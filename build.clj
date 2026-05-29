@@ -7,7 +7,7 @@
   (:require [clojure.tools.build.api :as b]))
 
 (def lib 'io.github.soohoonc/karcarthy)
-(def version (format "0.1.%s" (b/git-count-revs nil)))
+(def version "0.2.0")
 (def class-dir "target/classes")
 (def basis (delay (b/create-basis {:project "deps.edn"})))
 (def jar-file (format "target/%s-%s.jar" (name lib) version))

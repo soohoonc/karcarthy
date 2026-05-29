@@ -179,7 +179,7 @@ clojure -T:build install   # installs io.github.soohoonc/karcarthy 0.1.x into ~/
 ```
 
 ```clojure
-io.github.soohoonc/karcarthy {:mvn/version "0.1.0"}
+io.github.soohoonc/karcarthy {:mvn/version "0.2.0"}
 ```
 
 Needs JDK 21+. karcarthy itself pulls only `org.clojure/clojure` and
