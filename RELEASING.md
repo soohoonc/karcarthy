@@ -14,12 +14,9 @@ which runs on any `v*` tag and:
 1. Bump `version` in [`build.clj`](build.clj), the `:artifact` path in the
    `:deploy` alias in [`deps.edn`](deps.edn), and add a dated section to
    [`CHANGELOG.md`](CHANGELOG.md). Commit to `main`.
-2. Trigger the release workflow, any of:
-   - **Tag push:** `git tag v0.2.0 && git push origin v0.2.0`
-   - **GitHub → Releases → Draft a new release** (creates the tag).
-   - **`release/**` branch:** push e.g. `release/v0.2.0`; the workflow creates the
-     tag + Release **server-side** via the API (useful when tag pushes are
-     unavailable).
+2. Trigger the release workflow, either:
+   - **Tag push:** `git tag v0.0.2 && git push origin v0.0.2`, or
+   - **GitHub → Releases → Draft a new release** (creates the tag), or
    - **Actions → release → Run workflow** (`workflow_dispatch`) with a version.
 
 ## One-time setup for registry publishing
@@ -35,7 +32,7 @@ After that, every `v*` tag publishes `io.github.soohoonc/karcarthy` to Clojars,
 consumable as:
 
 ```clojure
-io.github.soohoonc/karcarthy {:mvn/version "0.2.0"}
+io.github.soohoonc/karcarthy {:mvn/version "0.0.2"}
 ```
 
 **Maven Central** (optional, for the widest JVM reach): register the

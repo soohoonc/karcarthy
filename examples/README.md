@@ -39,7 +39,7 @@ java   -cp "$CP:/tmp/karc-scala" Demo
 
 `clojure -Spath` puts the library and its deps on the classpath from source. To
 use a packaged jar instead, run `clojure -T:build jar` and put
-`target/karcarthy-0.2.0.jar` plus Clojure on the classpath.
+`target/karcarthy-0.0.2.jar` plus Clojure on the classpath.
 
 The non-Clojure examples use the
 [Clojure Java API](https://clojure.github.io/clojure/javadoc/clojure/java/api/Clojure.html):

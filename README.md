@@ -3,12 +3,13 @@
 > Homoiconic agent orchestration for Clojure.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
-[![Clojars Project](https://img.shields.io/clojars/v/io.github.soohoonc/karcarthy.svg)](https://clojars.org/io.github.soohoonc/karcarthy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**karcarthy** (named after [John McCarthy](https://en.wikipedia.org/wiki/John_McCarthy_(computer_scientist)))
-is a small Clojure library for orchestrating many AI agents. The agents, tools,
-handoffs, and the workflow itself are all plain Clojure **data** (EDN).
+**karcarthy** orchestrates many AI agents, with the agents, tools, handoffs, and
+the workflow itself all plain Clojure **data** (EDN). The name splices
+[Andrej Karpathy](https://en.wikipedia.org/wiki/Andrej_Karpathy) (LLMs) and
+[John McCarthy](https://en.wikipedia.org/wiki/John_McCarthy_(computer_scientist))
+(Lisp): *kar* + *carthy*.
 
 ## The idea
 
@@ -173,13 +174,14 @@ io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
                               :git/sha "<commit sha>"}
 ```
 
-Tagged releases publish to [Clojars](https://clojars.org/io.github.soohoonc/karcarthy)
-and attach a jar to the [Releases](https://github.com/soohoonc/karcarthy/releases)
-page (see [RELEASING.md](RELEASING.md)). `clojure -T:build install` installs it
-into your local `~/.m2`.
+There's no published release yet (it's early). Build a jar with
+`clojure -T:build jar`, or `clojure -T:build install` it into your local `~/.m2`
+and depend on the version. When a release is cut, the
+[release workflow](RELEASING.md) publishes to Clojars and attaches a jar to the
+Releases page.
 
 ```clojure
-io.github.soohoonc/karcarthy {:mvn/version "0.2.0"}
+io.github.soohoonc/karcarthy {:mvn/version "0.0.2"}
 ```
 
 Needs JDK 21+. The library itself depends only on `org.clojure/clojure` and

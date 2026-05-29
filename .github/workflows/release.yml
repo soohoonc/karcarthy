@@ -1,20 +1,15 @@
 name: release
 
-# Cut a release one of three ways:
-#   * push a v* tag,
-#   * push a release/** branch (cuts the version below; useful when tag pushes
-#     are unavailable - the Release + tag are created server-side via the API),
-#   * run manually (workflow_dispatch) with a version input.
+# Cut a release by pushing a v* tag, or via Actions -> release -> Run workflow.
 # See RELEASING.md.
 on:
   push:
     tags: ["v*"]
-    branches: ["release/**"]
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag, e.g. v0.2.0"
-        default: "v0.2.0"
+        description: "Release tag, e.g. v0.0.2"
+        default: "v0.0.2"
 
 permissions:
   contents: write   # create the tag, the GitHub Release, and upload the jar
@@ -48,7 +43,7 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.version }}"
           if [ "${{ github.ref_type }}" = "tag" ]; then TAG="${{ github.ref_name }}"; fi
-          if [ -z "$TAG" ]; then TAG="v0.2.0"; fi
+          if [ -z "$TAG" ]; then TAG="v0.0.2"; fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release (creates the tag + attaches the jar)
