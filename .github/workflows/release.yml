@@ -1,13 +1,23 @@
 name: release
 
-# Cut a release by pushing a v* tag (or creating a GitHub Release, which creates
-# the tag). See RELEASING.md.
+# Cut a release one of three ways:
+#   * push a v* tag,
+#   * push a release/** branch (cuts the version below; useful when tag pushes
+#     are unavailable — the Release + tag are created server-side via the API),
+#   * run manually (workflow_dispatch) with a version input.
+# See RELEASING.md.
 on:
   push:
     tags: ["v*"]
+    branches: ["release/**"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag, e.g. v0.2.0"
+        default: "v0.2.0"
 
 permissions:
-  contents: write   # create the GitHub Release and upload the jar
+  contents: write   # create the tag, the GitHub Release, and upload the jar
 
 jobs:
   release:
@@ -33,9 +43,18 @@ jobs:
       - name: Build jar
         run: clojure -T:build jar
 
-      - name: Publish GitHub Release (with jar artifact)
+      - name: Determine release tag
+        id: rel
+        run: |
+          TAG="${{ github.event.inputs.version }}"
+          if [ "${{ github.ref_type }}" = "tag" ]; then TAG="${{ github.ref_name }}"; fi
+          if [ -z "$TAG" ]; then TAG="v0.2.0"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release (creates the tag + attaches the jar)
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.rel.outputs.tag }}
           files: target/*.jar
           generate_release_notes: true
 
