@@ -77,8 +77,8 @@ as combinators over data + a harness:
 - **chain** — prompt chaining; threads each result into the next, short-circuits ✅
 - **parallel** / **parallel\*** — fan out concurrently and gather (sectioning/voting) ✅
 - **route** — classify (fn or agent), then dispatch to a specialized flow ✅
+- **refine** — evaluator-optimizer; a worker drafts, an evaluator critiques, repeat until accepted ✅
 - **orchestrate** — orchestrator-workers, dynamic fan-out *(planned)*
-- **refine** — evaluator-optimizer; critique until convergence *(planned)*
 
 See it run, fully offline:
 
@@ -94,10 +94,10 @@ Clojars required):
 - the EDN data model + `clojure.spec` validation
 - the `Harness` protocol with two adapters: an offline **mock** harness and a
   **`claude-cli`** harness that drives `claude -p` (verified end-to-end)
-- **chain / parallel / route** orchestration over a data DSL
+- **chain / parallel / route / refine** orchestration over a data DSL
 
-Next: orchestrator-workers and the evaluator-optimizer (refine) loop, streaming
-(`stream-json`), sessions/handoffs, and an OpenAI Agents harness.
+Next: orchestrator-workers (dynamic fan-out), streaming (`stream-json`),
+sessions/handoffs, and an OpenAI Agents harness.
 
 ## Develop
 

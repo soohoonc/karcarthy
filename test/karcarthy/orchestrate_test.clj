@@ -106,6 +106,59 @@
       ;; a:"[a] hi"; then parallel feeds that to b and c
       (is (= ["[b] [a] hi" "[c] [a] hi"] (map :text (:results r)))))))
 
+(deftest refine-accepts-immediately
+  (testing "an evaluator that accepts the first draft returns it at round 1"
+    (let [flow (o/refine a (fn [_draft _input] {:accept? true}))
+          r    (o/run-flow h flow "topic")]
+      (is (k/ok? r))
+      (is (true? (:accepted? r)))
+      (is (= 1 (:rounds r)))
+      (is (= "[a] topic" (:text r))))))         ; first draft on the raw input
+
+(deftest refine-loops-to-max-rounds
+  (testing "an evaluator that never accepts stops at :max-rounds, not accepted"
+    (let [flow (o/refine a (fn [_ _] {:accept? false :feedback "more"}) :max-rounds 3)
+          r    (o/run-flow h flow "topic")]
+      (is (false? (:accepted? r)))
+      (is (= 3 (:rounds r)))
+      (is (str/includes? (:text r) "topic")))))
+
+(deftest refine-accepts-on-later-round
+  (testing "the loop revises until the evaluator accepts"
+    (let [calls   (atom 0)
+          eval-fn (fn [_ _] (swap! calls inc) {:accept? (>= @calls 2) :feedback "f"})
+          flow    (o/refine a eval-fn :max-rounds 5)
+          r       (o/run-flow h flow "x")]
+      (is (true? (:accepted? r)))
+      (is (= 2 (:rounds r))))))
+
+(deftest refine-with-agent-evaluator
+  (testing "an agent evaluator's reply is the verdict (ACCEPT vs feedback)"
+    (let [accept-h (reify k/Harness
+                     (-run [_ ag p _]
+                       (k/result {:agent (:name ag)
+                                  :text  (if (= "judge" (:name ag))
+                                           "ACCEPT" (str "[" (:name ag) "] " p))})))
+          reject-h (reify k/Harness
+                     (-run [_ ag p _]
+                       (k/result {:agent (:name ag)
+                                  :text  (if (= "judge" (:name ag))
+                                           "needs work" (str "[" (:name ag) "] " p))})))
+          judge    (k/agent "judge" "judge")]
+      (let [r (o/run-flow accept-h (o/refine a judge) "x")]
+        (is (true? (:accepted? r)))
+        (is (= 1 (:rounds r))))
+      (let [r (o/run-flow reject-h (o/refine a judge :max-rounds 2) "x")]
+        (is (false? (:accepted? r)))
+        (is (= 2 (:rounds r)))))))
+
+(deftest refine-bails-on-worker-failure
+  (testing "a failing worker short-circuits the refine loop"
+    (let [flow (o/refine a (fn [_ _] {:accept? true}))
+          r    (o/run-flow (failing-harness #{"a"}) flow "x")]
+      (is (not (k/ok? r)))
+      (is (= "a" (:agent r))))))
+
 (deftest unknown-node-throws
   (is (thrown? clojure.lang.ExceptionInfo
                (o/run-flow h {:karcarthy/type :nonsense} "hi"))))

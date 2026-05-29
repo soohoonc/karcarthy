@@ -61,6 +61,20 @@
   (cond-> {:karcarthy/type :route :router router :routes routes}
     default (assoc :default default)))
 
+(defn refine
+  "Evaluator-optimizer: a `worker` drafts an answer, an `evaluator` critiques it,
+  and the worker revises using that critique — repeating until the evaluator
+  accepts or `:max-rounds` (default 3) is reached. Returns the final worker
+  result annotated with `:rounds` and `:accepted?`.
+
+  `evaluator` is either:
+    - a fn of [draft-result input] -> {:accept? boolean :feedback string}, or
+    - a flow/agent run on the draft; its reply is the verdict — accepted when the
+      trimmed text begins with \"ACCEPT\" (case-insensitive), otherwise the whole
+      reply is treated as feedback."
+  [worker evaluator & {:keys [max-rounds] :or {max-rounds 3}}]
+  {:karcarthy/type :refine :worker worker :evaluator evaluator :max-rounds max-rounds})
+
 ;; ---------------------------------------------------------------------------
 ;; Interpreter
 ;; ---------------------------------------------------------------------------
@@ -107,6 +121,35 @@
       (run-flow harness flow input opts)
       (k/result {:ok? false :error :no-route :label label
                  :text (str "no route for label: " (pr-str label))}))))
+
+(defn- evaluate
+  "Run `evaluator` against a draft, returning {:accept? :feedback :evaluation}."
+  [harness evaluator draft input opts]
+  (if (fn? evaluator)
+    (evaluator draft input)
+    (let [prompt (str "INPUT:\n" input "\n\nDRAFT:\n" (:text draft)
+                      "\n\nReply with exactly ACCEPT if the draft is good enough."
+                      " Otherwise reply with specific, actionable feedback.")
+          r      (run-flow harness evaluator prompt opts)
+          t      (str/trim (str (:text r)))]
+      {:accept?    (str/starts-with? (str/upper-case t) "ACCEPT")
+       :feedback   t
+       :evaluation r})))
+
+(defmethod run-node :refine
+  [harness {:keys [worker evaluator max-rounds]} input opts]
+  (loop [round 1, worker-input input]
+    (let [draft (run-flow harness worker worker-input opts)]
+      (if-not (k/ok? draft)
+        draft                                       ; worker failed; bail out
+        (let [{:keys [accept? feedback]} (evaluate harness evaluator draft input opts)]
+          (if (or accept? (>= round max-rounds))
+            (k/result (assoc draft :rounds round :accepted? (boolean accept?)))
+            (recur (inc round)
+                   (str "INPUT:\n" input
+                        "\n\nYOUR PREVIOUS DRAFT:\n" (:text draft)
+                        "\n\nFEEDBACK TO ADDRESS:\n" feedback
+                        "\n\nProduce an improved version."))))))))
 
 (defmethod run-node :default
   [_ node _ _]
