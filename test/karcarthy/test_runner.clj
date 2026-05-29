@@ -7,6 +7,7 @@
   '[karcarthy.core-test
     karcarthy.harness.claude-test
     karcarthy.harness.command-test
+    karcarthy.harness.openai-test
     karcarthy.orchestrate-test
     karcarthy.session-test])
 
