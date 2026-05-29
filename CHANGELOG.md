@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-29
+
 ### Added
 - `karcarthy.self` — agents author and edit karcarthy at runtime: `run-authored`
   (an agent writes a flow that then runs), `evolve` (an agent edits its own
@@ -41,5 +43,6 @@ All notable changes to this project are documented here. The format is based on
   (`examples/live_orchestrate.clj`).
 - MIT license, GitHub Actions CI, and a `tools.build` build script.
 
-[Unreleased]: https://github.com/soohoonc/karcarthy/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/soohoonc/karcarthy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/soohoonc/karcarthy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/soohoonc/karcarthy/releases/tag/v0.1.0
