@@ -20,6 +20,15 @@
                  :ok?   (not (contains? fail-names (:name agent)))
                  :text  (str "[" (:name agent) "] " prompt)}))))
 
+;; A harness that *throws* for named agents, to exercise fault isolation.
+(defn- throwing-harness [throw-names]
+  (reify k/Harness
+    (-run [_ agent prompt _]
+      (if (contains? throw-names (:name agent))
+        (throw (ex-info "boom" {:agent (:name agent)}))
+        (k/result {:agent (:name agent)
+                   :text  (str "[" (:name agent) "] " prompt)})))))
+
 (deftest constructors-build-data
   (testing "flows are plain tagged data"
     (is (= {:karcarthy/type :chain :steps [a b]} (o/chain a b)))
@@ -255,6 +264,32 @@
     (let [r (o/run-flow (failing-harness #{"a"}) (o/handoff a b) "hi")]
       (is (not (k/ok? r)))
       (is (= "a" (:agent r))))))
+
+(deftest parallel-isolates-throwing-branch
+  (testing "a branch that throws becomes a not-ok result; siblings are unaffected"
+    (let [r (o/run-flow (throwing-harness #{"b"}) (o/parallel a b c) "hi")]
+      (is (not (k/ok? r)))
+      (is (= 3 (count (:results r))))
+      (is (= [true false true] (mapv k/ok? (:results r))))
+      (is (= "[a] hi" (:text (first (:results r)))))
+      (is (= "[c] hi" (:text (last (:results r)))))
+      (is (= "boom" (:error (second (:results r))))))))
+
+(deftest route-matches-fuzzily
+  (testing "an agent router whose reply contains the label still routes"
+    (let [rh   (reify k/Harness
+                 (-run [_ ag p _]
+                   (k/result {:agent (:name ag)
+                              :text  (if (= "classifier" (:name ag))
+                                       "This is clearly a BILLING question."
+                                       (str "[" (:name ag) "] " p))})))
+          flow (o/route (k/agent "classifier" "c") {"billing" a "support" b})]
+      (is (= "[a] refund" (:text (o/run-flow rh flow "refund")))))))
+
+(deftest route-fn-label-case-insensitive
+  (testing "a string label matches a route key case-insensitively"
+    (let [flow (o/route (fn [_] "BILLING") {"billing" a})]
+      (is (= "[a] x" (:text (o/run-flow h flow "x")))))))
 
 (deftest unknown-node-throws
   (is (thrown? clojure.lang.ExceptionInfo

@@ -5,6 +5,7 @@
 
 (def test-namespaces
   '[karcarthy.core-test
+    karcarthy.proc-test
     karcarthy.harness.claude-test
     karcarthy.harness.command-test
     karcarthy.harness.openai-test
