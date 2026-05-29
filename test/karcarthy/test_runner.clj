@@ -5,7 +5,8 @@
 
 (def test-namespaces
   '[karcarthy.core-test
-    karcarthy.harness.claude-test])
+    karcarthy.harness.claude-test
+    karcarthy.orchestrate-test])
 
 (defn -main [& _]
   (doseq [ns test-namespaces] (require ns))
