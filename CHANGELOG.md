@@ -29,6 +29,8 @@ Early and not yet released. What works so far:
 - Runners selectable by id: pass a registry map `{id -> Runner}` and set
   `:runner` on an agent; workflows stay plain data. The old `Harness` /
   `:harness` names, plus old `flow` API names, remain as compatibility aliases.
+- OpenTelemetry instrumentation via `karcarthy.otel/instrument` for workflow
+  nodes, embedded functions, and agent calls.
 - Usage examples in Java, Kotlin, and Scala; MIT license; CI.
 
 [Unreleased]: https://github.com/soohoonc/karcarthy

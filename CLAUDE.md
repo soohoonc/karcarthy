@@ -23,6 +23,7 @@ clojure -M -e '(load-file "examples/live_orchestrate.clj")'   # live demo (paid 
 | `src/karcarthy/runner/claude.clj` | preferred Claude runner namespace; delegates to the compatibility implementation in `harness/claude.clj` |
 | `src/karcarthy/runner/command.clj` | preferred command runner namespace; wrap any CLI as an agent (prompt → stdin, stdout → result) |
 | `src/karcarthy/runner/openai.clj` | preferred OpenAI runner namespace; OpenAI Agents SDK via `resources/karcarthy/openai_runner.py` |
+| `src/karcarthy/otel.clj` | optional OpenTelemetry instrumentation around runners, workflow nodes, embedded functions, and agent calls |
 | `test/…` | mirrors `src/`; the runner lists namespaces in `test/karcarthy/test_runner.clj` |
 
 ## Conventions

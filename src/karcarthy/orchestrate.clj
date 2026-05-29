@@ -22,7 +22,8 @@
   so a child that throws becomes a not-ok result instead of crashing the run
   (see `safe-run`)."
   (:require [clojure.string :as str]
-            [karcarthy.core :as k])
+            [karcarthy.core :as k]
+            [karcarthy.otel :as otel])
   (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
@@ -170,20 +171,25 @@
 
 (defmethod run-node :chain
   [runner {:keys [steps]} input opts]
-  (loop [input input, steps steps, last-result nil]
-    (if (empty? steps)
+  (loop [input input, indexed-steps (map-indexed vector steps), last-result nil]
+    (if (empty? indexed-steps)
       (or last-result (k/result {:ok? true :text input :empty-chain? true}))
-      (let [r (safe-run runner (first steps) input opts)]
+      (let [[idx step] (first indexed-steps)
+            r          (safe-run runner step input (otel/with-child-path opts [:steps idx]))]
         (if (k/ok? r)
-          (recur (:text r) (rest steps) r)
+          (recur (:text r) (rest indexed-steps) r)
           r)))))                                    ; short-circuit on failure
 
 (defmethod run-node :parallel
   [runner {:keys [branches gather max-concurrency]} input opts]
   (let [results  (bounded-pmap max-concurrency
-                               #(safe-run runner % input opts)
-                               branches)
-        gathered (when gather (gather results))]
+                               (fn [[idx branch]]
+                                 (safe-run runner branch input
+                                           (otel/with-child-path opts [:branches idx])))
+                               (map-indexed vector branches))
+        gathered (when gather
+                   (otel/with-function-span opts :parallel/gather gather
+                     #(gather results)))]
     (k/result {:ok?      (every? k/ok? results)
                :results  results
                :gathered gathered
@@ -193,11 +199,14 @@
 (defmethod run-node :route
   [runner {:keys [router routes default]} input opts]
   (let [label (if (fn? router)
-                (router input)
-                (str/trim (str (:text (safe-run runner router input opts)))))
-        workflow  (or (match-route routes label) default)]
+                (otel/with-function-span opts :route/router router
+                  #(router input))
+                (str/trim (str (:text (safe-run runner router input
+                                                 (otel/with-child-path opts [:router]))))))
+        workflow  (or (match-route routes label) default)
+        route-path [(if (contains? routes label) :routes :route) label]]
     (if workflow
-      (safe-run runner workflow input opts)
+      (safe-run runner workflow input (otel/with-child-path opts route-path))
       (k/result {:ok? false :error :no-route :label label
                  :text (str "no route for label: " (pr-str label))}))))
 
@@ -205,11 +214,12 @@
   "Run `evaluator` against a draft, returning {:accept? :feedback :evaluation}."
   [runner evaluator draft input opts]
   (if (fn? evaluator)
-    (evaluator draft input)
+    (otel/with-function-span opts :refine/evaluator evaluator
+      #(evaluator draft input))
     (let [prompt (str "INPUT:\n" input "\n\nDRAFT:\n" (:text draft)
                       "\n\nReply with exactly ACCEPT if the draft is good enough."
                       " Otherwise reply with specific, actionable feedback.")
-          r      (safe-run runner evaluator prompt opts)
+          r      (safe-run runner evaluator prompt (otel/with-child-path opts [:evaluator]))
           t      (str/trim (str (:text r)))]
       {:accept?    (str/starts-with? (str/upper-case t) "ACCEPT")
        :feedback   t
@@ -218,10 +228,12 @@
 (defmethod run-node :refine
   [runner {:keys [worker evaluator max-rounds]} input opts]
   (loop [round 1, worker-input input]
-    (let [draft (safe-run runner worker worker-input opts)]
+    (let [round-opts (otel/with-child-path opts [:round round])
+          draft      (safe-run runner worker worker-input
+                               (otel/with-child-path round-opts [:worker]))]
       (if-not (k/ok? draft)
         draft                                       ; worker failed; bail out
-        (let [{:keys [accept? feedback]} (evaluate runner evaluator draft input opts)]
+        (let [{:keys [accept? feedback]} (evaluate runner evaluator draft input round-opts)]
           (if (or accept? (>= round max-rounds))
             (k/result (assoc draft :rounds round :accepted? (boolean accept?)))
             (recur (inc round)
@@ -237,8 +249,10 @@
   workflow whose reply is parsed line-by-line)."
   [runner planner input opts]
   (if (fn? planner)
-    (vec (planner input))
-    (->> (str/split-lines (str (:text (safe-run runner planner input opts))))
+    (otel/with-function-span opts :orchestrate/planner planner
+      #(vec (planner input)))
+    (->> (str/split-lines (str (:text (safe-run runner planner input
+                                                (otel/with-child-path opts [:planner])))))
          (map #(str/replace % list-marker ""))
          (map str/trim)
          (remove str/blank?)
@@ -248,9 +262,13 @@
   [runner {:keys [planner worker synthesize max-concurrency]} input opts]
   (let [subtasks (plan-subtasks runner planner input opts)
         results  (bounded-pmap max-concurrency
-                               #(safe-run runner worker % opts)
-                               subtasks)
-        gathered (when synthesize (synthesize results input))]
+                               (fn [[idx subtask]]
+                                 (safe-run runner worker subtask
+                                           (otel/with-child-path opts [:worker idx])))
+                               (map-indexed vector subtasks))
+        gathered (when synthesize
+                   (otel/with-function-span opts :orchestrate/synthesize synthesize
+                     #(synthesize results input)))]
     (k/result {:ok?      (every? k/ok? results)
                :subtasks subtasks
                :results  results
@@ -260,12 +278,12 @@
 
 (defmethod run-node :handoff
   [runner {:keys [from to prompt]} input opts]
-  (let [r1 (safe-run runner from input opts)]
+  (let [r1 (safe-run runner from input (otel/with-child-path opts [:from]))]
     (if-not (k/ok? r1)
       r1                                              ; bail if the first agent failed
       (let [opts' (cond-> opts
                     (:session-id r1) (assoc :resume (:session-id r1)))]
-        (safe-run runner to (or prompt (:text r1)) opts')))))
+        (safe-run runner to (or prompt (:text r1)) (otel/with-child-path opts' [:to]))))))
 
 (defmethod run-node :default
   [_ node _ _]
@@ -277,7 +295,10 @@
   Returns a `karcarthy.core` result map. `workflow` may be an agent or any
   composite node."
   ([runner workflow input] (run runner workflow input {}))
-  ([runner workflow input opts] (run-node runner workflow input opts)))
+  ([runner workflow input opts]
+   (let [opts (otel/instrumented-opts runner opts)]
+     (otel/with-workflow-span opts workflow input
+       #(run-node runner workflow input opts)))))
 
 (defn run-flow
   "Deprecated alias for `run`."

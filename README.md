@@ -58,6 +58,16 @@ Swap `(k/mock-runner)` for `(k/claude-runner {})` to run it against `claude`.
 - **Agents speak karcarthy**: `run-authored` (an agent writes a workflow) and
   `evolve` (an agent edits its own definition), parsed as data via `clojure.edn`,
   never `eval`.
+- **OpenTelemetry-ready**: wrap a runner with `karcarthy.otel/instrument` to
+  emit spans for workflow nodes, embedded functions, and agent calls.
+
+```clojure
+(require '[karcarthy.otel :as otel])
+
+(k/run (otel/instrument (k/mock-runner))
+       (k/chain researcher summarizer)
+       "what is a monad?")
+```
 
 ## More
 
@@ -66,8 +76,8 @@ Swap `(k/mock-runner)` for `(k/claude-runner {})` to run it against `claude`.
   (`karcarthy.cli`), since a workflow is just data.
 - How it compares to PydanticAI, Agno, and the Vercel AI SDK: [`COMPARISON.md`](COMPARISON.md).
 - `clojure -M:test` runs the offline tests; `clojure -M -m karcarthy.demo` a demo.
-- Pre-release (0.0.2). JDK 21+; depends only on `org.clojure/clojure` and
-  `org.clojure/data.json`.
+- Pre-release (0.0.2). JDK 21+; depends on `org.clojure/clojure`,
+  `org.clojure/data.json`, and the OpenTelemetry Java API.
 
 ## License
 
