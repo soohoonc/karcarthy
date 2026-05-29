@@ -109,7 +109,17 @@ Requires a JDK (21+) and the [Clojure CLI](https://clojure.org/guides/install_cl
 clojure -M:test            # run the offline test suite
 KARCARTHY_LIVE=1 clojure -M:test   # also run the live `claude -p` integration test
 clojure -M -m karcarthy.demo       # run the offline demo
+
+# a LIVE orchestrator-workers run (real, paid claude -p calls):
+clojure -M -e '(load-file "examples/live_orchestrate.clj")'
 ```
+
+**Driving real agents.** When pointing the `claude-cli` harness at sub-agents,
+prefer `:system-prompt-mode :replace` (so the system prompt is *only* the
+agent's instructions) and disable tools via `:extra-args ["--disallowedTools"
+"..."]`. Otherwise agents inherit Claude Code's interactive persona and tend to
+ask clarifying questions or wander into tool use. See
+[`examples/live_orchestrate.clj`](examples/live_orchestrate.clj).
 
 ## License
 
