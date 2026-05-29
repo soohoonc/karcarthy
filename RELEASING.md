@@ -14,13 +14,13 @@ which runs on any `v*` tag and:
 1. Bump `version` in [`build.clj`](build.clj), the `:artifact` path in the
    `:deploy` alias in [`deps.edn`](deps.edn), and add a dated section to
    [`CHANGELOG.md`](CHANGELOG.md). Commit to `main`.
-2. Tag and push:
-   ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
-   ```
-   (Or use **GitHub → Releases → Draft a new release**, which creates the tag and
-   triggers the same workflow.)
+2. Trigger the release workflow, any of:
+   - **Tag push:** `git tag v0.2.0 && git push origin v0.2.0`
+   - **GitHub → Releases → Draft a new release** (creates the tag).
+   - **`release/**` branch:** push e.g. `release/v0.2.0`; the workflow creates the
+     tag + Release **server-side** via the API (useful when tag pushes are
+     unavailable).
+   - **Actions → release → Run workflow** (`workflow_dispatch`) with a version.
 
 ## One-time setup for registry publishing
 
