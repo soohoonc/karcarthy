@@ -125,6 +125,32 @@ Clojars required):
 Next: tool-call extraction for richer handoffs, structured outputs
 (`--json-schema`), and a hosted Managed Agents harness.
 
+## Install
+
+karcarthy is a plain `deps.edn` library. Depend on it straight from GitHub — no
+build step required:
+
+```clojure
+;; deps.edn
+io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
+                              :git/sha "<latest commit sha>"}
+```
+
+Or build and install a jar to your local Maven repo, then depend on the version:
+
+```bash
+clojure -T:build install   # installs io.github.soohoonc/karcarthy 0.1.x into ~/.m2
+```
+
+```clojure
+io.github.soohoonc/karcarthy {:mvn/version "0.1.0"}
+```
+
+Needs JDK 21+. karcarthy itself pulls only `org.clojure/clojure` and
+`org.clojure/data.json` (both on Maven Central). The `claude-cli` harness needs
+the `claude` CLI on `PATH`; the `openai` harness needs `python3` with
+`openai-agents` and `OPENAI_API_KEY`.
+
 ## Develop
 
 Requires a JDK (21+) and the [Clojure CLI](https://clojure.org/guides/install_clojure).
@@ -147,4 +173,4 @@ ask clarifying questions or wander into tool use. See
 
 ## License
 
-Copyright © 2026. Distributed under the Eclipse Public License 2.0.
+[MIT](LICENSE) © 2026 soohoonc and the karcarthy contributors — use it freely.
