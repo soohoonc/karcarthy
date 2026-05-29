@@ -2,6 +2,10 @@
 
 > Homoiconic agent orchestration for Clojure.
 
+[![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
+[![Clojars Project](https://img.shields.io/clojars/v/io.github.soohoonc/karcarthy.svg)](https://clojars.org/io.github.soohoonc/karcarthy)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **karcarthy** (a nod to [John McCarthy](https://en.wikipedia.org/wiki/John_McCarthy_(computer_scientist)))
 is a small Clojure library for orchestrating *many* AI agents — where the
 agents, tools, handoffs, and the orchestration workflow itself are all plain
@@ -172,11 +176,12 @@ io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
                               :git/sha "<latest commit sha>"}
 ```
 
-Or build and install a jar to your local Maven repo, then depend on the version:
-
-```bash
-clojure -T:build install   # installs io.github.soohoonc/karcarthy 0.1.x into ~/.m2
-```
+Or use the published Maven coordinate. Tagged releases are published to
+[Clojars](https://clojars.org/io.github.soohoonc/karcarthy) by CI, and each
+release also attaches a jar to the
+[GitHub Releases](https://github.com/soohoonc/karcarthy/releases) page (see
+[RELEASING.md](RELEASING.md)). Locally, `clojure -T:build install` installs it
+into your `~/.m2`.
 
 ```clojure
 io.github.soohoonc/karcarthy {:mvn/version "0.2.0"}
