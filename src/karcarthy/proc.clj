@@ -1,5 +1,5 @@
 (ns karcarthy.proc
-  "Subprocess execution with timeout — the shared primitive behind the
+  "Subprocess execution with timeout - the shared primitive behind the
   shell-based harnesses (`claude-cli`, `command`, `openai`).
 
   Uses `ProcessBuilder` directly (so the process can be killed on timeout) and

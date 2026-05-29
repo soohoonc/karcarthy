@@ -2,7 +2,7 @@
   "Orchestration as data.
 
   A *flow* is a plain Clojure value describing how to coordinate agents. It is
-  either an agent (a leaf — see `karcarthy.core/agent`) or a composite node
+  either an agent (a leaf; see `karcarthy.core/agent`) or a composite node
   tagged with `:karcarthy/type`:
 
     :chain        run flows in sequence, threading each result's :text into the
@@ -14,21 +14,19 @@
     :orchestrate  orchestrator-workers: plan subtasks, fan out, gather.
     :handoff      run one flow, then hand off to another with shared session.
 
-  Because a flow is just data, you can build it with the constructors here,
-  assemble it by hand, generate it programmatically, walk it with
-  `clojure.walk`, serialize it to EDN, and diff two versions of it. `run-flow`
-  is the interpreter that executes a flow against a `Harness`.
+  Because a flow is data, you build, generate and serialize it with ordinary
+  Clojure. `run-flow` interprets a flow against a `Harness`.
 
   Every flow run returns a `karcarthy.core` result map, so flows compose: the
-  output of one is a valid input position for another. Composite nodes are
-  fault-isolated — a child that throws becomes a not-ok result rather than
-  crashing the whole run (see `safe-run`)."
+  output of one is valid input to another. Composite nodes are fault-isolated,
+  so a child that throws becomes a not-ok result instead of crashing the run
+  (see `safe-run`)."
   (:require [clojure.string :as str]
             [karcarthy.core :as k])
   (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
-;; Constructors — build flow data
+;; Constructors - build flow data
 ;; ---------------------------------------------------------------------------
 
 (defn chain
@@ -63,7 +61,7 @@
     - if `router` is a fn, it is called with the input and must return a label;
     - otherwise `router` is run as a flow and its result's :text is the label.
   `routes` maps labels to flows. Matching is exact first, then (for string
-  labels) case-insensitive and substring — so an agent that replies \"This is a
+  labels) case-insensitive and substring - so an agent that replies \"This is a
   billing question\" still matches the route \"billing\". `:default` (optional
   kwarg) is used when nothing matches."
   [router routes & {:keys [default]}]
@@ -72,13 +70,13 @@
 
 (defn refine
   "Evaluator-optimizer: a `worker` drafts an answer, an `evaluator` critiques it,
-  and the worker revises using that critique — repeating until the evaluator
+  and the worker revises using that critique - repeating until the evaluator
   accepts or `:max-rounds` (default 3) is reached. Returns the final worker
   result annotated with `:rounds` and `:accepted?`.
 
   `evaluator` is either:
     - a fn of [draft-result input] -> {:accept? boolean :feedback string}, or
-    - a flow/agent run on the draft; its reply is the verdict — accepted when the
+    - a flow/agent run on the draft; its reply is the verdict - accepted when the
       trimmed text begins with \"ACCEPT\" (case-insensitive), otherwise the whole
       reply is treated as feedback."
   [worker evaluator & {:keys [max-rounds] :or {max-rounds 3}}]
@@ -87,7 +85,7 @@
 (defn orchestrate
   "Orchestrator-workers: a `planner` decomposes the input into subtasks, a
   `worker` flow handles each subtask (fanned out, at most :max-concurrency at a
-  time — default 16, echoing the dynamic-workflows bound), and an optional
+  time, default 16), and an optional
   `:synthesize` fn combines the worker results.
 
   `planner` is either a fn of input -> seq of subtask strings, or a flow/agent
@@ -151,8 +149,8 @@
       (finally (.shutdown pool)))))
 
 (defn- match-route
-  "Resolve the flow for `label` in `routes`: exact match first, then — for
-  string labels — case-insensitive exact and substring (label contains key)."
+  "Resolve the flow for `label` in `routes`: exact match first, then - for
+  string labels - case-insensitive exact and substring (label contains key)."
   [routes label]
   (or (get routes label)
       (when (string? label)

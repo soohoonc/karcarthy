@@ -7,7 +7,7 @@
            [--model M] [--allowedTools t1,t2] [--max-turns N] ...
 
   The command builder (`claude-command`) is a pure function returning a vector
-  of strings — the command is data too, so you can inspect or transform it
+  of strings - the command is data too, so you can inspect or transform it
   before running. `claude-harness` wraps it as a `karcarthy.core/Harness`."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
@@ -58,7 +58,7 @@
       (seq extra-args)  (into (vec extra-args)))))
 
 (defn result-map->result
-  "Turn a parsed `claude -p` result object (keyword-keyed map — the JSON `result`
+  "Turn a parsed `claude -p` result object (keyword-keyed map - the JSON `result`
   payload, or the terminal `result` event in a stream) into a karcarthy result."
   [agent-name m]
   (k/result {:agent      agent-name

@@ -1,4 +1,4 @@
-# karcarthy — guide for Claude Code
+# karcarthy - guide for Claude Code
 
 Homoiconic agent **orchestration** in Clojure. Agents, tools, and workflows are
 plain EDN data; the inner agent loop (model calls + tool execution) is delegated
@@ -18,8 +18,8 @@ clojure -M -e '(load-file "examples/live_orchestrate.clj")'   # live demo (paid 
 | File | Role |
 |------|------|
 | `src/karcarthy/core.clj` | data model (`agent`), spec validation, `result`, the `Harness` protocol, the offline `mock-harness`, and the `defagent` macro |
-| `src/karcarthy/orchestrate.clj` | the flow DSL — `chain` / `parallel` / `route` / `refine` / `orchestrate` / `handoff`, the `run-flow` interpreter (a `run-node` multimethod), and `defflow` / `flow?` |
-| `src/karcarthy/session.clj` | `converse` — multi-turn conversations that thread the harness session (memory) |
+| `src/karcarthy/orchestrate.clj` | the flow DSL - `chain` / `parallel` / `route` / `refine` / `orchestrate` / `handoff`, the `run-flow` interpreter (a `run-node` multimethod), and `defflow` / `flow?` |
+| `src/karcarthy/session.clj` | `converse` - multi-turn conversations that thread the harness session (memory) |
 | `src/karcarthy/harness/claude.clj` | drives `claude -p` (buffered JSON **and** `stream-json` streaming) |
 | `src/karcarthy/harness/command.clj` | wrap any CLI as an agent (prompt → stdin, stdout → result) |
 | `src/karcarthy/harness/openai.clj` | OpenAI Agents SDK via `resources/karcarthy/openai_runner.py` |
@@ -28,7 +28,7 @@ clojure -M -e '(load-file "examples/live_orchestrate.clj")'   # live demo (paid 
 ## Conventions
 
 - **Dependencies: Maven Central only.** Clojars is blocked in the dev sandbox.
-  HTTP uses Java's built-in client or shelling out — no HTTP-client dep.
+  HTTP uses Java's built-in client or shelling out - no HTTP-client dep.
 - **Everything is data.** Each entity is a map tagged with `:karcarthy/type`
   (`:agent`, `:result`, `:chain`, `:route`, …). Prefer plain maps over records.
 - **A harness** implements `karcarthy.core/Harness` (`-run`) and returns a

@@ -109,11 +109,11 @@
       (is (= "S1" (:session-id r)))
       (is (= 0.01 (:cost-usd r))))))
 
-;; Live test — only runs when KARCARTHY_LIVE is set, to avoid spending tokens
+;; Live test - only runs when KARCARTHY_LIVE is set, to avoid spending tokens
 ;; (and needing network/auth) on a normal `clojure -M:test`.
 ;;
-;; This validates karcarthy's responsibility — build command -> spawn -> auth ->
-;; capture stdout -> parse into a result — i.e. the integration boundary. It
+;; This validates karcarthy's responsibility - build command -> spawn -> auth ->
+;; capture stdout -> parse into a result - i.e. the integration boundary. It
 ;; deliberately does NOT assert the model's turn-by-turn behavior: whether a
 ;; trivial prompt resolves in one turn or wanders into tool use depends on the
 ;; ambient environment (available tools, any discovered CLAUDE.md), which is

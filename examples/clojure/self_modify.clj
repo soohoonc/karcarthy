@@ -1,4 +1,4 @@
-;; Agents using karcarthy to author and edit their own behavior — LIVE.
+;; Agents using karcarthy to author and edit their own behavior - LIVE.
 ;;
 ;; Makes real, paid `claude -p` calls; run it intentionally. Needs the `claude`
 ;; CLI with valid auth on PATH.
@@ -6,9 +6,9 @@
 ;;     clojure -M -e '(load-file "examples/self_modify.clj")'
 ;;
 ;; Two demonstrations of the metacircular layer (karcarthy.self):
-;;   1. run-authored — an agent WRITES a karcarthy flow (EDN), which karcarthy
+;;   1. run-authored - an agent WRITES a karcarthy flow (EDN), which karcarthy
 ;;      parses (data only, never eval) and runs.
-;;   2. evolve       — an agent EDITS ITS OWN definition at runtime via EDN
+;;   2. evolve       - an agent EDITS ITS OWN definition at runtime via EDN
 ;;      patches, then acts with the new behavior.
 
 (require '[karcarthy.core :as k]

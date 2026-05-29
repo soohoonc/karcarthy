@@ -7,11 +7,11 @@
 ;;
 ;; It demonstrates the harness tuning that makes agents behave as constrained
 ;; sub-agents rather than as an interactive Claude Code session:
-;;   * :system-prompt-mode :replace  — the system prompt is *only* the agent's
+;;   * :system-prompt-mode :replace  - the system prompt is *only* the agent's
 ;;     instructions, with none of Claude Code's interactive persona;
-;;   * --disallowedTools ...          — tools off, so agents answer directly
+;;   * --disallowedTools ...          - tools off, so agents answer directly
 ;;     instead of wandering into tool use (which burns turns);
-;;   * a neutral :dir                 — avoids picking up the project's CLAUDE.md.
+;;   * a neutral :dir                 - avoids picking up the project's CLAUDE.md.
 
 (require '[karcarthy.core :as k]
          '[karcarthy.orchestrate :as o]

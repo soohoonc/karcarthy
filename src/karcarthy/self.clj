@@ -1,18 +1,18 @@
 (ns karcarthy.self
   "Metacircular karcarthy: agents reading, writing and editing karcarthy itself.
 
-  Because flows and agents are EDN *data* (not code), an agent can emit karcarthy
-  EDN as text, and karcarthy can parse it — with `clojure.edn`, **data only,
-  never evaluating code** — validate it, and run it. That is how agents \"use the
-  language themselves\":
+  Flows and agents are EDN data, not code. So an agent can emit karcarthy EDN as
+  text, and karcarthy can parse it with `clojure.edn` (data only, never
+  evaluating code), validate it, and run it. That is how agents use the language
+  themselves:
 
-    * `dsl-reference`  — a prompt fragment teaching an agent the EDN DSL.
-    * `read-flow` / `read-agent` — safely parse an agent's output into karcarthy
-      data (validated; no code eval).
-    * `run-authored`   — have an agent *write* a flow for a task, then run it.
-    * `evolve` (a `:evolve` node) — an agent *edits its own definition*
+    * `dsl-reference`: a prompt fragment teaching an agent the EDN DSL.
+    * `read-flow` / `read-agent`: parse an agent's output into validated
+      karcarthy data (no code eval).
+    * `run-authored`: have an agent write a flow for a task, then run it.
+    * `evolve` (a `:evolve` node): an agent edits its own definition
       (instructions, model, tools) at runtime by emitting an EDN patch, then
-      retries with the new behavior.
+      retrying with the new behavior.
 
   Requiring this namespace registers the `:evolve` node with the interpreter."
   (:require [clojure.edn :as edn]
@@ -26,7 +26,7 @@
 
 (defn extract-edn
   "Pull the first EDN map out of `s`, which may contain prose or a ```edn fence.
-  Uses `clojure.edn/read-string` — data only, never evaluates code. Throws
+  Uses `clojure.edn/read-string` - data only, never evaluates code. Throws
   ex-info if no map is found or it doesn't parse."
   [s]
   (let [s      (str s)
@@ -92,7 +92,7 @@
     "  :handoff     {:karcarthy/type :handoff :from FLOW :to FLOW}"
     ""
     "Rules: output EDN only (optionally inside an ```edn fence), no prose. Use"
-    "only the keys shown. Nest freely — any FLOW position may hold an agent or a"
+    "only the keys shown. Nest freely - any FLOW position may hold an agent or a"
     "node."]))
 
 (defn authoring-prompt
@@ -137,7 +137,7 @@
 
 (defn- evolve-prompt [input]
   (str "You may improve yourself before answering. Reply with EITHER:\n"
-       "  an EDN patch to your own definition —\n"
+       "  an EDN patch to your own definition -\n"
        "  {:karcarthy/patch {:instructions \"<better instructions>\"} :reason \"<why>\"}\n"
        "  (you may patch :instructions, :model and/or :tools) to change and retry,\n"
        "OR your final answer as plain text (no EDN).\n\nTASK:\n" input))
