@@ -46,30 +46,67 @@ protocol, so the orchestration layer stays provider-agnostic:
   (`--agents '{...}'`), so EDN → JSON is direct.
 - **`openai-agents`** *(planned)* — the OpenAI Agents SDK.
 
-## Orchestration patterns *(planned)*
+## Orchestration is data
 
-The canonical patterns from Anthropic's
+A **flow** is a plain EDN value — an agent (leaf) or a composite node — that the
+`run-flow` interpreter executes against any harness. Because it's data, you can
+build it, nest it, generate it, `clojure.walk` it, serialize it, and diff it.
+
+```clojure
+(require '[karcarthy.orchestrate :as o])
+
+;; Route by a triage agent; the technical path drafts an answer then reviews it.
+(def support-desk
+  (o/route triage
+           {"billing"   billing
+            "technical" (o/chain technical reviewer)   ; sequential
+            "general"   general}
+           :default general))
+
+(o/run-flow (k/mock-harness) support-desk "my deploy 500s intermittently")
+;=> {:karcarthy/type :result, :ok? true, :text "...reviewed draft...", ...}
+
+;; It's just data — transform it like any value (bump every agent to opus):
+(clojure.walk/postwalk #(if (k/agent? %) (assoc % :model "opus") %) support-desk)
+```
+
+Patterns from Anthropic's
 [*Building Effective Agents*](https://www.anthropic.com/research/building-effective-agents),
-expressed as combinators over data + a harness:
+as combinators over data + a harness:
 
-- **chain** — prompt chaining (sequential steps)
-- **route** — classify, then dispatch to a specialized agent
-- **parallel** — fan out (sectioning) and gather; voting
-- **orchestrate** — orchestrator-workers (dynamic fan-out)
-- **refine** — evaluator-optimizer (refute / critique until convergence)
+- **chain** — prompt chaining; threads each result into the next, short-circuits ✅
+- **parallel** / **parallel\*** — fan out concurrently and gather (sectioning/voting) ✅
+- **route** — classify (fn or agent), then dispatch to a specialized flow ✅
+- **orchestrate** — orchestrator-workers, dynamic fan-out *(planned)*
+- **refine** — evaluator-optimizer; critique until convergence *(planned)*
+
+See it run, fully offline:
+
+```bash
+clojure -M -m karcarthy.demo
+```
 
 ## Status
 
-Early. Working today: the data model, the `Harness` protocol, and the offline
-mock harness, all on **Maven-Central-only** dependencies (no Clojars required).
+Early, but real. Working today, all on **Maven-Central-only** dependencies (no
+Clojars required):
+
+- the EDN data model + `clojure.spec` validation
+- the `Harness` protocol with two adapters: an offline **mock** harness and a
+  **`claude-cli`** harness that drives `claude -p` (verified end-to-end)
+- **chain / parallel / route** orchestration over a data DSL
+
+Next: orchestrator-workers and the evaluator-optimizer (refine) loop, streaming
+(`stream-json`), sessions/handoffs, and an OpenAI Agents harness.
 
 ## Develop
 
 Requires a JDK (21+) and the [Clojure CLI](https://clojure.org/guides/install_clojure).
 
 ```bash
-clojure -M:test     # run the test suite
-clojure -M:repl     # (add your own alias) a REPL
+clojure -M:test            # run the offline test suite
+KARCARTHY_LIVE=1 clojure -M:test   # also run the live `claude -p` integration test
+clojure -M -m karcarthy.demo       # run the offline demo
 ```
 
 ## License
