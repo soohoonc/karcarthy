@@ -42,10 +42,31 @@ execution). That is delegated to an existing **harness** behind a small
 protocol, so the orchestration layer stays provider-agnostic:
 
 - **`mock`** — offline, deterministic; for tests and developing orchestration.
-- **`claude-cli`** *(planned)* — drives the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
-  via `claude -p --output-format stream-json`. Agents are already JSON there
-  (`--agents '{...}'`), so EDN → JSON is direct.
-- **`openai-agents`** *(planned)* — the OpenAI Agents SDK.
+- **`claude-cli`** — drives the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
+  via `claude -p`. JSON or **streaming** (`stream-json` + an `:on-event`
+  callback), plus `:resume`/sessions, model, tools, and permission options.
+- **`command`** — wrap *any* CLI as an agent (prompt → stdin, stdout → result):
+  a local model (`ollama run …`), `llm`, a script, or `cat`/`tr` in tests.
+- **`openai`** — drives the OpenAI Agents SDK via a small bundled Python runner.
+
+The same flow runs over any of them — just swap the harness.
+
+### Streaming, sessions, handoffs
+
+```clojure
+(require '[karcarthy.harness.claude :as cc]
+         '[karcarthy.session :as sess])
+
+;; Stream events live as the agent works:
+(k/run-agent (cc/claude-harness {:on-event #(println (:type %))}) researcher "…")
+
+;; A multi-turn conversation with memory (threads the session id):
+(sess/converse (cc/claude-harness {}) researcher
+               ["My name is Ada." "What is my name?"])   ; turn 2 recalls "Ada"
+
+;; A handoff passes context to another agent (it resumes the prior session):
+(o/run-flow (cc/claude-harness {}) (o/handoff triage specialist) "…")
+```
 
 ## Orchestration is data
 
@@ -80,6 +101,7 @@ as combinators over data + a harness:
 - **route** — classify (fn or agent), then dispatch to a specialized flow ✅
 - **refine** — evaluator-optimizer; a worker drafts, an evaluator critiques, repeat until accepted ✅
 - **orchestrate** — orchestrator-workers; a planner emits subtasks as data, fan out (bounded concurrency) and gather ✅
+- **handoff** — pass control to another agent, threading the session so it inherits context ✅
 
 See it run, fully offline:
 
@@ -93,13 +115,15 @@ Early, but real. Working today, all on **Maven-Central-only** dependencies (no
 Clojars required):
 
 - the EDN data model, `clojure.spec` validation, and **`defagent` / `defflow`** sugar
-- the `Harness` protocol with three adapters: an offline **mock** harness, a
-  **`claude-cli`** harness that drives `claude -p` (verified end-to-end), and a
-  **`command`** harness that wraps any CLI/local model as an agent
-- **chain / parallel / route / refine / orchestrate** — all five canonical
-  patterns over a data DSL
+- the `Harness` protocol with **four** adapters: **mock** (offline),
+  **claude-cli** (drives `claude -p`, incl. **streaming**; verified end-to-end),
+  **command** (wrap any CLI/local model), and **openai** (OpenAI Agents SDK)
+- all five **Building Effective Agents** patterns — **chain / parallel / route /
+  refine / orchestrate** — plus **handoff** and multi-turn **sessions**
+  (`converse`), over a data DSL
 
-Next: streaming (`stream-json`), sessions/handoffs, and an OpenAI Agents harness.
+Next: tool-call extraction for richer handoffs, structured outputs
+(`--json-schema`), and a hosted Managed Agents harness.
 
 ## Develop
 
