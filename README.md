@@ -6,10 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **karcarthy** orchestrates many AI agents, with the agents, tools, handoffs, and
-the workflow itself all plain Clojure **data** (EDN). The name splices
-[Andrej Karpathy](https://en.wikipedia.org/wiki/Andrej_Karpathy) (LLMs) and
-[John McCarthy](https://en.wikipedia.org/wiki/John_McCarthy_(computer_scientist))
-(Lisp): *kar* + *carthy*.
+the workflow itself all plain Clojure **data** (EDN).
 
 ## The idea
 
