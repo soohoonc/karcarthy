@@ -92,6 +92,14 @@
            :max-concurrency max-concurrency}
     synthesize (assoc :synthesize synthesize)))
 
+(defn handoff
+  "Run `from`, then hand off to `to`, threading `from`'s session so `to` inherits
+  its context on harnesses that support sessions (e.g. claude-cli, via --resume).
+  `to`'s input defaults to `from`'s :text; pass `:prompt` to override. On
+  harnesses without sessions the handoff still runs both flows in sequence."
+  [from to & {:keys [prompt]}]
+  {:karcarthy/type :handoff :from from :to to :prompt prompt})
+
 ;; ---------------------------------------------------------------------------
 ;; Interpreter
 ;; ---------------------------------------------------------------------------
@@ -203,6 +211,15 @@
                :gathered gathered
                :text     (or (:text gathered)
                              (str/join "\n\n" (keep :text results)))})))
+
+(defmethod run-node :handoff
+  [harness {:keys [from to prompt]} input opts]
+  (let [r1 (run-flow harness from input opts)]
+    (if-not (k/ok? r1)
+      r1                                              ; bail if the first agent failed
+      (let [opts' (cond-> opts
+                    (:session-id r1) (assoc :resume (:session-id r1)))]
+        (run-flow harness to (or prompt (:text r1)) opts')))))
 
 (defmethod run-node :default
   [_ node _ _]

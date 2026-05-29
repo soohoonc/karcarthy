@@ -7,7 +7,8 @@
   '[karcarthy.core-test
     karcarthy.harness.claude-test
     karcarthy.harness.command-test
-    karcarthy.orchestrate-test])
+    karcarthy.orchestrate-test
+    karcarthy.session-test])
 
 (defn -main [& _]
   (doseq [ns test-namespaces] (require ns))

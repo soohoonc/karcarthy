@@ -222,6 +222,40 @@
       (is (some? ex))
       (is (str/includes? msgs "not a runnable flow")))))
 
+;; Records each call's :resume opt and returns a per-agent session id, so we can
+;; assert that handoff threads the session forward.
+(defn- session-recording-harness [log]
+  (reify k/Harness
+    (-run [_ agent prompt opts]
+      (swap! log conj {:agent (:name agent) :prompt prompt :resume (:resume opts)})
+      (k/result {:agent      (:name agent)
+                 :text       (str "[" (:name agent) "] " prompt)
+                 :session-id (str "sess-" (:name agent))}))))
+
+(deftest handoff-threads-session
+  (testing "to inherits from's text as input and from's session as :resume"
+    (let [log (atom [])
+          r   (o/run-flow (session-recording-harness log) (o/handoff a b) "hi")]
+      (is (k/ok? r))
+      (is (= "[b] [a] hi" (:text r)))
+      (is (= [{:agent "a" :prompt "hi"     :resume nil}
+              {:agent "b" :prompt "[a] hi" :resume "sess-a"}]
+             @log)))))
+
+(deftest handoff-prompt-override
+  (testing ":prompt overrides the handed-off input"
+    (let [log (atom [])
+          r   (o/run-flow (session-recording-harness log)
+                          (o/handoff a b :prompt "explicit") "hi")]
+      (is (= "[b] explicit" (:text r)))
+      (is (= "explicit" (:prompt (second @log)))))))
+
+(deftest handoff-bails-on-from-failure
+  (testing "if the first agent fails, the handoff returns that failure"
+    (let [r (o/run-flow (failing-harness #{"a"}) (o/handoff a b) "hi")]
+      (is (not (k/ok? r)))
+      (is (= "a" (:agent r))))))
+
 (deftest unknown-node-throws
   (is (thrown? clojure.lang.ExceptionInfo
                (o/run-flow h {:karcarthy/type :nonsense} "hi"))))
