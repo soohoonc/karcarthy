@@ -13,4 +13,13 @@
   ;; Build/install a jar:  clojure -T:build jar | install
   :build {:deps {io.github.clojure/tools.build
                  {:git/tag "v0.9.6" :git/sha "b7258d84b36b7762b770819443042fdb8edca776"}}
-          :ns-default build}}}
+          :ns-default build}
+
+  ;; Publish to Clojars (used by CI on a release tag; needs CLOJARS_USERNAME /
+  ;; CLOJARS_PASSWORD). Isolated via :replace-deps so it never affects build/test.
+  ;; Run `clojure -T:build jar` first. See RELEASING.md.
+  :deploy {:replace-deps {slipset/deps-deploy {:mvn/version "0.2.2"}}
+           :exec-fn      deps-deploy.deps-deploy/deploy
+           :exec-args    {:installer      :remote
+                          :sign-releases? false
+                          :artifact       "target/karcarthy-0.2.0.jar"}}}}
