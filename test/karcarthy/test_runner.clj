@@ -5,10 +5,12 @@
 
 (def test-namespaces
   '[karcarthy.core-test
+    karcarthy.proc-test
     karcarthy.harness.claude-test
     karcarthy.harness.command-test
     karcarthy.harness.openai-test
     karcarthy.orchestrate-test
+    karcarthy.self-test
     karcarthy.session-test])
 
 (defn -main [& _]

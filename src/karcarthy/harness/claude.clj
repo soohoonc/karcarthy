@@ -11,9 +11,9 @@
   before running. `claude-harness` wraps it as a `karcarthy.core/Harness`."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
-            [clojure.java.shell :as shell]
             [clojure.string :as str]
-            [karcarthy.core :as k]))
+            [karcarthy.core :as k]
+            [karcarthy.proc :as proc]))
 
 (defn claude-command
   "Pure: build the argv (vector of strings) to run `agent` on `prompt`.
@@ -82,30 +82,37 @@
   keys), call `(on-event ev)` per event, and return
   {:events [...] :exit n :result <terminal \"result\" event map, or nil>}.
   stderr is merged into stdout; non-JSON lines are ignored. `opts`: :on-event
-  :dir. Exposed (and harness-agnostic) so it can be tested with any line-emitting
+  :dir :timeout-ms (a watchdog force-kills the process after :timeout-ms).
+  Exposed (and harness-agnostic) so it can be tested with any line-emitting
   command."
-  [argv {:keys [on-event dir]}]
+  [argv {:keys [on-event dir timeout-ms]}]
   (let [pb (doto (ProcessBuilder. ^java.util.List (vec argv))
              (.redirectErrorStream true))]
     (when dir (.directory pb (io/file (str dir))))
-    (let [proc (.start pb)]
-      (with-open [rdr (io/reader (.getInputStream proc))]
-        (loop [events []]
-          (if-let [line (.readLine ^java.io.BufferedReader rdr)]
-            (let [ev (try (json/read-str line :key-fn keyword)
-                          (catch Exception _ nil))]
-              (when (and ev on-event) (on-event ev))
-              (recur (if ev (conj events ev) events)))
-            {:events events
-             :exit   (.waitFor proc)
-             :result (last (filter #(= "result" (:type %)) events))}))))))
+    (let [proc     (.start pb)
+          watchdog (when timeout-ms
+                     (future (Thread/sleep timeout-ms)
+                             (when (.isAlive proc) (.destroyForcibly proc))))]
+      (try
+        (with-open [rdr (io/reader (.getInputStream proc))]
+          (loop [events []]
+            (if-let [line (.readLine ^java.io.BufferedReader rdr)]
+              (let [ev (try (json/read-str line :key-fn keyword)
+                            (catch Exception _ nil))]
+                (when (and ev on-event) (on-event ev))
+                (recur (if ev (conj events ev) events)))
+              {:events events
+               :exit   (.waitFor proc)
+               :result (last (filter #(= "result" (:type %)) events))})))
+        (finally
+          (when watchdog (future-cancel watchdog)))))))
 
 (defn- run-streaming
   "Stream `claude -p --output-format stream-json`, invoking (:on-event opts) per
   event, and return the karcarthy result built from the terminal result event."
   [agent prompt opts]
   (let [argv (claude-command agent prompt (assoc opts :output-format "stream-json"))
-        {:keys [result exit events]} (read-stream argv (select-keys opts [:on-event :dir]))]
+        {:keys [result exit events]} (read-stream argv (select-keys opts [:on-event :dir :timeout-ms]))]
     (if result
       (result-map->result (:name agent) result)
       (k/result {:agent (:name agent) :ok? false :text nil
@@ -116,11 +123,14 @@
   [agent prompt opts]
   (let [output-format (get opts :output-format "json")
         argv          (claude-command agent prompt opts)
-        ;; :dir runs the agent in a chosen working directory (clojure.java.shell
-        ;; takes :dir as a trailing kwarg).
-        sh-argv       (if-let [d (:dir opts)] (concat argv [:dir (str d)]) argv)
-        {:keys [exit out err]} (apply shell/sh sh-argv)]
+        {:keys [exit out err timed-out?]}
+        (proc/run argv {:dir (:dir opts) :timeout-ms (:timeout-ms opts)})]
     (cond
+      timed-out?
+      (k/result {:agent (:name agent) :ok? false :text nil
+                 :error "claude timed out"
+                 :raw   {:timed-out? true :out out :err err :argv argv}})
+
       ;; JSON mode: claude emits a structured result (with cost, subtype and
       ;; partial text) even when it errors and exits non-zero, so prefer parsing
       ;; stdout and let the payload's `is_error` decide `:ok?`.
@@ -134,7 +144,7 @@
                      :raw   {:exit exit :out out :err err :argv argv}})))
 
       ;; Non-JSON output (or empty stdout): trust the exit code.
-      (zero? exit)
+      (and exit (zero? exit))
       (k/result {:agent (:name agent) :ok? true
                  :text  out
                  :raw   {:out out :err err}})
@@ -156,8 +166,9 @@
 (defn claude-harness
   "A `karcarthy.core/Harness` that drives `claude -p`. `default-opts` are merged
   beneath per-run opts (per-run wins). See `claude-command` for command-building
-  option keys; additionally `:dir` sets the agent's working directory and
-  `:on-event` (a fn of each stream event) streams via --output-format stream-json.
+  option keys; additionally `:dir` sets the agent's working directory,
+  `:timeout-ms` force-kills a hung run, and `:on-event` (a fn of each stream
+  event) streams via --output-format stream-json.
 
     (require '[karcarthy.core :as k]
              '[karcarthy.harness.claude :as cc])

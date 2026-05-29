@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `karcarthy.self` — agents author and edit karcarthy at runtime: `run-authored`
+  (an agent writes a flow that then runs), `evolve` (an agent edits its own
+  definition), a runtime-editable agent `registry` + `agent-ref`, and safe EDN
+  parsing (`read-flow` / `read-agent`, data-only via `clojure.edn` — never eval).
+  `dsl-reference` teaches the DSL to a model.
+- `karcarthy.proc` — subprocess execution with `:timeout-ms`; all shell harnesses
+  (claude-cli, command, openai) now accept it and force-kill hung processes.
+
+### Changed
+- Composite flow nodes are fault-isolated (a child that throws becomes a not-ok
+  result); `parallel`/`orchestrate` use a fixed-thread-pool bounded concurrency;
+  `route` matches tolerantly (exact, then case-insensitive, then substring).
+- `karcarthy.orchestrate/run-node` is now public — the interpreter's extension
+  point for new node types.
+
 ## [0.1.0] - 2026-05-29
 
 ### Added

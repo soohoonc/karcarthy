@@ -109,6 +109,37 @@ See it run, fully offline:
 clojure -M -m karcarthy.demo
 ```
 
+## Agents that speak karcarthy
+
+The payoff of homoiconicity: because agents and flows are EDN *data*, an agent
+can **emit karcarthy as text**, and karcarthy parses it — with `clojure.edn`,
+**data only, never `eval`** — validates it, and runs it. So agents can use the
+language themselves to build and edit behavior at runtime.
+
+```clojure
+(require '[karcarthy.self :as self])
+
+;; 1. An agent WRITES a flow (taught the DSL via `self/dsl-reference`), and
+;;    karcarthy runs what it wrote — a homoiconic take on "dynamic workflows":
+(self/run-authored harness designer "Research X from three angles, then merge")
+;=> {:flow <the EDN flow the agent wrote>, :result <run result>, :author …}
+
+;; 2. An agent EDITS ITS OWN definition at runtime, then acts with it:
+(o/run-flow harness (self/evolve poet) "Become an expert, then write a line on Lisp")
+;=> {:rounds 3, :patches [{:instructions "…"}], :evolved {…}, :text "…"}
+```
+
+In a real run ([`examples/self_modify.clj`](examples/self_modify.clj)), a `haiku`
+agent evolved itself from *"a mediocre poet"* into *"an expert minimalist poet"*
+over three self-issued patches, then wrote:
+
+> McCarthy opened a parenthesis the universe has not yet closed.
+
+A `registry` + `agent-ref` let a running flow re-point a *named* agent, so later
+steps pick up the change — runtime-editable shared behavior. Parsing is strictly
+data (`clojure.edn`), so an agent's output can reshape *behavior*, never execute
+arbitrary code.
+
 ## Status
 
 Early, but real. Working today, all on **Maven-Central-only** dependencies (no
@@ -121,9 +152,14 @@ Clojars required):
 - all five **Building Effective Agents** patterns — **chain / parallel / route /
   refine / orchestrate** — plus **handoff** and multi-turn **sessions**
   (`converse`), over a data DSL
+- **`karcarthy.self`** — agents author flows (`run-authored`) and edit their own
+  behavior (`evolve`) at runtime; a runtime-editable agent `registry`
+- production hardening: subprocess **timeouts**, fault-isolated nodes, bounded
+  concurrency, tolerant routing
 
 Next: tool-call extraction for richer handoffs, structured outputs
-(`--json-schema`), and a hosted Managed Agents harness.
+(`--json-schema`), clj-kondo hooks for `defagent`/`defflow`, and a hosted
+Managed Agents harness.
 
 ## Install
 

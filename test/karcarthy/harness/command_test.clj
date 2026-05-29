@@ -36,3 +36,11 @@
     (let [h (cmd/command-harness ["cat"] {:trim? false})
           r (k/run-agent h (k/agent "raw" "i") "x\n")]
       (is (= "x\n" (:text r))))))
+
+(deftest command-timeout
+  (testing "a slow command is reported as a not-ok timeout"
+    (let [h (cmd/command-harness ["sleep" "10"] {:timeout-ms 300})
+          r (k/run-agent h (k/agent "slow" "i") "x")]
+      (is (not (k/ok? r)))
+      (is (= "command timed out" (:error r)))
+      (is (true? (get-in r [:raw :timed-out?]))))))

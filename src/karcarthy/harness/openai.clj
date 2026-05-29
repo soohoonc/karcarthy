@@ -13,9 +13,9 @@
   the environment."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
-            [clojure.java.shell :as shell]
             [clojure.string :as str]
-            [karcarthy.core :as k]))
+            [karcarthy.core :as k]
+            [karcarthy.proc :as proc]))
 
 (defn openai-request
   "Pure: build the JSON request map sent to the Python runner. `opts` :model
@@ -52,20 +52,28 @@
     :python-bin  python executable (default \"python3\")
     :runner      path to the runner script (default: the bundled resource)
     :model       default model for agents that don't set one
-    :dir / :env  working directory / extra environment for the process"
+    :dir / :env  working directory / extra environment for the process
+    :timeout-ms  kill the runner if it runs longer than this (milliseconds)"
   ([] (openai-agents-harness {}))
   ([default-opts]
    (reify k/Harness
      (-run [_ agent prompt opts]
-       (let [opts    (merge default-opts opts)
-             python  (get opts :python-bin "python3")
-             runner  (or (:runner opts) @runner-file)
-             req     (json/write-str (openai-request agent prompt opts))
-             sh-args (cond-> [python runner :in req]
-                       (:dir opts) (concat [:dir (str (:dir opts))])
-                       (:env opts) (concat [:env (merge (into {} (System/getenv)) (:env opts))]))
-             {:keys [exit out err]} (apply shell/sh sh-args)]
-         (if (seq (str/trim (or out "")))
+       (let [opts   (merge default-opts opts)
+             python (get opts :python-bin "python3")
+             runner (or (:runner opts) @runner-file)
+             req    (json/write-str (openai-request agent prompt opts))
+             {:keys [exit out err timed-out?]}
+             (proc/run [python runner] {:in         req
+                                        :dir        (:dir opts)
+                                        :env        (:env opts)
+                                        :timeout-ms (:timeout-ms opts)})]
+         (cond
+           timed-out?
+           (k/result {:agent (:name agent) :ok? false :text nil
+                      :error "openai runner timed out"
+                      :raw   {:timed-out? true :err err}})
+
+           (seq (str/trim (or out "")))
            (try
              (parse-openai-result (:name agent) out)
              (catch Exception e
@@ -73,6 +81,8 @@
                           :text  (or (not-empty err) out)
                           :error (str "could not parse runner JSON: " (.getMessage e))
                           :raw   {:exit exit :out out :err err}})))
+
+           :else
            (k/result {:agent (:name agent) :ok? false
                       :text  (or (not-empty err) out)
                       :error (str "runner exited with status " exit)
