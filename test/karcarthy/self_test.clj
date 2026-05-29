@@ -111,3 +111,21 @@
       (is (= "immediate answer" (:text r)))
       (is (= 1 (:rounds r)))
       (is (empty? (:patches r))))))
+
+;; --- registry: edit a named agent's behavior at runtime --------------------
+
+(deftest agent-ref-resolves-at-runtime
+  (testing "patching a registered agent changes what agent-ref runs next"
+    (let [reg (self/registry [(k/agent "writer" "version one")])
+          ;; this harness echoes the agent's *current* instructions
+          h   (k/mock-harness (fn [{:keys [agent]}] (:instructions agent)))
+          ref (self/agent-ref reg "writer")]
+      (is (= "version one" (:text (o/run-flow h ref "x"))))
+      (self/patch-agent! reg "writer" {:instructions "version two"})
+      (is (= "version two" (:text (o/run-flow h ref "x")))))))
+
+(deftest agent-ref-unknown
+  (let [reg (self/registry [])
+        r   (o/run-flow (k/mock-harness) (self/agent-ref reg "missing") "x")]
+    (is (not (k/ok? r)))
+    (is (= :unknown-agent (:error r)))))

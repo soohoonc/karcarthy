@@ -163,3 +163,41 @@
         :else
         (k/result (assoc r :agent (:name agent) :rounds round
                          :patches patches :evolved agent))))))
+
+;; ---------------------------------------------------------------------------
+;; A runtime-editable registry of named agents
+;;
+;; `evolve` lets an agent edit *itself*; a registry lets a running flow edit a
+;; *named, shared* agent so that later steps (referenced via `agent-ref`) pick up
+;; the new behavior at runtime.
+;; ---------------------------------------------------------------------------
+
+(defn registry
+  "A mutable store of named agents (an atom keyed by :name), built from `agents`."
+  [agents]
+  (atom (into {} (map (juxt :name identity)) agents)))
+
+(defn patch-agent!
+  "Merge `patch` into the registered agent `name`, returning the updated agent.
+  How a running flow edits a shared agent's behavior at runtime."
+  [reg name patch]
+  (-> (swap! reg update name merge patch) (get name)))
+
+(defn put-agent!
+  "Register (or replace) `agent` in `reg`, keyed by its :name."
+  [reg agent]
+  (swap! reg assoc (:name agent) agent)
+  agent)
+
+(defn agent-ref
+  "A flow node that resolves agent `name` from `reg` *at run time*, so edits made
+  with `patch-agent!`/`put-agent!` take effect on subsequent runs."
+  [reg name]
+  {:karcarthy/type :agent-ref :registry reg :name name})
+
+(defmethod o/run-node :agent-ref
+  [harness {:keys [registry name]} input opts]
+  (if-let [a (get @registry name)]
+    (k/run-agent harness a input opts)
+    (k/result {:ok? false :error :unknown-agent
+               :text (str "no agent named " (pr-str name) " in registry")})))
