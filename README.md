@@ -61,7 +61,10 @@ Swap `(k/mock-harness)` for `(k/claude-harness {})` to run it against `claude`.
 
 ## More
 
-- Examples in Clojure, Java, Kotlin, and Scala: [`examples/`](examples/).
+- Examples in Clojure, Java, Kotlin, Scala, Python, and TypeScript:
+  [`examples/`](examples/). Non-JVM languages drive it over a JSON bridge
+  (`karcarthy.cli`), since a flow is just data.
+- How it compares to PydanticAI, Agno, and the Vercel AI SDK: [`COMPARISON.md`](COMPARISON.md).
 - `clojure -M:test` runs the offline tests; `clojure -M -m karcarthy.demo` a demo.
 - Pre-release (0.0.2). JDK 21+; depends only on `org.clojure/clojure` and
   `org.clojure/data.json`.

@@ -6,6 +6,7 @@
 (def test-namespaces
   '[karcarthy-test
     karcarthy.core-test
+    karcarthy.cli-test
     karcarthy.proc-test
     karcarthy.harness.claude-test
     karcarthy.harness.command-test

@@ -11,6 +11,24 @@ languages, to show the library is reachable from each.
 - `clojure/self_modify.clj` - an agent writes a flow, and an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
+## Python and TypeScript (via the JSON bridge)
+
+Non-JVM languages drive karcarthy through `karcarthy.cli`: send a flow described
+as JSON on stdin, get the result as JSON. The flow is data, so the language
+builds (and could transform) the workflow, and an agent can author or edit one
+the same way. See [`../COMPARISON.md`](../COMPARISON.md) for how this differs
+from PydanticAI, Agno, and the Vercel AI SDK.
+
+```bash
+python3 examples/python/demo.py            # offline (mock harness)
+python3 examples/python/demo.py --live     # + an agent that edits itself (real claude)
+
+bun run examples/typescript/demo.ts        # or: npx tsx … / ts-node …
+```
+
+Both build a flow as a plain dict/object and run it; `--live` runs an `evolve`
+flow where the agent rewrites its own instructions, all over the bridge.
+
 ## Java (verified)
 
 ```bash
