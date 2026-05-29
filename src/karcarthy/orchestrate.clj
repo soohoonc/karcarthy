@@ -75,6 +75,23 @@
   [worker evaluator & {:keys [max-rounds] :or {max-rounds 3}}]
   {:karcarthy/type :refine :worker worker :evaluator evaluator :max-rounds max-rounds})
 
+(defn orchestrate
+  "Orchestrator-workers: a `planner` decomposes the input into subtasks, a
+  `worker` flow handles each subtask (fanned out, at most :max-concurrency at a
+  time — default 16, echoing the dynamic-workflows bound), and an optional
+  `:synthesize` fn combines the worker results.
+
+  `planner` is either a fn of input -> seq of subtask strings, or a flow/agent
+  whose reply is parsed into subtasks (one per non-blank line, with leading list
+  markers like '-', '*', '1.' stripped). `:synthesize` is a fn of
+  [results input] -> result/map; when present its :text becomes the node :text."
+  [planner worker & {:keys [synthesize max-concurrency] :or {max-concurrency 16}}]
+  (cond-> {:karcarthy/type  :orchestrate
+           :planner         planner
+           :worker          worker
+           :max-concurrency max-concurrency}
+    synthesize (assoc :synthesize synthesize)))
+
 ;; ---------------------------------------------------------------------------
 ;; Interpreter
 ;; ---------------------------------------------------------------------------
@@ -151,6 +168,42 @@
                         "\n\nFEEDBACK TO ADDRESS:\n" feedback
                         "\n\nProduce an improved version."))))))))
 
+(def ^:private list-marker #"^\s*(?:[-*•]|\d+[.)])\s+")
+
+(defn- plan-subtasks
+  "Turn the input into a vector of subtask strings via `planner` (a fn, or a
+  flow whose reply is parsed line-by-line)."
+  [harness planner input opts]
+  (if (fn? planner)
+    (vec (planner input))
+    (->> (str/split-lines (str (:text (run-flow harness planner input opts))))
+         (map #(str/replace % list-marker ""))
+         (map str/trim)
+         (remove str/blank?)
+         vec)))
+
+(defn- bounded-pmap
+  "Map `f` over `coll`, running at most `n` calls concurrently (in batches)."
+  [n f coll]
+  (->> coll
+       (partition-all (max 1 n))
+       (mapcat (fn [batch] (mapv deref (mapv #(future (f %)) batch))))
+       vec))
+
+(defmethod run-node :orchestrate
+  [harness {:keys [planner worker synthesize max-concurrency]} input opts]
+  (let [subtasks (plan-subtasks harness planner input opts)
+        results  (bounded-pmap max-concurrency
+                               #(run-flow harness worker % opts)
+                               subtasks)
+        gathered (when synthesize (synthesize results input))]
+    (k/result {:ok?      (every? k/ok? results)
+               :subtasks subtasks
+               :results  results
+               :gathered gathered
+               :text     (or (:text gathered)
+                             (str/join "\n\n" (keep :text results)))})))
+
 (defmethod run-node :default
   [_ node _ _]
   (throw (ex-info "Not a runnable flow node (missing or unknown :karcarthy/type)"
@@ -161,3 +214,29 @@
   a `karcarthy.core` result map. `flow` may be an agent or any composite node."
   ([harness flow input] (run-flow harness flow input {}))
   ([harness flow input opts] (run-node harness flow input opts)))
+
+;; ---------------------------------------------------------------------------
+;; DSL sugar
+;; ---------------------------------------------------------------------------
+
+(defn flow?
+  "True if `x` is a runnable flow: an agent leaf, or a node whose
+  `:karcarthy/type` the interpreter handles."
+  [x]
+  (boolean (and (map? x)
+                (or (k/agent? x)
+                    (contains? (disj (set (keys (methods run-node))) :default)
+                               (:karcarthy/type x))))))
+
+(defmacro defflow
+  "Define a var holding a flow, validating at load time that it is runnable.
+
+    (defflow support-desk
+      (route triage {\"billing\"   billing
+                     \"technical\" (chain technical reviewer)}))"
+  [sym flow-form]
+  `(def ~sym
+     (let [f# ~flow-form]
+       (when-not (flow? f#)
+         (throw (ex-info "defflow: not a runnable flow" {:sym '~sym :flow f#})))
+       f#)))

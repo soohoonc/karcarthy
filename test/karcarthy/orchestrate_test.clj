@@ -159,6 +159,69 @@
       (is (not (k/ok? r)))
       (is (= "a" (:agent r))))))
 
+(deftest orchestrate-fn-planner
+  (testing "a fn planner's subtasks are each handled by the worker"
+    (let [flow (o/orchestrate (fn [in] (str/split in #",")) a)
+          r    (o/run-flow h flow "x,y,z")]
+      (is (k/ok? r))
+      (is (= ["x" "y" "z"] (:subtasks r)))
+      (is (= ["[a] x" "[a] y" "[a] z"] (map :text (:results r))))
+      (is (= "[a] x\n\n[a] y\n\n[a] z" (:text r))))))
+
+(deftest orchestrate-agent-planner-parses-list
+  (testing "an agent planner's reply is parsed into subtasks (markers stripped)"
+    (let [ph   (reify k/Harness
+                 (-run [_ ag p _]
+                   (k/result {:agent (:name ag)
+                              :text  (if (= "planner" (:name ag))
+                                       "- alpha\n2. beta\n  * gamma\n"
+                                       (str "[" (:name ag) "] " p))})))
+          flow (o/orchestrate (k/agent "planner" "plan") a)
+          r    (o/run-flow ph flow "do stuff")]
+      (is (= ["alpha" "beta" "gamma"] (:subtasks r)))
+      (is (= ["[a] alpha" "[a] beta" "[a] gamma"] (map :text (:results r)))))))
+
+(deftest orchestrate-synthesize
+  (testing "a synthesize fn combines the worker results"
+    (let [flow (o/orchestrate (fn [_] ["p" "q"]) a
+                              :synthesize (fn [rs _] (k/result {:text (str/join "+" (map :text rs))})))
+          r    (o/run-flow h flow "in")]
+      (is (= "[a] p+[a] q" (:text r))))))
+
+(deftest orchestrate-bounded-concurrency
+  (testing "all subtasks run correctly even with a small concurrency bound"
+    (let [flow (o/orchestrate (fn [_] (map str (range 5))) a :max-concurrency 2)
+          r    (o/run-flow h flow "in")]
+      (is (= 5 (count (:results r))))
+      (is (= (mapv #(str "[a] " %) (range 5)) (mapv :text (:results r)))))))
+
+(deftest flow-predicate
+  (testing "flow? recognizes agents and known nodes, rejects the rest"
+    (is (o/flow? a))
+    (is (o/flow? (o/chain a b)))
+    (is (o/flow? (o/orchestrate (fn [_] []) a)))
+    (is (not (o/flow? {:karcarthy/type :nonsense})))
+    (is (not (o/flow? {:karcarthy/type :default})))   ; :default isn't a real node
+    (is (not (o/flow? 42)))))
+
+(deftest defflow-macro
+  (testing "defflow defines and validates a flow"
+    (o/defflow good-flow (o/chain a b))
+    (is (o/flow? good-flow))
+    (is (= :chain (:karcarthy/type good-flow))))
+  (testing "defflow rejects a non-flow at load time"
+    ;; eval of a top-level def wraps the runtime throw in a CompilerException,
+    ;; so assert our message appears somewhere in the cause chain.
+    (let [ex   (try (eval '(karcarthy.orchestrate/defflow bad-flow
+                             {:karcarthy/type :nonsense}))
+                    (catch Throwable t t))
+          msgs (->> (iterate ex-cause ex)
+                    (take-while some?)
+                    (map ex-message)
+                    (str/join " "))]
+      (is (some? ex))
+      (is (str/includes? msgs "not a runnable flow")))))
+
 (deftest unknown-node-throws
   (is (thrown? clojure.lang.ExceptionInfo
                (o/run-flow h {:karcarthy/type :nonsense} "hi"))))

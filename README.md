@@ -22,11 +22,12 @@ manipulate it. Plan-as-code *and* plan-as-data, at once.
 ```clojure
 (require '[karcarthy.core :as k])
 
-;; An agent is just a map.
-(def researcher
-  (k/agent "researcher" "Research questions thoroughly and cite sources."
-           :model "sonnet"
-           :tools ["WebSearch" "WebFetch"]))
+;; An agent is just a map — `defagent` is sugar (the var name is the agent name,
+;; and the instructions double as the docstring).
+(k/defagent researcher
+  "Research questions thoroughly and cite sources."
+  :model "sonnet"
+  :tools ["WebSearch" "WebFetch"])
 
 ;; Run it on a harness. The mock harness is fully offline — great for tests.
 (k/run-agent (k/mock-harness) researcher "What changed in Node v22?")
@@ -78,7 +79,7 @@ as combinators over data + a harness:
 - **parallel** / **parallel\*** — fan out concurrently and gather (sectioning/voting) ✅
 - **route** — classify (fn or agent), then dispatch to a specialized flow ✅
 - **refine** — evaluator-optimizer; a worker drafts, an evaluator critiques, repeat until accepted ✅
-- **orchestrate** — orchestrator-workers, dynamic fan-out *(planned)*
+- **orchestrate** — orchestrator-workers; a planner emits subtasks as data, fan out (bounded concurrency) and gather ✅
 
 See it run, fully offline:
 
@@ -91,13 +92,14 @@ clojure -M -m karcarthy.demo
 Early, but real. Working today, all on **Maven-Central-only** dependencies (no
 Clojars required):
 
-- the EDN data model + `clojure.spec` validation
-- the `Harness` protocol with two adapters: an offline **mock** harness and a
-  **`claude-cli`** harness that drives `claude -p` (verified end-to-end)
-- **chain / parallel / route / refine** orchestration over a data DSL
+- the EDN data model, `clojure.spec` validation, and **`defagent` / `defflow`** sugar
+- the `Harness` protocol with three adapters: an offline **mock** harness, a
+  **`claude-cli`** harness that drives `claude -p` (verified end-to-end), and a
+  **`command`** harness that wraps any CLI/local model as an agent
+- **chain / parallel / route / refine / orchestrate** — all five canonical
+  patterns over a data DSL
 
-Next: orchestrator-workers (dynamic fan-out), streaming (`stream-json`),
-sessions/handoffs, and an OpenAI Agents harness.
+Next: streaming (`stream-json`), sessions/handoffs, and an OpenAI Agents harness.
 
 ## Develop
 
