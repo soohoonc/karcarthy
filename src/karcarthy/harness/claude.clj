@@ -1,5 +1,5 @@
 (ns karcarthy.harness.claude
-  "Harness adapter that drives the Claude Agent SDK via the `claude` CLI in
+  "Runner adapter that drives the Claude Agent SDK via the `claude` CLI in
   headless (`-p`) mode. Each agent run is one `claude -p` invocation:
 
     claude -p <prompt> --output-format json
@@ -8,7 +8,7 @@
 
   The command builder (`claude-command`) is a pure function returning a vector
   of strings - the command is data too, so you can inspect or transform it
-  before running. `claude-harness` wraps it as a `karcarthy.core/Harness`."
+  before running. `claude-runner` wraps it as a `karcarthy.core/Runner`."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -83,7 +83,7 @@
   {:events [...] :exit n :result <terminal \"result\" event map, or nil>}.
   stderr is merged into stdout; non-JSON lines are ignored. `opts`: :on-event
   :dir :timeout-ms (a watchdog force-kills the process after :timeout-ms).
-  Exposed (and harness-agnostic) so it can be tested with any line-emitting
+  Exposed (and runner-agnostic) so it can be tested with any line-emitting
   command."
   [argv {:keys [on-event dir timeout-ms]}]
   (let [pb (doto (ProcessBuilder. ^java.util.List (vec argv))
@@ -163,8 +163,8 @@
     (run-streaming agent prompt opts)
     (run-buffered agent prompt opts)))
 
-(defn claude-harness
-  "A `karcarthy.core/Harness` that drives `claude -p`. `default-opts` are merged
+(defn claude-runner
+  "A `karcarthy.core/Runner` that drives `claude -p`. `default-opts` are merged
   beneath per-run opts (per-run wins). See `claude-command` for command-building
   option keys; additionally `:dir` sets the agent's working directory,
   `:timeout-ms` force-kills a hung run, and `:on-event` (a fn of each stream
@@ -172,11 +172,16 @@
 
     (require '[karcarthy.core :as k]
              '[karcarthy.harness.claude :as cc])
-    (k/run-agent (cc/claude-harness {:max-turns 4})
+    (k/run-agent (cc/claude-runner {:max-turns 4})
                  (k/agent \"haiku\" \"Be terse.\" :model \"haiku\")
                  \"Say hi\")"
-  ([] (claude-harness {}))
+  ([] (claude-runner {}))
   ([default-opts]
-   (reify k/Harness
+   (reify k/Runner
      (-run [_ agent prompt opts]
        (run-claude agent prompt (merge default-opts opts))))))
+
+(defn claude-harness
+  "Deprecated alias for `claude-runner`."
+  ([] (claude-runner))
+  ([default-opts] (claude-runner default-opts)))

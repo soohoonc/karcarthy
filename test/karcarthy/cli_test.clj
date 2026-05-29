@@ -4,29 +4,40 @@
             [karcarthy.orchestrate :as o]
             [karcarthy.cli :as cli]))
 
-(deftest json->flow-builds-and-runs
-  (testing "a JSON chain translates to flow data and runs on the mock harness"
-    (let [f (cli/json->flow {"type"  "chain"
-                             "steps" [{"type" "agent" "name" "a" "instructions" "i"}
-                                      {"type" "agent" "name" "b" "instructions" "i"}]})]
-      (is (= :chain (:karcarthy/type f)))
-      (is (k/agent? (first (:steps f))))
-      (is (= "[b] [a] hi" (:text (o/run-flow (k/mock-harness) f "hi")))))))
+(deftest json->workflow-builds-and-runs
+  (testing "a JSON chain translates to workflow data and runs on the mock runner"
+    (let [workflow (cli/json->workflow {"type"  "chain"
+                                        "steps" [{"type" "agent" "name" "a" "instructions" "i"}
+                                                 {"type" "agent" "name" "b" "instructions" "i"}]})]
+      (is (= :chain (:karcarthy/type workflow)))
+      (is (k/agent? (first (:steps workflow))))
+      (is (= "[b] [a] hi" (:text (o/run (k/mock-runner) workflow "hi")))))))
 
-(deftest json->flow-agent-fields
-  (let [a (cli/json->flow {"type" "agent" "name" "x" "instructions" "do"
-                           "model" "haiku" "harness" "claude"})]
+(deftest json->workflow-agent-fields
+  (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
+                               "model" "haiku" "runner" "claude"})]
     (is (= "x" (:name a)))
     (is (= "haiku" (:model a)))
+    (is (= :claude (:runner a)))))
+
+(deftest json->workflow-accepts-old-harness-field
+  (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
+                               "harness" "claude"})]
+    (is (= :claude (:runner a)))
     (is (= :claude (:harness a)))))
 
-(deftest json->flow-route-keeps-string-labels
+(deftest json->workflow-route-keeps-string-labels
   (testing "route labels stay strings (not coerced to keywords)"
-    (let [f (cli/json->flow {"type"   "route"
-                             "router" {"type" "agent" "name" "r" "instructions" "i"}
-                             "routes" {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}})]
-      (is (= :route (:karcarthy/type f)))
-      (is (contains? (:routes f) "billing")))))
+    (let [workflow (cli/json->workflow {"type"   "route"
+                                        "router" {"type" "agent" "name" "r" "instructions" "i"}
+                                        "routes" {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}})]
+      (is (= :route (:karcarthy/type workflow)))
+      (is (contains? (:routes workflow) "billing")))))
 
-(deftest json->flow-unknown-type
-  (is (thrown? clojure.lang.ExceptionInfo (cli/json->flow {"type" "nope"}))))
+(deftest json->workflow-unknown-type
+  (is (thrown? clojure.lang.ExceptionInfo (cli/json->workflow {"type" "nope"}))))
+
+(deftest json->flow-compatibility-alias
+  (let [workflow (cli/json->flow {"type" "agent" "name" "x" "instructions" "do"})]
+    (is (k/agent? workflow))
+    (is (= "x" (:name workflow)))))

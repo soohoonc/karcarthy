@@ -1,7 +1,7 @@
 (ns karcarthy.otel
   "OpenTelemetry instrumentation for karcarthy.
 
-  The public entrypoint is `instrument`, which wraps a harness so flow nodes,
+  The public entrypoint is `instrument`, which wraps a runner so workflow nodes,
   embedded functions, and agent calls produce OpenTelemetry spans. Applications
   provide their own OpenTelemetry SDK/exporter setup; without one, the global
   OpenTelemetry instance is a no-op, matching the Java API's normal behavior."
@@ -15,8 +15,8 @@
 (def ^:private default-instrumentation-version "0.0.2")
 (def ^:private preview-limit 180)
 
-(defprotocol ^:no-doc InstrumentedHarness
-  (-otel-defaults [harness]))
+(defprotocol ^:no-doc InstrumentedRunner
+  (-otel-defaults [runner]))
 
 (defn- preview [x]
   (let [s (str/replace (str x) #"\s+" " ")]
@@ -37,12 +37,12 @@
     (not (:otel/tracer opts)) (assoc :otel/tracer (tracer-from opts))))
 
 (defn ^:no-doc instrumented-opts
-  "Merge OTel defaults from an instrumented harness into run opts."
-  [harness opts]
+  "Merge OTel defaults from an instrumented runner into run opts."
+  [runner opts]
   (cond
     (:otel/tracer opts) opts
     (or (:tracer opts) (:open-telemetry opts)) (normalize-opts opts)
-    (satisfies? InstrumentedHarness harness) (merge (-otel-defaults harness) opts)
+    (satisfies? InstrumentedRunner runner) (merge (-otel-defaults runner) opts)
     :else opts))
 
 (defn- attr-name [k]
@@ -78,7 +78,7 @@
       :else (.setAttribute span ^String k ^String (str v)))))
 
 (defn ^:no-doc with-child-path
-  "Append path segments to the current flow path."
+  "Append path segments to the current workflow path."
   [opts segment]
   (if (:otel/tracer opts)
     (update opts :otel/path (fnil into []) (if (sequential? segment) segment [segment]))
@@ -114,11 +114,11 @@
           (.end span))))
     (thunk nil)))
 
-(defn ^:no-doc with-flow-span [opts flow input thunk]
-  (with-span opts "karcarthy.flow"
-    (merge {"karcarthy.flow.type" (name (:karcarthy/type flow))
-            "karcarthy.flow.path" (or (path-string opts) "")
-            "karcarthy.agent.name" (:name flow)}
+(defn ^:no-doc with-workflow-span [opts workflow input thunk]
+  (with-span opts "karcarthy.workflow"
+    (merge {"karcarthy.workflow.type" (name (:karcarthy/type workflow))
+            "karcarthy.workflow.path" (or (path-string opts) "")
+            "karcarthy.agent.name" (:name workflow)}
            (maybe-preview opts "karcarthy.input.preview" input))
     (fn [span]
       (let [r (thunk)]
@@ -127,17 +127,22 @@
           (set-attr! span "karcarthy.result.agent" (:agent r))
           (set-attr! span "karcarthy.error" (:error r))
           (when (false? (:ok? r))
-            (.setStatus span StatusCode/ERROR (str (or (:error r) "karcarthy flow returned not-ok"))))
+            (.setStatus span StatusCode/ERROR (str (or (:error r) "karcarthy workflow returned not-ok"))))
           (doseq [[k v] (maybe-preview opts "karcarthy.output.preview" (:text r))]
             (set-attr! span k v)))
         r))))
+
+(defn ^:no-doc with-flow-span
+  "Deprecated alias for `with-workflow-span`."
+  [opts flow input thunk]
+  (with-workflow-span opts flow input thunk))
 
 (defn ^:no-doc with-agent-span [opts agent prompt thunk]
   (with-span opts "karcarthy.agent"
     (merge {"karcarthy.agent.name" (:name agent)
             "karcarthy.agent.model" (:model agent)
-            "karcarthy.agent.harness" (some-> (:harness agent) name)
-            "karcarthy.flow.path" (or (path-string opts) "")}
+            "karcarthy.agent.runner" (some-> (or (:runner agent) (:harness agent)) name)
+            "karcarthy.workflow.path" (or (path-string opts) "")}
            (maybe-preview opts "karcarthy.prompt.preview" prompt))
     (fn [span]
       (let [r (thunk)]
@@ -160,7 +165,7 @@
   (with-span opts "karcarthy.function"
     {"karcarthy.function.label" (attr-name label)
      "karcarthy.function.class" (.getName (class f))
-     "karcarthy.flow.path" (or (path-string opts) "")}
+     "karcarthy.workflow.path" (or (path-string opts) "")}
     (fn [span]
       (let [v (thunk)]
         (when span
@@ -169,7 +174,7 @@
         v))))
 
 (defn instrument
-  "Wrap a harness or harness registry with OpenTelemetry instrumentation.
+  "Wrap a runner or runner registry with OpenTelemetry instrumentation.
 
   Options:
     :open-telemetry      an io.opentelemetry.api.OpenTelemetry instance
@@ -179,15 +184,15 @@
 
   If neither :open-telemetry nor :tracer is supplied, the global OpenTelemetry
   instance is used. With no configured SDK/exporter, this is a no-op."
-  ([harness] (instrument harness {}))
-  ([harness opts]
+  ([runner] (instrument runner {}))
+  ([runner opts]
    (let [defaults (normalize-opts opts)]
      (reify
-       InstrumentedHarness
+       InstrumentedRunner
        (-otel-defaults [_] defaults)
 
-       k/Harness
+       k/Runner
        (-run [_ agent prompt opts]
          (let [opts' (merge defaults opts)]
            (with-agent-span opts' agent prompt
-             #(k/-run (k/resolve-harness harness agent) agent prompt opts'))))))))
+             #(k/-run (k/resolve-runner runner agent) agent prompt opts'))))))))

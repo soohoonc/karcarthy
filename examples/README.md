@@ -2,32 +2,33 @@
 
 karcarthy is a Clojure library that runs on the JVM, so any JVM language can
 drive it. The Java, Kotlin, and Scala examples each build two agents, chain
-them, and run the chain on the offline mock harness - identical work in three
+them, and run the chain on the offline mock runner - identical work in three
 languages, to show the library is reachable from each.
 
 ## Clojure
 
 - `clojure/live_orchestrate.clj` - a live orchestrator-workers run (paid `claude -p`).
-- `clojure/self_modify.clj` - an agent writes a flow, and an agent edits itself.
+- `clojure/self_modify.clj` - an agent writes a workflow, and an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
 ## Python and TypeScript (via the JSON bridge)
 
-Non-JVM languages drive karcarthy through `karcarthy.cli`: send a flow described
-as JSON on stdin, get the result as JSON. The flow is data, so the language
-builds (and could transform) the workflow, and an agent can author or edit one
-the same way. See [`../COMPARISON.md`](../COMPARISON.md) for how this differs
-from PydanticAI, Agno, and the Vercel AI SDK.
+Non-JVM languages drive karcarthy through `karcarthy.cli`: send a workflow
+described as JSON on stdin, get the result as JSON. The workflow is data, so the
+language builds (and could transform) it, and an agent can author or edit one the
+same way. See [`../COMPARISON.md`](../COMPARISON.md) for how this differs from
+PydanticAI, Agno, and the Vercel AI SDK.
 
 ```bash
-python3 examples/python/demo.py            # offline (mock harness)
+python3 examples/python/demo.py            # offline (mock runner)
 python3 examples/python/demo.py --live     # + an agent that edits itself (real claude)
 
 bun run examples/typescript/demo.ts        # or: npx tsx … / ts-node …
 ```
 
-Both build a flow as a plain dict/object and run it; `--live` runs an `evolve`
-flow where the agent rewrites its own instructions, all over the bridge.
+Both build a workflow as a plain dict/object and run it; `--live` runs an
+`evolve` workflow where the agent rewrites its own instructions, all over the
+bridge.
 
 ## Java (verified)
 

@@ -11,6 +11,7 @@
     karcarthy.harness.claude-test
     karcarthy.harness.command-test
     karcarthy.harness.openai-test
+    karcarthy.runner-test
     karcarthy.orchestrate-test
     karcarthy.self-test
     karcarthy.session-test

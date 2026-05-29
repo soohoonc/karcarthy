@@ -6,7 +6,7 @@
 ;;     clojure -M -e '(load-file "examples/self_modify.clj")'
 ;;
 ;; Two demonstrations of the metacircular layer (karcarthy.self):
-;;   1. run-authored - an agent WRITES a karcarthy flow (EDN), which karcarthy
+;;   1. run-authored - an agent WRITES a karcarthy workflow (EDN), which karcarthy
 ;;      parses (data only, never eval) and runs.
 ;;   2. evolve       - an agent EDITS ITS OWN definition at runtime via EDN
 ;;      patches, then acts with the new behavior.
@@ -14,7 +14,7 @@
 (require '[karcarthy.core :as k]
          '[karcarthy.self :as self]
          '[karcarthy.orchestrate :as o]
-         '[karcarthy.harness.claude :as cc])
+         '[karcarthy.runner.claude :as cc])
 
 (.mkdirs (java.io.File. "/tmp/karc"))
 
@@ -24,25 +24,25 @@
   ["--disallowedTools"
    "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"])
 
-(def harness
-  (cc/claude-harness {:system-prompt-mode :replace
-                      :max-turns          3
-                      :model              "haiku"
-                      :dir                "/tmp/karc"
-                      :timeout-ms         90000
-                      :extra-args         no-tools}))
+(def runner
+  (cc/claude-runner {:system-prompt-mode :replace
+                     :max-turns          3
+                     :model              "haiku"
+                     :dir                "/tmp/karc"
+                     :timeout-ms         90000
+                     :extra-args         no-tools}))
 
-(println "=== run-authored: an agent writes a karcarthy flow as EDN ===")
-(let [designer (k/agent "designer" "You design karcarthy orchestration flows.")
-      {:keys [flow result]} (self/run-authored harness designer
-                                               "Answer concisely: what is a monad?")]
-  (println "AUTHORED FLOW:" (pr-str flow))
+(println "=== run-authored: an agent writes a karcarthy workflow as EDN ===")
+(let [designer (k/agent "designer" "You design karcarthy orchestration workflows.")
+      {:keys [workflow result]} (self/run-authored runner designer
+                                                   "Answer concisely: what is a monad?")]
+  (println "AUTHORED WORKFLOW:" (pr-str workflow))
   (println "RAN ->" (:text result)))
 
 (println "\n=== evolve: an agent edits its own instructions at runtime ===")
 (let [poet (k/agent "poet" "You are a mediocre poet who writes one bland line.")
-      r    (o/run-flow harness (self/evolve poet :max-rounds 3)
-                       "Patch yourself into an expert minimalist poet, then write ONE line about Lisp.")]
+      r    (o/run runner (self/evolve poet :max-rounds 3)
+                  "Patch yourself into an expert minimalist poet, then write ONE line about Lisp.")]
   (println "ROUNDS:" (:rounds r) "| PATCHES:" (count (:patches r)))
   (println "EVOLVED INSTRUCTIONS:" (:instructions (:evolved r)))
   (println "ANSWER:" (:text r)))

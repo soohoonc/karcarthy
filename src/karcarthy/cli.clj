@@ -1,64 +1,72 @@
 (ns karcarthy.cli
-  "A language-agnostic bridge. Read a flow described as JSON on stdin, run it, and
-  write the result as JSON on stdout. Any language can drive karcarthy by
+  "A language-agnostic bridge. Read a workflow described as JSON on stdin, run it,
+  and write the result as JSON on stdout. Any language can drive karcarthy by
   exchanging data, so the homoiconic part (a workflow is data you can build,
   transform, and have an agent author or edit) survives the boundary.
 
-      echo '{\"flow\": <flow>, \"input\": \"...\", \"harness\": \"mock\"}' \\
+      echo '{\"workflow\": <workflow>, \"input\": \"...\", \"runner\": \"mock\"}' \\
         | clojure -M -m karcarthy.cli
 
-  A <flow> is JSON mirroring the EDN flow:
-    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"harness\":?}
-    {\"type\":\"chain\" \"steps\":[<flow> ...]}
-    {\"type\":\"parallel\" \"branches\":[<flow> ...]}
-    {\"type\":\"route\" \"router\":<flow> \"routes\":{\"label\":<flow>} \"default\":<flow>?}
-    {\"type\":\"refine\" \"worker\":<flow> \"evaluator\":<flow> \"max-rounds\":?}
-    {\"type\":\"orchestrate\" \"planner\":<flow> \"worker\":<flow>}
-    {\"type\":\"handoff\" \"from\":<flow> \"to\":<flow>}
-    {\"type\":\"evolve\" \"agent\":<flow> \"max-rounds\":?}
-  Response is the karcarthy result map as JSON. \"harness\" is \"mock\" (default,
-  offline) or \"claude\"."
+  A <workflow> is JSON mirroring the EDN workflow:
+    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"runner\":?}
+    {\"type\":\"chain\" \"steps\":[<workflow> ...]}
+    {\"type\":\"parallel\" \"branches\":[<workflow> ...]}
+    {\"type\":\"route\" \"router\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
+    {\"type\":\"refine\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
+    {\"type\":\"orchestrate\" \"planner\":<workflow> \"worker\":<workflow>}
+    {\"type\":\"handoff\" \"from\":<workflow> \"to\":<workflow>}
+    {\"type\":\"evolve\" \"agent\":<workflow> \"max-rounds\":?}
+  Response is the karcarthy result map as JSON. \"runner\" is \"mock\" (default,
+  offline) or \"claude\". The old \"flow\" and \"harness\" keys are still accepted."
   (:require [clojure.data.json :as json]
             [karcarthy.core :as k]
             [karcarthy.orchestrate :as o]
             [karcarthy.self :as self]
-            [karcarthy.harness.claude :as cc]))
+            [karcarthy.runner.claude :as cc]))
 
-(defn json->flow
-  "Translate a JSON-parsed flow map (string keys) into karcarthy flow data.
-  Route labels stay strings; `type`/`harness` become keywords."
+(declare json->workflow)
+
+(defn json->workflow
+  "Translate a JSON-parsed workflow map (string keys) into karcarthy workflow data.
+  Route labels stay strings; `type`/`runner` become keywords."
   [m]
   (let [g #(get m %)]
     (case (g "type")
       "agent"       (k/agent (g "name") (g "instructions")
                              :model   (g "model")
                              :tools   (g "tools")
+                             :runner  (some-> (or (g "runner") (g "harness")) keyword)
                              :harness (some-> (g "harness") keyword))
-      "chain"       (apply o/chain (map json->flow (g "steps")))
-      "parallel"    (apply o/parallel (map json->flow (g "branches")))
-      "route"       (o/route (json->flow (g "router"))
-                             (reduce-kv (fn [acc label f] (assoc acc label (json->flow f)))
+      "chain"       (apply o/chain (map json->workflow (g "steps")))
+      "parallel"    (apply o/parallel (map json->workflow (g "branches")))
+      "route"       (o/route (json->workflow (g "router"))
+                             (reduce-kv (fn [acc label f] (assoc acc label (json->workflow f)))
                                         {} (g "routes"))
-                             :default (some-> (g "default") json->flow))
-      "refine"      (o/refine (json->flow (g "worker")) (json->flow (g "evaluator"))
+                             :default (some-> (g "default") json->workflow))
+      "refine"      (o/refine (json->workflow (g "worker")) (json->workflow (g "evaluator"))
                               :max-rounds (or (g "max-rounds") 3))
-      "orchestrate" (o/orchestrate (json->flow (g "planner")) (json->flow (g "worker")))
-      "handoff"     (o/handoff (json->flow (g "from")) (json->flow (g "to")))
-      "evolve"      (self/evolve (json->flow (g "agent")) :max-rounds (or (g "max-rounds") 5))
-      (throw (ex-info (str "unknown flow type: " (pr-str (g "type"))) {:node m})))))
+      "orchestrate" (o/orchestrate (json->workflow (g "planner")) (json->workflow (g "worker")))
+      "handoff"     (o/handoff (json->workflow (g "from")) (json->workflow (g "to")))
+      "evolve"      (self/evolve (json->workflow (g "agent")) :max-rounds (or (g "max-rounds") 5))
+      (throw (ex-info (str "unknown workflow type: " (pr-str (g "type"))) {:node m})))))
 
-(defn- harness-for
-  "Build the harness named in the request. \"claude\" uses lean sub-agent
+(defn json->flow
+  "Deprecated alias for `json->workflow`."
+  [m]
+  (json->workflow m))
+
+(defn- runner-for
+  "Build the runner named in the request. \"claude\" uses lean sub-agent
   defaults (replace mode, tools off) so cross-language agents answer directly."
   [name]
   (if (= name "claude")
-    (cc/claude-harness {:system-prompt-mode :replace
-                        :max-turns          4
-                        :model              "haiku"
-                        :dir                "/tmp/karc"
-                        :extra-args         ["--disallowedTools"
-                                             "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]})
-    (k/mock-harness)))
+    (cc/claude-runner {:system-prompt-mode :replace
+                       :max-turns          4
+                       :model              "haiku"
+                       :dir                "/tmp/karc"
+                       :extra-args         ["--disallowedTools"
+                                            "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]})
+    (k/mock-runner)))
 
 (defn- result->json [r]
   (try
@@ -70,10 +78,10 @@
   (.mkdirs (java.io.File. "/tmp/karc"))
   (let [out (try
               (let [req     (json/read-str (slurp *in*))
-                    flow    (json->flow (get req "flow"))
+                    workflow (json->workflow (or (get req "workflow") (get req "flow")))
                     input   (get req "input" "")
-                    harness (harness-for (get req "harness"))]
-                (result->json (o/run-flow harness flow input)))
+                    runner (runner-for (or (get req "runner") (get req "harness")))]
+                (result->json (o/run runner workflow input)))
               (catch Throwable t
                 (json/write-str {:ok false
                                  :error (.getMessage t)
