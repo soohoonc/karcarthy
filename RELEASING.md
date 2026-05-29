@@ -4,7 +4,7 @@ Releases are automated by [`.github/workflows/release.yml`](.github/workflows/re
 which runs on any `v*` tag and:
 
 1. builds the jar (`clojure -T:build jar`),
-2. creates a **GitHub Release** with the jar attached (always — uses the built-in
+2. creates a **GitHub Release** with the jar attached (always - uses the built-in
    `GITHUB_TOKEN`, no extra setup), and
 3. **publishes to Clojars** *if* the `CLOJARS_USERNAME` / `CLOJARS_PASSWORD`
    repository secrets are set (otherwise that step is skipped).
@@ -28,8 +28,8 @@ which runs on any `v*` tag and:
 create a deploy token at <https://clojars.org/tokens>, then add two repository
 secrets (Settings → Secrets and variables → Actions):
 
-- `CLOJARS_USERNAME` — your Clojars username
-- `CLOJARS_PASSWORD` — the deploy **token**
+- `CLOJARS_USERNAME` - your Clojars username
+- `CLOJARS_PASSWORD` - the deploy **token**
 
 After that, every `v*` tag publishes `io.github.soohoonc/karcarthy` to Clojars,
 consumable as:
@@ -45,7 +45,7 @@ sufficient for `deps.edn`/Leiningen consumers.
 
 ## Without any registry
 
-karcarthy is always usable directly from git — no publish step required:
+karcarthy is always usable directly from git - no publish step required:
 
 ```clojure
 io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"

@@ -2,12 +2,12 @@
   "Harness adapter for the OpenAI Agents SDK
   (https://github.com/openai/openai-agents-python).
 
-  The Agents SDK is Python, so — like the claude harness uses an existing CLI —
+  The Agents SDK is Python, so - like the claude harness uses an existing CLI -
   this drives an existing harness by shelling out to a small Python runner
   (`resources/karcarthy/openai_runner.py`) that builds an `agents.Agent` and
   calls `Runner.run_sync`. karcarthy sends a JSON request on stdin and reads a
   JSON result on stdout, so the orchestration layer is identical whether a flow
-  runs over Claude or OpenAI — just swap the harness.
+  runs over Claude or OpenAI - just swap the harness.
 
   Requirements: a `python3` with `openai-agents` installed and OPENAI_API_KEY in
   the environment."

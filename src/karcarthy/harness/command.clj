@@ -1,7 +1,7 @@
 (ns karcarthy.harness.command
   "A Harness that runs an arbitrary external command as an agent: the agent's
   prompt is written to the process's stdin and its stdout becomes the result
-  :text. Use it to wrap any CLI as an agent — a local model (`ollama run ...`),
+  :text. Use it to wrap any CLI as an agent - a local model (`ollama run ...`),
   Simon Willison's `llm`, a shell script, or `cat`/`tr` in tests.
 
   The command is chosen per-agent by a function (agent -> argv), so an agent's

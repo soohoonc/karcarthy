@@ -2,7 +2,7 @@
   "Multi-turn conversations over a session-aware harness.
 
   `converse` runs a sequence of prompts against one agent, threading the
-  harness's session id so each turn sees the prior context — i.e. memory. It
+  harness's session id so each turn sees the prior context - i.e. memory. It
   works with any harness that returns `:session-id` and honours a `:resume`
   option (e.g. `karcarthy.harness.claude`); other harnesses simply run the turns
   in sequence without shared context."

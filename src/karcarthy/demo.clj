@@ -3,7 +3,7 @@
 
       clojure -M -m karcarthy.demo
 
-  Shows the central idea — a karcarthy workflow is *data* — plus the DSL sugar
+  Shows the central idea - a karcarthy workflow is *data* - plus the DSL sugar
   (`defagent` / `defflow`) and orchestrator-workers fanning out over the command
   harness with real subprocesses. No API key or network required."
   (:require [clojure.pprint :as pp]

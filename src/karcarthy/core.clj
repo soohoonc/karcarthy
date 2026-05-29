@@ -1,19 +1,14 @@
 (ns karcarthy.core
-  "karcarthy — homoiconic agent orchestration for Clojure.
+  "karcarthy: homoiconic agent orchestration for Clojure.
 
-  Agents, tools, handoffs and workflows are plain Clojure maps (EDN). Because
-  they are values, you can generate, transform, compose, inspect, serialize and
-  diff them like any other data — which is the whole point of doing this in a
-  Lisp.
+  Agents, tools, handoffs and workflows are plain Clojure maps (EDN). They are
+  values, so you build, transform, inspect and serialize them with ordinary
+  Clojure.
 
-  karcarthy deliberately does *not* implement the inner agent loop (model calls
-  + tool execution). It delegates that to an existing *harness* — for example
-  the Claude Agent SDK via the `claude -p` CLI — and focuses on orchestrating
-  many agents over that harness. See `karcarthy.harness.*` for adapters.
-
-  Compare Anthropic's framing of \"dynamic workflows\": *a workflow moves the
-  plan into code.* In Clojure, code is data, so the plan is literally a value
-  you hold in your hand."
+  karcarthy does not implement the inner agent loop (model calls and tool
+  execution). It delegates that to a *harness*, such as the `claude -p` CLI, and
+  concentrates on coordinating many agents over it. Harness adapters live in
+  `karcarthy.harness.*`."
   ;; `agent` deliberately shadows clojure.core/agent (the STM primitive); this
   ;; is an agent library. Use `clojure.core/agent` if you need the original.
   (:refer-clojure :exclude [agent])

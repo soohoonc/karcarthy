@@ -3,7 +3,7 @@ name: release
 # Cut a release one of three ways:
 #   * push a v* tag,
 #   * push a release/** branch (cuts the version below; useful when tag pushes
-#     are unavailable — the Release + tag are created server-side via the API),
+#     are unavailable - the Release + tag are created server-side via the API),
 #   * run manually (workflow_dispatch) with a version input.
 # See RELEASING.md.
 on:
