@@ -13,7 +13,8 @@
     karcarthy.harness.openai-test
     karcarthy.orchestrate-test
     karcarthy.self-test
-    karcarthy.session-test])
+    karcarthy.session-test
+    karcarthy.otel-test])
 
 (defn -main [& _]
   (doseq [ns test-namespaces] (require ns))

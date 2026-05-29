@@ -22,7 +22,8 @@
   so a child that throws becomes a not-ok result instead of crashing the run
   (see `safe-run`)."
   (:require [clojure.string :as str]
-            [karcarthy.core :as k])
+            [karcarthy.core :as k]
+            [karcarthy.otel :as otel])
   (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
@@ -170,20 +171,25 @@
 
 (defmethod run-node :chain
   [harness {:keys [steps]} input opts]
-  (loop [input input, steps steps, last-result nil]
-    (if (empty? steps)
+  (loop [input input, indexed-steps (map-indexed vector steps), last-result nil]
+    (if (empty? indexed-steps)
       (or last-result (k/result {:ok? true :text input :empty-chain? true}))
-      (let [r (safe-run harness (first steps) input opts)]
+      (let [[idx step] (first indexed-steps)
+            r          (safe-run harness step input (otel/with-child-path opts [:steps idx]))]
         (if (k/ok? r)
-          (recur (:text r) (rest steps) r)
+          (recur (:text r) (rest indexed-steps) r)
           r)))))                                    ; short-circuit on failure
 
 (defmethod run-node :parallel
   [harness {:keys [branches gather max-concurrency]} input opts]
   (let [results  (bounded-pmap max-concurrency
-                               #(safe-run harness % input opts)
-                               branches)
-        gathered (when gather (gather results))]
+                               (fn [[idx branch]]
+                                 (safe-run harness branch input
+                                           (otel/with-child-path opts [:branches idx])))
+                               (map-indexed vector branches))
+        gathered (when gather
+                   (otel/with-function-span opts :parallel/gather gather
+                     #(gather results)))]
     (k/result {:ok?      (every? k/ok? results)
                :results  results
                :gathered gathered
@@ -193,11 +199,16 @@
 (defmethod run-node :route
   [harness {:keys [router routes default]} input opts]
   (let [label (if (fn? router)
-                (router input)
-                (str/trim (str (:text (safe-run harness router input opts)))))
+                (otel/with-function-span opts :route/router router
+                  #(router input))
+                (str/trim (str (:text (safe-run harness router input
+                                                 (otel/with-child-path opts [:router]))))))
         flow  (or (match-route routes label) default)]
     (if flow
-      (safe-run harness flow input opts)
+      (safe-run harness flow input (otel/with-child-path opts [(if (contains? routes label)
+                                                                :routes
+                                                                :route)
+                                                              label]))
       (k/result {:ok? false :error :no-route :label label
                  :text (str "no route for label: " (pr-str label))}))))
 
@@ -205,11 +216,12 @@
   "Run `evaluator` against a draft, returning {:accept? :feedback :evaluation}."
   [harness evaluator draft input opts]
   (if (fn? evaluator)
-    (evaluator draft input)
+    (otel/with-function-span opts :refine/evaluator evaluator
+      #(evaluator draft input))
     (let [prompt (str "INPUT:\n" input "\n\nDRAFT:\n" (:text draft)
                       "\n\nReply with exactly ACCEPT if the draft is good enough."
                       " Otherwise reply with specific, actionable feedback.")
-          r      (safe-run harness evaluator prompt opts)
+          r      (safe-run harness evaluator prompt (otel/with-child-path opts [:evaluator]))
           t      (str/trim (str (:text r)))]
       {:accept?    (str/starts-with? (str/upper-case t) "ACCEPT")
        :feedback   t
@@ -218,10 +230,12 @@
 (defmethod run-node :refine
   [harness {:keys [worker evaluator max-rounds]} input opts]
   (loop [round 1, worker-input input]
-    (let [draft (safe-run harness worker worker-input opts)]
+    (let [round-opts (otel/with-child-path opts [:round round])
+          draft      (safe-run harness worker worker-input
+                               (otel/with-child-path round-opts [:worker]))]
       (if-not (k/ok? draft)
         draft                                       ; worker failed; bail out
-        (let [{:keys [accept? feedback]} (evaluate harness evaluator draft input opts)]
+        (let [{:keys [accept? feedback]} (evaluate harness evaluator draft input round-opts)]
           (if (or accept? (>= round max-rounds))
             (k/result (assoc draft :rounds round :accepted? (boolean accept?)))
             (recur (inc round)
@@ -237,8 +251,10 @@
   flow whose reply is parsed line-by-line)."
   [harness planner input opts]
   (if (fn? planner)
-    (vec (planner input))
-    (->> (str/split-lines (str (:text (safe-run harness planner input opts))))
+    (otel/with-function-span opts :orchestrate/planner planner
+      #(vec (planner input)))
+    (->> (str/split-lines (str (:text (safe-run harness planner input
+                                                (otel/with-child-path opts [:planner])))))
          (map #(str/replace % list-marker ""))
          (map str/trim)
          (remove str/blank?)
@@ -248,9 +264,13 @@
   [harness {:keys [planner worker synthesize max-concurrency]} input opts]
   (let [subtasks (plan-subtasks harness planner input opts)
         results  (bounded-pmap max-concurrency
-                               #(safe-run harness worker % opts)
-                               subtasks)
-        gathered (when synthesize (synthesize results input))]
+                               (fn [[idx subtask]]
+                                 (safe-run harness worker subtask
+                                           (otel/with-child-path opts [:worker idx])))
+                               (map-indexed vector subtasks))
+        gathered (when synthesize
+                   (otel/with-function-span opts :orchestrate/synthesize synthesize
+                     #(synthesize results input)))]
     (k/result {:ok?      (every? k/ok? results)
                :subtasks subtasks
                :results  results
@@ -260,12 +280,12 @@
 
 (defmethod run-node :handoff
   [harness {:keys [from to prompt]} input opts]
-  (let [r1 (safe-run harness from input opts)]
+  (let [r1 (safe-run harness from input (otel/with-child-path opts [:from]))]
     (if-not (k/ok? r1)
       r1                                              ; bail if the first agent failed
       (let [opts' (cond-> opts
                     (:session-id r1) (assoc :resume (:session-id r1)))]
-        (safe-run harness to (or prompt (:text r1)) opts')))))
+        (safe-run harness to (or prompt (:text r1)) (otel/with-child-path opts' [:to]))))))
 
 (defmethod run-node :default
   [_ node _ _]
@@ -276,7 +296,10 @@
   "Interpret `flow` against `harness`, starting from `input` (a string). Returns
   a `karcarthy.core` result map. `flow` may be an agent or any composite node."
   ([harness flow input] (run-flow harness flow input {}))
-  ([harness flow input opts] (run-node harness flow input opts)))
+  ([harness flow input opts]
+   (let [opts (otel/instrumented-opts harness opts)]
+     (otel/with-flow-span opts flow input
+       #(run-node harness flow input opts)))))
 
 ;; ---------------------------------------------------------------------------
 ;; DSL sugar

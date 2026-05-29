@@ -2,12 +2,15 @@
 
  ;; Maven Central only - Clojars is blocked in some sandboxes, and we don't
  ;; need it. HTTP is handled by Java 21's built-in java.net.http (no dep).
- :deps {org.clojure/clojure   {:mvn/version "1.12.5"}
-        org.clojure/data.json {:mvn/version "2.5.0"}}
+ :deps {org.clojure/clojure               {:mvn/version "1.12.5"}
+        org.clojure/data.json             {:mvn/version "2.5.0"}
+        io.opentelemetry/opentelemetry-api {:mvn/version "1.62.0"}}
 
  :aliases
  {;; Run the test suite:  clojure -M:test
   :test {:extra-paths ["test"]
+         :extra-deps  {io.opentelemetry/opentelemetry-sdk         {:mvn/version "1.62.0"}
+                       io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.62.0"}}
          :main-opts   ["-m" "karcarthy.test-runner"]}
 
   ;; Build/install a jar:  clojure -T:build jar | install
