@@ -44,3 +44,18 @@
                  (k/run-agent (k/mock-harness)
                               {:karcarthy/type :agent}
                               "x")))))
+
+(k/defagent test-researcher
+  "Research questions thoroughly."
+  :model "sonnet" :tools ["WebSearch" "WebFetch"])
+
+(deftest defagent-macro
+  (testing "defagent defs a valid agent named after the symbol"
+    (is (k/agent? test-researcher))
+    (is (= "test-researcher" (:name test-researcher)))
+    (is (= "Research questions thoroughly." (:instructions test-researcher)))
+    (is (= "sonnet" (:model test-researcher)))
+    (is (= ["WebSearch" "WebFetch"] (:tools test-researcher))))
+  (testing "instructions become the var's docstring"
+    (is (= "Research questions thoroughly."
+           (:doc (meta #'test-researcher))))))

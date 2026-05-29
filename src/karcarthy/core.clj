@@ -68,6 +68,26 @@
   (when-not (s/valid? ::agent x)
     (s/explain-str ::agent x)))
 
+(defmacro defagent
+  "Define a var holding an agent map. The symbol's name becomes the agent's
+  :name, and `instructions` (a string literal) becomes both the agent's
+  instructions and the var's docstring. Remaining args are the optional kwargs
+  of `agent`.
+
+    (defagent researcher
+      \"Research questions thoroughly and cite sources.\"
+      :model \"sonnet\"
+      :tools [\"WebSearch\" \"WebFetch\"])
+
+    researcher        ;=> {:karcarthy/type :agent :name \"researcher\" ...}
+    (:doc (meta #'researcher))  ;=> \"Research questions thoroughly...\""
+  [sym instructions & opts]
+  (when-not (string? instructions)
+    (throw (ex-info "defagent: instructions must be a string literal"
+                    {:sym sym :instructions instructions})))
+  `(def ~(vary-meta sym assoc :doc instructions)
+     (agent ~(name sym) ~instructions ~@opts)))
+
 ;; ===========================================================================
 ;; Results
 ;;
