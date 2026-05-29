@@ -152,9 +152,7 @@ code.
 
 In a real run ([`examples/clojure/self_modify.clj`](examples/clojure/self_modify.clj)),
 a `haiku` agent patched itself from *"a mediocre poet"* into *"an expert
-minimalist poet"* over three rounds, then wrote:
-
-> McCarthy opened a parenthesis the universe has not yet closed.
+minimalist poet"* over three rounds, then wrote a one-line poem about Lisp.
 
 A `registry` plus `agent-ref` let a running flow re-point a named agent, so
 later steps pick up the change.
