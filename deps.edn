@@ -1,0 +1,11 @@
+{:paths ["src" "resources"]
+
+ ;; Maven Central only — Clojars is blocked in some sandboxes, and we don't
+ ;; need it. HTTP is handled by Java 21's built-in java.net.http (no dep).
+ :deps {org.clojure/clojure   {:mvn/version "1.12.5"}
+        org.clojure/data.json {:mvn/version "2.5.0"}}
+
+ :aliases
+ {;; Run the test suite:  clojure -M:test
+  :test {:extra-paths ["test"]
+         :main-opts   ["-m" "karcarthy.test-runner"]}}}

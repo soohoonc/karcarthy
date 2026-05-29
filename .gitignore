@@ -1,0 +1,12 @@
+# Clojure / deps.edn
+/.cpcache/
+/.clj-kondo/.cache/
+/.lsp/
+/target/
+/classes/
+*.jar
+.nrepl-port
+
+# Editors / OS
+.DS_Store
+*~
