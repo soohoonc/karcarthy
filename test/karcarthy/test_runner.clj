@@ -4,7 +4,8 @@
   (:require [clojure.test :as t]))
 
 (def test-namespaces
-  '[karcarthy.core-test
+  '[karcarthy-test
+    karcarthy.core-test
     karcarthy.proc-test
     karcarthy.harness.claude-test
     karcarthy.harness.command-test

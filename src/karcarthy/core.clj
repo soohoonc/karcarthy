@@ -27,10 +27,11 @@
 (s/def ::model       (s/nilable string?))
 (s/def ::tools       (s/coll-of string? :kind vector?))
 (s/def ::handoffs    (s/coll-of string? :kind vector?))
+(s/def ::harness     keyword?)   ; id into a harness registry (optional)
 
 (s/def ::agent
   (s/keys :req-un [::name ::instructions]
-          :opt-un [::model ::tools ::handoffs]))
+          :opt-un [::model ::tools ::handoffs ::harness]))
 
 (defn agent
   "Build an agent value. `name` and `instructions` are required; the rest are
@@ -44,13 +45,14 @@
     ;    :instructions \"Research questions thoroughly.\"
     ;    :model \"sonnet\"
     ;    :tools [\"WebSearch\" \"WebFetch\"]}"
-  [name instructions & {:keys [model tools handoffs]}]
+  [name instructions & {:keys [model tools handoffs harness]}]
   (cond-> {:karcarthy/type :agent
            :name           name
            :instructions   instructions}
     model    (assoc :model model)
     tools    (assoc :tools (vec tools))
-    handoffs (assoc :handoffs (vec handoffs))))
+    handoffs (assoc :handoffs (vec handoffs))
+    harness  (assoc :harness harness)))
 
 (defn agent?
   "True if `x` is a karcarthy agent value (well-formed)."
@@ -122,15 +124,34 @@
   `karcarthy.harness.*`. Prefer calling `run-agent`, which validates first."
   (-run [harness agent prompt opts]))
 
+(defn resolve-harness
+  "Pick the harness to run `agent` with. `harness` is either a Harness directly,
+  or a registry map {id -> Harness} - in which case the agent's `:harness` id
+  selects one, falling back to `:default`.
+
+    (resolve-harness {:claude cc :default mk} (agent \"a\" \"i\" :harness :claude))
+    ;=> cc"
+  [harness agent]
+  (cond
+    (satisfies? Harness harness) harness
+    (map? harness) (let [id (get agent :harness :default)]
+                     (or (get harness id)
+                         (get harness :default)
+                         (throw (ex-info (str "no harness registered for " (pr-str id))
+                                         {:harness-id id :registered (vec (keys harness))}))))
+    :else (throw (ex-info "harness must be a Harness or a registry map {id -> Harness}"
+                          {:got harness}))))
+
 (defn run-agent
-  "Validate `agent`, then run it on `prompt` via `harness`. Returns a result
-  map. Throws `ExceptionInfo` if the agent is malformed."
+  "Validate `agent`, then run it on `prompt`. `harness` is either a Harness or a
+  registry map {id -> Harness} (see `resolve-harness`). Returns a result map;
+  throws `ExceptionInfo` if the agent is malformed."
   ([harness agent prompt] (run-agent harness agent prompt {}))
   ([harness agent prompt opts]
    (when-let [msg (explain-agent agent)]
      (throw (ex-info (str "Invalid agent: " msg)
                      {:agent agent :problems (s/explain-data ::agent agent)})))
-   (-run harness agent prompt opts)))
+   (-run (resolve-harness harness agent) agent prompt opts)))
 
 ;; ===========================================================================
 ;; Mock harness

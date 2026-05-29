@@ -59,3 +59,22 @@
   (testing "instructions become the var's docstring"
     (is (= "Research questions thoroughly."
            (:doc (meta #'test-researcher))))))
+
+(deftest harness-registry-resolution
+  (testing "an agent's :harness id selects from a registry; :default is fallback"
+    (let [reg {:a       (k/mock-harness (fn [{:keys [prompt]}] (str "A:" prompt)))
+               :b       (k/mock-harness (fn [{:keys [prompt]}] (str "B:" prompt)))
+               :default (k/mock-harness (fn [{:keys [prompt]}] (str "D:" prompt)))}]
+      (is (= "A:hi" (:text (k/run-agent reg (k/agent "x" "i" :harness :a) "hi"))))
+      (is (= "B:hi" (:text (k/run-agent reg (k/agent "y" "i" :harness :b) "hi"))))
+      (is (= "D:hi" (:text (k/run-agent reg (k/agent "z" "i") "hi"))))   ; no :harness
+      (is (= :a (:harness (k/agent "x" "i" :harness :a)))))))
+
+(deftest harness-registry-missing-id
+  (testing "a missing id with no :default throws"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (k/run-agent {:a (k/mock-harness)} (k/agent "x" "i" :harness :nope) "hi")))))
+
+(deftest single-harness-unchanged
+  (testing "passing a Harness directly still works"
+    (is (= "[e] hi" (:text (k/run-agent (k/mock-harness) (k/agent "e" "i") "hi"))))))

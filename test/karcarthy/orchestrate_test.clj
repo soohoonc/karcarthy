@@ -291,6 +291,14 @@
     (let [flow (o/route (fn [_] "BILLING") {"billing" a})]
       (is (= "[a] x" (:text (o/run-flow h flow "x")))))))
 
+(deftest flow-over-harness-registry
+  (testing "a registry threads through orchestration; each agent uses its harness"
+    (let [reg  {:up      (k/mock-harness (fn [{:keys [prompt]}] (str/upper-case prompt)))
+                :default (k/mock-harness (fn [{:keys [prompt]}] prompt))}
+          flow (o/chain (k/agent "shout" "i" :harness :up) (k/agent "echo" "i"))]
+      ;; shout (:up) upper-cases "hi" -> "HI"; echo (:default) passes it through
+      (is (= "HI" (:text (o/run-flow reg flow "hi")))))))
+
 (deftest unknown-node-throws
   (is (thrown? clojure.lang.ExceptionInfo
                (o/run-flow h {:karcarthy/type :nonsense} "hi"))))

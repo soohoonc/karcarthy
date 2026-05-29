@@ -22,6 +22,9 @@ Early and not yet released. What works so far:
   parsing (data only, via `clojure.edn`).
 - `karcarthy.proc`: subprocess execution with `:timeout-ms` on every shell
   harness; fault-isolated flow nodes; bounded concurrency; tolerant routing.
+- A `karcarthy` facade namespace re-exporting the common API under one alias.
+- Harnesses selectable by id: pass a registry map `{id -> Harness}` and set
+  `:harness` on an agent; flows stay plain data.
 - Usage examples in Java, Kotlin, and Scala; MIT license; CI.
 
 [Unreleased]: https://github.com/soohoonc/karcarthy

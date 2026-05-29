@@ -36,6 +36,14 @@ coordination layer above it.
 ;    :text "[researcher] What changed in Node v22?", :raw {:harness :mock}}
 ```
 
+The examples set up short aliases with `require`: `k` is `karcarthy.core`, `o` is
+`karcarthy.orchestrate`, `cc` is `karcarthy.harness.claude`, `sess` is
+`karcarthy.session`, `self` is `karcarthy.self`. (The `alias/name` form is just
+how Clojure refers to a function in another namespace.) If you'd rather use one
+alias for everything, the `karcarthy` namespace re-exports the common API, so
+`(require '[karcarthy :as k])` gives you `k/agent`, `k/run-flow`,
+`k/claude-harness`, `k/converse`, `k/evolve`, and the rest.
+
 ## Harnesses
 
 A harness runs one agent's model/tool loop. karcarthy talks to it through a
@@ -49,7 +57,22 @@ small protocol, so the orchestration layer doesn't care which provider you use:
   a local model (`ollama run …`), `llm`, a shell script, or `cat`/`tr` in tests.
 - **`openai`**: drives the OpenAI Agents SDK through a small bundled Python runner.
 
-The same flow runs over any of them; you just swap the harness.
+The same flow runs over any of them; you just swap the harness. You can also
+pass a **registry** of harnesses and let each agent pick one by id, which keeps
+the flow itself plain data:
+
+```clojure
+(def registry
+  {:claude  (cc/claude-harness {})
+   :local   (cmd/command-harness ["ollama" "run" "llama3"])
+   :default (k/mock-harness)})
+
+;; an agent's :harness id selects from the registry (falling back to :default)
+(o/run-flow registry
+            (o/chain (k/agent "planner" "Plan it." :harness :claude)
+                     (k/agent "worker"  "Do it."   :harness :local))
+            "ship the feature")
+```
 
 ### Streaming, sessions, handoffs
 
