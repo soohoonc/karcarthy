@@ -65,6 +65,50 @@
     (is (not (k/ok? r)))
     (is (= "boom" (:text r)))))
 
+(deftest command-streaming-and-session-flags
+  (testing "stream-json, resume, continue and partial-messages flags"
+    (let [argv (cc/claude-command (k/agent "a" "i") "p"
+                                  {:output-format    "stream-json"
+                                   :resume           "S123"
+                                   :continue?        true
+                                   :partial-messages? true})]
+      (is (= "stream-json" (after argv "--output-format")))
+      (is (some #{"--verbose"} argv))   ; required for stream-json under --print
+      (is (= "S123" (after argv "--resume")))
+      (is (some #{"--continue"} argv))
+      (is (some #{"--include-partial-messages"} argv)))))
+
+;; A subprocess that emits JSONL like `claude -p --output-format stream-json`,
+;; including a non-JSON line that must be ignored.
+(def ^:private stream-script
+  (str "printf '%s\\n' "
+       "'{\"type\":\"system\",\"subtype\":\"init\"}' "
+       "'oops not json' "
+       "'{\"type\":\"assistant\"}' "
+       "'{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,"
+       "\"result\":\"hi\",\"session_id\":\"S1\",\"total_cost_usd\":0.01}'"))
+
+(deftest read-stream-parses-and-callbacks
+  (testing "events parse, on-event fires per event, garbage skipped, result found"
+    (let [seen (atom [])
+          {:keys [events exit result]}
+          (cc/read-stream ["bash" "-c" stream-script]
+                          {:on-event #(swap! seen conj (:type %))})]
+      (is (zero? exit))
+      (is (= ["system" "assistant" "result"] @seen))  ; "oops not json" skipped
+      (is (= 3 (count events)))
+      (is (= "hi" (:result result)))
+      (is (= "S1" (:session_id result))))))
+
+(deftest streaming-result-event-becomes-result
+  (testing "the terminal result event maps to a karcarthy result"
+    (let [{:keys [result]} (cc/read-stream ["bash" "-c" stream-script] {})
+          r (cc/result-map->result "streamer" result)]
+      (is (k/ok? r))
+      (is (= "hi" (:text r)))
+      (is (= "S1" (:session-id r)))
+      (is (= 0.01 (:cost-usd r))))))
+
 ;; Live test — only runs when KARCARTHY_LIVE is set, to avoid spending tokens
 ;; (and needing network/auth) on a normal `clojure -M:test`.
 ;;
