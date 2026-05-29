@@ -115,8 +115,11 @@
 
 (declare run-flow)
 
-(defmulti ^:private run-node
-  "Execute one flow node. Dispatches on (:karcarthy/type node)."
+(defmulti run-node
+  "Execute one flow node, dispatching on (:karcarthy/type node). This is the
+  interpreter's extension point: teach it a new node by adding a constructor and
+  a `(defmethod run-node :your-type [harness node input opts] ...)` returning a
+  `karcarthy.core` result. See `karcarthy.self` for examples (`:evolve`)."
   (fn [_harness node _input _opts] (:karcarthy/type node)))
 
 ;; --- shared helpers --------------------------------------------------------
