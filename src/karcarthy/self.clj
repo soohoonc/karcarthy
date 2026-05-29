@@ -1,15 +1,15 @@
 (ns karcarthy.self
   "Metacircular karcarthy: agents reading, writing and editing karcarthy itself.
 
-  Flows and agents are EDN data, not code. So an agent can emit karcarthy EDN as
-  text, and karcarthy can parse it with `clojure.edn` (data only, never
-  evaluating code), validate it, and run it. That is how agents use the language
-  themselves:
+  Workflows and agents are EDN data, not code. So an agent can emit karcarthy
+  EDN as text, and karcarthy can parse it with `clojure.edn` (data only, never
+  evaluating code), validate it, and run it. That is how agents use the
+  language themselves:
 
     * `dsl-reference`: a prompt fragment teaching an agent the EDN DSL.
-    * `read-flow` / `read-agent`: parse an agent's output into validated
+    * `read-workflow` / `read-agent`: parse an agent's output into validated
       karcarthy data (no code eval).
-    * `run-authored`: have an agent write a flow for a task, then run it.
+    * `run-authored`: have an agent write a workflow for a task, then run it.
     * `evolve` (a `:evolve` node): an agent edits its own definition
       (instructions, model, tools) at runtime by emitting an EDN patch, then
       retrying with the new behavior.
@@ -41,17 +41,22 @@
         (throw (ex-info (str "could not parse EDN: " (.getMessage e))
                         {:input s} e))))))
 
-(defn read-flow
-  "Parse `s` (an agent's output) into a runnable karcarthy flow, validating the
-  whole tree. Throws ex-info if it isn't a valid flow."
+(defn read-workflow
+  "Parse `s` (an agent's output) into a runnable karcarthy workflow, validating
+  the whole tree. Throws ex-info if it isn't a valid workflow."
   [s]
   (let [v (extract-edn s)]
-    (when-not (o/flow? v)
-      (throw (ex-info "parsed value is not a runnable karcarthy flow" {:parsed v})))
+    (when-not (o/workflow? v)
+      (throw (ex-info "parsed value is not a runnable karcarthy workflow" {:parsed v})))
     (doseq [node (tree-seq coll? seq v)]
       (when (and (map? node) (= :agent (:karcarthy/type node)) (not (k/agent? node)))
-        (throw (ex-info "authored flow contains an invalid agent" {:agent node}))))
+        (throw (ex-info "authored workflow contains an invalid agent" {:agent node}))))
     v))
+
+(defn read-flow
+  "Deprecated alias for `read-workflow`."
+  [s]
+  (read-workflow s))
 
 (defn read-agent
   "Parse `s` into a valid karcarthy agent, or throw ex-info."
@@ -67,10 +72,10 @@
 
 (def dsl-reference
   "A prompt fragment describing the karcarthy EDN DSL so an agent can author
-  flows. Append it to an authoring agent's prompt."
+  workflows. Append it to an authoring agent's prompt."
   (str/join
    "\n"
-   ["karcarthy flows are plain EDN data. A flow is either an AGENT or a NODE."
+   ["karcarthy workflows are plain EDN data. A workflow is either an AGENT or a NODE."
     ""
     "AGENT (a leaf that does one unit of work):"
     "  {:karcarthy/type :agent"
@@ -78,47 +83,49 @@
     "   :instructions \"Research the question and cite sources.\""
     "   :model \"sonnet\"}            ; :model optional"
     ""
-    "NODES (compose flows; each is tagged with :karcarthy/type):"
-    "  :chain       {:karcarthy/type :chain :steps [FLOW ...]}"
+    "NODES (compose workflows; each is tagged with :karcarthy/type):"
+    "  :chain       {:karcarthy/type :chain :steps [WORKFLOW ...]}"
     "               run in sequence, feeding each result's text into the next."
-    "  :parallel    {:karcarthy/type :parallel :branches [FLOW ...]}"
+    "  :parallel    {:karcarthy/type :parallel :branches [WORKFLOW ...]}"
     "               run on the same input concurrently, gather all results."
     "  :route       {:karcarthy/type :route :router AGENT"
-    "                :routes {\"label\" FLOW ...}}  ; router's reply picks a branch"
-    "  :refine      {:karcarthy/type :refine :worker FLOW :evaluator AGENT"
+    "                :routes {\"label\" WORKFLOW ...}}  ; router's reply picks a branch"
+    "  :refine      {:karcarthy/type :refine :worker WORKFLOW :evaluator AGENT"
     "                :max-rounds 3}             ; draft, critique, repeat"
-    "  :orchestrate {:karcarthy/type :orchestrate :planner AGENT :worker FLOW}"
+    "  :orchestrate {:karcarthy/type :orchestrate :planner AGENT :worker WORKFLOW}"
     "               planner lists subtasks (one per line); worker handles each."
-    "  :handoff     {:karcarthy/type :handoff :from FLOW :to FLOW}"
+    "  :handoff     {:karcarthy/type :handoff :from WORKFLOW :to WORKFLOW}"
     ""
     "Rules: output EDN only (optionally inside an ```edn fence), no prose. Use"
-    "only the keys shown. Nest freely - any FLOW position may hold an agent or a"
-    "node."]))
+    "only the keys shown. Nest freely - any WORKFLOW position may hold an agent"
+    "or a node."]))
 
 (defn authoring-prompt
   "The prompt given to an author agent: the DSL reference plus the task."
   [task]
   (str dsl-reference
-       "\n\n---\nWrite ONE karcarthy flow as EDN that best accomplishes this"
+       "\n\n---\nWrite ONE karcarthy workflow as EDN that best accomplishes this"
        " task. Output EDN only.\n\nTASK:\n" task))
 
 (defn run-authored
-  "Have `author` write a karcarthy flow (EDN) for `task`, then run that flow.
-  Returns {:author <author result> :flow <parsed flow> :result <run result>}.
-  `:input` overrides what the authored flow runs on (defaults to `task`)."
-  [harness author task & {:keys [input opts] :or {opts {}}}]
-  (let [ar   (k/run-agent harness author (authoring-prompt task) opts)
-        flow (read-flow (:text ar))]
+  "Have `author` write a karcarthy workflow (EDN) for `task`, then run it.
+  Returns {:author <author result> :workflow <parsed workflow> :result <run result>}.
+  The deprecated `:flow` key is also returned for compatibility.
+  `:input` overrides what the authored workflow runs on (defaults to `task`)."
+  [runner author task & {:keys [input opts] :or {opts {}}}]
+  (let [ar   (k/run-agent runner author (authoring-prompt task) opts)
+        workflow (read-workflow (:text ar))]
     {:author ar
-     :flow   flow
-     :result (o/run-flow harness flow (or input task) opts)}))
+     :workflow workflow
+     :flow   workflow
+     :result (o/run runner workflow (or input task) opts)}))
 
 ;; ---------------------------------------------------------------------------
 ;; Agents editing their own behavior at runtime
 ;; ---------------------------------------------------------------------------
 
 (defn evolve
-  "A flow node: run `agent`, letting it edit its own definition at runtime. Each
+  "A workflow node: run `agent`, letting it edit its own definition at runtime. Each
   round the agent may reply with an EDN patch
   `{:karcarthy/patch {<fields to merge>} :reason \"...\"}` to change itself (its
   :instructions, :model or :tools) and retry, or with a plain final answer.
@@ -143,9 +150,9 @@
        "OR your final answer as plain text (no EDN).\n\nTASK:\n" input))
 
 (defmethod o/run-node :evolve
-  [harness {:keys [agent max-rounds] :or {max-rounds 5}} input opts]
+  [runner {:keys [agent max-rounds] :or {max-rounds 5}} input opts]
   (loop [round 1, agent agent, patches []]
-    (let [r     (k/run-agent harness agent (evolve-prompt input) opts)
+    (let [r     (k/run-agent runner agent (evolve-prompt input) opts)
           patch (parse-patch (:text r))]
       (cond
         ;; agent wants to change itself and has rounds left -> apply + retry
@@ -155,7 +162,7 @@
         ;; out of rounds but still patching -> apply once and force a final answer
         patch
         (let [final-agent (merge agent patch)
-              fr          (k/run-agent harness final-agent input opts)]
+              fr          (k/run-agent runner final-agent input opts)]
           (k/result (assoc fr :agent (:name final-agent) :rounds round
                            :patches (conj patches patch) :evolved final-agent)))
 
@@ -167,7 +174,7 @@
 ;; ---------------------------------------------------------------------------
 ;; A runtime-editable registry of named agents
 ;;
-;; `evolve` lets an agent edit *itself*; a registry lets a running flow edit a
+;; `evolve` lets an agent edit *itself*; a registry lets a running workflow edit a
 ;; *named, shared* agent so that later steps (referenced via `agent-ref`) pick up
 ;; the new behavior at runtime.
 ;; ---------------------------------------------------------------------------
@@ -179,7 +186,7 @@
 
 (defn patch-agent!
   "Merge `patch` into the registered agent `name`, returning the updated agent.
-  How a running flow edits a shared agent's behavior at runtime."
+  How a running workflow edits a shared agent's behavior at runtime."
   [reg name patch]
   (-> (swap! reg update name merge patch) (get name)))
 
@@ -190,14 +197,14 @@
   agent)
 
 (defn agent-ref
-  "A flow node that resolves agent `name` from `reg` *at run time*, so edits made
-  with `patch-agent!`/`put-agent!` take effect on subsequent runs."
+  "A workflow node that resolves agent `name` from `reg` *at run time*, so edits
+  made with `patch-agent!`/`put-agent!` take effect on subsequent runs."
   [reg name]
   {:karcarthy/type :agent-ref :registry reg :name name})
 
 (defmethod o/run-node :agent-ref
-  [harness {:keys [registry name]} input opts]
+  [runner {:keys [registry name]} input opts]
   (if-let [a (get @registry name)]
-    (k/run-agent harness a input opts)
+    (k/run-agent runner a input opts)
     (k/result {:ok? false :error :unknown-agent
                :text (str "no agent named " (pr-str name) " in registry")})))

@@ -25,23 +25,23 @@
     (is (nil? (k/explain-agent (k/agent "a" "i"))))))
 
 (deftest run-via-mock-echo
-  (testing "default mock harness echoes the prompt tagged with agent name"
-    (let [r (k/run-agent (k/mock-harness) (k/agent "echo" "e") "hello")]
+  (testing "default mock runner echoes the prompt tagged with agent name"
+    (let [r (k/run-agent (k/mock-runner) (k/agent "echo" "e") "hello")]
       (is (k/ok? r))
       (is (= :result (:karcarthy/type r)))
       (is (= "echo" (:agent r)))
       (is (= "[echo] hello" (:text r))))))
 
 (deftest run-with-custom-responder
-  (testing "mock harness can return scripted replies"
-    (let [h (k/mock-harness (fn [{:keys [prompt]}] (str "got:" prompt)))
-          r (k/run-agent h (k/agent "a" "i") "x")]
+  (testing "mock runner can return scripted replies"
+    (let [runner (k/mock-runner (fn [{:keys [prompt]}] (str "got:" prompt)))
+          r      (k/run-agent runner (k/agent "a" "i") "x")]
       (is (= "got:x" (:text r))))))
 
 (deftest run-validates-agent
   (testing "run-agent throws on a malformed agent"
     (is (thrown? clojure.lang.ExceptionInfo
-                 (k/run-agent (k/mock-harness)
+                 (k/run-agent (k/mock-runner)
                               {:karcarthy/type :agent}
                               "x")))))
 
@@ -60,21 +60,30 @@
     (is (= "Research questions thoroughly."
            (:doc (meta #'test-researcher))))))
 
-(deftest harness-registry-resolution
-  (testing "an agent's :harness id selects from a registry; :default is fallback"
-    (let [reg {:a       (k/mock-harness (fn [{:keys [prompt]}] (str "A:" prompt)))
-               :b       (k/mock-harness (fn [{:keys [prompt]}] (str "B:" prompt)))
-               :default (k/mock-harness (fn [{:keys [prompt]}] (str "D:" prompt)))}]
-      (is (= "A:hi" (:text (k/run-agent reg (k/agent "x" "i" :harness :a) "hi"))))
-      (is (= "B:hi" (:text (k/run-agent reg (k/agent "y" "i" :harness :b) "hi"))))
-      (is (= "D:hi" (:text (k/run-agent reg (k/agent "z" "i") "hi"))))   ; no :harness
-      (is (= :a (:harness (k/agent "x" "i" :harness :a)))))))
+(deftest runner-registry-resolution
+  (testing "an agent's :runner id selects from a registry; :default is fallback"
+    (let [reg {:a       (k/mock-runner (fn [{:keys [prompt]}] (str "A:" prompt)))
+               :b       (k/mock-runner (fn [{:keys [prompt]}] (str "B:" prompt)))
+               :default (k/mock-runner (fn [{:keys [prompt]}] (str "D:" prompt)))}]
+      (is (= "A:hi" (:text (k/run-agent reg (k/agent "x" "i" :runner :a) "hi"))))
+      (is (= "B:hi" (:text (k/run-agent reg (k/agent "y" "i" :runner :b) "hi"))))
+      (is (= "D:hi" (:text (k/run-agent reg (k/agent "z" "i") "hi"))))   ; no :runner
+      (is (= :a (:runner (k/agent "x" "i" :runner :a)))))))
 
-(deftest harness-registry-missing-id
+(deftest runner-registry-missing-id
   (testing "a missing id with no :default throws"
     (is (thrown? clojure.lang.ExceptionInfo
-                 (k/run-agent {:a (k/mock-harness)} (k/agent "x" "i" :harness :nope) "hi")))))
+                 (k/run-agent {:a (k/mock-runner)} (k/agent "x" "i" :runner :nope) "hi")))))
 
-(deftest single-harness-unchanged
-  (testing "passing a Harness directly still works"
-    (is (= "[e] hi" (:text (k/run-agent (k/mock-harness) (k/agent "e" "i") "hi"))))))
+(deftest single-runner
+  (testing "passing a Runner directly works"
+    (is (= "[e] hi" (:text (k/run-agent (k/mock-runner) (k/agent "e" "i") "hi"))))))
+
+(deftest harness-compatibility
+  (testing "old Harness, :harness and mock-harness names still work"
+    (let [reg {:old (k/mock-harness (fn [{:keys [prompt]}] (str "old:" prompt)))}]
+      (is (= "old:hi" (:text (k/run-agent reg (k/agent "x" "i" :harness :old) "hi"))))
+      (is (= :old (:harness (k/agent "x" "i" :harness :old))))
+      (is (satisfies? k/Runner (reify k/Harness
+                                  (-run [_ agent prompt opts]
+                                    (k/run-agent (k/mock-runner) agent prompt opts))))))))

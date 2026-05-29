@@ -3,7 +3,7 @@
 Most agent frameworks define agents, tools, and workflows as **objects or
 decorators in a host language**, and bundle the agent loop (model call to tool
 call to model, until done). karcarthy makes a different pair of choices: the
-workflow is **plain data** (EDN), and the loop is **delegated to a harness**.
+workflow is **plain data** (EDN), and the loop is **delegated to a runner**.
 This page compares the common patterns and is honest about the trade-offs.
 
 The frameworks referenced:
@@ -21,11 +21,11 @@ The frameworks referenced:
 | Pattern | PydanticAI / Agno / Vercel AI SDK | karcarthy |
 | --- | --- | --- |
 | Define an agent | a host-language object: `Agent(model, instructions, tools)` (Py) or `{ model, tools }` (TS) | a data map: `{:karcarthy/type :agent :name … :instructions … :model …}` |
-| The agent loop | the framework runs it for you | delegated to a **harness** (the `claude` CLI, OpenAI Agents SDK, a local model) |
-| Tools | typed functions: Pydantic models / Zod schemas / Python callables | a tool allowlist handed to the harness (the harness executes them; MCP via the harness) |
-| Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | flow nodes as data: `chain`, `parallel`, `route`, `refine`, `orchestrate`, `handoff` |
+| The agent loop | the framework runs it for you | delegated to a **runner** (the `claude` CLI, OpenAI Agents SDK, a local model) |
+| Tools | typed functions: Pydantic models / Zod schemas / Python callables | a tool allowlist handed to the runner (the runner executes them; MCP via the runner) |
+| Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | workflow nodes as data: `chain`, `parallel`, `route`, `refine`, `orchestrate`, `handoff` |
 | Structured output | Pydantic model / Zod / `generateObject` | parse the reply yourself (roadmap: `--json-schema`) |
-| Streaming | tokens/events, especially to a UI | `claude-cli` harness `:on-event` |
+| Streaming | tokens/events, especially to a UI | `claude-cli` runner `:on-event` |
 | Sessions / memory | built in (Agno AgentOS, PydanticAI) | `converse` / `:resume` for sessions; richer memory is delegated or out of scope |
 | Observability | Logfire, AgentOS, etc. | none built in |
 
@@ -35,11 +35,11 @@ The frameworks referenced:
   then inspect, serialize, diff, generate, and transform it with ordinary code
   (`clojure.walk`, etc.). The plan is a value, not a callgraph hidden in objects.
 - **The loop is delegated.** karcarthy doesn't reimplement the model/tool loop;
-  it drives a harness. That makes it provider-neutral and thin, and it means
+  it drives a runner. That makes it provider-neutral and thin, and it means
   karcarthy can sit *on top of* the others: a PydanticAI or Agno agent can be
-  wrapped as a harness (via the `command` or `openai` adapter, or a small shim).
-- **Agents can author and edit the workflow at runtime.** Because flows are data
-  parsed with `clojure.edn` (never `eval`), an agent can write a flow that
+  wrapped as a runner (via the `command` or `openai` adapter, or a small shim).
+- **Agents can author and edit the workflow at runtime.** Because workflows are
+  data parsed with `clojure.edn` (never `eval`), an agent can write a workflow that
   karcarthy runs (`run-authored`) or rewrite its own definition (`evolve`). Most
   frameworks let the model call tools and hand off; they don't usually make the
   orchestration itself data the model emits and edits.
@@ -56,7 +56,7 @@ The frameworks referenced:
 - Orchestration you want as inspectable, generatable, serializable data;
   provider-neutral; on the JVM/Lisp; or where agents author and rewrite
   workflows themselves: **karcarthy** (early and minimal, and able to drive the
-  others as harnesses).
+  others as runners).
 
 These aren't strictly either/or: karcarthy is a thin coordination layer, and the
-frameworks above are good candidates to run *inside* it as harnesses.
+frameworks above are good candidates to run *inside* it as runners.

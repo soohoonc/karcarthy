@@ -20,7 +20,7 @@ clojure -T:build jar         # build a jar into target/
 - Add a test for new behavior, and register new test namespaces in
   `test/karcarthy/test_runner.clj`.
 - Adding an orchestration node: a constructor + a `run-node` defmethod + tests.
-- Adding a harness: implement `karcarthy.core/Harness` and return a result map.
+- Adding a runner: implement `karcarthy.core/Runner` and return a result map.
 
 ## Pull requests
 

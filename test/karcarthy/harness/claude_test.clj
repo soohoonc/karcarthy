@@ -117,14 +117,14 @@
 ;; deliberately does NOT assert the model's turn-by-turn behavior: whether a
 ;; trivial prompt resolves in one turn or wanders into tool use depends on the
 ;; ambient environment (available tools, any discovered CLAUDE.md), which is
-;; outside the harness's contract. The deterministic `parse-result` tests above
+;; outside the runner's contract. The deterministic `parse-result` tests above
 ;; already cover both the success and error payload shapes.
 (deftest ^:live live-claude-roundtrip
   (when (System/getenv "KARCARTHY_LIVE")
-    (testing "a real claude -p call round-trips through the harness and parses"
+    (testing "a real claude -p call round-trips through the runner and parses"
       (let [tmp (str (System/getProperty "java.io.tmpdir") "/karcarthy-live")
             _   (.mkdirs (java.io.File. tmp))
-            h   (cc/claude-harness {:system-prompt-mode :replace
+            h   (cc/claude-runner {:system-prompt-mode :replace
                                     :max-turns          6
                                     :dir                tmp})
             r   (k/run-agent h

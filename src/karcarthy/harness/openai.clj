@@ -1,13 +1,13 @@
 (ns karcarthy.harness.openai
-  "Harness adapter for the OpenAI Agents SDK
+  "Runner adapter for the OpenAI Agents SDK
   (https://github.com/openai/openai-agents-python).
 
-  The Agents SDK is Python, so - like the claude harness uses an existing CLI -
-  this drives an existing harness by shelling out to a small Python runner
+  The Agents SDK is Python, so - like the claude runner uses an existing CLI -
+  this drives an existing runner by shelling out to a small Python runner
   (`resources/karcarthy/openai_runner.py`) that builds an `agents.Agent` and
   calls `Runner.run_sync`. karcarthy sends a JSON request on stdin and reads a
-  JSON result on stdout, so the orchestration layer is identical whether a flow
-  runs over Claude or OpenAI - just swap the harness.
+  JSON result on stdout, so the orchestration layer is identical whether a
+  workflow runs over Claude or OpenAI - just swap the runner.
 
   Requirements: a `python3` with `openai-agents` installed and OPENAI_API_KEY in
   the environment."
@@ -46,17 +46,17 @@
         (io/copy in tmp))
       (.getPath tmp))))
 
-(defn openai-agents-harness
-  "A `karcarthy.core/Harness` that drives the OpenAI Agents SDK via the Python
+(defn openai-agents-runner
+  "A `karcarthy.core/Runner` that drives the OpenAI Agents SDK via the Python
   runner. `default-opts` are merged beneath per-run opts. Options:
     :python-bin  python executable (default \"python3\")
     :runner      path to the runner script (default: the bundled resource)
     :model       default model for agents that don't set one
     :dir / :env  working directory / extra environment for the process
     :timeout-ms  kill the runner if it runs longer than this (milliseconds)"
-  ([] (openai-agents-harness {}))
+  ([] (openai-agents-runner {}))
   ([default-opts]
-   (reify k/Harness
+   (reify k/Runner
      (-run [_ agent prompt opts]
        (let [opts   (merge default-opts opts)
              python (get opts :python-bin "python3")
@@ -87,3 +87,8 @@
                       :text  (or (not-empty err) out)
                       :error (str "runner exited with status " exit)
                       :raw   {:exit exit :out out :err err}})))))))
+
+(defn openai-agents-harness
+  "Deprecated alias for `openai-agents-runner`."
+  ([] (openai-agents-runner))
+  ([default-opts] (openai-agents-runner default-opts)))

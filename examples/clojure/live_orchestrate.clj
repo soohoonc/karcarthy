@@ -1,11 +1,11 @@
-;; A LIVE orchestrator-workers run against the Claude harness (`claude -p`).
+;; A LIVE orchestrator-workers run against the Claude runner (`claude -p`).
 ;;
 ;; Unlike the offline `karcarthy.demo`, this makes real, paid API calls, so run
 ;; it intentionally. It needs a working `claude` CLI with valid auth on PATH.
 ;;
 ;;     clojure -M -e '(load-file "examples/live_orchestrate.clj")'
 ;;
-;; It demonstrates the harness tuning that makes agents behave as constrained
+;; It demonstrates the runner tuning that makes agents behave as constrained
 ;; sub-agents rather than as an interactive Claude Code session:
 ;;   * :system-prompt-mode :replace  - the system prompt is *only* the agent's
 ;;     instructions, with none of Claude Code's interactive persona;
@@ -15,7 +15,7 @@
 
 (require '[karcarthy.core :as k]
          '[karcarthy.orchestrate :as o]
-         '[karcarthy.harness.claude :as cc]
+         '[karcarthy.runner.claude :as cc]
          '[clojure.string :as str])
 
 (.mkdirs (java.io.File. "/tmp/karc"))
@@ -24,12 +24,12 @@
   ["--disallowedTools"
    "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite,NotebookEdit,MultiEdit"])
 
-(def harness
-  (cc/claude-harness {:system-prompt-mode :replace
-                      :max-turns          4
-                      :model              "haiku"
-                      :dir                "/tmp/karc"
-                      :extra-args         no-tools}))
+(def runner
+  (cc/claude-runner {:system-prompt-mode :replace
+                     :max-turns          4
+                     :model              "haiku"
+                     :dir                "/tmp/karc"
+                     :extra-args         no-tools}))
 
 (def planner
   (k/agent "planner"
@@ -44,8 +44,8 @@
                  :synthesize (fn [results _input]
                                (k/result {:text (str/join "\n" (map #(str "- " (:text %)) results))}))))
 
-(let [r (o/run-flow harness research
-                    "Why is homoiconicity useful for agent orchestration?")]
+(let [r (o/run runner research
+               "Why is homoiconicity useful for agent orchestration?")]
   (println "SUBTASKS:" (pr-str (:subtasks r)))
   (println "OK?      " (k/ok? r))
   (println "RESULT:")

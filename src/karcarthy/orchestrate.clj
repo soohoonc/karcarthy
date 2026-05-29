@@ -1,23 +1,23 @@
 (ns karcarthy.orchestrate
   "Orchestration as data.
 
-  A *flow* is a plain Clojure value describing how to coordinate agents. It is
+  A *workflow* is a plain Clojure value describing how to coordinate agents. It is
   either an agent (a leaf; see `karcarthy.core/agent`) or a composite node
   tagged with `:karcarthy/type`:
 
-    :chain        run flows in sequence, threading each result's :text into the
+    :chain        run workflows in sequence, threading each result's :text into the
                   next; short-circuits on the first failure.
-    :parallel     run flows concurrently on the same input (bounded); gather.
-    :route        pick one downstream flow by a label from a router (a fn of the
+    :parallel     run workflows concurrently on the same input (bounded); gather.
+    :route        pick one downstream workflow by a label from a router (a fn of the
                   input, or an agent whose reply is the label).
     :refine       evaluator-optimizer: draft, critique, repeat until accepted.
     :orchestrate  orchestrator-workers: plan subtasks, fan out, gather.
-    :handoff      run one flow, then hand off to another with shared session.
+    :handoff      run one workflow, then hand off to another with shared session.
 
-  Because a flow is data, you build, generate and serialize it with ordinary
-  Clojure. `run-flow` interprets a flow against a `Harness`.
+  Because a workflow is data, you build, generate and serialize it with ordinary
+  Clojure. `run` interprets a workflow against a `Runner`.
 
-  Every flow run returns a `karcarthy.core` result map, so flows compose: the
+  Every workflow run returns a `karcarthy.core` result map, so workflows compose: the
   output of one is valid input to another. Composite nodes are fault-isolated,
   so a child that throws becomes a not-ok result instead of crashing the run
   (see `safe-run`)."
@@ -26,18 +26,18 @@
   (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
-;; Constructors - build flow data
+;; Constructors - build workflow data
 ;; ---------------------------------------------------------------------------
 
 (defn chain
-  "A flow that runs `steps` (agents or flows) in sequence, threading the :text
+  "A workflow that runs `steps` (agents or workflows) in sequence, threading the :text
   of each result into the next step's input. Returns the last result, or the
   first failing result (short-circuiting)."
   [& steps]
   {:karcarthy/type :chain :steps (vec steps)})
 
 (defn parallel
-  "A flow that runs each of `branches` concurrently on the same input and
+  "A workflow that runs each of `branches` concurrently on the same input and
   returns a result whose :results is the vector of branch results (in order).
   Its :text is the branch texts joined by blank lines, and :ok? is true only if
   every branch succeeded. Concurrency is bounded (default 16).
@@ -57,10 +57,10 @@
     max-concurrency (assoc :max-concurrency max-concurrency)))
 
 (defn route
-  "A flow that dispatches to one downstream flow chosen by `router`:
+  "A workflow that dispatches to one downstream workflow chosen by `router`:
     - if `router` is a fn, it is called with the input and must return a label;
-    - otherwise `router` is run as a flow and its result's :text is the label.
-  `routes` maps labels to flows. Matching is exact first, then (for string
+    - otherwise `router` is run as a workflow and its result's :text is the label.
+  `routes` maps labels to workflows. Matching is exact first, then (for string
   labels) case-insensitive and substring - so an agent that replies \"This is a
   billing question\" still matches the route \"billing\". `:default` (optional
   kwarg) is used when nothing matches."
@@ -76,7 +76,7 @@
 
   `evaluator` is either:
     - a fn of [draft-result input] -> {:accept? boolean :feedback string}, or
-    - a flow/agent run on the draft; its reply is the verdict - accepted when the
+    - a workflow/agent run on the draft; its reply is the verdict - accepted when the
       trimmed text begins with \"ACCEPT\" (case-insensitive), otherwise the whole
       reply is treated as feedback."
   [worker evaluator & {:keys [max-rounds] :or {max-rounds 3}}]
@@ -84,11 +84,11 @@
 
 (defn orchestrate
   "Orchestrator-workers: a `planner` decomposes the input into subtasks, a
-  `worker` flow handles each subtask (fanned out, at most :max-concurrency at a
+  `worker` workflow handles each subtask (fanned out, at most :max-concurrency at a
   time, default 16), and an optional
   `:synthesize` fn combines the worker results.
 
-  `planner` is either a fn of input -> seq of subtask strings, or a flow/agent
+  `planner` is either a fn of input -> seq of subtask strings, or a workflow/agent
   whose reply is parsed into subtasks (one per non-blank line, with leading list
   markers like '-', '*', '1.' stripped). `:synthesize` is a fn of
   [results input] -> result/map; when present its :text becomes the node :text."
@@ -101,9 +101,9 @@
 
 (defn handoff
   "Run `from`, then hand off to `to`, threading `from`'s session so `to` inherits
-  its context on harnesses that support sessions (e.g. claude-cli, via --resume).
+  its context on runners that support sessions (e.g. claude-cli, via --resume).
   `to`'s input defaults to `from`'s :text; pass `:prompt` to override. On
-  harnesses without sessions the handoff still runs both flows in sequence."
+  runners without sessions the handoff still runs both workflows in sequence."
   [from to & {:keys [prompt]}]
   {:karcarthy/type :handoff :from from :to to :prompt prompt})
 
@@ -111,24 +111,24 @@
 ;; Interpreter
 ;; ---------------------------------------------------------------------------
 
-(declare run-flow)
+(declare run)
 
 (defmulti run-node
-  "Execute one flow node, dispatching on (:karcarthy/type node). This is the
+  "Execute one workflow node, dispatching on (:karcarthy/type node). This is the
   interpreter's extension point: teach it a new node by adding a constructor and
-  a `(defmethod run-node :your-type [harness node input opts] ...)` returning a
+  a `(defmethod run-node :your-type [runner node input opts] ...)` returning a
   `karcarthy.core` result. See `karcarthy.self` for examples (`:evolve`)."
-  (fn [_harness node _input _opts] (:karcarthy/type node)))
+  (fn [_runner node _input _opts] (:karcarthy/type node)))
 
 ;; --- shared helpers --------------------------------------------------------
 
 (defn safe-run
-  "Run a child flow, converting a thrown exception into a not-ok result so one
+  "Run a child workflow, converting a thrown exception into a not-ok result so one
   bad branch can't crash a whole multi-agent run. Composite nodes run their
-  children through this; top-level `run-flow` stays transparent (fail fast)."
-  [harness flow input opts]
+  children through this; top-level `run` stays transparent (fail fast)."
+  [runner workflow input opts]
   (try
-    (run-flow harness flow input opts)
+    (run runner workflow input opts)
     (catch Throwable t
       (k/result {:ok?       false
                  :text      nil
@@ -149,7 +149,7 @@
       (finally (.shutdown pool)))))
 
 (defn- match-route
-  "Resolve the flow for `label` in `routes`: exact match first, then - for
+  "Resolve the workflow for `label` in `routes`: exact match first, then - for
   string labels - case-insensitive exact and substring (label contains key)."
   [routes label]
   (or (get routes label)
@@ -165,23 +165,23 @@
 ;; --- nodes -----------------------------------------------------------------
 
 (defmethod run-node :agent
-  [harness agent input opts]
-  (k/run-agent harness agent input opts))
+  [runner agent input opts]
+  (k/run-agent runner agent input opts))
 
 (defmethod run-node :chain
-  [harness {:keys [steps]} input opts]
+  [runner {:keys [steps]} input opts]
   (loop [input input, steps steps, last-result nil]
     (if (empty? steps)
       (or last-result (k/result {:ok? true :text input :empty-chain? true}))
-      (let [r (safe-run harness (first steps) input opts)]
+      (let [r (safe-run runner (first steps) input opts)]
         (if (k/ok? r)
           (recur (:text r) (rest steps) r)
           r)))))                                    ; short-circuit on failure
 
 (defmethod run-node :parallel
-  [harness {:keys [branches gather max-concurrency]} input opts]
+  [runner {:keys [branches gather max-concurrency]} input opts]
   (let [results  (bounded-pmap max-concurrency
-                               #(safe-run harness % input opts)
+                               #(safe-run runner % input opts)
                                branches)
         gathered (when gather (gather results))]
     (k/result {:ok?      (every? k/ok? results)
@@ -191,37 +191,37 @@
                              (str/join "\n\n" (keep :text results)))})))
 
 (defmethod run-node :route
-  [harness {:keys [router routes default]} input opts]
+  [runner {:keys [router routes default]} input opts]
   (let [label (if (fn? router)
                 (router input)
-                (str/trim (str (:text (safe-run harness router input opts)))))
-        flow  (or (match-route routes label) default)]
-    (if flow
-      (safe-run harness flow input opts)
+                (str/trim (str (:text (safe-run runner router input opts)))))
+        workflow  (or (match-route routes label) default)]
+    (if workflow
+      (safe-run runner workflow input opts)
       (k/result {:ok? false :error :no-route :label label
                  :text (str "no route for label: " (pr-str label))}))))
 
 (defn- evaluate
   "Run `evaluator` against a draft, returning {:accept? :feedback :evaluation}."
-  [harness evaluator draft input opts]
+  [runner evaluator draft input opts]
   (if (fn? evaluator)
     (evaluator draft input)
     (let [prompt (str "INPUT:\n" input "\n\nDRAFT:\n" (:text draft)
                       "\n\nReply with exactly ACCEPT if the draft is good enough."
                       " Otherwise reply with specific, actionable feedback.")
-          r      (safe-run harness evaluator prompt opts)
+          r      (safe-run runner evaluator prompt opts)
           t      (str/trim (str (:text r)))]
       {:accept?    (str/starts-with? (str/upper-case t) "ACCEPT")
        :feedback   t
        :evaluation r})))
 
 (defmethod run-node :refine
-  [harness {:keys [worker evaluator max-rounds]} input opts]
+  [runner {:keys [worker evaluator max-rounds]} input opts]
   (loop [round 1, worker-input input]
-    (let [draft (safe-run harness worker worker-input opts)]
+    (let [draft (safe-run runner worker worker-input opts)]
       (if-not (k/ok? draft)
         draft                                       ; worker failed; bail out
-        (let [{:keys [accept? feedback]} (evaluate harness evaluator draft input opts)]
+        (let [{:keys [accept? feedback]} (evaluate runner evaluator draft input opts)]
           (if (or accept? (>= round max-rounds))
             (k/result (assoc draft :rounds round :accepted? (boolean accept?)))
             (recur (inc round)
@@ -234,21 +234,21 @@
 
 (defn- plan-subtasks
   "Turn the input into a vector of subtask strings via `planner` (a fn, or a
-  flow whose reply is parsed line-by-line)."
-  [harness planner input opts]
+  workflow whose reply is parsed line-by-line)."
+  [runner planner input opts]
   (if (fn? planner)
     (vec (planner input))
-    (->> (str/split-lines (str (:text (safe-run harness planner input opts))))
+    (->> (str/split-lines (str (:text (safe-run runner planner input opts))))
          (map #(str/replace % list-marker ""))
          (map str/trim)
          (remove str/blank?)
          vec)))
 
 (defmethod run-node :orchestrate
-  [harness {:keys [planner worker synthesize max-concurrency]} input opts]
-  (let [subtasks (plan-subtasks harness planner input opts)
+  [runner {:keys [planner worker synthesize max-concurrency]} input opts]
+  (let [subtasks (plan-subtasks runner planner input opts)
         results  (bounded-pmap max-concurrency
-                               #(safe-run harness worker % opts)
+                               #(safe-run runner worker % opts)
                                subtasks)
         gathered (when synthesize (synthesize results input))]
     (k/result {:ok?      (every? k/ok? results)
@@ -259,31 +259,37 @@
                              (str/join "\n\n" (keep :text results)))})))
 
 (defmethod run-node :handoff
-  [harness {:keys [from to prompt]} input opts]
-  (let [r1 (safe-run harness from input opts)]
+  [runner {:keys [from to prompt]} input opts]
+  (let [r1 (safe-run runner from input opts)]
     (if-not (k/ok? r1)
       r1                                              ; bail if the first agent failed
       (let [opts' (cond-> opts
                     (:session-id r1) (assoc :resume (:session-id r1)))]
-        (safe-run harness to (or prompt (:text r1)) opts')))))
+        (safe-run runner to (or prompt (:text r1)) opts')))))
 
 (defmethod run-node :default
   [_ node _ _]
-  (throw (ex-info "Not a runnable flow node (missing or unknown :karcarthy/type)"
+  (throw (ex-info "Not a runnable workflow node (missing or unknown :karcarthy/type)"
                   {:node node})))
 
+(defn run
+  "Interpret `workflow` against `runner`, starting from `input` (a string).
+  Returns a `karcarthy.core` result map. `workflow` may be an agent or any
+  composite node."
+  ([runner workflow input] (run runner workflow input {}))
+  ([runner workflow input opts] (run-node runner workflow input opts)))
+
 (defn run-flow
-  "Interpret `flow` against `harness`, starting from `input` (a string). Returns
-  a `karcarthy.core` result map. `flow` may be an agent or any composite node."
-  ([harness flow input] (run-flow harness flow input {}))
-  ([harness flow input opts] (run-node harness flow input opts)))
+  "Deprecated alias for `run`."
+  ([runner flow input] (run runner flow input))
+  ([runner flow input opts] (run runner flow input opts)))
 
 ;; ---------------------------------------------------------------------------
 ;; DSL sugar
 ;; ---------------------------------------------------------------------------
 
-(defn flow?
-  "True if `x` is a runnable flow: an agent leaf, or a node whose
+(defn workflow?
+  "True if `x` is a runnable workflow: an agent leaf, or a node whose
   `:karcarthy/type` the interpreter handles."
   [x]
   (boolean (and (map? x)
@@ -291,8 +297,27 @@
                     (contains? (disj (set (keys (methods run-node))) :default)
                                (:karcarthy/type x))))))
 
+(defn flow?
+  "Deprecated alias for `workflow?`."
+  [x]
+  (workflow? x))
+
+(defmacro defworkflow
+  "Define a var holding a workflow, validating at load time that it is runnable.
+
+    (defworkflow support-desk
+      (route triage {\"billing\"   billing
+                     \"technical\" (chain technical reviewer)}))"
+  [sym workflow-form]
+  `(def ~sym
+     (let [f# ~workflow-form]
+       (when-not (workflow? f#)
+         (throw (ex-info "defworkflow: not a runnable workflow" {:sym '~sym :workflow f#})))
+       f#)))
+
 (defmacro defflow
-  "Define a var holding a flow, validating at load time that it is runnable.
+  "Deprecated alias for `defworkflow`. Defines a var holding a workflow and
+  validates at load time that it is runnable.
 
     (defflow support-desk
       (route triage {\"billing\"   billing
@@ -300,6 +325,6 @@
   [sym flow-form]
   `(def ~sym
      (let [f# ~flow-form]
-       (when-not (flow? f#)
+       (when-not (workflow? f#)
          (throw (ex-info "defflow: not a runnable flow" {:sym '~sym :flow f#})))
        f#)))

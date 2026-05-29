@@ -2,7 +2,7 @@
 
 Homoiconic agent **orchestration** in Clojure. Agents, tools, and workflows are
 plain EDN data; the inner agent loop (model calls + tool execution) is delegated
-to an external **harness** rather than reimplemented here.
+to an external **runner** rather than reimplemented here.
 
 ## Commands
 
@@ -17,12 +17,12 @@ clojure -M -e '(load-file "examples/live_orchestrate.clj")'   # live demo (paid 
 
 | File | Role |
 |------|------|
-| `src/karcarthy/core.clj` | data model (`agent`), spec validation, `result`, the `Harness` protocol, the offline `mock-harness`, and the `defagent` macro |
-| `src/karcarthy/orchestrate.clj` | the flow DSL - `chain` / `parallel` / `route` / `refine` / `orchestrate` / `handoff`, the `run-flow` interpreter (a `run-node` multimethod), and `defflow` / `flow?` |
-| `src/karcarthy/session.clj` | `converse` - multi-turn conversations that thread the harness session (memory) |
-| `src/karcarthy/harness/claude.clj` | drives `claude -p` (buffered JSON **and** `stream-json` streaming) |
-| `src/karcarthy/harness/command.clj` | wrap any CLI as an agent (prompt → stdin, stdout → result) |
-| `src/karcarthy/harness/openai.clj` | OpenAI Agents SDK via `resources/karcarthy/openai_runner.py` |
+| `src/karcarthy/core.clj` | data model (`agent`), spec validation, `result`, the `Runner` protocol, the offline `mock-runner`, and the `defagent` macro |
+| `src/karcarthy/orchestrate.clj` | the workflow DSL - `chain` / `parallel` / `route` / `refine` / `orchestrate` / `handoff`, the `run` interpreter (a `run-node` multimethod), and `defworkflow` / `workflow?` |
+| `src/karcarthy/session.clj` | `converse` - multi-turn conversations that thread the runner session (memory) |
+| `src/karcarthy/runner/claude.clj` | preferred Claude runner namespace; delegates to the compatibility implementation in `harness/claude.clj` |
+| `src/karcarthy/runner/command.clj` | preferred command runner namespace; wrap any CLI as an agent (prompt → stdin, stdout → result) |
+| `src/karcarthy/runner/openai.clj` | preferred OpenAI runner namespace; OpenAI Agents SDK via `resources/karcarthy/openai_runner.py` |
 | `test/…` | mirrors `src/`; the runner lists namespaces in `test/karcarthy/test_runner.clj` |
 
 ## Conventions
@@ -31,9 +31,9 @@ clojure -M -e '(load-file "examples/live_orchestrate.clj")'   # live demo (paid 
   HTTP uses Java's built-in client or shelling out - no HTTP-client dep.
 - **Everything is data.** Each entity is a map tagged with `:karcarthy/type`
   (`:agent`, `:result`, `:chain`, `:route`, …). Prefer plain maps over records.
-- **A harness** implements `karcarthy.core/Harness` (`-run`) and returns a
+- **A runner** implements `karcarthy.core/Runner` (`-run`) and returns a
   result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
-- **Adding a flow node:** add a constructor in `orchestrate.clj`, a `run-node`
+- **Adding a workflow node:** add a constructor in `orchestrate.clj`, a `run-node`
   defmethod, and tests.
 - **Adding a test namespace:** register it in `test/karcarthy/test_runner.clj`
   (zero-dependency runner; no Clojars test libs).

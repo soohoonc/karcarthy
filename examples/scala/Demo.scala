@@ -14,16 +14,16 @@ object Demo {
     require.invoke(Clojure.read("karcarthy.orchestrate"))
 
     val agent       = Clojure.`var`("karcarthy.core", "agent")
-    val mockHarness = Clojure.`var`("karcarthy.core", "mock-harness")
+    val mockRunner  = Clojure.`var`("karcarthy.core", "mock-runner")
     val chain       = Clojure.`var`("karcarthy.orchestrate", "chain")
-    val runFlow     = Clojure.`var`("karcarthy.orchestrate", "run-flow")
+    val run         = Clojure.`var`("karcarthy.orchestrate", "run")
     val get         = Clojure.`var`("clojure.core", "get")
 
     val researcher = agent.invoke("researcher", "Research the question.")
     val summarizer = agent.invoke("summarizer", "Summarize in one line.")
-    val flow       = chain.invoke(researcher, summarizer)
+    val workflow   = chain.invoke(researcher, summarizer)
 
-    val result = runFlow.invoke(mockHarness.invoke(), flow, "what is a monad?")
+    val result = run.invoke(mockRunner.invoke(), workflow, "what is a monad?")
     println("ok?  " + get.invoke(result, Clojure.read(":ok?")))
     println("text " + get.invoke(result, Clojure.read(":text")))
   }
