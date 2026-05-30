@@ -25,8 +25,8 @@
         (is (k/ok? r))
         (is (= "version one :: topic" (:text r)))))))
 
-(deftest put-patch-call-and-remove-living-resources
-  (testing "new operations mutate the living runtime directly"
+(deftest put-patch-call-and-remove-agent
+  (testing "new operations mutate agent state directly"
     (let [rt     (dyn/dynamic-runtime)
           runner (k/mock-runner (fn [{:keys [agent prompt]}]
                                   (str (:instructions agent) " :: " prompt)))]
@@ -48,24 +48,13 @@
                                                     :target "writer"
                                                     :input "topic"}))))
 
-      (dyn/apply-operation runner rt {:karcarthy/op :put
-                                      :resource {:kind :environment
-                                                 :id "default"
-                                                 :capabilities [:model :spawn-agent]}})
-      (dyn/apply-operation runner rt {:karcarthy/op :patch
-                                      :kind :environment
-                                      :id "default"
-                                      :merge {:capabilities [:model :spawn-agent :patch-runtime]}})
-      (is (= [:model :spawn-agent :patch-runtime]
-             (get-in (dyn/snapshot rt) [:resources "environment" "default" :capabilities])))
-
       (dyn/apply-operation runner rt {:karcarthy/op :remove
-                                      :kind :environment
-                                      :id "default"})
-      (is (nil? (get-in (dyn/snapshot rt) [:resources "environment" "default"]))))))
+                                      :kind :agent
+                                      :id "writer"})
+      (is (nil? (get-in (dyn/snapshot rt) [:agents "writer"]))))))
 
-(deftest put-graph-and-call-it
-  (testing "graphs are living resources that resolve agent refs at call time"
+(deftest put-workflow-and-call-it
+  (testing "workflows are living state that resolve agent refs at call time"
     (let [rt     (dyn/dynamic-runtime)
           runner (k/mock-runner (fn [{:keys [agent]}] (:instructions agent)))]
       (dyn/apply-operation runner rt {:karcarthy/op :put
@@ -73,7 +62,7 @@
                                                  :id "writer"
                                                  :instructions "graph v1"}})
       (dyn/apply-operation runner rt {:karcarthy/op :put
-                                      :resource {:kind :graph
+                                      :resource {:kind :workflow
                                                  :id "main"
                                                  :workflow (o/chain (dyn/dynamic-agent-ref "writer"))}})
       (is (= "graph v1"
@@ -86,7 +75,7 @@
                                       :merge {:instructions "graph v2"}})
       (is (= "graph v2"
              (:text (dyn/apply-operation runner rt {:karcarthy/op :call
-                                                    :kind :graph
+                                                    :kind :workflow
                                                     :target "main"
                                                     :input "x"})))))))
 

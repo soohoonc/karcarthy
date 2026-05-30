@@ -1,7 +1,7 @@
 # References
 
 These are the protocol and SDK surfaces that informed the proposed karcarthy
-self-evolving runtime vocabulary.
+runtime vocabulary.
 
 ## Agent Client Protocol
 
@@ -22,11 +22,10 @@ self-evolving runtime vocabulary.
 Takeaways for karcarthy:
 
 - `context` should be session/message state, not a broad resource kind.
-- `:mode` should not be a core resource. It belongs in session config or the
-  environment/capability surface.
+- `:mode` should not be a core resource. It belongs in session config or runner
+  options.
 - tool calls are runtime events, not resource definitions.
-- permission requests are protocol adapter behavior, not graph IR. The core
-  vocabulary should describe available capabilities.
+- permission requests are protocol adapter behavior, not graph IR.
 
 ## OpenAI Agents SDK and Responses API
 
@@ -46,12 +45,11 @@ Takeaways for karcarthy:
 
 Takeaways for karcarthy:
 
-- `:integration` should represent MCP/hosted/local connection surfaces.
-- `:tool` should represent callable capabilities exposed directly or through an
-  integration.
+- MCP, hosted tools, and function tools should stay in runner/provider config
+  until karcarthy has a concrete reason to interpret them directly.
 - fanout can map to agents-as-tools, multiple SDK runs, or graph branches.
 - final output, emitted updates, and resumable state should stay separate.
-- mutable runtime state should preserve enough result/state data for replay and
+- mutable runtime state should preserve enough result data for replay and
   continuation.
 
 ## Claude Agent SDK and Claude Code
@@ -75,8 +73,8 @@ Takeaways for karcarthy:
   this supports explicit `context` passing and fanout synthesis.
 - MCP servers should be scoping boundaries so tool definitions do not bloat the
   parent context unnecessarily.
-- permission modes are part of the host/runtime adapter, while the core runtime
-  vocabulary should model the capability surface the agent can use.
+- permission modes are part of the host/runtime adapter, not first-class graph
+  operations.
 
 ## DSPy
 
@@ -86,6 +84,6 @@ Takeaways for karcarthy:
 Takeaways for karcarthy:
 
 - prompts should not be the only contract; agents and graphs should grow typed
-  input/output signatures.
-- metrics and optimization can be runtime resources that help the agent patch
-  itself while preserving an auditable before/after history.
+  input/output signatures once validation needs them.
+- metrics and optimization can help the agent patch itself, but they should not
+  expand the runtime surface before they have interpreter behavior.
