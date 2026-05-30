@@ -9,6 +9,9 @@ languages, to show the library is reachable from each.
 
 - `clojure/orchestrator_emulations.clj` - offline emulations of LangGraph,
   CrewAI, AutoGen, OpenAI Agents SDK, and Google ADK-style orchestration shapes.
+- `clojure/open-source-harnesses/` - tiny runnable emulations of open-source
+  harness examples from Swarm, CrewAI, AutoGen, and LangGraph, with one folder
+  per harness.
 - `clojure/live_orchestrate.clj` - a live orchestrator-workers run (paid `claude -p`).
 - `clojure/self_modify.clj` - an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
