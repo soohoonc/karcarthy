@@ -24,6 +24,11 @@ language builds (and could transform) it, and an agent can generate or edit one 
 same way. See [`../COMPARISON.md`](../COMPARISON.md) for how this differs from
 PydanticAI, Agno, and the Vercel AI SDK.
 
+The open-source harness examples also have JSON-bridge versions:
+
+- `python/open-source-harnesses/` - Swarm, CrewAI, and AutoGen shapes in Python.
+- `typescript/open-source-harnesses/` - the same shapes in TypeScript.
+
 ```bash
 python3 examples/python/demo.py            # offline (mock runner)
 python3 examples/python/demo.py --live     # + an agent that edits itself (real claude)
