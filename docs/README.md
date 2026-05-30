@@ -8,6 +8,8 @@ agents, workflows, and history become mutable runtime data.
 
 - [Runtime vocabulary](agent-configuration.md) defines the proposed state shape
   and small operation set.
+- [Orchestrator emulations](orchestrator-emulations.md) maps popular
+  orchestrator shapes to karcarthy workflow data.
 - [References](references/) records the protocol and SDK prior art behind the
   vocabulary decisions.
 

@@ -46,12 +46,11 @@ The frameworks referenced:
   evidence for separating *what* a module should do from *how* its prompt or
   weights are tuned. karcarthy applies the same pressure one level up: keep
   agents, workflows, and operation history as data that runners can execute and
-  the controller can rewrite.
-- **Agents can author and edit the runtime while it runs.** Because workflows and
-  dynamic operations are data parsed with `clojure.edn` (never `eval`), an agent
-  can write a workflow that karcarthy runs (`run-authored`), rewrite its own
-  definition (`evolve`), or mutate runtime agents/workflows through
-  `karcarthy.dynamic`.
+  ordinary code can rewrite.
+- **Agents can emit orchestration data.** Because workflows and runtime
+  operations are data parsed with `clojure.edn` (never `eval`), advanced APIs can
+  parse model output into workflows or patches and feed them into the same
+  runtime state without treating text as code.
   Most frameworks let the model call tools and hand off; they don't usually make
   the orchestration state itself data the model emits and edits.
 - **It's language-neutral.** Because the unit of exchange is data, you can drive
@@ -67,7 +66,7 @@ The frameworks referenced:
   observability: **Agno**.
 - A web app streaming to React: **Vercel AI SDK**.
 - Orchestration you want as inspectable, generatable, serializable data;
-  provider-neutral; on the JVM/Lisp; or where agents author and rewrite
+  provider-neutral; on the JVM/Lisp; or where agents generate and rewrite
   workflows themselves: **karcarthy** (early and minimal, and able to drive the
   others as runners).
 

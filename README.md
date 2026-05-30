@@ -55,13 +55,11 @@ Swap `(k/mock-runner)` for `(k/claude-runner {})` to run it against `claude`.
   `{id -> runner}` and let each agent choose with `:runner`.
 - **Workflow nodes**, all data: `chain`, `parallel`, `route`, `refine`,
   `orchestrate`, `handoff`, and multi-turn `converse`.
-- **Agents speak karcarthy**: `run-authored` (an agent writes a workflow) and
-  `evolve` (an agent edits its own definition), parsed as data via `clojure.edn`,
-  never `eval`.
-- **Runtime execution as data**: `karcarthy.dynamic/run-dynamic` lets a
-  controller agent `:put`, `:patch`, `:remove`, and `:call` agents and
-  workflows, then keep deciding from the resulting state - all through EDN
-  operations.
+- **Popular orchestrator shapes as data**: `karcarthy.patterns` emulates
+  LangGraph-style state graphs, CrewAI-style crews, AutoGen-style round-robin
+  group chats, OpenAI-style handoff routing, and ADK-style workflow agents.
+- **Agents speak karcarthy**: advanced self-modifying flows parse EDN via
+  `clojure.edn`, never `eval`.
 - **OpenTelemetry-ready**: wrap a runner with `karcarthy.otel/instrument` to
   emit spans for workflow nodes, embedded functions, and agent calls.
 
@@ -78,6 +76,8 @@ Swap `(k/mock-runner)` for `(k/claude-runner {})` to run it against `claude`.
 - Examples in Clojure, Java, Kotlin, Scala, Python, and TypeScript:
   [`examples/`](examples/). Non-JVM languages drive it over a JSON bridge
   (`karcarthy.cli`), since a workflow is just data.
+- Runnable offline emulations of common orchestrator patterns:
+  [`examples/clojure/orchestrator_emulations.clj`](examples/clojure/orchestrator_emulations.clj).
 - How it compares to PydanticAI, DSPy, Agno, and the Vercel AI SDK:
   [`COMPARISON.md`](COMPARISON.md).
 - What is missing for a production-ready default runtime:

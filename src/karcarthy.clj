@@ -11,6 +11,7 @@
   (:refer-clojure :exclude [agent])
   (:require [karcarthy.core]
             [karcarthy.orchestrate]
+            [karcarthy.patterns]
             [karcarthy.session]
             [karcarthy.self]
             [karcarthy.dynamic]
@@ -68,16 +69,22 @@
 (export karcarthy.orchestrate/defworkflow)
 (export karcarthy.orchestrate/defflow)
 
+;; common orchestrator pattern helpers
+(export karcarthy.patterns/task-agent)
+(export karcarthy.patterns/crew)
+(export karcarthy.patterns/group-chat)
+(export karcarthy.patterns/workflow-agent)
+(export karcarthy.patterns/handoff-router)
+(export karcarthy.patterns/state-graph)
+
 ;; sessions
 (export karcarthy.session/converse)
 
 ;; agents using the language themselves
-(export karcarthy.self/run-authored)
 (export karcarthy.self/evolve)
 (export karcarthy.self/registry)
 (export karcarthy.self/agent-ref)
 (export karcarthy.self/read-workflow)
-(export karcarthy.self/read-flow)
 (export karcarthy.self/dsl-reference)
 
 ;; dynamic data-level execution

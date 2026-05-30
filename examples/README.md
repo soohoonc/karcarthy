@@ -7,15 +7,17 @@ languages, to show the library is reachable from each.
 
 ## Clojure
 
+- `clojure/orchestrator_emulations.clj` - offline emulations of LangGraph,
+  CrewAI, AutoGen, OpenAI Agents SDK, and Google ADK-style orchestration shapes.
 - `clojure/live_orchestrate.clj` - a live orchestrator-workers run (paid `claude -p`).
-- `clojure/self_modify.clj` - an agent writes a workflow, and an agent edits itself.
+- `clojure/self_modify.clj` - an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
 ## Python and TypeScript (via the JSON bridge)
 
 Non-JVM languages drive karcarthy through `karcarthy.cli`: send a workflow
 described as JSON on stdin, get the result as JSON. The workflow is data, so the
-language builds (and could transform) it, and an agent can author or edit one the
+language builds (and could transform) it, and an agent can generate or edit one the
 same way. See [`../COMPARISON.md`](../COMPARISON.md) for how this differs from
 PydanticAI, Agno, and the Vercel AI SDK.
 

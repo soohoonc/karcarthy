@@ -2,7 +2,7 @@
   "A language-agnostic bridge. Read a workflow described as JSON on stdin, run it,
   and write the result as JSON on stdout. Any language can drive karcarthy by
   exchanging data, so the homoiconic part (a workflow is data you can build,
-  transform, and have an agent author or edit) survives the boundary.
+  transform, and have an agent generate or edit) survives the boundary.
 
       echo '{\"workflow\": <workflow>, \"input\": \"...\", \"runner\": \"mock\"}' \\
         | clojure -M -m karcarthy.cli

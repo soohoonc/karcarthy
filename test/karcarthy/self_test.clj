@@ -46,41 +46,6 @@
                  (self/read-workflow (str "{:karcarthy/type :chain :steps ["
                                           "{:karcarthy/type :agent :name \"\" :instructions \"i\"}]}"))))))
 
-(deftest read-flow-compatibility-alias
-  (let [workflow (self/read-flow "{:karcarthy/type :agent :name \"w\" :instructions \"do\"}")]
-    (is (k/agent? workflow))
-    (is (= "w" (:name workflow)))))
-
-;; --- run-authored: an agent writes a workflow, then it runs ----------------
-
-(deftest run-authored-builds-and-runs
-  (testing "the author writes a workflow as EDN; karcarthy parses and runs it"
-    (let [h (k/mock-runner
-             (fn [{:keys [agent prompt]}]
-               (if (= "author" (:name agent))
-                 "```edn\n{:karcarthy/type :agent :name \"worker\" :instructions \"do the task\"}\n```"
-                 (str "[" (:name agent) "] " prompt))))
-          {:keys [workflow flow result]} (self/run-authored h
-                                                            (k/agent "author" "You design workflows.")
-                                                            "summarize the doc")]
-      (is (k/agent? workflow))
-      (is (= workflow flow))
-      (is (= "worker" (:name workflow)))
-      (is (= "[worker] summarize the doc" (:text result))))))
-
-(deftest run-authored-builds-a-pipeline
-  (testing "the author can write a multi-step workflow"
-    (let [h (k/mock-runner
-             (fn [{:keys [agent prompt]}]
-               (if (= "author" (:name agent))
-                 (str "{:karcarthy/type :chain :steps ["
-                      "{:karcarthy/type :agent :name \"x\" :instructions \"i\"} "
-                      "{:karcarthy/type :agent :name \"y\" :instructions \"i\"}]}")
-                 (str "[" (:name agent) "] " prompt))))
-          {:keys [workflow result]} (self/run-authored h (k/agent "author" "design") "task")]
-      (is (= :chain (:karcarthy/type workflow)))
-      (is (= "[y] [x] task" (:text result))))))
-
 ;; --- evolve: an agent edits its own definition at runtime ------------------
 
 (deftest evolve-self-modifies-then-answers

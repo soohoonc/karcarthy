@@ -1,15 +1,12 @@
-;; Agents using karcarthy to author and edit their own behavior - LIVE.
+;; Agents editing their own behavior - LIVE.
 ;;
 ;; Makes real, paid `claude -p` calls; run it intentionally. Needs the `claude`
 ;; CLI with valid auth on PATH.
 ;;
 ;;     clojure -M -e '(load-file "examples/self_modify.clj")'
 ;;
-;; Two demonstrations of the metacircular layer (karcarthy.self):
-;;   1. run-authored - an agent WRITES a karcarthy workflow (EDN), which karcarthy
-;;      parses (data only, never eval) and runs.
-;;   2. evolve       - an agent EDITS ITS OWN definition at runtime via EDN
-;;      patches, then acts with the new behavior.
+;; Demonstrates `evolve`: an agent edits its own definition at runtime via EDN
+;; patches, then acts with the new behavior.
 
 (require '[karcarthy.core :as k]
          '[karcarthy.self :as self]
@@ -32,14 +29,7 @@
                      :timeout-ms         90000
                      :extra-args         no-tools}))
 
-(println "=== run-authored: an agent writes a karcarthy workflow as EDN ===")
-(let [designer (k/agent "designer" "You design karcarthy orchestration workflows.")
-      {:keys [workflow result]} (self/run-authored runner designer
-                                                   "Answer concisely: what is a monad?")]
-  (println "AUTHORED WORKFLOW:" (pr-str workflow))
-  (println "RAN ->" (:text result)))
-
-(println "\n=== evolve: an agent edits its own instructions at runtime ===")
+(println "=== evolve: an agent edits its own instructions at runtime ===")
 (let [poet (k/agent "poet" "You are a mediocre poet who writes one bland line.")
       r    (o/run runner (self/evolve poet :max-rounds 3)
                   "Patch yourself into an expert minimalist poet, then write ONE line about Lisp.")]

@@ -4,7 +4,7 @@
 // build one and run it. This builds workflows as plain objects, sends them to the
 // karcarthy CLI bridge (`clojure -M -m karcarthy.cli`) as JSON, and reads the
 // JSON result back. The workflow crosses the boundary as data, so an agent can
-// author or edit a workflow the same way.
+// generate or edit a workflow the same way.
 //
 // Run from the repo root (any of):
 //   npx tsx examples/typescript/demo.ts

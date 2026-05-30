@@ -118,21 +118,6 @@ End the current top-level run.
  :text "Created a worker, patched it after observing output, and ran the patched version."}
 ```
 
-## Compatibility
-
-`karcarthy.dynamic` keeps the early operation names as aliases:
-
-| Legacy operation | Default runtime operation |
-| --- | --- |
-| `:define-agent` | `:put` with `{:kind :agent ...}` |
-| `:patch-agent` | `:patch` with `:kind :agent` |
-| `:define-workflow` | `:put` with `{:kind :workflow ...}` |
-| `:patch-workflow` | `:patch` with `:kind :workflow` |
-| `:run-agent` | `:call` |
-| `:run-workflow` | `:call` |
-| `:run` | `:call` with an inline workflow |
-| `:answer` | `:complete` |
-
 ## Production Requirements
 
 Production readiness means the default runtime can survive and explain itself:
