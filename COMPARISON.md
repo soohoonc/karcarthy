@@ -42,16 +42,17 @@ The frameworks referenced:
   it drives a runner. That makes it provider-neutral and thin, and it means
   karcarthy can sit *on top of* the others: a PydanticAI or Agno agent can be
   wrapped as a runner (via the `command` or `openai` adapter, or a small shim).
-- **The workflow is an intermediate representation.** DSPy is strong evidence
-  for separating *what* a module should do from *how* its prompt or weights are
-  tuned. karcarthy applies the same pressure one level up: keep orchestration as
-  data, then let runners, optimizers, or policies compile that data into concrete
-  prompts, tools, permissions, and execution plans.
-- **Agents can author and edit the workflow at runtime.** Because workflows are
-  data parsed with `clojure.edn` (never `eval`), an agent can write a workflow that
-  karcarthy runs (`run-authored`) or rewrite its own definition (`evolve`). Most
-  frameworks let the model call tools and hand off; they don't usually make the
-  orchestration itself data the model emits and edits.
+- **The runtime state is an intermediate representation.** DSPy is strong
+  evidence for separating *what* a module should do from *how* its prompt or
+  weights are tuned. karcarthy applies the same pressure one level up: keep
+  agents, graphs, environments, integrations, and operation history as data that
+  runners can execute and the controller can rewrite.
+- **Agents can author and edit the runtime while it runs.** Because workflows and
+  dynamic operations are data parsed with `clojure.edn` (never `eval`), an agent
+  can write a workflow that karcarthy runs (`run-authored`), rewrite its own
+  definition (`evolve`), or mutate a living runtime through `karcarthy.dynamic`.
+  Most frameworks let the model call tools and hand off; they don't usually make
+  the orchestration state itself data the model emits and edits.
 - **It's language-neutral.** Because the unit of exchange is data, you can drive
   it from any language over a JSON bridge — see the Python and TypeScript
   examples in [`examples/`](examples/), no Clojure required.

@@ -1,137 +1,173 @@
-# Toward a production-ready configuration system
+# Toward a production-ready self-evolving runtime
 
 karcarthy should stay small: a data-first orchestration layer, not another
-full-stack agent runtime. The production target is a stable configuration
-intermediate representation (IR) that can drive Claude Code, Codex, OpenAI
-Agents SDK, PydanticAI, DSPy, local models, or small command runners.
+full-stack agent runtime. The production target is a durable runtime kernel where
+agents, graphs, integrations, tools, environments, context, and history are all
+data that the controller can rewrite while it runs.
 
-The most useful outside inspiration from DSPy is not its Python API. It is the
-separation between declarative task contracts, execution modules, metrics, and
-compiled optimized state. karcarthy can apply that idea one level higher:
-describe the agent graph as data, validate it, run it through policies and
-optimizers, then hand each leaf to the right runner.
+This is different from a static configuration system. The deployed artifact is
+the interpreter. The living state inside it evolves:
+
+```text
+runtime kernel -> agent state -> operation log -> evolved state -> next action
+```
+
+The useful outside inspiration from DSPy is still the separation between task
+contracts, modules, metrics, and optimized state. karcarthy applies that idea at
+the orchestration/runtime layer: the agent edits its own graph and specialists as
+data, and the runtime records enough state to replay, fork, evaluate, and debug
+what happened.
 
 ## What production-ready means
 
-### 1. A versioned config contract
+### 1. A versioned runtime state contract
 
 - Add a top-level `:karcarthy/version`.
-- Define a recursive schema for every portable node and agent field.
-- Provide canonical normalization so equivalent configs print the same way.
+- Define schema for resource kinds: `:agent`, `:graph`, `:environment`,
+  `:integration`, and `:tool`.
+- Define schema for operation kinds: `:put`, `:patch`, `:remove`, `:call`,
+  `:emit`, `:return`, and `:complete`.
+- Provide canonical normalization so equivalent operations print the same way.
 - Support EDN and JSON readers/writers with clear validation errors.
-- Add migration functions between config versions.
-- Separate portable config from host-only extension points such as Clojure
-  functions.
+- Add migrations between state and operation versions.
+- Separate portable runtime state from host-only extension points such as
+  Clojure functions.
 
-### 2. Typed signatures, inspired by DSPy
+### 2. Durable operation logs and snapshots
 
-DSPy signatures show why prompts should not be the only contract. karcarthy
-should let an agent declare optional input and output fields:
+In-memory interpretation is enough for demos. A production self-evolving runtime
+needs:
+
+- run IDs and operation IDs;
+- append-only operation log;
+- operation result records;
+- periodic state snapshots;
+- replay from genesis or from a snapshot;
+- fork from any operation;
+- crash recovery;
+- cancellation and deadlines;
+- resource accounting for model calls, tool calls, latency, tokens, and cost.
+
+The log is the ground truth. Snapshots are acceleration.
+
+### 3. Mutable runtime resources
+
+The controller should be able to create, patch, remove, and call resources while
+it runs:
 
 ```clojure
-{:karcarthy/type :agent
- :name "researcher"
+{:op :put
+ :resource {:kind :agent
+            :id "critic"
+            :instructions "Find flaws in the current plan."}}
+
+{:op :patch
+ :kind :agent
+ :id "critic"
+ :merge {:instructions "Find flaws and propose one better plan."}}
+
+{:op :call
+ :target "critic"
+ :input "Review the current approach."}
+```
+
+The first implementation exists in `karcarthy.dynamic`. It now accepts the
+living operation names while preserving the early `:define-agent`,
+`:patch-agent`, `:run-agent`, and `:answer` aliases.
+
+### 4. Capabilities and environments
+
+Drop `:policy` as a core resource. It implies a gate. The runtime should model
+what exists in the agent's world:
+
+```clojure
+{:kind :environment
+ :id "default"
+ :capabilities [:model :spawn-agent :patch-runtime :filesystem :network :mcp]
+ :roots [{:type :filesystem :path "/repo"}
+         {:type :runner :id :claude}
+         {:type :mcp :id :github}]}
+```
+
+Production deployments can still sandbox dangerous capabilities at the process
+or infrastructure layer. That boundary should be outside the graph IR.
+
+### 5. Typed signatures, inspired by DSPy
+
+DSPy signatures show why prompts should not be the only contract. Agents and
+graphs should eventually declare input/output shapes:
+
+```clojure
+{:kind :agent
+ :id "researcher"
  :instructions "Research the question and cite sources."
  :signature {:inputs  {:question :string}
              :outputs {:answer :string
                        :citations [:vector :string]}}}
 ```
 
-The immediate value is validation and routing. A route can require an enum output;
-an orchestrator can require a vector of subtasks; a handoff can check that the
-next agent accepts the prior output shape.
+The immediate value is reliable self-editing. A controller can inspect a resource
+contract before patching or calling it. Longer term, signatures give optimizers
+and runners a stable target.
 
-Longer term, signatures give optimizers and runners a stable target. A runner can
-decide whether the best execution strategy is direct prediction, chain-of-thought,
-ReAct/tool use, structured output, or a framework-native agent.
+### 6. Dynamic graph construction
 
-### 3. Named modules and extension points
-
-Today some nodes accept raw Clojure functions for routing, gathering, planning,
-or evaluation. That is convenient but not portable. Production config should
-reference named extension points:
+Graphs should be temporary living plans. The controller can build a graph for the
+current situation, run it, patch it, or throw it away:
 
 ```clojure
-{:karcarthy/type :parallel
- :branches [...]
- :gather {:ref :summarize-results}}
+{:op :put
+ :resource {:kind :graph
+            :id "next-attempt"
+            :workflow {:karcarthy/type :parallel
+                       :branches [{:karcarthy/type :agent-ref :name "critic"}
+                                  {:karcarthy/type :agent-ref :name "implementer"}]}}}
 ```
 
-The application provides the registry. The config remains serializable, diffable,
-and safe to inspect before execution.
+The graph vocabulary should stay small:
 
-The first version of this idea now exists in `karcarthy.dynamic`: a controller
-agent can define and patch named agents/workflows through EDN operations, and
-workflows can late-resolve `:agent-ref` and `:workflow-ref` data references.
-The production version should harden this with schema versioning, persistence,
-and policy checks.
+- call;
+- parallel/fanout;
+- branch;
+- loop;
+- return/complete.
 
-### 4. Metrics and optimization
+### 7. Evaluation without freezing the runtime
 
-DSPy treats metrics and examples as first-class inputs to optimization. karcarthy
-should have the same slot in the IR:
+Metrics and examples should be first-class runtime resources, but optimization
+should not require freezing the agent. Useful eval flows:
 
-```clojure
-{:karcarthy/type :agent
- :name "triage"
- :instructions "Route support tickets."
- :signature {:inputs {:ticket :string}
-             :outputs {:team [:enum "billing" "technical" "general"]}}
- :metric {:ref :triage-accuracy}}
-```
+- the agent runs itself against examples;
+- the agent patches itself based on failures;
+- the runtime records before/after state and scores;
+- later runs can replay or fork any attempt.
 
-An optimizer protocol can then compile a workflow into a new workflow:
+The output is not necessarily a promoted static artifact. It can simply be the
+next evolved state.
 
-- improve instructions while preserving schema and policy;
-- choose cheaper or stronger runners per agent;
-- add few-shot examples or structured-output constraints;
-- save the compiled artifact with optimizer name, dataset hash, metric score,
-  runner versions, and cost.
+### 8. Observability
 
-This should be explicit compilation, not silent runtime mutation.
-
-### 5. Policy before execution
-
-Self-editing is useful only when constrained. A production system needs:
-
-- allowed patch keys for `evolve`;
-- post-patch schema validation;
-- per-runner and per-agent tool allowlists;
-- MCP server declarations and per-tool approval modes;
-- file, shell, and network sandbox policy;
-- secrets handling rules;
-- an audit log for policy decisions and agent-authored changes.
-
-### 6. Durable execution
-
-In-memory interpretation is enough for demos. Production workflows need:
-
-- run IDs and node IDs;
-- checkpointed node inputs, outputs, errors, and retry state;
-- resumable interrupts for approvals;
-- cancellation and deadlines;
-- per-node retry, timeout, and backoff policy;
-- idempotency keys for side-effecting tools;
-- replay and fork for debugging.
-
-### 7. Observability and evaluation
-
-OpenTelemetry instrumentation is already present. The next layer is a stable run
+OpenTelemetry instrumentation is already present. The next layer is a stable
 event model:
 
-- workflow, node, runner, tool, and optimizer events;
-- redaction policy for prompts and outputs;
-- cost, latency, token, and turn counters;
-- eval reports for a workflow over a dataset;
-- saved traces tied to compiled workflow artifacts.
+- operation events;
+- resource mutation events;
+- model call events;
+- graph call events;
+- tool call events;
+- integration discovery events;
+- snapshot/replay/fork events;
+- cost, latency, token, and turn counters.
 
-### 8. Distribution and compatibility
+The trace viewer should make it obvious why the agent changed itself.
+
+### 9. Distribution and compatibility
 
 Before calling this production-ready:
 
 - publish releases instead of requiring git SHAs;
-- document compatibility guarantees for config versions;
-- add a CLI linter: `karcarthy validate workflow.edn`;
+- document compatibility guarantees for runtime state versions;
+- add a CLI linter: `karcarthy validate state.edn`;
 - add a small server mode for language-neutral callers;
 - include real-runner examples for Claude, OpenAI, and a local command runner;
 - keep offline tests as the default gate and add opt-in live conformance tests.
@@ -139,9 +175,10 @@ Before calling this production-ready:
 ## Non-goals
 
 - Reimplementing every provider's agent loop.
-- Owning long-term memory, vector stores, or UI streaming directly.
-- Making self-modification unconstrained.
+- Owning vector stores or UI streaming directly.
+- Turning dynamic self-evolution into a static PR-promotion workflow.
+- Putting approval requests in the core graph IR.
 - Treating prompt strings as the stable production API.
 
-The useful production shape is a small, typed, policy-aware, optimizable IR for
-agent orchestration.
+The useful production shape is a small, durable, inspectable runtime where the
+agent can continuously rewrite its own execution state as data.

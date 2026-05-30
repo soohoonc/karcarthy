@@ -1,56 +1,98 @@
-# Agent configuration vocabulary
+# Self-evolving runtime vocabulary
 
-karcarthy should expose a small data model that matches common agent protocol and
-SDK concepts, while keeping the graph itself editable as data. The goal is not to
-mirror every provider API. The goal is a compact IR that can compile to ACP,
-Claude, OpenAI Agents SDK, Codex-style runners, or local command runners.
+karcarthy's production direction is a living runtime, not a static agent
+configuration system. The deployed artifact is the interpreter/kernel. The agent
+state inside that kernel is data, and the controller can rewrite that data while
+it runs.
+
+```text
+runtime kernel -> agent state -> operation log -> evolved state -> next action
+```
+
+The runtime should stay small. Claude, Codex, OpenAI Agents SDK, local models, or
+other runners still own the inner model/tool loop. karcarthy owns the mutable
+data substrate around that loop: agents, graphs, integrations, tools,
+environments, context, history, and operations.
 
 ## Design rules
 
-- Keep the execution plan as plain data.
-- Separate resources from runtime operations.
-- Treat context as scoped run/session data, not as a giant "memory" resource.
-- Treat integrations as connection boundaries and tools as capabilities exposed
-  by those boundaries.
-- Keep permission prompts and approvals in policy/runtime adapters, not in the
-  core graph IR.
-- Prefer graph shapes that compose: call, parallel, branch, loop.
+- Keep execution state as plain data.
+- Let the controller mutate that state directly.
+- Treat history as an append-only event log, not a review queue.
+- Treat recovery as snapshot/replay/fork, not approval.
+- Treat integrations and tools as capabilities available in the agent's world.
+- Prefer a small operation set: put, patch, remove, call, emit, return, complete.
+- Keep schema normalization so the agent can edit reliably.
 
-## Resource kinds
+## Runtime State
+
+A running system has a few living registries:
+
+```clojure
+{:agents {"planner" {...}
+          "critic" {...}}
+ :workflows {"next-attempt" {...}}
+ :resources {"environment" {"default" {...}}
+             "integration" {"github" {...}}
+             "tool" {"github/list-issues" {...}}}
+ :history [{:operation {...}
+            :result {...}}]}
+```
+
+The exact storage can be in memory, SQLite, an event stream, or a durable
+workflow engine. The model should see the state as EDN and respond with exactly
+one operation.
+
+## Resource Kinds
 
 ### `:agent`
 
-An agent is a callable specialist.
+An agent is a callable specialist. The controller can create, patch, remove, and
+call agents at runtime.
 
 ```clojure
 {:kind :agent
- :id :reviewer
- :description "Review code changes for correctness risks."
- :instructions "Prioritize bugs, regressions, and missing tests."
- :model {:provider :openai
-         :name "gpt-5.5"}
- :tools [:repo/read :test/run]
- :policy :code-review}
+ :id "critic"
+ :instructions "Find flaws in the current plan."
+ :model "sonnet"
+ :tools ["Read" "Grep"]}
 ```
-
-Use a new agent only when the instructions, tools, output contract, or policy
-are materially different. Otherwise keep the work inside one agent or one graph.
 
 ### `:graph`
 
-A graph is a reusable execution plan. It can call agents, tools, or other graphs.
+A graph is a callable execution plan. Graphs can be temporary. The controller can
+compose a graph for the current situation, run it, discard it, or patch it based
+on observations.
 
 ```clojure
 {:kind :graph
- :id :review-then-summarize
- :steps [{:op :call :target :reviewer :as :findings}
-         {:op :call :target :summarizer :with [:findings] :as :summary}
-         {:op :return :value :summary}]}
+ :id "next-attempt"
+ :workflow {:karcarthy/type :chain
+            :steps [{:karcarthy/type :agent-ref :name "planner"}
+                    {:karcarthy/type :agent-ref :name "critic"}]}}
 ```
 
-The graph is karcarthy's local IR. ACP, Claude, and OpenAI do not expose this as
-the same primitive; adapters compile it into sessions, agent calls, tool calls,
-or SDK runs.
+The current implementation accepts karcarthy workflow nodes as graph resources.
+The target IR can grow richer graph operations like `:parallel`, `:branch`, and
+`:loop`.
+
+### `:environment`
+
+An environment describes the world available to the agent. It replaces `:policy`
+as the core concept. It is not a gate; it is the capability surface.
+
+```clojure
+{:kind :environment
+ :id "default"
+ :capabilities [:model :spawn-agent :patch-runtime :filesystem :network :mcp]
+ :roots [{:type :filesystem :path "/repo"}
+         {:type :runner :id :claude}
+         {:type :mcp :id :github}]}
+```
+
+Production systems can still enforce process-level sandboxing outside the IR,
+but the core vocabulary should describe what the agent can use, not ask for
+permission as a graph operation.
 
 ### `:integration`
 
@@ -59,7 +101,7 @@ an API, a shell/runtime, or a hosted tool surface.
 
 ```clojure
 {:kind :integration
- :id :github
+ :id "github"
  :type :mcp
  :transport :http
  :url "https://api.githubcopilot.com/mcp/"
@@ -67,212 +109,161 @@ an API, a shell/runtime, or a hosted tool surface.
  :exposes [:tools :resources]}
 ```
 
-Integrations own connection, authentication, discovery, and trust boundaries.
-Tools are the individual callable capabilities that come from integrations.
-
 ### `:tool`
 
-A tool is one callable capability with a schema and side-effect metadata.
+A tool is one callable capability exposed directly or through an integration.
 
 ```clojure
 {:kind :tool
- :id :github/list-issues
- :from :github
+ :id "github/list-issues"
+ :from "github"
  :description "List issues for a repository."
  :input-schema {:type :object
                 :required [:owner :repo]
                 :properties {:owner {:type :string}
-                             :repo {:type :string}}}
- :effects #{:read}}
+                             :repo {:type :string}}}}
 ```
 
-Tools may be declared directly, discovered from an integration, or deferred until
-needed through a tool-search style mechanism.
+Tools can be loaded eagerly, discovered from integrations, or loaded lazily
+through a tool-search style surface.
 
-### `:policy`
+## Context
 
-A policy constrains execution. It is not a prompt and not a graph step.
-
-```clojure
-{:kind :policy
- :id :code-review
- :limits {:max-tool-calls 50
-          :timeout-ms 300000}
- :side-effects {:filesystem-read :allow
-                :filesystem-write :deny
-                :shell :deny
-                :network :allow}
- :redaction {:secrets true}}
-```
-
-If an ACP adapter needs to ask a client for permission, it can translate policy
-decisions into ACP methods. The core graph should not contain a
-`:request-permission` operation.
-
-## Runtime context
-
-`context` means the scoped data available to a prompt, call, or graph run. It is
-not the same thing as memory, policy, integrations, or tools.
+`context` is the scoped data available to a single prompt, call, or graph run.
+It is not memory, policy, or integrations.
 
 Examples:
 
 - user prompt/content blocks;
 - attached files, images, URLs, and snippets;
 - session history or compacted summary;
-- graph variables from prior steps;
+- graph variables from prior calls;
 - artifacts and tool results;
-- environment facts such as `cwd`, repo, branch, and active config.
+- environment facts like `cwd`, repo, branch, and active runtime state.
 
 ```clojure
-{:op :prompt
- :target :planner
- :input "Design the migration."
+{:op :call
+ :target "planner"
+ :input "Choose the next action."
  :context {:resources [{:uri "file:///repo/README.md"
                         :mime-type "text/markdown"}]
-           :summary "Prior decision: use ACP-style sessions."
-           :bindings {:target-system :karcarthy}}}
+           :summary "Prior decision: build a self-evolving runtime."
+           :bindings {:goal "Improve the agent system."}}}
 ```
 
-The UX should expose context as attachments, selected resources, session state,
-summaries, and named bindings. Users should not need to manage a vague "memory"
-object for ordinary runs.
-
-Named reusable context bundles can exist later, but they should be treated as
-inputs to a run rather than the central abstraction.
+The UX should make context feel like attachments, selected resources, summaries,
+and bindings. The agent can then decide what to preserve, discard, summarize, or
+turn into new runtime resources.
 
 ## Operations
 
-There are two categories of operations: configuration operations and execution
-operations.
+### `:put`
 
-### Configuration operations
-
-Use these to mutate the data registry.
+Create or replace a resource.
 
 ```clojure
 {:op :put
  :resource {:kind :agent
-            :id :planner
-            :instructions "Plan the next step."}}
-
-{:op :patch
- :kind :agent
- :id :planner
- :merge {:instructions "Plan the next step and explain tradeoffs."}}
-
-{:op :remove
- :kind :agent
- :id :planner}
+            :id "planner"
+            :instructions "Plan the next operation."}}
 ```
 
-`put` replaces or creates a resource. `patch` changes a resource. `remove`
-deletes a resource.
+### `:patch`
 
-### Execution operations
-
-Use these inside graphs or at the session boundary.
+Merge changes into a resource.
 
 ```clojure
-{:op :prompt
- :target :planner
- :input "What should happen next?"
- :as :plan}
-
-{:op :call
- :target :reviewer
- :with [:plan]
- :as :review}
-
-{:op :emit
- :content "Running review and tests."}
-
-{:op :return
- :value :review}
-
-{:op :complete
- :reason :end-turn}
+{:op :patch
+ :kind :agent
+ :id "planner"
+ :merge {:instructions "Plan the next operation and explain tradeoffs."}}
 ```
 
-`prompt` is the external user-turn boundary. `call` invokes an agent, graph, or
-tool from inside a graph. `emit` sends visible progress or messages. `return`
-returns a value from a graph. `complete` ends a prompt turn.
+### `:remove`
 
-Do not use `:answer` as a primitive. It conflates visible text, graph return
-values, and turn completion.
+Delete a resource from the living runtime.
 
-## Graph shapes
+```clojure
+{:op :remove
+ :kind :agent
+ :id "planner"}
+```
 
 ### `:call`
 
-One target invocation.
+Invoke an agent or graph.
 
 ```clojure
 {:op :call
- :target :researcher
- :input {:question "What changed in ACP config options?"}
- :as :research}
+ :target "planner"
+ :input "What should happen next?"
+ :as :plan}
 ```
 
-### `:parallel`
-
-Fan out over independent branches, then optionally synthesize.
-
-```clojure
-{:op :parallel
- :branches [{:op :call :target :api-reviewer :as :api}
-            {:op :call :target :db-reviewer :as :db}
-            {:op :call :target :ux-reviewer :as :ux}]
- :concurrency 3
- :then {:op :call
-        :target :synthesizer
-        :with [:api :db :ux]
-        :as :summary}}
-```
-
-### `:call` with `:for-each`
-
-Use this for homogeneous fanout: the same target over many items.
+Homogeneous fanout is a call over many inputs:
 
 ```clojure
 {:op :call
- :target :reviewer
- :for-each :changed-files
- :as :file-reviews
- :concurrency 8}
+ :target "reviewer"
+ :for-each ["api.clj" "db.clj" "ui.clj"]
+ :as :reviews}
 ```
 
-### `:branch`
-
-Choose one path based on data.
+Heterogeneous fanout should be represented as a graph with parallel branches:
 
 ```clojure
-{:op :branch
- :on [:plan :kind]
- :cases {:simple [{:op :call :target :implementer}]
-         :risky  [{:op :call :target :architect}
-                  {:op :call :target :implementer}]}
- :default [{:op :call :target :planner}]}
+{:op :put
+ :resource {:kind :graph
+            :id "review-swarm"
+            :workflow {:karcarthy/type :parallel
+                       :branches [{:karcarthy/type :agent-ref :name "api-reviewer"}
+                                  {:karcarthy/type :agent-ref :name "db-reviewer"}
+                                  {:karcarthy/type :agent-ref :name "ux-reviewer"}]}}}
 ```
 
-### `:loop`
+### `:emit`
 
-Repeat until a condition or limit.
+Record or stream visible progress.
 
 ```clojure
-{:op :loop
- :while {:not :tests-passing?}
- :max-iterations 5
- :body [{:op :call :target :fixer}
-        {:op :call :target :test-runner :as :test-result}]}
+{:op :emit
+ :content "Created critic and implementer agents; running both now."}
 ```
 
-## Mapping to current code
+### `:return`
 
-The current `karcarthy.dynamic` namespace is the first implementation experiment.
-It proves that execution state can be data and can evolve while the controller is
-running. It still uses early operation names:
+Return a value from a graph/subgraph.
 
-| Current operation | Target operation |
+```clojure
+{:op :return
+ :value {:selected-plan :parallel-review}}
+```
+
+### `:complete`
+
+End the current top-level dynamic run.
+
+```clojure
+{:op :complete
+ :text "The runtime created a worker, patched it after observing output, and ran the patched version."}
+```
+
+## Current Implementation
+
+`karcarthy.dynamic` now accepts the living-runtime operation names:
+
+- `:put`
+- `:patch`
+- `:remove`
+- `:prompt`
+- `:call`
+- `:emit`
+- `:return`
+- `:complete`
+
+It also keeps the early names for compatibility:
+
+| Legacy operation | Living-runtime operation |
 | --- | --- |
 | `:define-agent` | `:put` with `{:kind :agent ...}` |
 | `:patch-agent` | `:patch` with `:kind :agent` |
@@ -280,8 +271,28 @@ running. It still uses early operation names:
 | `:patch-workflow` | `:patch` with `:kind :graph` |
 | `:run-agent` | `:call` |
 | `:run-workflow` | `:call` |
-| `:run` | `:prompt` at the boundary or `:call` inside a graph |
-| `:answer` | `:emit`, `:return`, or `:complete` depending on intent |
+| `:run` | `:call` with an inline workflow |
+| `:answer` | `:complete` |
 
-The next implementation pass should normalize these names and add schema
-validation before broadening behavior.
+The implementation still does not mutate host source code or add new Clojure
+interpreter methods by itself. It mutates runtime data. To let the agent modify
+source code, expose that as an environment capability and tool surface.
+
+## Production Runtime Requirements
+
+Production readiness in this model means durability and inspectability, not
+human promotion gates.
+
+- append-only operation log;
+- periodic state snapshots;
+- replay from genesis or from a snapshot;
+- fork from any prior state;
+- crash recovery;
+- trace viewer over operations, model calls, tool calls, and graph calls;
+- resource accounting for tokens, cost, latency, and external calls;
+- capability discovery for tools, integrations, runners, and environments;
+- schema normalization and migrations so the agent can reliably edit itself;
+- opt-in process sandboxing around dangerous capabilities.
+
+The goal is an agent OS: a small interpreter that lets the model continuously
+rewrite the data that defines its own execution.

@@ -1,7 +1,7 @@
 # References
 
 These are the protocol and SDK surfaces that informed the proposed karcarthy
-configuration vocabulary.
+self-evolving runtime vocabulary.
 
 ## Agent Client Protocol
 
@@ -22,9 +22,11 @@ configuration vocabulary.
 Takeaways for karcarthy:
 
 - `context` should be session/message state, not a broad resource kind.
-- `:mode` should not be a core resource. It belongs in session config/policy.
+- `:mode` should not be a core resource. It belongs in session config or the
+  environment/capability surface.
 - tool calls are runtime events, not resource definitions.
-- permission requests are protocol adapter behavior, not graph IR.
+- permission requests are protocol adapter behavior, not graph IR. The core
+  vocabulary should describe available capabilities.
 
 ## OpenAI Agents SDK and Responses API
 
@@ -49,6 +51,8 @@ Takeaways for karcarthy:
   integration.
 - fanout can map to agents-as-tools, multiple SDK runs, or graph branches.
 - final output, emitted updates, and resumable state should stay separate.
+- mutable runtime state should preserve enough result/state data for replay and
+  continuation.
 
 ## Claude Agent SDK and Claude Code
 
@@ -71,8 +75,8 @@ Takeaways for karcarthy:
   this supports explicit `context` passing and fanout synthesis.
 - MCP servers should be scoping boundaries so tool definitions do not bloat the
   parent context unnecessarily.
-- permissions are important, but they belong in policy/runtime adapters rather
-  than as first-class graph operations.
+- permission modes are part of the host/runtime adapter, while the core runtime
+  vocabulary should model the capability surface the agent can use.
 
 ## DSPy
 
@@ -83,5 +87,5 @@ Takeaways for karcarthy:
 
 - prompts should not be the only contract; agents and graphs should grow typed
   input/output signatures.
-- metrics and optimization should be explicit compilation steps that produce
-  new config artifacts, not hidden runtime mutation.
+- metrics and optimization can be runtime resources that help the agent patch
+  itself while preserving an auditable before/after history.
