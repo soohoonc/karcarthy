@@ -9,15 +9,14 @@
     * `dsl-reference`: a prompt fragment teaching an agent the EDN DSL.
     * `read-workflow` / `read-agent`: parse an agent's output into validated
       karcarthy data (no code eval).
-    * `run-authored`: have an agent write a workflow for a task, then run it.
     * `evolve` (a `:evolve` node): an agent edits its own definition
       (instructions, model, tools) at runtime by emitting an EDN patch, then
       retrying with the new behavior.
 
   Requiring this namespace registers the `:evolve` node with the interpreter."
-  (:require [clojure.edn :as edn]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [karcarthy.core :as k]
+            [karcarthy.edn :as kedn]
             [karcarthy.orchestrate :as o]))
 
 ;; ---------------------------------------------------------------------------
@@ -29,17 +28,7 @@
   Uses `clojure.edn/read-string` - data only, never evaluates code. Throws
   ex-info if no map is found or it doesn't parse."
   [s]
-  (let [s      (str s)
-        fenced (re-find #"(?s)```(?:edn|clojure|clj)?\s*(.*?)```" s)
-        body   (if fenced (second fenced) s)
-        idx    (str/index-of body "{")]
-    (when (nil? idx)
-      (throw (ex-info "no EDN map found in output" {:input s})))
-    (try
-      (edn/read-string (subs body idx))
-      (catch Exception e
-        (throw (ex-info (str "could not parse EDN: " (.getMessage e))
-                        {:input s} e))))))
+  (kedn/extract-map s))
 
 (defn read-workflow
   "Parse `s` (an agent's output) into a runnable karcarthy workflow, validating
@@ -50,13 +39,8 @@
       (throw (ex-info "parsed value is not a runnable karcarthy workflow" {:parsed v})))
     (doseq [node (tree-seq coll? seq v)]
       (when (and (map? node) (= :agent (:karcarthy/type node)) (not (k/agent? node)))
-        (throw (ex-info "authored workflow contains an invalid agent" {:agent node}))))
+        (throw (ex-info "generated workflow contains an invalid agent" {:agent node}))))
     v))
-
-(defn read-flow
-  "Deprecated alias for `read-workflow`."
-  [s]
-  (read-workflow s))
 
 (defn read-agent
   "Parse `s` into a valid karcarthy agent, or throw ex-info."
@@ -71,8 +55,8 @@
 ;; ---------------------------------------------------------------------------
 
 (def dsl-reference
-  "A prompt fragment describing the karcarthy EDN DSL so an agent can author
-  workflows. Append it to an authoring agent's prompt."
+  "A prompt fragment describing the karcarthy EDN DSL so an agent can generate
+  workflows."
   (str/join
    "\n"
    ["karcarthy workflows are plain EDN data. A workflow is either an AGENT or a NODE."
@@ -99,26 +83,6 @@
     "Rules: output EDN only (optionally inside an ```edn fence), no prose. Use"
     "only the keys shown. Nest freely - any WORKFLOW position may hold an agent"
     "or a node."]))
-
-(defn authoring-prompt
-  "The prompt given to an author agent: the DSL reference plus the task."
-  [task]
-  (str dsl-reference
-       "\n\n---\nWrite ONE karcarthy workflow as EDN that best accomplishes this"
-       " task. Output EDN only.\n\nTASK:\n" task))
-
-(defn run-authored
-  "Have `author` write a karcarthy workflow (EDN) for `task`, then run it.
-  Returns {:author <author result> :workflow <parsed workflow> :result <run result>}.
-  The deprecated `:flow` key is also returned for compatibility.
-  `:input` overrides what the authored workflow runs on (defaults to `task`)."
-  [runner author task & {:keys [input opts] :or {opts {}}}]
-  (let [ar   (k/run-agent runner author (authoring-prompt task) opts)
-        workflow (read-workflow (:text ar))]
-    {:author ar
-     :workflow workflow
-     :flow   workflow
-     :result (o/run runner workflow (or input task) opts)}))
 
 ;; ---------------------------------------------------------------------------
 ;; Agents editing their own behavior at runtime

@@ -7,20 +7,22 @@
 
 (deftest read-operation-accepts-edn
   (testing "controller replies are parsed as operation data"
-    (is (= :define-agent
+    (is (= :put
            (:karcarthy/op
             (dyn/read-operation
-             "```edn\n{:op :define-agent :agent {:karcarthy/type :agent :name \"a\" :instructions \"i\"}}\n```"))))))
+             "```edn\n{:op :put :resource {:kind :agent :id \"a\" :instructions \"i\"}}\n```"))))))
 
-(deftest define-and-run-agent
-  (testing "a dynamic operation can define an agent, then run it"
+(deftest put-and-call-agent
+  (testing "a runtime operation can put an agent, then call it"
     (let [rt     (dyn/dynamic-runtime)
           runner (k/mock-runner (fn [{:keys [agent prompt]}]
                                   (str (:instructions agent) " :: " prompt)))]
-      (dyn/apply-operation runner rt {:karcarthy/op :define-agent
-                                      :agent (k/agent "writer" "version one")})
-      (let [r (dyn/apply-operation runner rt {:karcarthy/op :run-agent
-                                              :name "writer"
+      (dyn/apply-operation runner rt {:karcarthy/op :put
+                                      :resource {:kind :agent
+                                                 :id "writer"
+                                                 :instructions "version one"}})
+      (let [r (dyn/apply-operation runner rt {:karcarthy/op :call
+                                              :target "writer"
                                               :input "topic"})]
         (is (k/ok? r))
         (is (= "version one :: topic" (:text r)))))))
@@ -95,19 +97,21 @@
     (let [rt     (dyn/dynamic-runtime :agents [(k/agent "writer" "version one")])
           runner (k/mock-runner (fn [{:keys [agent]}] (:instructions agent)))
           flow   (o/chain (dyn/dynamic-agent-ref "writer"))]
-      (dyn/apply-operation runner rt {:karcarthy/op :define-workflow
-                                      :name "main"
-                                      :workflow flow})
+      (dyn/apply-operation runner rt {:karcarthy/op :put
+                                      :resource {:kind :workflow
+                                                 :id "main"
+                                                 :workflow flow}})
       (is (= "version one"
-             (:text (dyn/apply-operation runner rt {:karcarthy/op :run-workflow
-                                                    :name "main"
+             (:text (dyn/apply-operation runner rt {:karcarthy/op :call
+                                                    :target "main"
                                                     :input "x"}))))
-      (dyn/apply-operation runner rt {:karcarthy/op :patch-agent
-                                      :name "writer"
-                                      :patch {:instructions "version two"}})
+      (dyn/apply-operation runner rt {:karcarthy/op :patch
+                                      :kind :agent
+                                      :id "writer"
+                                      :merge {:instructions "version two"}})
       (is (= "version two"
-             (:text (dyn/apply-operation runner rt {:karcarthy/op :run-workflow
-                                                    :name "main"
+             (:text (dyn/apply-operation runner rt {:karcarthy/op :call
+                                                    :target "main"
                                                     :input "x"})))))))
 
 (deftest materialize-workflow-ref
@@ -117,43 +121,6 @@
               :workflows {"leaf" (dyn/dynamic-agent-ref "a")
                           "main" (o/chain (dyn/dynamic-workflow-ref "leaf"))})]
       (is (k/agent? (first (:steps (dyn/materialize rt (dyn/dynamic-workflow-ref "main")))))))))
-
-(deftest run-dynamic-controller-loop
-  (testing "a controller can grow and patch the agent/workflow universe as data"
-    (let [calls  (atom 0)
-          script [{:karcarthy/op :define-agent
-                   :agent {:karcarthy/type :agent
-                           :name "worker"
-                           :instructions "version one"}}
-                  {:karcarthy/op :define-workflow
-                   :name "main"
-                   :workflow {:karcarthy/type :chain
-                              :steps [{:karcarthy/type :agent-ref
-                                       :name "worker"}]}}
-                  {:karcarthy/op :run-workflow
-                   :name "main"
-                   :input "topic"}
-                  {:karcarthy/op :patch-agent
-                   :name "worker"
-                   :patch {:instructions "version two"}}
-                  {:karcarthy/op :run-workflow
-                   :name "main"
-                   :input "topic"}
-                  {:karcarthy/op :answer
-                   :text "done"}]
-          runner (k/mock-runner
-                  (fn [{:keys [agent]}]
-                    (if (= "controller" (:name agent))
-                      (pr-str (nth script (dec (swap! calls inc)) nil))
-                      (:instructions agent))))
-          controller (k/agent "controller" "Emit dynamic karcarthy operations.")
-          r (dyn/run-dynamic runner controller "build and improve a worker"
-                             :max-steps 10)]
-      (is (k/ok? r))
-      (is (= "done" (:text r)))
-      (is (= "version two" (get-in r [:runtime :agents "worker" :instructions])))
-      (is (= "version two" (-> r :runtime :history (nth 4) :result :text)))
-      (is (= 6 (:steps r))))))
 
 (deftest run-dynamic-controller-loop-with-living-ops
   (testing "a controller can self-evolve with put, patch, call, and complete"

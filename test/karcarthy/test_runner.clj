@@ -13,6 +13,7 @@
     karcarthy.harness.openai-test
     karcarthy.runner-test
     karcarthy.orchestrate-test
+    karcarthy.patterns-test
     karcarthy.self-test
     karcarthy.dynamic-test
     karcarthy.session-test

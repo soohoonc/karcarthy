@@ -5,7 +5,7 @@ karcarthy is a Clojure library, but a workflow is just data, so any language can
 build one and run it. This builds workflows as plain Python dicts, sends them to
 the karcarthy CLI bridge (`clojure -M -m karcarthy.cli`) as JSON, and reads the
 JSON result back. The homoiconic part survives the boundary: Python constructs
-(and could transform) the workflow as data, and an agent can author or edit a
+(and could transform) the workflow as data, and an agent can generate or edit a
 workflow the same way.
 
 Run from the repo root:
