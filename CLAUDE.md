@@ -20,6 +20,7 @@ clojure -M -e '(load-file "examples/live_orchestrate.clj")'   # live demo (paid 
 | `src/karcarthy/core.clj` | data model (`agent`), spec validation, `result`, the `Runner` protocol, the offline `mock-runner`, and the `defagent` macro |
 | `src/karcarthy/orchestrate.clj` | the workflow DSL - `chain` / `parallel` / `route` / `refine` / `orchestrate` / `handoff`, the `run` interpreter (a `run-node` multimethod), and `defworkflow` / `workflow?` |
 | `src/karcarthy/session.clj` | `converse` - multi-turn conversations that thread the runner session (memory) |
+| `src/karcarthy/dynamic.clj` | data-only meta-execution loop; a controller agent emits EDN operations to define/patch/run agents and workflows |
 | `src/karcarthy/runner/claude.clj` | preferred Claude runner namespace; delegates to the compatibility implementation in `harness/claude.clj` |
 | `src/karcarthy/runner/command.clj` | preferred command runner namespace; wrap any CLI as an agent (prompt → stdin, stdout → result) |
 | `src/karcarthy/runner/openai.clj` | preferred OpenAI runner namespace; OpenAI Agents SDK via `resources/karcarthy/openai_runner.py` |
@@ -36,6 +37,8 @@ clojure -M -e '(load-file "examples/live_orchestrate.clj")'   # live demo (paid 
   result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
 - **Adding a workflow node:** add a constructor in `orchestrate.clj`, a `run-node`
   defmethod, and tests.
+- **Dynamic execution stays data-only.** Add new operations in `dynamic.clj`
+  rather than letting model output become evaluated Clojure code.
 - **Adding a test namespace:** register it in `test/karcarthy/test_runner.clj`
   (zero-dependency runner; no Clojars test libs).
 - **Prefer pure, offline-testable builders** (e.g. `claude-command`,

@@ -14,6 +14,7 @@
     karcarthy.runner-test
     karcarthy.orchestrate-test
     karcarthy.self-test
+    karcarthy.dynamic-test
     karcarthy.session-test
     karcarthy.otel-test])
 

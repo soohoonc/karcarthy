@@ -1,0 +1,351 @@
+(ns karcarthy.dynamic
+  "A data-only meta-execution loop.
+
+  `karcarthy.self/evolve` lets one agent patch itself. This namespace lifts that
+  idea to the whole execution state: a controller agent emits EDN operations that
+  define agents, define workflows, patch them, run them, and decide the next
+  operation from the resulting state.
+
+  The important boundary is the same as the rest of karcarthy: operations are
+  parsed as data with `clojure.edn`, never evaluated as code. Dynamic behavior
+  comes from changing the data registries that later runs resolve."
+  (:require [clojure.string :as str]
+            [karcarthy.core :as k]
+            [karcarthy.orchestrate :as o]
+            [karcarthy.self :as self]))
+
+(defn- name-key [x]
+  (cond
+    (keyword? x) (name x)
+    (string? x) x
+    :else (str x)))
+
+(defn dynamic-agent-ref
+  "A portable reference to an agent in a dynamic runtime. It is resolved to the
+  current agent value immediately before execution, so patches take effect."
+  [name]
+  {:karcarthy/type :agent-ref :name (name-key name)})
+
+(defn dynamic-workflow-ref
+  "A portable reference to a named workflow in a dynamic runtime."
+  [name]
+  {:karcarthy/type :workflow-ref :name (name-key name)})
+
+(declare workflow-config?)
+
+(defn- maybe-workflow-config? [x]
+  (or (fn? x) (workflow-config? x)))
+
+(defn workflow-config?
+  "True if `x` is a portable workflow config accepted by the dynamic runtime.
+  This extends normal karcarthy workflows with data refs:
+  `{:karcarthy/type :agent-ref :name ...}` and
+  `{:karcarthy/type :workflow-ref :name ...}`."
+  [x]
+  (cond
+    (k/agent? x) true
+    (not (map? x)) false
+    :else
+    (case (:karcarthy/type x)
+      :agent-ref    (contains? x :name)
+      :workflow-ref (contains? x :name)
+      :chain        (and (sequential? (:steps x))
+                         (every? workflow-config? (:steps x)))
+      :parallel     (and (sequential? (:branches x))
+                         (every? workflow-config? (:branches x)))
+      :route        (and (maybe-workflow-config? (:router x))
+                         (map? (:routes x))
+                         (every? workflow-config? (vals (:routes x)))
+                         (or (not (contains? x :default))
+                             (workflow-config? (:default x))))
+      :refine       (and (workflow-config? (:worker x))
+                         (maybe-workflow-config? (:evaluator x)))
+      :orchestrate  (and (maybe-workflow-config? (:planner x))
+                         (workflow-config? (:worker x)))
+      :handoff      (and (workflow-config? (:from x))
+                         (workflow-config? (:to x)))
+      :evolve       (workflow-config? (:agent x))
+      false)))
+
+(defn- validate-agent [agent]
+  (if (k/agent? agent)
+    agent
+    (throw (ex-info "invalid dynamic agent" {:agent agent
+                                             :explain (k/explain-agent agent)}))))
+
+(defn- validate-workflow [workflow]
+  (if (workflow-config? workflow)
+    workflow
+    (throw (ex-info "invalid dynamic workflow" {:workflow workflow}))))
+
+(defn dynamic-runtime
+  "Create mutable runtime state for dynamic execution.
+
+  `agents` is a collection of agent maps. `workflows` is a map of name -> workflow
+  config. Both are stored as data and can be changed by operations."
+  [& {:keys [agents workflows history]}]
+  (doseq [agent agents] (validate-agent agent))
+  (doseq [[_ workflow] workflows] (validate-workflow workflow))
+  (atom {:agents    (into {} (map (fn [a] [(name-key (:name a)) a]) agents))
+         :workflows (into {} (map (fn [[n w]] [(name-key n) w]) workflows))
+         :history   (vec history)}))
+
+(defn snapshot
+  "Return the current dynamic runtime state as plain data."
+  [rt]
+  @rt)
+
+(defn- lookup-agent [rt name]
+  (let [n (name-key name)]
+    (or (get-in @rt [:agents n])
+        (throw (ex-info (str "unknown dynamic agent: " (pr-str n))
+                        {:name n :known (keys (:agents @rt))})))))
+
+(defn- lookup-workflow [rt name]
+  (let [n (name-key name)]
+    (or (get-in @rt [:workflows n])
+        (throw (ex-info (str "unknown dynamic workflow: " (pr-str n))
+                        {:name n :known (keys (:workflows @rt))})))))
+
+(defn materialize
+  "Resolve dynamic agent/workflow references in `workflow` against runtime state,
+  returning an ordinary karcarthy workflow that `karcarthy.orchestrate/run` can
+  execute."
+  ([rt workflow] (materialize rt workflow #{}))
+  ([rt workflow seen]
+   (cond
+     (or (k/agent? workflow) (fn? workflow)) workflow
+     (not (map? workflow)) workflow
+     :else
+     (case (:karcarthy/type workflow)
+       :agent-ref
+       (lookup-agent rt (:name workflow))
+
+       :workflow-ref
+       (let [n (name-key (:name workflow))
+             marker [:workflow n]]
+         (when (contains? seen marker)
+           (throw (ex-info "cyclic dynamic workflow reference" {:name n :seen seen})))
+         (materialize rt (lookup-workflow rt n) (conj seen marker)))
+
+       :chain
+       (update workflow :steps #(mapv (fn [w] (materialize rt w seen)) %))
+
+       :parallel
+       (update workflow :branches #(mapv (fn [w] (materialize rt w seen)) %))
+
+       :route
+       (cond-> workflow
+         (not (fn? (:router workflow))) (update :router #(materialize rt % seen))
+         true (update :routes (fn [routes]
+                                (into {} (map (fn [[label w]]
+                                                [label (materialize rt w seen)])
+                                              routes))))
+         (contains? workflow :default) (update :default #(materialize rt % seen)))
+
+       :refine
+       (cond-> workflow
+         true (update :worker #(materialize rt % seen))
+         (not (fn? (:evaluator workflow))) (update :evaluator #(materialize rt % seen)))
+
+       :orchestrate
+       (cond-> workflow
+         (not (fn? (:planner workflow))) (update :planner #(materialize rt % seen))
+         true (update :worker #(materialize rt % seen)))
+
+       :handoff
+       (-> workflow
+           (update :from #(materialize rt % seen))
+           (update :to #(materialize rt % seen)))
+
+       :evolve
+       (update workflow :agent #(materialize rt % seen))
+
+       workflow))))
+
+(def ^:private operation-kinds
+  #{:define-agent :patch-agent
+    :define-workflow :patch-workflow
+    :run-agent :run-workflow :run
+    :answer})
+
+(defn- operation-kind [operation]
+  (let [op (or (:karcarthy/op operation) (:op operation))]
+    (cond
+      (keyword? op) op
+      (string? op) (keyword op)
+      :else op)))
+
+(defn normalize-operation
+  "Normalize an operation map, accepting either `:karcarthy/op` or `:op`."
+  [operation]
+  (let [op (operation-kind operation)]
+    (when-not (contains? operation-kinds op)
+      (throw (ex-info "unknown dynamic operation" {:operation operation
+                                                   :known operation-kinds})))
+    (assoc operation :karcarthy/op op)))
+
+(defn read-operation
+  "Parse the first EDN map in `text` into a dynamic operation."
+  [text]
+  (normalize-operation (self/extract-edn text)))
+
+(defn- compact-result [result]
+  (select-keys result [:karcarthy/type :ok? :agent :text :error :label :rounds :subtasks]))
+
+(defn- remember! [rt operation result]
+  (swap! rt update :history conj {:operation operation
+                                  :result    (compact-result result)})
+  result)
+
+(defn apply-operation
+  "Apply one dynamic operation to `rt`, optionally running agents or workflows.
+  Returns a karcarthy result map describing the operation outcome."
+  ([runner rt operation] (apply-operation runner rt operation {}))
+  ([runner rt operation opts]
+   (let [operation (normalize-operation operation)
+         op        (:karcarthy/op operation)]
+     (case op
+       :define-agent
+       (let [agent (validate-agent (:agent operation))
+             n     (name-key (:name agent))
+             r     (k/result {:agent "dynamic"
+                              :text  (str "defined agent " n)
+                              :name  n})]
+         (swap! rt assoc-in [:agents n] agent)
+         (remember! rt operation r))
+
+       :patch-agent
+       (let [n       (name-key (:name operation))
+             current (lookup-agent rt n)
+             updated (validate-agent (merge current (:patch operation)))
+             r       (k/result {:agent "dynamic"
+                                :text  (str "patched agent " n)
+                                :name  n})]
+         (swap! rt assoc-in [:agents n] updated)
+         (remember! rt operation r))
+
+       :define-workflow
+       (let [n        (name-key (:name operation))
+             workflow (validate-workflow (:workflow operation))
+             r        (k/result {:agent "dynamic"
+                                 :text  (str "defined workflow " n)
+                                 :name  n})]
+         (swap! rt assoc-in [:workflows n] workflow)
+         (remember! rt operation r))
+
+       :patch-workflow
+       (let [n        (name-key (:name operation))
+             current  (lookup-workflow rt n)
+             workflow (validate-workflow (merge current (:patch operation)))
+             r        (k/result {:agent "dynamic"
+                                 :text  (str "patched workflow " n)
+                                 :name  n})]
+         (swap! rt assoc-in [:workflows n] workflow)
+         (remember! rt operation r))
+
+       :run-agent
+       (let [agent (lookup-agent rt (:name operation))
+             input (or (:input operation) (:prompt operation) "")
+             r     (k/run-agent runner agent input opts)]
+         (remember! rt operation r))
+
+       :run-workflow
+       (let [workflow (materialize rt (lookup-workflow rt (:name operation)))
+             input    (or (:input operation) (:prompt operation) "")
+             r        (o/run runner workflow input opts)]
+         (remember! rt operation r))
+
+       :run
+       (let [workflow (materialize rt (:workflow operation))
+             input    (or (:input operation) (:prompt operation) "")
+             r        (o/run runner workflow input opts)]
+         (remember! rt operation r))
+
+       :answer
+       (let [r (k/result {:agent "dynamic"
+                          :text  (str (:text operation))})]
+         (remember! rt operation r))))))
+
+(def dynamic-reference
+  "Prompt fragment for a controller agent that drives dynamic execution."
+  (str/join
+   "\n"
+   ["You control karcarthy by outputting exactly one EDN operation map."
+    "Do not output prose."
+    ""
+    "Operations:"
+    "{:karcarthy/op :define-agent :agent AGENT}"
+    "{:karcarthy/op :patch-agent :name \"agent-name\" :patch {:instructions \"...\"}}"
+    "{:karcarthy/op :define-workflow :name \"workflow-name\" :workflow WORKFLOW}"
+    "{:karcarthy/op :patch-workflow :name \"workflow-name\" :patch MAP}"
+    "{:karcarthy/op :run-agent :name \"agent-name\" :input \"...\"}"
+    "{:karcarthy/op :run-workflow :name \"workflow-name\" :input \"...\"}"
+    "{:karcarthy/op :run :workflow WORKFLOW :input \"...\"}"
+    "{:karcarthy/op :answer :text \"final answer\"}"
+    ""
+    "Portable refs inside workflows:"
+    "{:karcarthy/type :agent-ref :name \"agent-name\"}"
+    "{:karcarthy/type :workflow-ref :name \"workflow-name\"}"
+    ""
+    "Known workflow node types: :chain, :parallel, :route, :refine,"
+    ":orchestrate, :handoff, :evolve."]))
+
+(defn- state-view [rt]
+  (let [{:keys [agents workflows history]} @rt]
+    {:agents    (into {} (map (fn [[n a]]
+                                [n (select-keys a [:karcarthy/type :name :instructions
+                                                    :model :tools :runner])])
+                              agents))
+     :workflows workflows
+     :history   history}))
+
+(defn controller-prompt
+  "Build the prompt for the dynamic controller's next operation."
+  [task rt last-result step]
+  (str dynamic-reference
+       "\n\nTASK:\n" task
+       "\n\nSTEP: " step
+       "\n\nSTATE EDN:\n" (pr-str (state-view rt))
+       "\n\nLAST OBSERVATION EDN:\n" (pr-str (compact-result last-result))
+       "\n\nOutput exactly one EDN operation now."))
+
+(defn run-dynamic
+  "Run a controller agent that evolves agents/workflows as data.
+
+  The controller is called repeatedly. Each reply must be one EDN operation, and
+  non-`:answer` operations feed their result back into the next controller turn.
+  `:max-steps nil` allows the controller to run until it emits `:answer` or an
+  error occurs; the default is 25 so accidental loops remain finite by default."
+  [runner controller task & {:keys [runtime max-steps opts]
+                             :or   {max-steps 25 opts {}}}]
+  (let [rt (or runtime (dynamic-runtime))]
+    (loop [step 1, last-result nil]
+      (if (and max-steps (> step max-steps))
+        (k/result {:agent   (:name controller)
+                   :ok?     false
+                   :error   :max-steps
+                   :text    (str "dynamic controller exceeded max steps: " max-steps)
+                   :runtime (snapshot rt)})
+        (let [prompt (controller-prompt task rt last-result step)
+              cr     (k/run-agent runner controller prompt opts)]
+          (if-not (k/ok? cr)
+            (k/result (assoc cr :runtime (snapshot rt)))
+            (let [outcome (try
+                            (let [operation (read-operation (:text cr))
+                                  result    (apply-operation runner rt operation opts)]
+                              {:operation operation
+                               :result    (assoc result :runtime (snapshot rt) :steps step)})
+                            (catch Throwable t
+                              {:error t}))]
+              (if-let [t (:error outcome)]
+                (k/result {:agent   (:name controller)
+                           :ok?     false
+                           :error   (or (ex-message t) (str t))
+                           :text    (:text cr)
+                           :runtime (snapshot rt)
+                           :raw     {:controller cr}})
+                (let [{:keys [operation result]} outcome]
+                  (if (= :answer (:karcarthy/op operation))
+                    result
+                    (recur (inc step) result)))))))))))

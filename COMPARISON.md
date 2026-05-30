@@ -10,6 +10,9 @@ The frameworks referenced:
 
 - **PydanticAI** ("pi") — type-safe Python agents, model-agnostic, the "FastAPI
   feeling." ([pydantic-ai](https://github.com/pydantic/pydantic-ai))
+- **DSPy** — declarative LM programs built from typed signatures, modules,
+  metrics, and optimizers that compile prompts or weights.
+  ([dspy](https://dspy.ai/))
 - **Agno** — a high-performance multi-agent runtime with sessions, memory,
   knowledge, MCP, and a prebuilt server (AgentOS). ([agno](https://github.com/agno-agi/agno))
 - **Vercel AI SDK** — TypeScript, optimized for streaming to a web UI, tool
@@ -18,16 +21,17 @@ The frameworks referenced:
 
 ## Common patterns, side by side
 
-| Pattern | PydanticAI / Agno / Vercel AI SDK | karcarthy |
+| Pattern | PydanticAI / DSPy / Agno / Vercel AI SDK | karcarthy |
 | --- | --- | --- |
-| Define an agent | a host-language object: `Agent(model, instructions, tools)` (Py) or `{ model, tools }` (TS) | a data map: `{:karcarthy/type :agent :name … :instructions … :model …}` |
+| Define an agent | a host-language object/module: `Agent(model, instructions, tools)`, a DSPy `Signature` + module, or `{ model, tools }` (TS) | a data map: `{:karcarthy/type :agent :name … :instructions … :model …}` |
 | The agent loop | the framework runs it for you | delegated to a **runner** (the `claude` CLI, OpenAI Agents SDK, a local model) |
-| Tools | typed functions: Pydantic models / Zod schemas / Python callables | a tool allowlist handed to the runner (the runner executes them; MCP via the runner) |
+| Tools | typed functions: Pydantic models / Zod schemas / Python callables; DSPy `ReAct` can use tools | a tool allowlist handed to the runner (the runner executes them; MCP via the runner) |
 | Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | workflow nodes as data: `chain`, `parallel`, `route`, `refine`, `orchestrate`, `handoff` |
-| Structured output | Pydantic model / Zod / `generateObject` | parse the reply yourself (roadmap: `--json-schema`) |
+| Structured output | Pydantic model / Zod / `generateObject`; DSPy signatures type input/output fields | parse the reply yourself (roadmap: typed signatures / JSON Schema) |
+| Optimization | DSPy optimizers compile programs against metrics; others mostly leave prompt tuning to the application | no optimizer yet; workflows are easy to transform because they are data |
 | Streaming | tokens/events, especially to a UI | `claude-cli` runner `:on-event` |
 | Sessions / memory | built in (Agno AgentOS, PydanticAI) | `converse` / `:resume` for sessions; richer memory is delegated or out of scope |
-| Observability | Logfire, AgentOS, etc. | none built in |
+| Observability | Logfire, AgentOS, DSPy tracing/debugging, etc. | OpenTelemetry spans via `karcarthy.otel/instrument` |
 
 ## What karcarthy does differently
 
@@ -38,6 +42,11 @@ The frameworks referenced:
   it drives a runner. That makes it provider-neutral and thin, and it means
   karcarthy can sit *on top of* the others: a PydanticAI or Agno agent can be
   wrapped as a runner (via the `command` or `openai` adapter, or a small shim).
+- **The workflow is an intermediate representation.** DSPy is strong evidence
+  for separating *what* a module should do from *how* its prompt or weights are
+  tuned. karcarthy applies the same pressure one level up: keep orchestration as
+  data, then let runners, optimizers, or policies compile that data into concrete
+  prompts, tools, permissions, and execution plans.
 - **Agents can author and edit the workflow at runtime.** Because workflows are
   data parsed with `clojure.edn` (never `eval`), an agent can write a workflow that
   karcarthy runs (`run-authored`) or rewrite its own definition (`evolve`). Most
@@ -50,6 +59,8 @@ The frameworks referenced:
 ## When to use what
 
 - Typed tools, structured output, great Python DX: **PydanticAI**.
+- Declarative LM programs you want to optimize against examples and metrics:
+  **DSPy**.
 - A batteries-included multi-agent runtime with memory, knowledge, a server, and
   observability: **Agno**.
 - A web app streaming to React: **Vercel AI SDK**.
