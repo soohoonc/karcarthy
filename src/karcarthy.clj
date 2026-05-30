@@ -13,6 +13,7 @@
             [karcarthy.orchestrate]
             [karcarthy.session]
             [karcarthy.self]
+            [karcarthy.dynamic]
             [karcarthy.runner.claude]
             [karcarthy.runner.command]
             [karcarthy.runner.openai]
@@ -78,6 +79,17 @@
 (export karcarthy.self/read-workflow)
 (export karcarthy.self/read-flow)
 (export karcarthy.self/dsl-reference)
+
+;; dynamic data-level execution
+(export karcarthy.dynamic/dynamic-runtime)
+(export karcarthy.dynamic/dynamic-agent-ref)
+(export karcarthy.dynamic/dynamic-workflow-ref)
+(export karcarthy.dynamic/workflow-config?)
+(export karcarthy.dynamic/materialize)
+(export karcarthy.dynamic/read-operation)
+(export karcarthy.dynamic/apply-operation)
+(export karcarthy.dynamic/run-dynamic)
+(export karcarthy.dynamic/dynamic-reference)
 
 ;; runner adapters
 (export karcarthy.runner.claude/claude-runner)

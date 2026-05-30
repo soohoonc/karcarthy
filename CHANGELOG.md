@@ -20,6 +20,10 @@ Early and not yet released. What works so far:
 - `karcarthy.self`: agents author workflows (`run-authored`) and edit their own
   behavior (`evolve`) at runtime; a runtime-editable agent `registry`; safe EDN
   parsing (data only, via `clojure.edn`).
+- `karcarthy.dynamic`: a data-only meta-execution loop where a controller agent
+  emits EDN operations to mutate runtime agents and workflows (`:put`, `:patch`,
+  `:remove`, `:call`, `:complete`) while keeping early dynamic op names as
+  compatibility aliases.
 - `karcarthy.proc`: subprocess execution with `:timeout-ms` on every shell
   runner; fault-isolated workflow nodes; bounded concurrency; tolerant routing.
 - A `karcarthy` facade namespace re-exporting the common API under one alias.
