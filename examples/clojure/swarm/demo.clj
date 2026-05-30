@@ -1,7 +1,7 @@
 ;; OpenAI Swarm-style triage handoff, offline.
 ;;
 ;; Run:
-;;   clojure -M -e '(load-file "examples/clojure/open-source-harnesses/swarm/demo.clj")'
+;;   clojure -M -e '(load-file "examples/clojure/swarm/demo.clj")'
 
 (require '[clojure.pprint :as pp]
          '[clojure.string :as str]

@@ -1,7 +1,7 @@
 ;; LangGraph-style state graph with routed edges, offline.
 ;;
 ;; Run:
-;;   clojure -M -e '(load-file "examples/clojure/open-source-harnesses/langgraph/demo.clj")'
+;;   clojure -M -e '(load-file "examples/clojure/langgraph/demo.clj")'
 
 (require '[clojure.pprint :as pp]
          '[clojure.string :as str]

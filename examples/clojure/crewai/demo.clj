@@ -1,7 +1,7 @@
 ;; CrewAI-style agents + tasks + sequential crew, offline.
 ;;
 ;; Run:
-;;   clojure -M -e '(load-file "examples/clojure/open-source-harnesses/crewai/demo.clj")'
+;;   clojure -M -e '(load-file "examples/clojure/crewai/demo.clj")'
 
 (require '[clojure.pprint :as pp]
          '[clojure.walk :as walk]
