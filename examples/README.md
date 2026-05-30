@@ -9,9 +9,8 @@ languages, to show the library is reachable from each.
 
 - `clojure/orchestrator_emulations.clj` - offline emulations of LangGraph,
   CrewAI, AutoGen, OpenAI Agents SDK, and Google ADK-style orchestration shapes.
-- `clojure/open-source-harnesses/` - tiny runnable emulations of open-source
-  harness examples from Swarm, CrewAI, AutoGen, and LangGraph, with one folder
-  per harness.
+- `clojure/swarm/`, `clojure/crewai/`, `clojure/autogen/`, `clojure/langgraph/`
+  - tiny runnable harness-shape examples, with one folder per harness.
 - `clojure/live_orchestrate.clj` - a live orchestrator-workers run (paid `claude -p`).
 - `clojure/self_modify.clj` - an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
@@ -24,10 +23,10 @@ language builds (and could transform) it, and an agent can generate or edit one 
 same way. See [`../COMPARISON.md`](../COMPARISON.md) for how this differs from
 PydanticAI, Agno, and the Vercel AI SDK.
 
-The open-source harness examples also have JSON-bridge versions:
+The harness examples also have JSON-bridge versions:
 
-- `python/open-source-harnesses/` - Swarm, CrewAI, and AutoGen shapes in Python.
-- `typescript/open-source-harnesses/` - the same shapes in TypeScript.
+- `python/swarm/`, `python/crewai/`, `python/autogen/`
+- `typescript/swarm/`, `typescript/crewai/`, `typescript/autogen/`
 
 ```bash
 python3 examples/python/demo.py            # offline (mock runner)

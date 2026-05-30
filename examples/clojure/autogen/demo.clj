@@ -1,7 +1,7 @@
 ;; AutoGen-style round-robin group chat, offline.
 ;;
 ;; Run:
-;;   clojure -M -e '(load-file "examples/clojure/open-source-harnesses/autogen/demo.clj")'
+;;   clojure -M -e '(load-file "examples/clojure/autogen/demo.clj")'
 
 (require '[clojure.pprint :as pp]
          '[clojure.string :as str]
