@@ -10,7 +10,7 @@ agents, workflows, and history become mutable runtime data.
   and small operation set.
 - [Mappings](mappings.md) maps popular framework shapes to karcarthy workflow
   data.
-- [References](references/) records the protocol and SDK prior art behind the
+- [References](references/) records the protocol and SDK sources behind the
   vocabulary decisions.
 
 ## Status
