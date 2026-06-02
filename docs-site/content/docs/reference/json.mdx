@@ -1,22 +1,83 @@
 ---
-title: JSON CLI
-description: JSON workflow shapes for Python, TypeScript, and other non-JVM languages.
+title: CLI
+description: Run agents and workflow files from the karcarthy command.
 ---
 
-`bin/karcarthy` reads JSON on stdin and writes a result JSON object on stdout:
+Build the standalone runner once:
 
 ```bash
 clojure -T:build uber
+```
 
-echo '{"workflow":{"type":"agent","name":"echo","instructions":"Echo."},"input":"hi"}' \
-  | ./bin/karcarthy
+Then use `bin/karcarthy` as a normal command:
+
+```bash
+./bin/karcarthy agent echo --instructions "Echo the input." hi
+./bin/karcarthy run examples/workflows/echo.json hi
+./bin/karcarthy demo
+./bin/karcarthy --help
 ```
 
 During source checkout development, the launcher can run from source if the
 standalone jar is not built. For installed copies, set
 `KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`.
 
-Top-level request:
+## Commands
+
+### agent
+
+Run one agent without writing a workflow file:
+
+```bash
+./bin/karcarthy agent reviewer \
+  --instructions "Find the launch risk and answer in one sentence." \
+  "Enterprise SSO is ready for staged beta."
+```
+
+By default, command output is just the result text. Add `--json` when a caller
+needs the full result object:
+
+```bash
+./bin/karcarthy agent echo --instructions "Echo the input." hi --json
+```
+
+Useful options:
+
+- `--adapter mock|claude`
+- `--model NAME`
+- `--tool NAME`
+- `--mock-response AGENT=TEXT`
+- `--input TEXT`
+
+### run
+
+Run a workflow JSON file. The file can be either a raw workflow object:
+
+```json
+{
+  "type": "agent",
+  "name": "echo",
+  "instructions": "Echo the input."
+}
+```
+
+or a full request object with `workflow`, `input`, and adapter fields.
+
+```bash
+./bin/karcarthy run examples/workflows/echo.json hi
+./bin/karcarthy run examples/workflows/echo.json --input "hi" --json
+```
+
+### json
+
+Use `json` for the machine protocol: request JSON on stdin, result JSON on
+stdout.
+
+```bash
+./bin/karcarthy json < request.json
+```
+
+Top-level request shape:
 
 ```json
 {
@@ -41,7 +102,9 @@ fall back to the default echo-style mock response.
 support tool selection; it does not create tool servers or bind MCP
 configuration. The mock adapter ignores tools.
 
-## agent
+## JSON workflow shapes
+
+### agent
 
 ```json
 {
@@ -54,7 +117,7 @@ configuration. The mock adapter ignores tools.
 }
 ```
 
-## pipe
+### pipe
 
 ```json
 {
@@ -66,7 +129,7 @@ configuration. The mock adapter ignores tools.
 }
 ```
 
-## map
+### map
 
 Branches on the same input:
 
@@ -93,7 +156,7 @@ Planner/worker shape:
 JSON cannot safely transmit host functions. To synthesize mapped output from a
 non-JVM language, put a synthesizer agent after `map` in a `pipe`.
 
-## iterate
+### iterate
 
 ```json
 {
@@ -104,7 +167,7 @@ non-JVM language, put a synthesizer agent after `map` in a `pipe`.
 }
 ```
 
-## bind
+### bind
 
 Choice map:
 
@@ -130,9 +193,10 @@ Continuation:
 }
 ```
 
-## Response
+## JSON response
 
-The response is a karcarthy result map encoded as JSON:
+`karcarthy json` and command runs with `--json` return the karcarthy result map
+encoded as JSON:
 
 ```json
 {
@@ -143,5 +207,5 @@ The response is a karcarthy result map encoded as JSON:
 }
 ```
 
-If the workflow fails to parse or run, the CLI returns a JSON object with
-`ok: false`, `error`, and `exception`.
+If a JSON request fails to parse or run, the JSON protocol returns an object
+with `ok: false`, `error`, and `exception`.

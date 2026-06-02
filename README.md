@@ -92,7 +92,7 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   [`docs/`](docs/).
 - `clojure -M:test` runs the offline tests; `clojure -M -m karcarthy.demo` runs a demo.
 - `clojure -T:build uber` builds `target/karcarthy-0.0.2-standalone.jar`;
-  `./bin/karcarthy` runs it when present.
+  `./bin/karcarthy agent echo --instructions "Echo the input." hi` runs it as a CLI.
 - Pre-release (0.0.2). JDK 21+; depends on `org.clojure/clojure`,
   `org.clojure/data.json`, and the OpenTelemetry Java API.
 

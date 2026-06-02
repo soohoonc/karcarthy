@@ -48,7 +48,9 @@ the Clojure CLI:
 
 ```bash
 clojure -T:build uber
-./bin/karcarthy < request.json
+./bin/karcarthy agent echo --instructions "Echo the input." hi
+./bin/karcarthy run examples/workflows/echo.json hi
+./bin/karcarthy json < request.json
 ```
 
 `bin/karcarthy` also honors `KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`

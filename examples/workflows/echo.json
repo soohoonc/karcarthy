@@ -1,0 +1,5 @@
+{
+  "type": "agent",
+  "name": "echo",
+  "instructions": "Echo the input."
+}

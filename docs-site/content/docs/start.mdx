@@ -83,11 +83,12 @@ Build the standalone runner:
 clojure -T:build uber
 ```
 
-Then send JSON workflow requests to the executable:
+Then run agents or workflow files:
 
 ```bash
-echo '{"workflow":{"type":"agent","name":"echo","instructions":"Echo."},"input":"hi"}' \
-  | ./bin/karcarthy
+./bin/karcarthy agent echo --instructions "Echo the input." hi
+./bin/karcarthy run examples/workflows/echo.json hi
+./bin/karcarthy demo
 ```
 
 Python, TypeScript, and other non-JVM hosts use this command path. The command
@@ -101,7 +102,7 @@ From the repository root:
 clojure -M:test
 clojure -M -m karcarthy.demo
 clojure -T:build uber
-./bin/karcarthy < request.json
+./bin/karcarthy agent echo --instructions "Echo the input." hi
 ```
 
 The demos and tests default to offline adapters unless a file explicitly calls

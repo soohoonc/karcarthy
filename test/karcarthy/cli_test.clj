@@ -67,3 +67,45 @@
         result  (json/read-str output)]
     (is (= true (get result "ok?")))
     (is (= "two" (get result "text")))))
+
+(deftest cli-main-shows-help
+  (let [output (with-out-str (cli/-main "--help"))]
+    (is (re-find #"karcarthy agent NAME" output))
+    (is (re-find #"karcarthy run WORKFLOW.json" output))))
+
+(deftest cli-main-agent-command-prints-text
+  (let [output (with-out-str
+                 (cli/-main "agent" "echo"
+                            "--instructions" "Echo the input."
+                            "hi"))]
+    (is (= "[echo] hi\n" output))))
+
+(deftest cli-main-agent-command-can-print-json
+  (let [output (with-out-str
+                 (cli/-main "agent" "echo"
+                            "--instructions" "Echo the input."
+                            "--json"
+                            "hi"))
+        result (json/read-str output)]
+    (is (= true (get result "ok?")))
+    (is (= "echo" (get result "agent")))
+    (is (= "[echo] hi" (get result "text")))))
+
+(deftest cli-main-run-command-accepts-workflow-file
+  (let [file (java.io.File/createTempFile "karcarthy-workflow" ".json")]
+    (try
+      (spit file (json/write-str {"type" "agent"
+                                  "name" "echo"
+                                  "instructions" "Echo the input."}))
+      (let [output (with-out-str
+                     (cli/-main "run" (.getPath file) "hi"))]
+        (is (= "[echo] hi\n" output)))
+      (finally
+        (.delete file)))))
+
+(deftest cli-main-json-command-keeps-errors-machine-readable
+  (let [output (with-in-str "{"
+                 (with-out-str (cli/-main "json")))
+        result (json/read-str output)]
+    (is (= false (get result "ok")))
+    (is (contains? result "error"))))
