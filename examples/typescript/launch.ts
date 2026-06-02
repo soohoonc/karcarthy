@@ -71,10 +71,10 @@ const classifier = configuredAgent({
     "Use launch for planned releases, rollout reviews, beta exits, or go/no-go prep.",
     "Use incident for outages, regressions, active customer impact, or urgent mitigation.",
   ],
-  output: "Return exactly one lowercase word: launch or incident.",
+  output: 'Reply with EDN only: {:route "launch"} or {:route "incident"}.',
   tone: "Invisible routing agent. Do not explain unless the route is ambiguous.",
   boundaries: ["Do not solve the task. Only classify it."],
-  selfCheck: ["The final text is only launch or incident."],
+  selfCheck: ["The final text is exactly one EDN route map."],
 });
 
 const productReviewer = configuredAgent({
@@ -176,10 +176,10 @@ const critic = configuredAgent({
     "Accept only if the draft has decision, risks, owner/action clarity, and no invented facts.",
     "Otherwise provide specific feedback that the writer can apply in one revision.",
   ],
-  output: "Return ACCEPT if ready. Otherwise return concise actionable feedback.",
+  output: 'Reply with EDN only: {:accept? true} if ready, or {:accept? false :feedback "specific feedback"}.',
   tone: "Strict, brief, and useful.",
   boundaries: ["Do not rewrite the brief yourself."],
-  selfCheck: ["The answer is either ACCEPT or concrete revision feedback."],
+  selfCheck: ["The answer is exactly one EDN verdict map."],
 });
 
 const incidentResponder = configuredAgent({
@@ -223,7 +223,7 @@ const workflow: Workflow = {
 };
 
 const mockResponses: Record<string, string> = {
-  classifier: "launch",
+  classifier: '{:route "launch"}',
   "product-reviewer": [
     "Product signal: enterprise admins need SSO before broad rollout.",
     "Product risk: beta evidence covers admins, not end users.",
@@ -251,7 +251,7 @@ const mockResponses: Record<string, string> = {
     "Required owners: engineering for latency monitoring, security for audit-log signoff, support for FAQ and escalation macro.",
     "Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.",
   ].join("\n"),
-  critic: "ACCEPT",
+  critic: "{:accept? true}",
   "incident-responder": "Stabilize: pause rollout. Communicate: notify affected customers. Assign: name incident lead. Review: document root cause.",
 };
 

@@ -118,9 +118,9 @@ workflow = {
 With a live adapter, the same configured agents and workflow delegate each
 single-agent call to the selected Agent SDK or CLI.
 
-## Why Python uses a synthesizer agent
+## Why control outputs are EDN
 
-The Clojure guide passes a host function to `reduce`. JSON cannot transmit a
-Python function safely. For cross-language workflows, put a synthesizer agent
-after `map` inside a `pipe`; the mapped outputs become that agent's prompt
-text.
+The JSON bridge carries workflow shape, not host-language functions. Router and
+critic agents still return EDN text, such as `{:route "launch"}` or
+`{:accept? true}`, because the Clojure interpreter can parse and validate those
+control messages the same way for Python, TypeScript, and Clojure callers.

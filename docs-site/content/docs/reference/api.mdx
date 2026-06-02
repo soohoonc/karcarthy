@@ -88,12 +88,12 @@ Runs steps in sequence. Each step receives the previous result's `:text`.
 ### `map`
 
 ```clojure
-(k/map workflows & {:keys [reduce max-concurrency]})
-(k/map planner worker & {:keys [reduce max-concurrency]})
+(k/map workflows & {:keys [max-concurrency]})
+(k/map planner worker & {:keys [max-concurrency]})
 ```
 
 With a workflow collection, runs every branch on the same input. With planner
-and worker, parses planner output into subtasks and runs the worker for each
+and worker, reads planner EDN `{:subtasks [...]}` and runs the worker for each
 subtask.
 
 ```clojure
@@ -106,18 +106,18 @@ subtask.
 ### `reduce`
 
 ```clojure
-(k/reduce reducer mapped & {:keys [max-concurrency]})
+(k/reduce mapped reducer & {:keys [max-concurrency]})
 ```
 
-Attaches a Clojure reducer function to mapped work.
+Runs mapped work, then sends an EDN result summary to a reducer workflow.
 
 ```clojure
-(k/reduce combine-review-notes
-          (k/map [product-reviewer engineering-reviewer]))
+(k/reduce
+  (k/map [product-reviewer engineering-reviewer])
+  brief-writer)
 ```
 
-For branch maps, `reducer` receives `results`. For planner/worker maps, it
-receives `results` and the original input.
+The reducer receives EDN shaped like `{:input ... :subtasks ... :results [...]}`.
 
 ### `iterate`
 
@@ -131,7 +131,12 @@ Runs a worker/evaluator loop until accepted or the round limit is reached.
 (k/iterate draft-writer critic :max-rounds 3)
 ```
 
-Evaluator workflows accept when their result text starts with `ACCEPT`.
+Evaluator workflows reply with EDN verdict maps:
+
+```clojure
+{:accept? true}
+{:accept? false :feedback "specific revision feedback"}
+```
 
 ### `bind`
 
@@ -140,13 +145,13 @@ Evaluator workflows accept when their result text starts with `ACCEPT`.
 (k/bind source continuation & {:keys [prompt]})
 ```
 
-With a route map, `source` chooses a key and the selected workflow receives the
-original input.
+With a route map, `source` replies with EDN `{:route key}` and the selected
+workflow receives the original input.
 
 ```clojure
 (k/bind classifier
-        {"launch" launch-brief
-         "incident" incident-plan}
+        {:launch launch-brief
+         :incident incident-plan}
         :default launch-brief)
 ```
 

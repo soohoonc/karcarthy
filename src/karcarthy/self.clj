@@ -73,12 +73,13 @@
     "  map     {:karcarthy/type :map :branches [WORKFLOW ...]}"
     "          run each workflow on the same input."
     "  map     {:karcarthy/type :map :planner AGENT :worker WORKFLOW}"
-    "          planner lists subtasks (one per line); worker handles each."
-    "  reduce  add :reduce to a :map node."
+    "          planner replies {:subtasks [\"...\"]}; worker handles each."
+    "  reduce  {:karcarthy/type :reduce :mapped MAP :reducer WORKFLOW}"
+    "          reducer receives {:input ... :subtasks ... :results [...]}"
     "  iterate {:karcarthy/type :iterate :worker WORKFLOW :evaluator AGENT"
-    "           :max-rounds 3}             ; draft, critique, repeat"
+    "           :max-rounds 3} ; evaluator replies {:accept? bool :feedback \"...\"}"
     "  bind    {:karcarthy/type :bind :source AGENT"
-    "           :routes {\"label\" WORKFLOW ...}}  ; prior reply picks a branch"
+    "           :routes {:label WORKFLOW ...}} ; source replies {:route :label}"
     "  bind    {:karcarthy/type :bind :source WORKFLOW :to WORKFLOW}"
     ""
     "Rules: output EDN only (optionally inside an ```edn fence), no prose. Use"
@@ -98,14 +99,53 @@
   [agent & {:keys [max-rounds] :or {max-rounds 5}}]
   {:karcarthy/type :evolve :agent agent :max-rounds max-rounds})
 
-(defn- parse-patch
-  "Return the :karcarthy/patch map from `text`, or nil if it isn't a patch."
-  [text]
+(def ^:private no-patch ::no-patch)
+
+(def ^:private patch-keys
+  #{:instructions :model :tools})
+
+(defn- patch!
+  [agent patch]
+  (when-not (map? patch)
+    (throw (ex-info ":karcarthy/patch must be a map" {:patch patch})))
+  (when-let [unknown (seq (remove patch-keys (keys patch)))]
+    (throw (ex-info ":karcarthy/patch contains unknown keys"
+                    {:unknown (vec unknown)
+                     :supported (vec patch-keys)})))
+  (when (and (contains? patch :instructions)
+             (not (string? (:instructions patch))))
+    (throw (ex-info ":karcarthy/patch :instructions must be a string"
+                    {:patch patch})))
+  (when (and (contains? patch :model)
+             (some? (:model patch))
+             (not (string? (:model patch))))
+    (throw (ex-info ":karcarthy/patch :model must be a string or nil"
+                    {:patch patch})))
+  (when (and (contains? patch :tools)
+             (not (and (vector? (:tools patch))
+                       (every? string? (:tools patch)))))
+    (throw (ex-info ":karcarthy/patch :tools must be a vector of strings"
+                    {:patch patch})))
+  (let [agent' (merge agent patch)]
+    (when-not (k/agent? agent')
+      (throw (ex-info ":karcarthy/patch would produce an invalid agent"
+                      {:patch patch
+                       :agent agent'
+                       :problems (k/explain-agent agent')}))))
+  patch)
+
+(defn- read-patch
+  "Return a validated :karcarthy/patch map, or `no-patch` for a plain answer."
+  [agent text]
   (try
     (let [v (extract-edn text)]
-      (when (and (map? v) (contains? v :karcarthy/patch))
-        (:karcarthy/patch v)))
-    (catch Exception _ nil)))
+      (if (and (map? v) (contains? v :karcarthy/patch))
+        (patch! agent (:karcarthy/patch v))
+        no-patch))
+    (catch Exception e
+      (if (= "no EDN map found in output" (.getMessage e))
+        no-patch
+        (throw e)))))
 
 (defn- evolve-prompt [input]
   (str "You may improve yourself before answering. Reply with EITHER:\n"
@@ -117,21 +157,35 @@
 (defmethod o/run-node :evolve
   [adapter {:keys [agent max-rounds] :or {max-rounds 5}} input opts]
   (loop [round 1, agent agent, patches []]
-    (let [r     (k/run-agent adapter agent (evolve-prompt input) opts)
-          patch (parse-patch (:text r))]
-      (cond
-        ;; agent wants to change itself and has rounds left -> apply + retry
-        (and patch (< round max-rounds))
-        (recur (inc round) (merge agent patch) (conj patches patch))
+    (let [r (k/run-agent adapter agent (evolve-prompt input) opts)]
+      (if-not (k/ok? r)
+        r
+        (let [patch (try
+                      (read-patch agent (:text r))
+                      (catch Throwable t
+                        {::error t}))]
+          (cond
+            (::error patch)
+            (k/result {:ok? false
+                       :error :invalid-patch
+                       :text (ex-message (::error patch))
+                       :agent (:name agent)
+                       :rounds round
+                       :patches patches
+                       :evolved agent})
 
-        ;; out of rounds but still patching -> apply once and force a final answer
-        patch
-        (let [final-agent (merge agent patch)
-              fr          (k/run-agent adapter final-agent input opts)]
-          (k/result (assoc fr :agent (:name final-agent) :rounds round
-                           :patches (conj patches patch) :evolved final-agent)))
+            ;; agent wants to change itself and has rounds left -> apply + retry
+            (and (not= no-patch patch) (< round max-rounds))
+            (recur (inc round) (merge agent patch) (conj patches patch))
 
-        ;; a plain final answer
-        :else
-        (k/result (assoc r :agent (:name agent) :rounds round
-                         :patches patches :evolved agent))))))
+            ;; out of rounds but still patching -> apply once and force a final answer
+            (not= no-patch patch)
+            (let [final-agent (merge agent patch)
+                  fr          (k/run-agent adapter final-agent input opts)]
+              (k/result (assoc fr :agent (:name final-agent) :rounds round
+                               :patches (conj patches patch) :evolved final-agent)))
+
+            ;; a plain final answer
+            :else
+            (k/result (assoc r :agent (:name agent) :rounds round
+                             :patches patches :evolved agent))))))))

@@ -34,7 +34,7 @@ Next actions: confirm audit-log coverage, assign rollback owner, publish support
 
 | Page | Teaches |
 | --- | --- |
-| [Clojure](/docs/tutorials/clojure) | Direct API use, host reducer functions, and EDN workflow data. |
+| [Clojure](/docs/tutorials/clojure) | Direct API use, EDN control outputs, and workflow data rewrites. |
 | [Python](/docs/tutorials/python) | Building workflow JSON from application dictionaries. |
 | [TypeScript](/docs/tutorials/typescript) | Building the same workflow shape from typed application objects. |
 
@@ -61,13 +61,11 @@ The launch workflow uses the small functional vocabulary:
 
 - `bind` chooses the launch path from a classifier result.
 - `map` runs independent reviewers.
-- `reduce` combines mapped reviewer output in Clojure.
 - `pipe` turns review notes into a final draft.
 - `iterate` gives the draft one or more critique rounds.
 
-Python and TypeScript send JSON to `bin/karcarthy`, so host-language functions
-cannot be sent as reducers. Those guides use a synthesizer agent in a `pipe`
-after `map`, which is the portable cross-language shape.
+Planner, evaluator, and router control outputs are EDN maps, so the workflow
+shape stays portable across the Clojure API and the JSON bridge.
 
 <Cards>
   <Card title="Clojure" href="/docs/tutorials/clojure" />

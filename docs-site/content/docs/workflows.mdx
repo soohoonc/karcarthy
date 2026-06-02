@@ -22,7 +22,7 @@ how child result text is routed to the next node.
 | --- | --- | --- | --- |
 | `pipe` | Steps must happen in order. | First step receives the original input; each later step receives previous `:text`. | Last successful step's result. |
 | `map` | Several reviewers or workers should run independently. | Each branch receives the same input, or each worker receives one planner subtask. | A result with `:results` and combined `:text`. |
-| `reduce` | Mapped outputs need deterministic synthesis. | Receives mapped child results in host code. | Whatever result your reducer returns. |
+| `reduce` | Mapped outputs need synthesis by another workflow. | Runs mapped work, then sends an EDN result summary to the reducer workflow. | Reducer result plus `:mapped` and `:reduced`. |
 | `iterate` | A draft needs critique and revision. | Worker receives the input, then revision prompts. | Final draft plus `:rounds` and `:accepted?`. |
 | `bind` | A classifier should choose the next path, or one step should continue into another. | Source receives original input. | Selected/continued workflow result. |
 
@@ -83,29 +83,35 @@ Use planner/worker mapping when a planner should create subtasks:
 (k/map planner worker :max-concurrency 8)
 ```
 
-The planner's text is parsed as one non-blank subtask per line. The worker runs
-once per subtask.
+The planner replies with EDN:
+
+```clojure
+{:subtasks ["audit logs" "rollback messaging" "support docs"]}
+```
+
+The worker runs once per subtask.
 
 ## reduce
 
-Use `reduce` when mapped outputs need deterministic host-code synthesis:
+Use `reduce` when mapped outputs need synthesis by another workflow:
 
 ```clojure
-(defn combine-review-notes
-  ([results] (combine-review-notes results nil))
-  ([results _input]
-   (k/result
-    {:text (str "Review packet:\n"
-                (str/join "\n" (map #(str "- " (:text %)) results)))})))
-
 (def review-packet
-  (k/reduce combine-review-notes
-            (k/map [product-reviewer engineering-reviewer security-reviewer])))
+  (k/reduce
+    (k/map [product-reviewer engineering-reviewer security-reviewer])
+    brief-writer))
 ```
 
-Reducers are Clojure functions. Python and TypeScript cannot send functions
-through JSON, so those examples place a synthesizer agent after `map` inside a
-`pipe`.
+The reducer receives a prompt containing EDN data:
+
+```clojure
+{:input "original input"
+ :results [{:agent "product-reviewer" :ok? true :text "..."}
+           {:agent "engineering-reviewer" :ok? true :text "..."}]}
+```
+
+Because reducers are workflows, not host functions, the workflow stays
+serializable.
 
 ## iterate
 
@@ -120,7 +126,7 @@ Trace:
 
 ```text
 round 1 worker:    writes a draft
-round 1 evaluator: replies ACCEPT or feedback
+round 1 evaluator: replies {:accept? true} or {:accept? false :feedback "..."}
 round 2 worker:    receives input, previous draft, and feedback
 ```
 
@@ -134,7 +140,12 @@ The result includes loop metadata:
  :accepted? true}
 ```
 
-Evaluator workflows accept when their text starts with `ACCEPT`.
+Evaluator workflows reply with EDN verdict maps:
+
+```clojure
+{:accept? true}
+{:accept? false :feedback "name the missing rollback owner"}
+```
 
 ## bind
 
@@ -142,8 +153,8 @@ Use `bind` with a route map when one workflow chooses the next path:
 
 ```clojure
 (k/bind classifier
-        {"launch" launch-brief
-         "incident" incident-plan}
+        {:launch launch-brief
+         :incident incident-plan}
         :default launch-brief)
 ```
 
@@ -151,7 +162,7 @@ Trace:
 
 ```text
 input:     Prepare a launch review.
-classifier result text: launch
+classifier result text: {:route :launch}
 selected workflow:      launch-brief
 launch-brief input:     Prepare a launch review.
 ```

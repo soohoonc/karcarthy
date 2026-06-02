@@ -8,8 +8,8 @@ languages, to show the library is reachable from each.
 ## Clojure
 
 - `clojure/launch.clj` - the complete launch-readiness tutorial:
-  classify, map reviewers, reduce their notes, write a brief, and iterate on
-  critique.
+  classify with an EDN route, map reviewers, write a brief, and iterate on
+  EDN critique verdicts.
 - `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
   adapter/model/instruction config, then run the rewritten value.
 - `clojure/live.clj` - a live map/reduce run (paid `claude -p`).

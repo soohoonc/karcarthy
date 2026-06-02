@@ -8,12 +8,18 @@
     pipe     run workflows in sequence, threading each result's :text into the next.
     map      run a collection of workflows on the same input, or run a worker over
              subtasks produced by a planner.
-    reduce   combine mapped results.
+    reduce   run mapped work, then pass its EDN result summary to a reducer workflow.
     iterate  draft, critique, and retry until accepted or a round limit is reached.
     bind     choose or continue to the next workflow from a previous result.
 
   Because a workflow is data, you build, generate and serialize it with ordinary
-  Clojure. `run` interprets a workflow through an adapter.
+  Clojure. Model-facing control messages are EDN maps:
+
+    planner   {:subtasks [\"...\"]}
+    evaluator {:accept? true} or {:accept? false :feedback \"...\"}
+    router    {:route :some-route}
+
+  `run` interprets a workflow through an adapter.
 
   Every workflow run returns a `karcarthy.core` result map, so workflows compose: the
   output of one is valid input to another. Composite nodes are fault-isolated,
@@ -21,7 +27,8 @@
   (see `safe-run`)."
   (:refer-clojure :exclude [iterate map reduce])
   (:require [clojure.string :as str]
-            [karcarthy.core :as k])
+            [karcarthy.core :as k]
+            [karcarthy.edn :as kedn])
   (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
@@ -37,43 +44,59 @@
   "Map work over a collection.
 
   With one collection argument, each workflow in the collection runs on the same
-  input. With planner and worker arguments, the planner yields subtasks and the
-  worker runs once per subtask. Options:
-    :reduce           fn combining mapped results into a result/map.
+  input. With planner and worker arguments, the planner must reply with EDN
+  `{:subtasks [\"...\"]}` and the worker runs once per subtask. Options:
     :max-concurrency  max mapped calls running at once."
   [& args]
   (let [first-arg (first args)
         opts?     (or (= 1 (count args)) (keyword? (second args)))]
     (if (and (sequential? first-arg) opts?)
-      (let [{:keys [reduce max-concurrency]} (apply hash-map (rest args))]
+      (let [{:keys [max-concurrency] :as opts} (apply hash-map (rest args))]
+        (when-let [unknown (seq (remove #{:max-concurrency} (keys opts)))]
+          (throw (ex-info "map contains unknown options"
+                          {:unknown (vec unknown)
+                           :supported [:max-concurrency]})))
         (cond-> {:karcarthy/type :map :branches (vec first-arg)}
-          reduce          (assoc :reduce reduce)
           max-concurrency (assoc :max-concurrency max-concurrency)))
       (let [[planner worker & opts] args]
-        (let [{:keys [reduce max-concurrency]} (apply hash-map opts)]
+        (let [{:keys [max-concurrency] :as opts} (apply hash-map opts)]
+          (when-let [unknown (seq (remove #{:max-concurrency} (keys opts)))]
+            (throw (ex-info "map contains unknown options"
+                            {:unknown (vec unknown)
+                             :supported [:max-concurrency]})))
           (cond-> {:karcarthy/type :map
                    :planner        planner
                    :worker         worker}
-            reduce          (assoc :reduce reduce)
             max-concurrency (assoc :max-concurrency max-concurrency)))))))
 
 (defn reduce
-  "Attach a reducer to mapped work.
+  "Run mapped work, then pass an EDN result summary to `reducer`.
 
-  `f` receives the mapped result vector for `map` over branches, or
-  [results input] for planner/worker `map`."
-  [f mapped & {:keys [max-concurrency]}]
+  `mapped` is a `map` workflow, or a collection of workflows which is first
+  turned into `(map workflows)`. `reducer` is a workflow. It receives a prompt
+  whose body is EDN:
+
+    {:input \"original input\"
+     :subtasks [...]
+     :results [{:agent \"...\" :ok? true :text \"...\"} ...]}"
+  [mapped reducer & {:keys [max-concurrency]}]
   (let [node (if (sequential? mapped) (map mapped) mapped)]
     (case (:karcarthy/type node)
       :map
-      (cond-> (assoc node :reduce f)
-        max-concurrency (assoc :max-concurrency max-concurrency))
+      {:karcarthy/type :reduce
+       :mapped         (cond-> node
+                         max-concurrency (assoc :max-concurrency max-concurrency))
+       :reducer        reducer}
 
       (throw (ex-info "reduce expects mapped workflow data"
                       {:workflow mapped :type (:karcarthy/type node)})))))
 
 (defn iterate
-  "Run a worker/evaluator loop until accepted or `:max-rounds` is reached."
+  "Run a worker/evaluator loop until accepted or `:max-rounds` is reached.
+
+  The evaluator must reply with EDN:
+    {:accept? true}
+    {:accept? false :feedback \"what to improve\"}"
   [worker evaluator & {:keys [max-rounds] :or {max-rounds 3}}]
   {:karcarthy/type :iterate :worker worker :evaluator evaluator :max-rounds max-rounds})
 
@@ -81,9 +104,10 @@
   "Run `source`, then bind its result to the next workflow.
 
   When `next` is a choice map, `source` picks the key and the selected workflow
-  receives the original input. Otherwise `next` is treated as the continuation
-  workflow and receives `source`'s result text, preserving session ids when the
-  adapter supports them."
+  receives the original input. The source must reply with EDN `{:route key}` and
+  matching is exact. Otherwise `next` is treated as the continuation workflow
+  and receives `source`'s result text, preserving session ids when the adapter
+  supports them."
   [source next & {:keys [default prompt] :as opts}]
   (if (and (map? next) (not (contains? next :karcarthy/type)))
     (if (contains? opts :default)
@@ -135,18 +159,43 @@
       (finally (.shutdown pool)))))
 
 (defn- match-route
-  "Resolve the workflow for `label` in `routes`: exact match first, then - for
-  string labels - case-insensitive exact and substring (label contains key)."
+  "Resolve the workflow for `label` in `routes` by exact EDN value."
   [routes label]
-  (or (get routes label)
-      (when (string? label)
-        (let [ll (str/lower-case (str/trim label))]
-          (some (fn [[k v]]
-                  (when (and (string? k)
-                             (let [lk (str/lower-case k)]
-                               (or (= lk ll) (str/includes? ll lk))))
-                    v))
-                routes)))))
+  (get routes label))
+
+(defn- invalid-control
+  [kind message data]
+  (k/result {:ok? false
+             :error kind
+             :text message
+             :data data}))
+
+(defn- read-control-map
+  [kind result]
+  (try
+    (let [m (kedn/extract-map (:text result))]
+      (if (map? m)
+        m
+        (throw (ex-info "control output must be an EDN map" {:parsed m}))))
+    (catch Throwable t
+      (throw (ex-info (str kind " output must be an EDN map")
+                      {:text (:text result)
+                       :result result}
+                      t)))))
+
+(defn- result-summary
+  [r]
+  (cond-> {:ok? (k/ok? r)}
+    (:agent r) (assoc :agent (:agent r))
+    (:text r)  (assoc :text (:text r))
+    (:error r) (assoc :error (:error r))))
+
+(defn- reduce-input
+  [input mapped-result]
+  (pr-str (cond-> {:input input
+                   :results (mapv result-summary (:results mapped-result))}
+            (contains? mapped-result :subtasks)
+            (assoc :subtasks (:subtasks mapped-result)))))
 
 ;; --- canonical nodes --------------------------------------------------------
 
@@ -165,41 +214,68 @@
           (recur (:text r) (rest indexed-steps) r)
           r)))))                                    ; short-circuit on failure
 
-(defn- run-branch-map [adapter {:keys [branches reduce max-concurrency]} input opts]
+(defn- run-branch-map [adapter {:keys [branches max-concurrency]} input opts]
   (let [results  (bounded-pmap max-concurrency
                                (fn [[idx branch]]
                                  (safe-run adapter branch input opts))
-                               (map-indexed vector branches))
-        reduced (when reduce (reduce results))]
+                               (map-indexed vector branches))]
     (k/result {:ok?      (every? k/ok? results)
                :results  results
-               :reduced  reduced
-               :text     (or (:text reduced)
-                             (str/join "\n\n" (keep :text results)))})))
+               :text     (str/join "\n\n" (keep :text results))})))
 
 (defn- run-route [adapter source routes default input opts]
-  (let [label (if (fn? source)
-                (source input)
-                (str/trim (str (:text (safe-run adapter source input opts)))))
-        workflow  (or (match-route routes label) default)]
-    (if workflow
-      (safe-run adapter workflow input opts)
-      (k/result {:ok? false :error :no-route :label label
-                 :text (str "no route for label: " (pr-str label))}))))
+  (let [r (safe-run adapter source input opts)]
+    (if-not (k/ok? r)
+      r
+      (try
+        (let [m        (read-control-map :route r)
+              label    (:route m)
+              workflow (or (match-route routes label) default)]
+          (cond
+            (not (contains? m :route))
+            (invalid-control :invalid-route
+                             "route output must contain :route"
+                             {:output m :result r})
+
+            workflow
+            (safe-run adapter workflow input opts)
+
+            :else
+            (k/result {:ok? false :error :no-route :label label
+                       :text (str "no route for label: " (pr-str label))})))
+        (catch Throwable t
+          (invalid-control :invalid-route (.getMessage t) {:result r}))))))
 
 (defn- evaluate
   "Run `evaluator` against a draft, returning {:accept? :feedback :evaluation}."
   [adapter evaluator draft input opts]
-  (if (fn? evaluator)
-    (evaluator draft input)
-    (let [prompt (str "INPUT:\n" input "\n\nDRAFT:\n" (:text draft)
-                      "\n\nReply with exactly ACCEPT if the draft is good enough."
-                      " Otherwise reply with specific, actionable feedback.")
-          r      (safe-run adapter evaluator prompt opts)
-          t      (str/trim (str (:text r)))]
-      {:accept?    (str/starts-with? (str/upper-case t) "ACCEPT")
-       :feedback   t
-       :evaluation r})))
+  (let [prompt (str "INPUT:\n" input "\n\nDRAFT:\n" (:text draft)
+                    "\n\nReply with EDN only, either:"
+                    "\n{:accept? true}"
+                    "\nor"
+                    "\n{:accept? false :feedback \"specific, actionable feedback\"}")
+        r      (safe-run adapter evaluator prompt opts)]
+    (if-not (k/ok? r)
+      {:accept? false :feedback (:text r) :evaluation r}
+      (try
+        (let [m (read-control-map :evaluation r)]
+          (cond
+            (not (contains? m :accept?))
+            {:accept? false :feedback "evaluation output must contain :accept?" :evaluation r}
+
+            (not (boolean? (:accept? m)))
+            {:accept? false :feedback "evaluation :accept? must be true or false" :evaluation r}
+
+            (:accept? m)
+            {:accept? true :feedback (:feedback m) :evaluation r}
+
+            (string? (:feedback m))
+            {:accept? false :feedback (:feedback m) :evaluation r}
+
+            :else
+            {:accept? false :feedback "rejected evaluations must include string :feedback" :evaluation r}))
+        (catch Throwable t
+          {:accept? false :feedback (.getMessage t) :evaluation r})))))
 
 (defn- run-iterate [adapter {:keys [worker evaluator max-rounds]} input opts]
   (loop [round 1, worker-input input]
@@ -215,34 +291,36 @@
                         "\n\nFEEDBACK TO ADDRESS:\n" feedback
                         "\n\nProduce an improved version."))))))))
 
-(def ^:private list-marker #"^\s*(?:[-*•]|\d+[.)])\s+")
-
 (defn- plan-subtasks
-  "Turn the input into a vector of subtask strings via `planner` (a fn, or a
-  workflow whose reply is parsed line-by-line)."
-  [adapter planner input opts]
-  (if (fn? planner)
-    (vec (planner input))
-    (->> (str/split-lines (str (:text (safe-run adapter planner input
-                                                opts))))
-         (clojure.core/map #(str/replace % list-marker ""))
-         (clojure.core/map str/trim)
-         (remove str/blank?)
-         vec)))
+  "Turn the input into a vector of subtask strings via `planner`.
 
-(defn- run-planned-map [adapter {:keys [planner worker reduce max-concurrency]} input opts]
-  (let [subtasks (plan-subtasks adapter planner input opts)
-        results  (bounded-pmap max-concurrency
-                               (fn [[idx subtask]]
-                                 (safe-run adapter worker subtask opts))
-                               (map-indexed vector subtasks))
-        reduced (when reduce (reduce results input))]
-    (k/result {:ok?      (every? k/ok? results)
-               :subtasks subtasks
-               :results  results
-               :reduced  reduced
-               :text     (or (:text reduced)
-                             (str/join "\n\n" (keep :text results)))})))
+  The planner must reply with EDN `{:subtasks [\"...\"]}`."
+  [adapter planner input opts]
+  (let [r (safe-run adapter planner input opts)]
+    (if-not (k/ok? r)
+      r
+      (try
+        (let [m        (read-control-map :planner r)
+              subtasks (:subtasks m)]
+          (if (and (vector? subtasks) (every? string? subtasks))
+            subtasks
+            (throw (ex-info "planner output must be {:subtasks [string ...]}"
+                            {:output m :result r}))))
+        (catch Throwable t
+          (invalid-control :invalid-subtasks (.getMessage t) {:result r}))))))
+
+(defn- run-planned-map [adapter {:keys [planner worker max-concurrency]} input opts]
+  (let [subtasks (plan-subtasks adapter planner input opts)]
+    (if (map? subtasks)
+      subtasks
+      (let [results (bounded-pmap max-concurrency
+                                  (fn [[idx subtask]]
+                                    (safe-run adapter worker subtask opts))
+                                  (map-indexed vector subtasks))]
+        (k/result {:ok?      (every? k/ok? results)
+                   :subtasks subtasks
+                   :results  results
+                   :text     (str/join "\n\n" (keep :text results))})))))
 
 (defn- run-continuation [adapter source to prompt input opts]
   (let [r1 (safe-run adapter source input opts)]
@@ -268,6 +346,17 @@
 (defmethod run-node :iterate
   [adapter node input opts]
   (run-iterate adapter node input opts))
+
+(defmethod run-node :reduce
+  [adapter {:keys [mapped reducer] :as node} input opts]
+  (if (and mapped reducer)
+    (let [mapped-result  (safe-run adapter mapped input opts)
+          reducer-result (safe-run adapter reducer (reduce-input input mapped-result) opts)]
+      (k/result (assoc reducer-result
+                       :ok? (and (k/ok? mapped-result) (k/ok? reducer-result))
+                       :mapped mapped-result
+                       :reduced reducer-result)))
+    (throw (ex-info "reduce workflow requires :mapped and :reducer" {:node node}))))
 
 (defmethod run-node :bind
   [adapter {:keys [source routes default to prompt] :as node} input opts]
@@ -300,12 +389,9 @@
 
 (declare workflow?)
 
-(defn- workflow-or-fn? [x]
-  (or (fn? x) (workflow? x)))
-
 (defn- extension-workflow? [x]
   (contains? (disj (set (keys (methods run-node))) :default
-                   :agent :pipe :map :iterate :bind)
+                   :agent :pipe :map :reduce :iterate :bind)
              (:karcarthy/type x)))
 
 (defn workflow?
@@ -328,15 +414,19 @@
        :map
        (or (and (sequential? (:branches x))
                 (every? workflow? (:branches x)))
-           (and (workflow-or-fn? (:planner x))
+           (and (workflow? (:planner x))
                 (workflow? (:worker x))))
+
+       :reduce
+       (and (workflow? (:mapped x))
+            (workflow? (:reducer x)))
 
        :iterate
        (and (workflow? (:worker x))
-            (workflow-or-fn? (:evaluator x)))
+            (workflow? (:evaluator x)))
 
        :bind
-       (or (and (workflow-or-fn? (:source x))
+       (or (and (workflow? (:source x))
                 (map? (:routes x))
                 (every? workflow? (vals (:routes x)))
                 (or (not (contains? x :default))

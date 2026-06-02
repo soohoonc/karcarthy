@@ -83,3 +83,21 @@
       (is (= "immediate answer" (:text r)))
       (is (= 1 (:rounds r)))
       (is (empty? (:patches r))))))
+
+(deftest evolve-rejects-unknown-patch-keys
+  (testing "self-modification cannot smuggle arbitrary agent fields"
+    (let [h (k/mock-adapter
+             (fn [_] "{:karcarthy/patch {:name \"renamed\"} :reason \"bad\"}"))
+          r (o/run h (self/evolve (k/agent "a" "i")) "x")]
+      (is (not (k/ok? r)))
+      (is (= :invalid-patch (:error r)))
+      (is (str/includes? (:text r) "unknown keys")))))
+
+(deftest evolve-rejects-invalid-patch-values
+  (testing "a patch must still produce a valid agent"
+    (let [h (k/mock-adapter
+             (fn [_] "{:karcarthy/patch {:tools [42]} :reason \"bad\"}"))
+          r (o/run h (self/evolve (k/agent "a" "i")) "x")]
+      (is (not (k/ok? r)))
+      (is (= :invalid-patch (:error r)))
+      (is (str/includes? (:text r) ":tools must be a vector of strings")))))

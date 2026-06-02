@@ -1,6 +1,6 @@
 ---
 title: Clojure
-description: Configure realistic agents in Clojure with pipe, map, reduce, iterate, and bind.
+description: Configure realistic agents in Clojure with pipe, map, iterate, bind, and EDN control outputs.
 ---
 
 This guide builds a launch-readiness assistant directly in Clojure. The
@@ -79,24 +79,15 @@ One specialist profile:
 
 ## Compose workflow data
 
-Clojure can use a host reducer function to combine mapped reviewer output before
-the brief writer runs:
+Clojure keeps the coordination graph as data. `map` gathers reviewer output;
+the brief writer receives the combined mapped text in the next `pipe` step:
 
 ```clojure
 (def reviewers
   [product-reviewer engineering-reviewer security-reviewer support-reviewer])
 
-(defn combine-review-notes
-  ([results] (combine-review-notes results nil))
-  ([results _input]
-   (k/result
-    {:text (str "Review packet:\n"
-                (str/join "\n" (map #(str "- " (:text %)) results)))})))
-
 (def review-packet
-  (k/reduce combine-review-notes
-            (k/map reviewers)
-            :max-concurrency 4))
+  (k/map reviewers :max-concurrency 4))
 
 (def launch-brief
   (k/iterate
@@ -106,8 +97,8 @@ the brief writer runs:
 
 (def workflow
   (k/bind classifier
-          {"launch" launch-brief
-           "incident" incident-responder}
+          {:launch launch-brief
+           :incident incident-responder}
           :default launch-brief))
 ```
 

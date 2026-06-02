@@ -35,8 +35,7 @@ Runs a collection of branches on the same input:
 ```clojure
 {:karcarthy/type :map
  :branches [WORKFLOW ...]
- :max-concurrency 16
- :reduce reduce-fn}
+ :max-concurrency 16}
 ```
 
 Or runs a worker once per subtask from a planner:
@@ -45,14 +44,32 @@ Or runs a worker once per subtask from a planner:
 {:karcarthy/type :map
  :planner PLANNER
  :worker WORKFLOW
- :max-concurrency 16
- :reduce reduce-fn}
+ :max-concurrency 16}
 ```
 
-`PLANNER` may be a function from input to subtask strings, or a workflow whose
-text is parsed as one subtask per non-blank line. `:reduce` is a Clojure
-function. Use a synthesizer agent in a `pipe` when crossing the JSON command
-boundary.
+`PLANNER` is a workflow whose result text is EDN:
+
+```clojure
+{:subtasks ["first" "second"]}
+```
+
+## reduce
+
+Runs mapped work, then passes an EDN summary to a reducer workflow.
+
+```clojure
+{:karcarthy/type :reduce
+ :mapped {:karcarthy/type :map ...}
+ :reducer WORKFLOW}
+```
+
+The reducer receives EDN shaped like:
+
+```clojure
+{:input "original input"
+ :subtasks ["first" "second"]
+ :results [{:agent "worker" :ok? true :text "..."}]}
+```
 
 ## iterate
 
@@ -65,9 +82,12 @@ Runs a worker and evaluator until accepted or the round limit is reached.
  :max-rounds 3}
 ```
 
-`EVALUATOR` may be a function returning `{:accept? boolean :feedback string}`,
-or a workflow/agent. Workflow evaluators accept when their text starts with
-`ACCEPT`; otherwise the text becomes feedback for the next round.
+`EVALUATOR` is a workflow whose result text is an EDN verdict:
+
+```clojure
+{:accept? true}
+{:accept? false :feedback "specific revision feedback"}
+```
 
 ## bind
 
@@ -76,7 +96,7 @@ Routes by the source result:
 ```clojure
 {:karcarthy/type :bind
  :source WORKFLOW
- :routes {"label" WORKFLOW}
+ :routes {:label WORKFLOW}
  :default WORKFLOW}
 ```
 
@@ -89,9 +109,10 @@ Or continues from one workflow to another:
  :prompt "optional override"}
 ```
 
-When `:routes` is present, `:source` chooses a label and the selected workflow
-receives the original input. When `:to` is present, the second workflow receives
-the source result text unless `:prompt` is provided.
+When `:routes` is present, `:source` replies with EDN `{:route :label}` and the
+selected workflow receives the original input. Route matching is exact. When
+`:to` is present, the second workflow receives the source result text unless
+`:prompt` is provided.
 
 ## Result
 
@@ -108,7 +129,8 @@ Composite nodes add more fields:
 | Node | Extra fields |
 | --- | --- |
 | `pipe` | last child result fields. |
-| `map` branches | `:results`, `:reduced`, `:text`. |
-| `map` planner/worker | `:subtasks`, `:results`, `:reduced`, `:text`. |
+| `map` branches | `:results`, `:text`. |
+| `map` planner/worker | `:subtasks`, `:results`, `:text`. |
+| `reduce` | `:mapped`, `:reduced`, reducer `:text`. |
 | `iterate` | `:rounds`, `:accepted?`. |
 | `bind` routes | selected child result fields, or `:error :no-route`. |

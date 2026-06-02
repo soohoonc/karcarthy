@@ -57,10 +57,10 @@
     :responsibilities ["Read the user's request and choose exactly one route label."
                        "Use launch for planned releases, rollout reviews, beta exits, or go/no-go prep."
                        "Use incident for outages, regressions, active customer impact, or urgent mitigation."]
-    :output "Return exactly one lowercase word: launch or incident."
+    :output "Reply with EDN only: {:route :launch} or {:route :incident}."
     :tone "Invisible routing agent. Do not explain unless the route is ambiguous."
     :boundaries ["Do not solve the task. Only classify it."]
-    :self-check ["The final text is only launch or incident."]}))
+    :self-check ["The final text is exactly one EDN route map."]}))
 
 (def product-reviewer
   (configured-agent
@@ -145,10 +145,10 @@
     :context launch-context
     :responsibilities ["Accept only if the draft has decision, risks, owner/action clarity, and no invented facts."
                        "Otherwise provide specific feedback that the writer can apply in one revision."]
-    :output "Return ACCEPT if ready. Otherwise return concise actionable feedback."
+    :output "Reply with EDN only: {:accept? true} if ready, or {:accept? false :feedback \"specific feedback\"}."
     :tone "Strict, brief, and useful."
     :boundaries ["Do not rewrite the brief yourself."]
-    :self-check ["The answer is either ACCEPT or concrete revision feedback."]}))
+    :self-check ["The answer is exactly one EDN verdict map."]}))
 
 (def incident-responder
   (configured-agent
@@ -166,17 +166,8 @@
 (def reviewers
   [product-reviewer engineering-reviewer security-reviewer support-reviewer])
 
-(defn combine-review-notes
-  ([results] (combine-review-notes results nil))
-  ([results _input]
-   (k/result
-    {:text (str "Review packet:\n"
-                (str/join "\n" (map #(str "- " (:text %)) results)))})))
-
 (def review-packet
-  (k/reduce combine-review-notes
-            (k/map reviewers)
-            :max-concurrency 4))
+  (k/map reviewers :max-concurrency 4))
 
 (def launch-brief
   (k/iterate
@@ -186,8 +177,8 @@
 
 (def workflow
   (k/bind classifier
-          {"launch" launch-brief
-           "incident" incident-responder}
+          {:launch launch-brief
+           :incident incident-responder}
           :default launch-brief))
 
 (def adapter
@@ -195,8 +186,8 @@
    (fn [{:keys [agent prompt]}]
      (case (:name agent)
        "classifier" (if (str/includes? (str/lower-case prompt) "incident")
-                      "incident"
-                      "launch")
+                      "{:route :incident}"
+                      "{:route :launch}")
        "product-reviewer" (str/join "\n" ["Product signal: enterprise admins need SSO before broad rollout."
                                            "Product risk: beta evidence covers admins, not end users."
                                            "Product recommendation: launch to enterprise beta cohort first."])
@@ -214,7 +205,7 @@
                                       "Top risks: SSO latency, unverified audit logs, and missing rollback messaging."
                                       "Required owners: engineering for latency monitoring, security for audit-log signoff, support for FAQ and escalation macro."
                                       "Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout."])
-       "critic" "ACCEPT"
+       "critic" "{:accept? true}"
        "incident-responder" "Stabilize: pause rollout. Communicate: notify affected customers. Assign: name incident lead. Review: document root cause."
        (str "[" (:name agent) "] " prompt)))))
 

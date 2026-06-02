@@ -10,6 +10,7 @@
     {\"type\":\"pipe\" \"steps\":[<workflow> ...]}
     {\"type\":\"map\" \"branches\":[<workflow> ...]}
     {\"type\":\"map\" \"planner\":<workflow> \"worker\":<workflow>}
+    {\"type\":\"reduce\" \"mapped\":<map-workflow> \"reducer\":<workflow>}
     {\"type\":\"bind\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
     {\"type\":\"bind\" \"source\":<workflow> \"to\":<workflow>}
     {\"type\":\"iterate\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
@@ -72,6 +73,8 @@
                       (o/map (map json->workflow (g "branches")))
                       (o/map (json->workflow (g "planner"))
                              (json->workflow (g "worker"))))
+      "reduce"      (o/reduce (json->workflow (g "mapped"))
+                               (json->workflow (g "reducer")))
       "bind"        (if (contains? m "routes")
                       (o/bind (json->workflow (g "source"))
                               (json->routes (g "routes"))

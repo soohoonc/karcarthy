@@ -14,8 +14,7 @@
 ;;   * a neutral :dir                 - avoids picking up the project's CLAUDE.md.
 
 (require '[karcarthy :as k]
-         '[karcarthy.orchestrate :as o]
-         '[clojure.string :as str])
+         '[karcarthy.orchestrate :as o])
 
 (.mkdirs (java.io.File. "/tmp/karc"))
 
@@ -32,24 +31,26 @@
 
 (def planner
   (k/agent "planner"
-           "Output ONLY two lines, each a short subtopic (a noun phrase) for the question. No numbering, no preamble, no blank lines."))
+           "Reply with EDN only: {:subtasks [\"subtopic one\" \"subtopic two\"]}. Use exactly two short noun-phrase subtasks."))
 
 (def writer
   (k/agent "writer"
            "Write ONE concise sentence about the given subtopic. Output only the sentence."))
 
+(def reducer
+  (k/agent "reducer"
+           "You receive EDN with :input, :subtasks, and :results. Write a concise bullet list using only the :text from successful results."))
+
 (def research
-  (o/map planner writer
-         :reduce (fn [results _input]
-                   (k/result {:text (str/join "\n" (map #(str "- " (:text %)) results))}))))
+  (o/reduce (o/map planner writer) reducer))
 
 (let [r (o/run adapter research
                "Why is homoiconicity useful for agent orchestration?")]
-  (println "SUBTASKS:" (pr-str (:subtasks r)))
+  (println "SUBTASKS:" (pr-str (get-in r [:mapped :subtasks])))
   (println "OK?      " (k/ok? r))
   (println "RESULT:")
   (println (:text r))
-  (doseq [w (:results r)]
+  (doseq [w (get-in r [:mapped :results])]
     (println (format "  [worker] ok=%s turns=%s cost=$%.4f"
                      (k/ok? w) (:num-turns w) (or (:cost-usd w) 0.0)))))
 

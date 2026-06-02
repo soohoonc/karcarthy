@@ -148,13 +148,26 @@ Planner/worker shape:
 ```json
 {
   "type": "map",
-  "planner": { "type": "agent", "name": "planner", "instructions": "List subtasks." },
+  "planner": { "type": "agent", "name": "planner", "instructions": "Reply with EDN: {:subtasks [\"...\"]}." },
   "worker": { "type": "agent", "name": "worker", "instructions": "Handle one subtask." }
 }
 ```
 
-JSON cannot safely transmit host functions. To synthesize mapped output from a
-non-JVM language, put a synthesizer agent after `map` in a `pipe`.
+### reduce
+
+```json
+{
+  "type": "reduce",
+  "mapped": {
+    "type": "map",
+    "branches": [
+      { "type": "agent", "name": "api", "instructions": "Review API." },
+      { "type": "agent", "name": "docs", "instructions": "Review docs." }
+    ]
+  },
+  "reducer": { "type": "agent", "name": "writer", "instructions": "Synthesize the EDN result summary." }
+}
+```
 
 ### iterate
 
@@ -162,7 +175,7 @@ non-JVM language, put a synthesizer agent after `map` in a `pipe`.
 {
   "type": "iterate",
   "worker": { "type": "agent", "name": "writer", "instructions": "Draft." },
-  "evaluator": { "type": "agent", "name": "critic", "instructions": "Reply ACCEPT or feedback." },
+  "evaluator": { "type": "agent", "name": "critic", "instructions": "Reply with EDN: {:accept? true} or {:accept? false :feedback \"...\"}." },
   "max-rounds": 3
 }
 ```
@@ -182,6 +195,9 @@ Choice map:
   "default": { "type": "agent", "name": "fallback", "instructions": "Handle fallback." }
 }
 ```
+
+The classifier result text should be EDN such as `{:route "launch"}` because
+JSON route labels are strings.
 
 Continuation:
 

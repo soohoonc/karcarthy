@@ -76,10 +76,10 @@ classifier = configured_agent(
             "Use launch for planned releases, rollout reviews, beta exits, or go/no-go prep.",
             "Use incident for outages, regressions, active customer impact, or urgent mitigation.",
         ],
-        "output": "Return exactly one lowercase word: launch or incident.",
+        "output": 'Reply with EDN only: {:route "launch"} or {:route "incident"}.',
         "tone": "Invisible routing agent. Do not explain unless the route is ambiguous.",
         "boundaries": ["Do not solve the task. Only classify it."],
-        "self_check": ["The final text is only launch or incident."],
+        "self_check": ["The final text is exactly one EDN route map."],
     }
 )
 
@@ -190,10 +190,10 @@ critic = configured_agent(
             "Accept only if the draft has decision, risks, owner/action clarity, and no invented facts.",
             "Otherwise provide specific feedback that the writer can apply in one revision.",
         ],
-        "output": "Return ACCEPT if ready. Otherwise return concise actionable feedback.",
+        "output": 'Reply with EDN only: {:accept? true} if ready, or {:accept? false :feedback "specific feedback"}.',
         "tone": "Strict, brief, and useful.",
         "boundaries": ["Do not rewrite the brief yourself."],
-        "self_check": ["The answer is either ACCEPT or concrete revision feedback."],
+        "self_check": ["The answer is exactly one EDN verdict map."],
     }
 )
 
@@ -234,7 +234,7 @@ workflow = {
 }
 
 mock_responses = {
-    "classifier": "launch",
+    "classifier": '{:route "launch"}',
     "product-reviewer": "\n".join(
         [
             "Product signal: enterprise admins need SSO before broad rollout.",
@@ -272,7 +272,7 @@ mock_responses = {
             "Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.",
         ]
     ),
-    "critic": "ACCEPT",
+    "critic": "{:accept? true}",
     "incident-responder": "Stabilize: pause rollout. Communicate: notify affected customers. Assign: name incident lead. Review: document root cause.",
 }
 
