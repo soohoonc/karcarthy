@@ -1,4 +1,4 @@
-(ns karcarthy.harness.claude
+(ns karcarthy.adapter.claude
   "Adapter that drives the Claude CLI in
   headless (`-p`) mode. Each agent run is one `claude -p` invocation:
 
@@ -163,30 +163,14 @@
     (run-streaming agent prompt opts)
     (run-buffered agent prompt opts)))
 
-(defn claude-runner
-  "Legacy alias implementation for the Claude CLI adapter. `default-opts` are merged
+(defn claude-cli
+  "Adapter for live execution through the Claude CLI. `default-opts` are merged
   beneath per-run opts (per-run wins). See `claude-command` for command-building
   option keys; additionally `:dir` sets the agent's working directory,
   `:timeout-ms` force-kills a hung run, and `:on-event` (a fn of each stream
-  event) streams via --output-format stream-json.
-
-    (require '[karcarthy.core :as k]
-             '[karcarthy.harness.claude :as cc])
-    (k/run-agent (cc/claude-cli {:max-turns 4})
-                 (k/agent \"haiku\" \"Be terse.\" :model \"haiku\")
-                 \"Say hi\")"
-  ([] (claude-runner {}))
+  event) streams via --output-format stream-json."
+  ([] (claude-cli {}))
   ([default-opts]
-   (reify k/Runner
+   (reify k/Adapter
      (-run [_ agent prompt opts]
        (run-claude agent prompt (merge default-opts opts))))))
-
-(defn claude-cli
-  "Adapter for live execution through the Claude CLI."
-  ([] (claude-runner))
-  ([default-opts] (claude-runner default-opts)))
-
-(defn claude-harness
-  "Deprecated alias for `claude-cli`."
-  ([] (claude-cli))
-  ([default-opts] (claude-cli default-opts)))

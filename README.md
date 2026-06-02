@@ -54,25 +54,21 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
 
 - **Agent SDK/CLI adapters** behind one protocol: `mock`, `claude-cli`
   (streaming + sessions), `command` (wrap any CLI, coding agent, or local
-  model), `openai`. Pass one adapter, or pass a registry and let each agent
-  choose with `:adapter`.
+  model), `openai`. Pass one adapter, or pass a map and let each agent choose
+  with `:adapter`.
 - **Workflows as data**: compose agents with `pipe`, `map`, `reduce`,
-  `iterate`, and `bind`.
-- **Popular orchestrator shapes as data**: `karcarthy.patterns` emulates
-  LangGraph-style state graphs, CrewAI-style crews, AutoGen-style round-robin
-  group chats, OpenAI-style specialist routing, and ADK-style workflow agents.
+  `iterate`, and `bind`; inspect and rewrite those workflow values before
+  running them.
+- **Structural rewrites**: stamp config onto every agent without changing the
+  original workflow:
+  ```clojure
+  (->> workflow
+       (k/config {:adapter :claude
+                  :model "claude-sonnet-4"
+                  :instructions/suffix "State assumptions before final answer."}))
+  ```
 - **Agents speak karcarthy**: advanced self-modifying flows parse EDN via
   `clojure.edn`, never `eval`.
-- **OpenTelemetry-ready**: wrap an adapter with `karcarthy.otel/instrument` to
-  emit spans for workflow nodes, embedded functions, and agent calls.
-
-```clojure
-(require '[karcarthy.otel :as otel])
-
-(k/run (otel/instrument (k/mock-adapter))
-       (k/pipe researcher summarizer)
-       "what is a monad?")
-```
 
 ## More
 
@@ -82,19 +78,17 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
 - Fumadocs-powered web docs for Vercel hosting:
   [`docs-site/`](docs-site/) and
   [`karcarthy-docs.vercel.app/docs`](https://karcarthy-docs.vercel.app/docs).
-- Runnable offline emulations of common orchestrator patterns:
-  [`examples/clojure/mappings.clj`](examples/clojure/mappings.clj).
 - How it compares to PydanticAI, DSPy, Agno, and the Vercel AI SDK:
   [`COMPARISON.md`](COMPARISON.md).
-- What is missing for a production-ready default runtime:
+- What is missing for a sharper core:
   [`ROADMAP.md`](ROADMAP.md).
-- Proposed runtime vocabulary and protocol references:
+- Protocol references behind the adapter/runtime boundary:
   [`docs/`](docs/).
 - `clojure -M:test` runs the offline tests; `clojure -M -m karcarthy.demo` runs a demo.
 - `clojure -T:build uber` builds `target/karcarthy-0.0.2-standalone.jar`;
   `./bin/karcarthy agent echo --instructions "Echo the input." hi` runs it as a CLI.
-- Pre-release (0.0.2). JDK 21+; depends on `org.clojure/clojure`,
-  `org.clojure/data.json`, and the OpenTelemetry Java API.
+- Pre-release (0.0.2). JDK 21+; depends on `org.clojure/clojure` and
+  `org.clojure/data.json`.
 
 ## License
 

@@ -41,7 +41,7 @@
 (deftest run-validates-agent
   (testing "run-agent throws on a malformed agent"
     (is (thrown? clojure.lang.ExceptionInfo
-                 (k/run-agent (k/mock-runner)
+                 (k/run-agent (k/mock-adapter)
                               {:karcarthy/type :agent}
                               "x")))))
 
@@ -78,12 +78,3 @@
 (deftest single-adapter
   (testing "passing one adapter directly works"
     (is (= "[e] hi" (:text (k/run-agent (k/mock-adapter) (k/agent "e" "i") "hi"))))))
-
-(deftest harness-compatibility
-  (testing "old Harness, :harness and mock-harness names still work"
-    (let [reg {:old (k/mock-harness (fn [{:keys [prompt]}] (str "old:" prompt)))}]
-      (is (= "old:hi" (:text (k/run-agent reg (k/agent "x" "i" :harness :old) "hi"))))
-      (is (= :old (:harness (k/agent "x" "i" :harness :old))))
-      (is (satisfies? k/Runner (reify k/Harness
-                                  (-run [_ agent prompt opts]
-                                    (k/run-agent (k/mock-runner) agent prompt opts))))))))

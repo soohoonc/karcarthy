@@ -1,20 +1,9 @@
 # karcarthy docs
 
-This directory captures the default runtime direction for karcarthy. The
-top-level project docs still describe what exists today; these docs describe how
-agents, workflows, and history become mutable runtime data.
+This directory keeps background references that informed the adapter boundary
+and workflow vocabulary. The product-facing docs live in `docs-site/`.
 
 ## Documents
 
-- [Agents](agents.md) defines the proposed state shape
-  and small operation set.
-- [Mappings](mappings.md) maps popular framework shapes to karcarthy workflow
-  data.
-- [References](references/) records the protocol and SDK sources behind the
+- [References](references/) records protocol and SDK prior art behind the
   vocabulary decisions.
-
-## Status
-
-This is design documentation plus the first implementation pass. The current
-code lives in `karcarthy.dynamic`, but the concept is intended to become the
-default runtime model rather than a separate mode.

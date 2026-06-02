@@ -1,10 +1,10 @@
-(ns karcarthy.harness.openai
+(ns karcarthy.adapter.openai
   "Adapter for the OpenAI Agents SDK
   (https://github.com/openai/openai-agents-python).
 
   The Agents SDK is Python, so this shells out to a small Python script
   (`resources/karcarthy/openai_runner.py`) that builds an `agents.Agent` and
-  calls `Runner.run_sync`. karcarthy sends a JSON request on stdin and reads a
+  calls the SDK runtime. karcarthy sends a JSON request on stdin and reads a
   JSON result on stdout, so the orchestration layer is identical whether a
   workflow runs over Claude or OpenAI - just swap the adapter.
 
@@ -17,7 +17,7 @@
             [karcarthy.proc :as proc]))
 
 (defn openai-request
-  "Pure: build the JSON request map sent to the Python runner. `opts` :model
+  "Pure: build the JSON request map sent to the Python bridge. `opts` :model
   overrides the agent's :model."
   [agent prompt opts]
   (cond-> {:name         (:name agent)
@@ -37,7 +37,7 @@
 
 ;; The bundled Python script is copied to a temp file once, so it works whether karcarthy
 ;; runs from source or from a jar (where the resource isn't a real file).
-(def ^:private runner-file
+(def ^:private bridge-file
   (delay
     (let [tmp (java.io.File/createTempFile "karcarthy_openai_runner" ".py")]
       (.deleteOnExit tmp)
@@ -55,14 +55,14 @@
     :timeout-ms  kill the subprocess if it runs longer than this (milliseconds)"
   ([] (openai-agents-sdk {}))
   ([default-opts]
-   (reify k/Runner
+   (reify k/Adapter
      (-run [_ agent prompt opts]
        (let [opts   (merge default-opts opts)
              python (get opts :python-bin "python3")
-             runner (or (:script opts) (:runner opts) @runner-file)
+             script (or (:script opts) @bridge-file)
              req    (json/write-str (openai-request agent prompt opts))
              {:keys [exit out err timed-out?]}
-             (proc/run [python runner] {:in         req
+             (proc/run [python script] {:in         req
                                         :dir        (:dir opts)
                                         :env        (:env opts)
                                         :timeout-ms (:timeout-ms opts)})]
@@ -86,13 +86,3 @@
                       :text  (or (not-empty err) out)
                       :error (str "adapter exited with status " exit)
                       :raw   {:exit exit :out out :err err}})))))))
-
-(defn openai-agents-runner
-  "Legacy alias for `openai-agents-sdk`."
-  ([] (openai-agents-sdk))
-  ([default-opts] (openai-agents-sdk default-opts)))
-
-(defn openai-agents-harness
-  "Deprecated alias for `openai-agents-sdk`."
-  ([] (openai-agents-sdk))
-  ([default-opts] (openai-agents-sdk default-opts)))

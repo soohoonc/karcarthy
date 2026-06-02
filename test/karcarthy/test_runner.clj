@@ -4,20 +4,16 @@
   (:require [clojure.test :as t]))
 
 (def test-namespaces
-  '[karcarthy-test
+ '[karcarthy-test
     karcarthy.core-test
     karcarthy.cli-test
     karcarthy.proc-test
-    karcarthy.harness.claude-test
-    karcarthy.harness.command-test
-    karcarthy.harness.openai-test
-    karcarthy.runner-test
+    karcarthy.adapter.claude-test
+    karcarthy.adapter.command-test
+    karcarthy.adapter.openai-test
     karcarthy.orchestrate-test
-    karcarthy.patterns-test
-    karcarthy.self-test
-    karcarthy.dynamic-test
-    karcarthy.session-test
-    karcarthy.otel-test])
+    karcarthy.rewrite-test
+    karcarthy.self-test])
 
 (defn -main [& _]
   (doseq [ns test-namespaces] (require ns))

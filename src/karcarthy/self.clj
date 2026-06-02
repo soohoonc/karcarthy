@@ -115,9 +115,9 @@
        "OR your final answer as plain text (no EDN).\n\nTASK:\n" input))
 
 (defmethod o/run-node :evolve
-  [runner {:keys [agent max-rounds] :or {max-rounds 5}} input opts]
+  [adapter {:keys [agent max-rounds] :or {max-rounds 5}} input opts]
   (loop [round 1, agent agent, patches []]
-    (let [r     (k/run-agent runner agent (evolve-prompt input) opts)
+    (let [r     (k/run-agent adapter agent (evolve-prompt input) opts)
           patch (parse-patch (:text r))]
       (cond
         ;; agent wants to change itself and has rounds left -> apply + retry
@@ -127,7 +127,7 @@
         ;; out of rounds but still patching -> apply once and force a final answer
         patch
         (let [final-agent (merge agent patch)
-              fr          (k/run-agent runner final-agent input opts)]
+              fr          (k/run-agent adapter final-agent input opts)]
           (k/result (assoc fr :agent (:name final-agent) :rounds round
                            :patches (conj patches patch) :evolved final-agent)))
 
@@ -135,41 +135,3 @@
         :else
         (k/result (assoc r :agent (:name agent) :rounds round
                          :patches patches :evolved agent))))))
-
-;; ---------------------------------------------------------------------------
-;; A runtime-editable registry of named agents
-;;
-;; `evolve` lets an agent edit *itself*; a registry lets a running workflow edit a
-;; *named, shared* agent so that later steps (referenced via `agent-ref`) pick up
-;; the new behavior at runtime.
-;; ---------------------------------------------------------------------------
-
-(defn registry
-  "A mutable store of named agents (an atom keyed by :name), built from `agents`."
-  [agents]
-  (atom (into {} (map (juxt :name identity)) agents)))
-
-(defn patch-agent!
-  "Merge `patch` into the registered agent `name`, returning the updated agent.
-  How a running workflow edits a shared agent's behavior at runtime."
-  [reg name patch]
-  (-> (swap! reg update name merge patch) (get name)))
-
-(defn put-agent!
-  "Register (or replace) `agent` in `reg`, keyed by its :name."
-  [reg agent]
-  (swap! reg assoc (:name agent) agent)
-  agent)
-
-(defn agent-ref
-  "A workflow node that resolves agent `name` from `reg` *at run time*, so edits
-  made with `patch-agent!`/`put-agent!` take effect on subsequent runs."
-  [reg name]
-  {:karcarthy/type :agent-ref :registry reg :name name})
-
-(defmethod o/run-node :agent-ref
-  [runner {:keys [registry name]} input opts]
-  (if-let [a (get @registry name)]
-    (k/run-agent runner a input opts)
-    (k/result {:ok? false :error :unknown-agent
-               :text (str "no agent named " (pr-str name) " in registry")})))

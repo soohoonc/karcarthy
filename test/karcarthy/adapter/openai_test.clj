@@ -1,10 +1,10 @@
-(ns karcarthy.harness.openai-test
+(ns karcarthy.adapter.openai-test
   (:require [clojure.test :refer [deftest is testing]]
             [karcarthy.core :as k]
-            [karcarthy.harness.openai :as oa]))
+            [karcarthy.adapter.openai :as oa]))
 
 (deftest request-builder
-  (testing "agent fields map into the runner request"
+  (testing "agent fields map into the adapter request"
     (is (= {:name "writer" :instructions "Write well." :input "hello" :model "gpt-4o-mini"}
            (oa/openai-request (k/agent "writer" "Write well." :model "gpt-4o-mini")
                               "hello" {}))))

@@ -1,7 +1,7 @@
-(ns karcarthy.harness.claude-test
+(ns karcarthy.adapter.claude-test
   (:require [clojure.test :refer [deftest is testing]]
             [karcarthy.core :as k]
-            [karcarthy.harness.claude :as cc]))
+            [karcarthy.adapter.claude :as cc]))
 
 (defn- after
   "The argv element immediately following `flag`, or nil if `flag` is absent."
@@ -117,16 +117,16 @@
 ;; deliberately does NOT assert the model's turn-by-turn behavior: whether a
 ;; trivial prompt resolves in one turn or wanders into tool use depends on the
 ;; ambient environment (available tools, any discovered CLAUDE.md), which is
-;; outside the runner's contract. The deterministic `parse-result` tests above
+  ;; outside the adapter's contract. The deterministic `parse-result` tests above
 ;; already cover both the success and error payload shapes.
 (deftest ^:live live-claude-roundtrip
   (when (System/getenv "KARCARTHY_LIVE")
-    (testing "a real claude -p call round-trips through the runner and parses"
+    (testing "a real claude -p call round-trips through the adapter and parses"
       (let [tmp (str (System/getProperty "java.io.tmpdir") "/karcarthy-live")
             _   (.mkdirs (java.io.File. tmp))
-            h   (cc/claude-runner {:system-prompt-mode :replace
-                                    :max-turns          6
-                                    :dir                tmp})
+            h   (cc/claude-cli {:system-prompt-mode :replace
+                                 :max-turns          6
+                                 :dir                tmp})
             r   (k/run-agent h
                              (k/agent "ponger"
                                       (str "You are an echo bot. Do not use any "

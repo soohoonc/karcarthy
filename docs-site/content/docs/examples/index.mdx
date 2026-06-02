@@ -14,6 +14,7 @@ launch-readiness tutorial when you want a realistic multi-agent workflow.
 | Run one CLI agent | `./bin/karcarthy agent echo --instructions "Echo the input." hi` | The standalone CLI works and returns text by default. |
 | Run a workflow file | `./bin/karcarthy run examples/workflows/echo.json hi` | Workflow data can live outside Clojure. |
 | Run the bundled Clojure demo | `clojure -M -m karcarthy.demo` | The library runs offline through the mock adapter. |
+| Rewrite workflow EDN | `clojure -M -e '(load-file "examples/clojure/rewrite.clj")'` | Clojure code can transform workflow data before execution. |
 
 Expected output for the first two commands:
 
@@ -34,27 +35,6 @@ security/support reviewers, synthesize their notes, and iterate with a critic.
 
 All three default to deterministic mock responses, so they run without model
 credentials. See [Tutorials](/docs/tutorials) for the walkthrough.
-
-## Port familiar orchestration patterns
-
-These examples show how common framework shapes compile into karcarthy's small
-workflow vocabulary:
-
-| Pattern | Clojure | Python | TypeScript |
-| --- | --- | --- | --- |
-| Specialist routing | `examples/clojure/openai/` | `examples/python/openai/` | `examples/typescript/openai/` |
-| Sequential crew | `examples/clojure/crewai/` | `examples/python/crewai/` | `examples/typescript/crewai/` |
-| Round-robin group chat | `examples/clojure/autogen/` | `examples/python/autogen/` | `examples/typescript/autogen/` |
-| State graph | `examples/clojure/langgraph/` | - | - |
-
-Run the mapping overview:
-
-```bash
-clojure -M -e '(load-file "examples/clojure/mappings.clj")'
-```
-
-Read [Port Patterns](/docs/examples/mappings) for concrete before/after
-examples.
 
 ## JVM language interop
 

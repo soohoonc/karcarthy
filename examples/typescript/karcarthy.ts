@@ -15,15 +15,15 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 function command(): Command {
   const override = process.env.KARCARTHY_BIN;
   if (override) {
-    return { file: override, args: [] };
+    return { file: override, args: ["json"] };
   }
 
   const launcher = resolve(repoRoot, "bin/karcarthy");
   if (existsSync(launcher)) {
-    return { file: launcher, args: [] };
+    return { file: launcher, args: ["json"] };
   }
 
-  return { file: "clojure", args: ["-M", "-m", "karcarthy.cli"] };
+  return { file: "clojure", args: ["-M", "-m", "karcarthy.cli", "json"] };
 }
 
 export function run(

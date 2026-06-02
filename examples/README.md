@@ -10,10 +10,8 @@ languages, to show the library is reachable from each.
 - `clojure/launch.clj` - the complete launch-readiness tutorial:
   classify, map reviewers, reduce their notes, write a brief, and iterate on
   critique.
-- `clojure/mappings.clj` - offline emulations of LangGraph,
-  CrewAI, AutoGen, OpenAI Agents SDK, and Google ADK-style orchestration shapes.
-- `clojure/openai/`, `clojure/crewai/`, `clojure/autogen/`, `clojure/langgraph/`
-  - tiny runnable orchestration-pattern examples, with one folder per pattern.
+- `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
+  adapter/model/instruction config, then run the rewritten value.
 - `clojure/live.clj` - a live map/reduce run (paid `claude -p`).
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
@@ -23,12 +21,8 @@ Non-JVM languages drive karcarthy through `bin/karcarthy`: send a workflow
 described as JSON on stdin, get the result as JSON. The workflow is data, so the
 language builds and can transform it before execution.
 
-The pattern examples also have executable-backed JSON versions:
-
 - `python/launch.py`
 - `typescript/launch.ts`
-- `python/openai/`, `python/crewai/`, `python/autogen/`
-- `typescript/openai/`, `typescript/crewai/`, `typescript/autogen/`
 
 ```bash
 python3 examples/python/demo.py            # offline (mock adapter)

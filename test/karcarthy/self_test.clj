@@ -25,17 +25,17 @@
 
 ;; --- read-workflow / read-agent --------------------------------------------
 
-(deftest read-workflow-agent
+(deftest read-agent-workflow
   (let [workflow (self/read-workflow "{:karcarthy/type :agent :name \"w\" :instructions \"do\"}")]
     (is (k/agent? workflow))
     (is (= "w" (:name workflow)))))
 
 (deftest read-workflow-nested-node
-  (let [workflow (self/read-workflow (str "{:karcarthy/type :chain :steps ["
+  (let [workflow (self/read-workflow (str "{:karcarthy/type :pipe :steps ["
                                           "{:karcarthy/type :agent :name \"a\" :instructions \"i\"} "
                                           "{:karcarthy/type :agent :name \"b\" :instructions \"i\"}]}"))]
     (is (o/workflow? workflow))
-    (is (= :chain (:karcarthy/type workflow)))))
+    (is (= :pipe (:karcarthy/type workflow)))))
 
 (deftest read-workflow-rejects-non-workflow
   (is (thrown? clojure.lang.ExceptionInfo (self/read-workflow "{:foo 1}"))))
@@ -43,14 +43,14 @@
 (deftest read-workflow-rejects-bad-nested-agent
   (testing "an invalid nested agent (blank name) is caught"
     (is (thrown? clojure.lang.ExceptionInfo
-                 (self/read-workflow (str "{:karcarthy/type :chain :steps ["
+                 (self/read-workflow (str "{:karcarthy/type :pipe :steps ["
                                           "{:karcarthy/type :agent :name \"\" :instructions \"i\"}]}"))))))
 
 ;; --- evolve: an agent edits its own definition at runtime ------------------
 
 (deftest evolve-self-modifies-then-answers
   (testing "the agent patches its own instructions, then answers with new behavior"
-    (let [h (k/mock-runner
+    (let [h (k/mock-adapter
              (fn [{:keys [agent]}]
                ;; until it has 'EVOLVED' instructions, it asks to patch itself
                (if (str/includes? (:instructions agent) "EVOLVED")
@@ -66,7 +66,7 @@
 (deftest evolve-stops-at-max-rounds
   (testing "an agent that always patches is capped, then forced to a final run"
     (let [calls (atom 0)
-          h (k/mock-runner
+          h (k/mock-adapter
              (fn [_]
                (swap! calls inc)
                ;; always returns a patch -> should hit max-rounds and force-finish
@@ -78,26 +78,8 @@
 
 (deftest evolve-no-change-passes-through
   (testing "if the agent answers immediately, no patches are applied"
-    (let [h (k/mock-runner (fn [_] "immediate answer"))
+    (let [h (k/mock-adapter (fn [_] "immediate answer"))
           r (o/run h (self/evolve (k/agent "a" "i")) "x")]
       (is (= "immediate answer" (:text r)))
       (is (= 1 (:rounds r)))
       (is (empty? (:patches r))))))
-
-;; --- registry: edit a named agent's behavior at runtime --------------------
-
-(deftest agent-ref-resolves-at-runtime
-  (testing "patching a registered agent changes what agent-ref runs next"
-    (let [reg (self/registry [(k/agent "writer" "version one")])
-          ;; this runner echoes the agent's *current* instructions
-          h   (k/mock-runner (fn [{:keys [agent]}] (:instructions agent)))
-          ref (self/agent-ref reg "writer")]
-      (is (= "version one" (:text (o/run h ref "x"))))
-      (self/patch-agent! reg "writer" {:instructions "version two"})
-      (is (= "version two" (:text (o/run h ref "x")))))))
-
-(deftest agent-ref-unknown
-  (let [reg (self/registry [])
-        r   (o/run (k/mock-runner) (self/agent-ref reg "missing") "x")]
-    (is (not (k/ok? r)))
-    (is (= :unknown-agent (:error r)))))

@@ -14,7 +14,7 @@ single-agent execution to systems that already run model calls and tools.
 | Agent loop | You already have an SDK, CLI, or command process that can run one agent. | You need a batteries-included agent runtime first. |
 | Workflow shape | You want the graph to be EDN/JSON data that can be stored, generated, diffed, and rewritten. | You want workflows only as Python/TypeScript objects. |
 | Tools | Tool execution belongs to Claude CLI, OpenAI Agents SDK, MCP config, or your command adapter. | You want karcarthy itself to define and host tool schemas. |
-| Multi-agent patterns | You want `pipe`, `map`, `reduce`, `iterate`, `bind`, or state graphs as portable values. | You want a mature framework-native graph runtime and UI. |
+| Multi-agent patterns | You want `pipe`, `map`, `reduce`, `iterate`, and `bind` as portable values. | You want a mature framework-native graph runtime and UI. |
 | Testing | You want deterministic offline orchestration tests with `mock-adapter`. | You need provider-level simulation of model/tool behavior. |
 
 ## Comparison
@@ -23,9 +23,6 @@ single-agent execution to systems that already run model calls and tools.
 | --- | --- | --- |
 | Claude CLI / Claude Agent SDK | Running single agents with tools, MCP, sessions, and CLI ergonomics. | Use as an adapter. |
 | OpenAI Agents SDK | Agent loop, handoffs, tools, tracing, and structured SDK runtime. | Use as an adapter or mirror routing with `bind`. |
-| LangGraph | Durable state graphs with nodes, edges, and transitions. | Port finite graph shapes with `state-graph` when you need data-first representation. |
-| CrewAI | Role/task/crew abstractions for collaborative agent work. | Port task crews with `crew`, which compiles to `pipe` or `map`. |
-| AutoGen | Multi-agent chat and speaker selection. | Port deterministic round-robin chats with `group-chat`; use `bind` for dynamic speaker choice. |
 | DSPy | Signatures, metrics, and prompt/program optimization. | Complementary; karcarthy does not optimize prompts today. |
 
 ## Design choice
@@ -43,5 +40,4 @@ OpenAI Agents SDK bridge, or through a command process.
 ## Related guides
 
 - [Use Adapters](/docs/adapters) for execution boundaries and tool allowlists.
-- [Port Patterns](/docs/examples/mappings) for concrete framework-pattern mappings.
 - [Clojure API](/docs/reference/api) for exact signatures.

@@ -14,7 +14,7 @@ Use the facade namespace for normal application code:
 ### `agent`
 
 ```clojure
-(k/agent name instructions & {:keys [model tools handoffs adapter]})
+(k/agent name instructions & {:keys [model tools adapter]})
 ```
 
 Builds an agent map.
@@ -165,6 +165,56 @@ With two workflows, the continuation receives the source result text.
 
 Use these when storing or publishing workflows from application code.
 
+## Rewrites
+
+Workflow rewrites operate on EDN before execution. They never call adapters and
+never use `eval`.
+
+### `agents`
+
+```clojure
+(k/agents workflow)
+```
+
+Returns the agent leaves in traversal order.
+
+### `over`
+
+```clojure
+(k/over pred f workflow)
+```
+
+Applies `f` to every value in `workflow` where `pred` returns true, then
+validates the rewritten workflow.
+
+```clojure
+(k/over k/agent?
+        #(update % :instructions str "\n\nState assumptions before final answer.")
+        workflow)
+```
+
+### `config`
+
+```clojure
+(k/config opts workflow)
+```
+
+Applies common agent configuration in one pass. Supported keys:
+
+| Key | Meaning |
+| --- | --- |
+| `:adapter` | Adapter registry key. |
+| `:model` | Model selector string. |
+| `:instructions/suffix` | Text appended to every agent instruction. |
+
+```clojure
+(def production-workflow
+  (->> workflow
+       (k/config {:adapter :claude
+                  :model "claude-sonnet-4"
+                  :instructions/suffix "State assumptions before final answer."})))
+```
+
 ## Execution
 
 ### `run`
@@ -279,21 +329,6 @@ Delegates single-agent calls to the OpenAI Agents SDK bridge.
        "ship the docs")
 ```
 
-## Pattern helpers
-
-These helpers accept familiar framework-shaped data and compile it back to
-ordinary workflow data.
-
-| API | Signature | Compiles to |
-| --- | --- | --- |
-| `task-agent` | `(k/task-agent task)` or `(k/task-agent agent description & opts)` | agent |
-| `crew` | `(k/crew tasks & opts)` | `pipe`, `map`, or planner/worker `map` |
-| `group-chat` | `(k/group-chat agents & {:keys [rounds speaker-selection]})` | `pipe` |
-| `workflow-agent` | `(k/workflow-agent kind children & opts)` | `pipe`, `map`, or `iterate` |
-| `state-graph` | `(k/state-graph spec)` | finite state graph workflow |
-
-Use [Port Patterns](/docs/examples/mappings) for examples.
-
 ## Parsing generated data
 
 ```clojure
@@ -323,14 +358,4 @@ Use [Port Patterns](/docs/examples/mappings) for examples.
 ```
 
 Composite workflows may add `:results`, `:subtasks`, `:rounds`, `:accepted?`,
-`:label`, `:state`, or `:path`.
-
-## Telemetry
-
-```clojure
-(karcarthy.otel/instrument adapter)
-```
-
-Wraps an adapter to emit OpenTelemetry spans for workflow nodes, agent calls,
-embedded functions, child paths, success/failure state, and limited text
-previews.
+or `:label`.

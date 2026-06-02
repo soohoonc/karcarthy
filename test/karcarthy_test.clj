@@ -20,6 +20,21 @@
     (kc/defworkflow facade-workflow (kc/pipe facade-agent))
     (is (kc/workflow? facade-workflow))))
 
+(deftest facade-reexports-rewrites
+  (testing "workflow rewrites are reachable under the facade"
+    (let [workflow  (kc/pipe (kc/agent "a" "i") (kc/agent "b" "j"))
+          rewritten (kc/config {:adapter :mock :model "m"} workflow)]
+      (is (kc/workflow? rewritten))
+      (is (= ["a" "b"] (map :name (kc/agents rewritten))))
+      (is (= [:mock :mock] (map :adapter (kc/agents rewritten))))
+      (is (= ["m" "m"] (map :model (kc/agents rewritten))))
+      (is (= ["x" "x"]
+             (map :instructions
+                  (kc/agents
+                   (kc/over kc/agent?
+                            (fn [agent] (assoc agent :instructions "x"))
+                            workflow))))))))
+
 (deftest facade-reexports-values
   (is (string? kc/dsl-reference))
   (is (string? (kc/explain-agent {:karcarthy/type :agent})))
@@ -28,14 +43,7 @@
 (deftest facade-hides-low-level-execution-apis
   (testing "normal users get one execution entrypoint: run"
     (is (nil? (ns-resolve 'karcarthy 'run-agent)))
-    (is (nil? (ns-resolve 'karcarthy 'converse)))
-    (is (nil? (ns-resolve 'karcarthy 'dynamic-runtime)))
-    (is (nil? (ns-resolve 'karcarthy 'dynamic-agent-ref)))
-    (is (nil? (ns-resolve 'karcarthy 'dynamic-workflow-ref)))
-    (is (nil? (ns-resolve 'karcarthy 'workflow-config?)))
-    (is (nil? (ns-resolve 'karcarthy 'materialize)))
-    (is (nil? (ns-resolve 'karcarthy 'read-operation)))
-    (is (nil? (ns-resolve 'karcarthy 'apply-operation)))
+    (is (nil? (ns-resolve 'karcarthy 'Adapter)))
+    (is (nil? (ns-resolve 'karcarthy 'resolve-adapter)))
     (is (nil? (ns-resolve 'karcarthy 'evolve)))
-    (is (nil? (ns-resolve 'karcarthy 'registry)))
-    (is (nil? (ns-resolve 'karcarthy 'agent-ref)))))
+    (is (nil? (ns-resolve 'karcarthy '-run)))))

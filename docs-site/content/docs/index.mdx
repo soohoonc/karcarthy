@@ -35,7 +35,17 @@ the workflow is a value you can inspect, diff, store, generate, and rewrite:
 ```
 
 That value can live as EDN, cross a JSON boundary, or be produced by an agent
-and parsed without `eval`.
+and parsed without `eval`. Clojure code can also rewrite it before execution:
+
+```clojure
+(->> workflow
+     (k/config {:adapter :claude
+                :model "claude-sonnet-4"
+                :instructions/suffix "State assumptions before final answer."}))
+```
+
+The adapter still owns model calls and tools. karcarthy owns the visible
+coordination value and the small interpreter for that value.
 
 ## What you can build
 
@@ -45,7 +55,6 @@ and parsed without `eval`.
 | Understand how data moves through `pipe`, `map`, `reduce`, `iterate`, and `bind` | [Build Workflows](/docs/workflows) |
 | Swap mock execution for Claude CLI, OpenAI Agents SDK, or a command process | [Use Adapters](/docs/adapters) |
 | Build a realistic launch-readiness workflow | [Tutorials](/docs/tutorials) |
-| Port familiar LangGraph/CrewAI/AutoGen-style patterns | [Examples](/docs/examples) |
 | Look up signatures and JSON shapes | [Reference](/docs/reference) |
 
 ## Core surfaces
@@ -54,15 +63,15 @@ and parsed without `eval`.
 | --- | --- |
 | Agents | Plain maps tagged with `:karcarthy/type :agent`. |
 | Workflows | `pipe`, `map`, `reduce`, `iterate`, and `bind`. |
+| Rewrites | `agents`, `over`, and `config`. |
 | Adapters | Mock, Claude CLI, command processes, and OpenAI Agents SDK bridge. |
 | CLI | `bin/karcarthy agent`, `run`, `demo`, and `json`. |
-| Observability | OpenTelemetry spans through `karcarthy.otel/instrument`. |
 
 ## Current status
 
 karcarthy is early and not yet published as a stable release. The docs treat
-the small public vocabulary as the product surface and keep compatibility names
-and implementation internals out of the main path.
+the small public vocabulary as the product surface and keep implementation
+internals out of the main path.
 
 <Cards>
   <Card title="Quickstart" href="/docs/start" />

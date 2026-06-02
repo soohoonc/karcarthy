@@ -108,8 +108,7 @@ Composite nodes add more fields:
 | Node | Extra fields |
 | --- | --- |
 | `pipe` | last child result fields. |
-| `map` branches | `:results`, `:gathered`, `:text`. |
-| `map` planner/worker | `:subtasks`, `:results`, `:gathered`, `:text`. |
+| `map` branches | `:results`, `:reduced`, `:text`. |
+| `map` planner/worker | `:subtasks`, `:results`, `:reduced`, `:text`. |
 | `iterate` | `:rounds`, `:accepted?`. |
 | `bind` routes | selected child result fields, or `:error :no-route`. |
-| `state-graph` | `:state`, `:path`, `:results`. |

@@ -166,14 +166,24 @@ In continuation form, the second workflow receives the source result text.
 
 ## Transform before running
 
-Because workflows are data, application code can inspect and rewrite them:
+Because workflows are data, application code can inspect and rewrite them
+before `run` interprets them:
 
 ```clojure
-(let [workflow (-> (k/pipe researcher summarizer)
-                   (update :steps conj reviewer))]
-  (k/run (k/mock-adapter) workflow "summarize the prior work"))
+(def production-workflow
+  (->> (k/pipe researcher summarizer)
+       (k/config {:adapter :claude
+                  :model "claude-sonnet-4"
+                  :instructions/suffix "State assumptions before final answer."})))
+
+(map #(select-keys % [:name :adapter :model])
+     (k/agents production-workflow))
+;=> ({:name "researcher", :adapter :claude, :model "claude-sonnet-4"}
+;    {:name "summarizer", :adapter :claude, :model "claude-sonnet-4"})
+
+(k/run adapter production-workflow "summarize the prior work")
 ```
 
 That is the point of karcarthy: keep the coordination graph visible and
 serializable while adapters own model calls, tools, and provider-specific agent
-loops.
+loops. It is EDN plus an explicit interpreter, not raw `eval`.

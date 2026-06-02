@@ -11,11 +11,11 @@
   (:refer-clojure :exclude [agent iterate map reduce])
   (:require [karcarthy.core]
             [karcarthy.orchestrate]
-            [karcarthy.patterns]
+            [karcarthy.rewrite]
             [karcarthy.self]
-            [karcarthy.runner.claude]
-            [karcarthy.runner.command]
-            [karcarthy.runner.openai]))
+            [karcarthy.adapter.claude]
+            [karcarthy.adapter.command]
+            [karcarthy.adapter.openai]))
 
 (defmacro ^:private export
   "Re-export the var named by the fully-qualified symbol `qsym` into this
@@ -40,8 +40,6 @@
 (export karcarthy.core/agent?)
 (export karcarthy.core/explain-agent)
 (export karcarthy.core/defagent)
-(export karcarthy.core/Adapter)
-(export karcarthy.core/resolve-adapter)
 (export karcarthy.core/mock-adapter)
 (export karcarthy.core/result)
 (export karcarthy.core/ok?)
@@ -56,12 +54,10 @@
 (export karcarthy.orchestrate/workflow?)
 (export karcarthy.orchestrate/defworkflow)
 
-;; common orchestrator pattern helpers
-(export karcarthy.patterns/task-agent)
-(export karcarthy.patterns/crew)
-(export karcarthy.patterns/group-chat)
-(export karcarthy.patterns/workflow-agent)
-(export karcarthy.patterns/state-graph)
+;; structural workflow rewrites
+(export karcarthy.rewrite/agents)
+(export karcarthy.rewrite/over)
+(export karcarthy.rewrite/config)
 
 ;; parsing generated agent/workflow data
 (export karcarthy.self/read-workflow)
@@ -69,6 +65,6 @@
 (export karcarthy.self/dsl-reference)
 
 ;; Agent SDK/CLI adapters
-(export karcarthy.runner.claude/claude-cli)
-(export karcarthy.runner.command/command-adapter)
-(export karcarthy.runner.openai/openai-agents-sdk)
+(export karcarthy.adapter.claude/claude-cli)
+(export karcarthy.adapter.command/command-adapter)
+(export karcarthy.adapter.openai/openai-agents-sdk)

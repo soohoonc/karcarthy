@@ -4,11 +4,10 @@
       clojure -M -m karcarthy.demo
 
   Shows the central idea - a karcarthy workflow is *data* - plus the DSL sugar
-  (`defagent` / `defworkflow`) and map/reduce over the
+  (`defagent` / `defworkflow`), structural rewrites, and map/reduce over the
   command adapter with real subprocesses. No API key or network required."
   (:require [clojure.pprint :as pp]
             [clojure.string :as str]
-            [clojure.walk :as walk]
             [karcarthy :as k]
             [karcarthy.orchestrate :as o]))
 
@@ -36,18 +35,14 @@
     "reviewer"  (str "Reviewed OK: " prompt)
     (str "[" (:name agent) "] " prompt)))
 
-(defn- agents-in [workflow]
-  (->> workflow (tree-seq coll? seq) (filter k/agent?)))
-
 (defn -main [& _]
   (println "\n=== A workflow is data (EDN) ===")
   (pp/pprint support-desk)
 
   (println "\n=== Transform the workflow as data: bump every agent to opus ===")
-  (let [opusified (walk/postwalk #(if (k/agent? %) (assoc % :model "opus") %)
-                                 support-desk)]
-    (println "before:" (mapv :model (agents-in support-desk)))
-    (println "after: " (mapv :model (agents-in opusified))))
+  (let [opusified (k/config {:model "opus"} support-desk)]
+    (println "before:" (mapv :model (k/agents support-desk)))
+    (println "after: " (mapv :model (k/agents opusified))))
 
   (println "\n=== Run the support desk on the offline mock adapter ===")
   (let [r (o/run (k/mock-adapter canned) support-desk

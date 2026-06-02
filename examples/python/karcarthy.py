@@ -14,13 +14,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def command() -> list[str]:
     override = os.environ.get("KARCARTHY_BIN")
     if override:
-        return [override]
+        return [override, "json"]
 
     launcher = REPO_ROOT / "bin" / "karcarthy"
     if launcher.exists():
-        return [str(launcher)]
+        return [str(launcher), "json"]
 
-    return ["clojure", "-M", "-m", "karcarthy.cli"]
+    return ["clojure", "-M", "-m", "karcarthy.cli", "json"]
 
 
 def run(

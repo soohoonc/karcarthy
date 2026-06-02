@@ -9,7 +9,6 @@
 //   npx tsx examples/typescript/demo.ts
 //   bun run examples/typescript/demo.ts
 //   ts-node examples/typescript/demo.ts
-// Add --live to also run the self-editing agent (real claude calls).
 
 import { run, type Workflow } from "./karcarthy";
 
@@ -22,18 +21,3 @@ const workflow: Workflow = {
   ],
 };
 console.log("pipe ->", run(workflow, "what is a monad?").text);
-
-// 2) An agent edits its own definition at runtime, across the command boundary (real model).
-if (process.argv.includes("--live")) {
-  const evolve: Workflow = {
-    type: "evolve",
-    agent: { type: "agent", name: "poet", instructions: "You are a mediocre poet." },
-    "max-rounds": 3,
-  };
-  const res = run(
-    evolve,
-    "Improve yourself into an expert, then write one line about Lisp.",
-    "claude",
-  );
-  console.log("evolve rounds:", res.rounds, "->", res.text);
-}

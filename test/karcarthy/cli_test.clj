@@ -26,34 +26,23 @@
       (is (= :bind (:karcarthy/type bound)))
       (is (contains? (:routes bound) "billing")))))
 
-(deftest json->workflow-agent-fields
+(deftest json->agent-workflow-fields
   (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
                                "model" "haiku" "adapter" "claude"})]
     (is (= "x" (:name a)))
     (is (= "haiku" (:model a)))
     (is (= :claude (:adapter a)))))
 
-(deftest json->workflow-accepts-old-harness-field
-  (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
-                               "harness" "claude"})]
-    (is (= :claude (:adapter a)))
-    (is (= :claude (:harness a)))))
-
-(deftest json->workflow-route-keeps-string-labels
+(deftest json->workflow-bind-keeps-string-labels
   (testing "route labels stay strings (not coerced to keywords)"
-    (let [workflow (cli/json->workflow {"type"   "route"
-                                        "router" {"type" "agent" "name" "r" "instructions" "i"}
+    (let [workflow (cli/json->workflow {"type"   "bind"
+                                        "source" {"type" "agent" "name" "r" "instructions" "i"}
                                         "routes" {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}})]
       (is (= :bind (:karcarthy/type workflow)))
       (is (contains? (:routes workflow) "billing")))))
 
 (deftest json->workflow-unknown-type
   (is (thrown? clojure.lang.ExceptionInfo (cli/json->workflow {"type" "nope"}))))
-
-(deftest json->flow-compatibility-alias
-  (let [workflow (cli/json->flow {"type" "agent" "name" "x" "instructions" "do"})]
-    (is (k/agent? workflow))
-    (is (= "x" (:name workflow)))))
 
 (deftest cli-main-uses-named-mock-responses
   (let [request {"workflow" {"type"  "pipe"
@@ -63,7 +52,7 @@
                  "mock-responses" {"a" "one"
                                    "b" "two"}}
         output  (with-in-str (json/write-str request)
-                  (with-out-str (cli/-main)))
+                  (with-out-str (cli/-main "json")))
         result  (json/read-str output)]
     (is (= true (get result "ok?")))
     (is (= "two" (get result "text")))))

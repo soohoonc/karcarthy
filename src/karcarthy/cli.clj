@@ -13,7 +13,6 @@
     {\"type\":\"bind\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
     {\"type\":\"bind\" \"source\":<workflow> \"to\":<workflow>}
     {\"type\":\"iterate\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
-    {\"type\":\"evolve\" \"agent\":<workflow> \"max-rounds\":?}
   Response is the karcarthy result map as JSON. \"adapter\" is \"mock\" (default,
   offline) or \"claude\". For deterministic offline demos, add
   \"mock-responses\": {\"agent-name\":\"text\"}."
@@ -22,8 +21,7 @@
             [clojure.string :as str]
             [karcarthy.core :as k]
             [karcarthy.orchestrate :as o]
-            [karcarthy.self :as self]
-            [karcarthy.runner.claude :as cc]))
+            [karcarthy.adapter.claude :as cc]))
 
 (declare json->workflow)
 
@@ -68,38 +66,21 @@
       "agent"       (k/agent (g "name") (g "instructions")
                              :model   (g "model")
                              :tools   (g "tools")
-                             :adapter (some-> (or (g "adapter") (g "runner") (g "harness")) keyword)
-                             :runner  (some-> (g "runner") keyword)
-                             :harness (some-> (g "harness") keyword))
+                             :adapter (some-> (g "adapter") keyword))
       "pipe"        (apply o/pipe (map json->workflow (g "steps")))
       "map"         (if (contains? m "branches")
                       (o/map (map json->workflow (g "branches")))
                       (o/map (json->workflow (g "planner"))
                              (json->workflow (g "worker"))))
       "bind"        (if (contains? m "routes")
-                      (o/bind (json->workflow (or (g "source") (g "router")))
+                      (o/bind (json->workflow (g "source"))
                               (json->routes (g "routes"))
                               :default (some-> (g "default") json->workflow))
-                      (o/bind (json->workflow (or (g "source") (g "from")))
+                      (o/bind (json->workflow (g "source"))
                               (json->workflow (g "to"))))
       "iterate"     (o/iterate (json->workflow (g "worker")) (json->workflow (g "evaluator"))
                                :max-rounds (or (g "max-rounds") 3))
-      "chain"       (apply o/chain (map json->workflow (g "steps")))
-      "parallel"    (apply o/parallel (map json->workflow (g "branches")))
-      "route"       (o/route (json->workflow (g "router"))
-                             (json->routes (g "routes"))
-                             :default (some-> (g "default") json->workflow))
-      "refine"      (o/refine (json->workflow (g "worker")) (json->workflow (g "evaluator"))
-                              :max-rounds (or (g "max-rounds") 3))
-      "orchestrate" (o/orchestrate (json->workflow (g "planner")) (json->workflow (g "worker")))
-      "handoff"     (o/handoff (json->workflow (g "from")) (json->workflow (g "to")))
-      "evolve"      (self/evolve (json->workflow (g "agent")) :max-rounds (or (g "max-rounds") 5))
       (throw (ex-info (str "unknown workflow type: " (pr-str (g "type"))) {:node m})))))
-
-(defn json->flow
-  "Deprecated alias for `json->workflow`."
-  [m]
-  (json->workflow m))
 
 (defn- mock-response-adapter [responses]
   (if (map? responses)
@@ -114,7 +95,7 @@
   "Build the adapter named in the request. \"claude\" uses lean sub-agent
   defaults (replace mode, tools off) so cross-language agents answer directly."
   [req]
-  (let [name (or (get req "adapter") (get req "runner") (get req "harness"))]
+  (let [name (get req "adapter")]
     (if (= name "claude")
       (cc/claude-cli {:system-prompt-mode :replace
                       :max-turns          4
@@ -147,7 +128,7 @@
       (result->json r)))
 
 (defn- run-request [req]
-  (let [workflow (json->workflow (or (get req "workflow") (get req "flow")))
+  (let [workflow (json->workflow (get req "workflow"))
         input    (get req "input" "")
         adapter  (adapter-for req)]
     (o/run adapter workflow input)))
@@ -233,7 +214,7 @@
 
 (defn- request-from-json [m opts input]
   (with-common-request-opts
-    (if (or (contains? m "workflow") (contains? m "flow"))
+    (if (contains? m "workflow")
       (assoc m "input" (or input (get m "input" "")))
       {"workflow" m
        "input"    (or input "")})
@@ -247,15 +228,6 @@
                        opts
                        (or (:input opts)
                            (some->> prompt seq (str/join " "))))))
-
-(defn- legacy-json-stdin []
-  (let [stdin (slurp *in*)]
-    (if (str/blank? stdin)
-      help-text
-      (try
-        (result->json (run-request (read-json stdin)))
-        (catch Throwable t
-          (result->json (error-result t)))))))
 
 (defn- json-stdin-output [opts]
   (let [json-opts (assoc opts :json? true)]
@@ -277,7 +249,7 @@
                                                                                  "instructions" "Echo the input."}
                                                                     "input"    "hi"})
                                                      opts)
-      (nil? cmd)                       (legacy-json-stdin)
+      (nil? cmd)                       help-text
       :else                            (throw (ex-info (str "unknown command: " cmd) {:command cmd})))))
 
 (defn -main [& args]

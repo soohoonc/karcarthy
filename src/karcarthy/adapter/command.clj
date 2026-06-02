@@ -1,4 +1,4 @@
-(ns karcarthy.harness.command
+(ns karcarthy.adapter.command
   "An adapter that runs an arbitrary external command as an agent: the agent's
   prompt is written to the process's stdin and its stdout becomes the result
   :text. Use it to wrap any CLI as an agent - a local model (`ollama run ...`),
@@ -26,7 +26,7 @@
   ([argv-or-fn] (command-adapter argv-or-fn {}))
   ([argv-or-fn {:keys [trim? env dir timeout-ms] :or {trim? true}}]
    (let [->argv (if (fn? argv-or-fn) argv-or-fn (constantly argv-or-fn))]
-     (reify k/Runner
+     (reify k/Adapter
        (-run [_ agent prompt _opts]
          (let [argv (->argv agent)
                {:keys [exit out err timed-out?]}
@@ -38,13 +38,3 @@
                                    (not= 0 exit) (str "command exited with status " exit))
                       :raw   {:exit exit :out out :err err
                               :timed-out? timed-out? :argv (vec argv)}})))))))
-
-(defn command-runner
-  "Legacy alias for `command-adapter`."
-  ([argv-or-fn] (command-adapter argv-or-fn))
-  ([argv-or-fn opts] (command-adapter argv-or-fn opts)))
-
-(defn command-harness
-  "Deprecated alias for `command-adapter`."
-  ([argv-or-fn] (command-adapter argv-or-fn))
-  ([argv-or-fn opts] (command-adapter argv-or-fn opts)))

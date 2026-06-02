@@ -17,7 +17,7 @@ runtime vocabulary.
   supersedes older session modes and exposes session-level selectors such as
   model, mode, and reasoning level.
 - [Session modes](https://agentclientprotocol.com/protocol/v1/session-modes) is the
-  older mode API; use it only as an adapter compatibility surface.
+  older mode API; it is useful historical context, not a karcarthy surface.
 
 Takeaways for karcarthy:
 
