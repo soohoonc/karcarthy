@@ -1,0 +1,82 @@
+---
+title: Runtime Vocabulary
+description: The default runtime model is agents, workflows, operations, and history as data.
+---
+
+There should not be a separate static-versus-dynamic split. The default runtime
+model is that execution state is data, and an agent can change that data while
+it runs.
+
+```text
+runtime -> agents + workflows + history -> next operation -> evolved runtime
+```
+
+Claude, Codex, OpenAI Agents SDK, local models, and command runners still own
+the inner agent loop. karcarthy owns the small mutable state layer around those
+runners.
+
+## State
+
+A running system needs three core registries:
+
+```clojure
+{:agents {"planner" {:karcarthy/type :agent
+                     :name "planner"
+                     :instructions "..."}}
+ :workflows {"main" {:karcarthy/type :chain
+                     :steps [{:karcarthy/type :agent-ref
+                              :name "planner"}]}}
+ :history [{:operation {...}
+            :result {...}}]}
+```
+
+Everything else stays where it belongs until there is concrete behavior for it:
+
+- tools live on agents or runners;
+- integrations live in runner options or MCP config;
+- context is input and history passed to the current call;
+- safety boundaries live in the host runtime.
+
+## Operations
+
+Keep the operation surface small.
+
+| Operation | Meaning |
+| --- | --- |
+| `:put` | Create or replace an agent or workflow. |
+| `:patch` | Merge changes into an existing agent or workflow. |
+| `:remove` | Remove an agent or workflow. |
+| `:call` | Invoke an agent or workflow. |
+| `:complete` | End the current top-level run. |
+
+```clojure
+{:op :put
+ :resource {:kind :agent
+            :id "critic"
+            :instructions "Find flaws in the current plan."}}
+
+{:op :patch
+ :kind :agent
+ :id "critic"
+ :merge {:instructions "Find flaws and propose one better plan."}}
+
+{:op :call
+ :target "critic"
+ :input "Review the current approach."}
+```
+
+## Production requirements
+
+Production readiness means the runtime can survive and explain itself:
+
+- append-only operation log;
+- state snapshots;
+- replay from the log;
+- fork from a prior operation;
+- crash recovery;
+- trace viewer over operations and calls;
+- resource accounting for model calls, latency, tokens, and cost;
+- schema normalization so the agent can edit state reliably.
+
+Do not add a new resource kind until the runtime needs to interpret it. The
+smallest useful surface is agents, workflows, calls, and history.

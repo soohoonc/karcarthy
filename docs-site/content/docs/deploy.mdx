@@ -1,0 +1,72 @@
+---
+title: Deploy the Docs
+description: Host the karcarthy Fumadocs site on Vercel from the docs-site directory.
+---
+
+The web documentation is a Next.js and Fumadocs app in `docs-site/`.
+
+Production URL:
+
+```text
+https://karcarthy-docs.vercel.app/docs
+```
+
+## Local development
+
+```bash
+cd docs-site
+npm ci
+npm run dev
+```
+
+Open `http://localhost:3000/docs`.
+
+## Local verification
+
+```bash
+cd docs-site
+npm run lint
+npm run types:check
+npm run build
+```
+
+The `types:check` script runs `fumadocs-mdx`, `next typegen`, and TypeScript.
+
+## Vercel project settings
+
+Set the Vercel project root directory to:
+
+```text
+docs-site
+```
+
+Then use the default commands:
+
+| Setting | Value |
+| --- | --- |
+| Framework preset | Next.js |
+| Install command | `npm ci` |
+| Build command | `npm run build` |
+| Output directory | `.next` |
+
+Preview deployments will be created for pull requests when the GitHub
+integration is enabled. Production deployments should track the repository's
+`main` branch.
+
+## CLI deployment
+
+From the repository root:
+
+```bash
+vercel --cwd docs-site
+vercel --cwd docs-site --prod
+```
+
+Vercel stores project linkage in `docs-site/.vercel/`, which is intentionally
+git-ignored.
+
+The current public alias is:
+
+```text
+karcarthy-docs.vercel.app
+```

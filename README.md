@@ -76,6 +76,9 @@ Swap `(k/mock-runner)` for `(k/claude-runner {})` to run it against `claude`.
 - Examples in Clojure, Java, Kotlin, Scala, Python, and TypeScript:
   [`examples/`](examples/). Non-JVM languages drive it over a JSON bridge
   (`karcarthy.cli`), since a workflow is just data.
+- Fumadocs-powered web docs for Vercel hosting:
+  [`docs-site/`](docs-site/) and
+  [`karcarthy-docs.vercel.app/docs`](https://karcarthy-docs.vercel.app/docs).
 - Runnable offline emulations of common orchestrator patterns:
   [`examples/clojure/orchestrator_emulations.clj`](examples/clojure/orchestrator_emulations.clj).
 - How it compares to PydanticAI, DSPy, Agno, and the Vercel AI SDK:

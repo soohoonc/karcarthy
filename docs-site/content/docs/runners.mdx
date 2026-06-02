@@ -1,0 +1,60 @@
+---
+title: Runners
+description: Delegate the inner model and tool loop while keeping orchestration portable.
+---
+
+A runner runs one agent to completion. karcarthy passes the runner a validated
+agent map, a prompt string, and options, then receives a result map.
+
+```clojure
+(defprotocol Runner
+  (-run [runner agent prompt opts]))
+```
+
+## Built-in runners
+
+| Runner | Use it for |
+| --- | --- |
+| `mock-runner` | Offline tests, examples, deterministic demos. |
+| `claude-runner` | Live execution through the Claude CLI. |
+| `command-runner` | Wrapping any CLI or local model process. |
+| `openai-agents-runner` | Delegating a single-agent loop to OpenAI Agents SDK. |
+
+## Runner registries
+
+Pass a runner directly when every agent should use the same backend:
+
+```clojure
+(k/run (k/mock-runner) workflow input)
+```
+
+Pass a registry when agents should choose by `:runner`:
+
+```clojure
+(def runners
+  {:default (k/mock-runner)
+   :claude  (k/claude-runner {})})
+
+(k/run runners
+       (k/chain
+         (k/agent "planner" "Plan." :runner :claude)
+         (k/agent "checker" "Check." :runner :default))
+       "ship a docs site")
+```
+
+## JSON bridge
+
+Non-JVM languages can send workflow data to `karcarthy.cli` over stdin and read
+JSON back. The Python and TypeScript examples use the same workflow vocabulary
+without importing Clojure directly.
+
+```bash
+python3 examples/python/demo.py
+npx tsx examples/typescript/demo.ts
+```
+
+## Harness compatibility
+
+Older code may still use harness-oriented names. New docs and new examples
+should use runner vocabulary. The compatibility layer exists to avoid breaking
+old local experiments, not to create a second public concept.

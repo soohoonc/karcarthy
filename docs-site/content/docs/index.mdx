@@ -1,0 +1,63 @@
+---
+title: Overview
+description: Homoiconic agent orchestration for Clojure.
+---
+
+karcarthy coordinates many AI agents while keeping agents, workflows, and
+runtime state as ordinary data. The inner model and tool loop still belongs to a
+runner such as Claude, OpenAI Agents SDK, a command-line model, or a local mock.
+karcarthy owns the data-first coordination layer above those runners.
+
+```clojure
+(require '[karcarthy :as k])
+
+(k/defagent researcher "Research the question and cite sources.")
+(k/defagent summarizer "Summarize the findings in one sentence.")
+
+(k/run (k/mock-runner)
+       (k/chain researcher summarizer)
+       "what is a monad?")
+```
+
+## Why data-first orchestration
+
+Most agent harnesses expose agents and workflows as host-language objects. In
+karcarthy, the plan is a value:
+
+```clojure
+{:karcarthy/type :chain
+ :steps [{:karcarthy/type :agent
+          :name "researcher"
+          :instructions "Research the question and cite sources."}
+         {:karcarthy/type :agent
+          :name "summarizer"
+          :instructions "Summarize the findings in one sentence."}]}
+```
+
+That shape can be printed, diffed, generated, rewritten with `clojure.walk`,
+stored as EDN, converted through JSON, or emitted by an agent and parsed without
+`eval`.
+
+## What karcarthy provides
+
+| Area | Surface |
+| --- | --- |
+| Agents | Plain maps tagged with `:karcarthy/type :agent`. |
+| Runners | `mock`, `claude-cli`, `command`, and OpenAI Agents SDK adapters behind one protocol. |
+| Workflows | `chain`, `parallel`, `route`, `refine`, `orchestrate`, `handoff`, and `converse`. |
+| Patterns | CrewAI, AutoGen, LangGraph, OpenAI handoff, and ADK-style helpers compiled to workflow data. |
+| Runtime state | Agents, workflows, operations, and history as mutable data. |
+| Observability | OpenTelemetry spans through `karcarthy.otel/instrument`. |
+
+## Current status
+
+karcarthy is early and not yet published as a stable release. Use it from git,
+expect the public vocabulary to stay small, and treat the runtime docs as the
+direction for the default model rather than a separate mode.
+
+<Cards>
+  <Card title="Getting Started" href="/docs/getting-started" />
+  <Card title="Workflows" href="/docs/workflows" />
+  <Card title="Runtime Vocabulary" href="/docs/runtime" />
+  <Card title="Examples" href="/docs/examples" />
+</Cards>
