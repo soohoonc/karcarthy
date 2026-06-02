@@ -5,7 +5,7 @@
   transform, and have an agent generate or edit) survives the boundary.
 
       echo '{\"workflow\": <workflow>, \"input\": \"...\", \"adapter\": \"mock\"}' \\
-        | clojure -M -m karcarthy.cli
+        | ./bin/karcarthy
 
   A <workflow> is JSON mirroring the EDN workflow:
     {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"adapter\":?}
@@ -19,6 +19,7 @@
   Response is the karcarthy result map as JSON. \"adapter\" is \"mock\" (default,
   offline) or \"claude\". For deterministic offline demos, add
   \"mock-responses\": {\"agent-name\":\"text\"}."
+  (:gen-class)
   (:require [clojure.data.json :as json]
             [karcarthy.core :as k]
             [karcarthy.orchestrate :as o]

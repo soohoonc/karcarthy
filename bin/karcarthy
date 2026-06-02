@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/.." && pwd)"
+
+if [[ -n "${KARCARTHY_JAR:-}" ]]; then
+  exec java -jar "$KARCARTHY_JAR" "$@"
+fi
+
+candidates=(
+  "$repo_root/target/karcarthy-0.0.2-standalone.jar"
+  "$script_dir/karcarthy-0.0.2-standalone.jar"
+  "$script_dir/../lib/karcarthy-0.0.2-standalone.jar"
+)
+
+for jar in "${candidates[@]}"; do
+  if [[ -f "$jar" ]]; then
+    exec java -jar "$jar" "$@"
+  fi
+done
+
+if [[ -f "$repo_root/deps.edn" && -d "$repo_root/src" ]] && command -v clojure >/dev/null 2>&1; then
+  cd "$repo_root"
+  exec clojure -M -m karcarthy.cli "$@"
+fi
+
+cat >&2 <<'EOF'
+karcarthy: no standalone jar found.
+
+Build one from the repository root:
+  clojure -T:build uber
+
+Or point the launcher at a downloaded jar:
+  KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar bin/karcarthy
+EOF
+exit 1

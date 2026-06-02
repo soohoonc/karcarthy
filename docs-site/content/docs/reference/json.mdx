@@ -3,12 +3,18 @@ title: JSON CLI
 description: JSON workflow shapes for Python, TypeScript, and other non-JVM languages.
 ---
 
-`karcarthy.cli` reads JSON on stdin and writes a result JSON object on stdout:
+`bin/karcarthy` reads JSON on stdin and writes a result JSON object on stdout:
 
 ```bash
+clojure -T:build uber
+
 echo '{"workflow":{"type":"agent","name":"echo","instructions":"Echo."},"input":"hi"}' \
-  | clojure -M -m karcarthy.cli
+  | ./bin/karcarthy
 ```
+
+During source checkout development, the launcher can run from source if the
+standalone jar is not built. For installed copies, set
+`KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`.
 
 Top-level request:
 

@@ -1,9 +1,9 @@
 ---
 title: Python
-description: Configure realistic agents in Python and run them through the JSON bridge.
+description: Configure realistic agents in Python and run them through karcarthy.
 ---
 
-Python uses `karcarthy.cli` as a JSON bridge. The workflow is a plain Python
+Python sends workflow JSON to `bin/karcarthy`. The workflow is a plain Python
 dictionary, but the agents are built from richer product-level profiles before
 they become JSON. The runnable file is `examples/python/launch.py`.
 
@@ -118,6 +118,6 @@ CLI.
 ## Why Python uses a synthesizer agent
 
 The Clojure guide passes a host function to `reduce`. JSON cannot transmit a
-Python function to Clojure safely. For cross-language workflows, put a
-synthesizer agent after `map` inside a `pipe`; the mapped outputs become that
-agent's prompt text.
+Python function safely. For cross-language workflows, put a synthesizer agent
+after `map` inside a `pipe`; the mapped outputs become that agent's prompt
+text.

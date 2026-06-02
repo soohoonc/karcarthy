@@ -35,8 +35,8 @@ jobs:
         with:
           cli: latest
 
-      - name: Build jar
-        run: clojure -T:build jar
+      - name: Build jars
+        run: clojure -T:build all
 
       - name: Determine release tag
         id: rel

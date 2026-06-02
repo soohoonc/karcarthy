@@ -75,6 +75,24 @@ Once the workflow behaves correctly offline, swap in a live agent system:
 
 The workflow data does not change. Only the adapter changes.
 
+## Run as a command
+
+Build the standalone runner:
+
+```bash
+clojure -T:build uber
+```
+
+Then send JSON workflow requests to the executable:
+
+```bash
+echo '{"workflow":{"type":"agent","name":"echo","instructions":"Echo."},"input":"hi"}' \
+  | ./bin/karcarthy
+```
+
+Python, TypeScript, and other non-JVM hosts use this command path. The command
+still runs the same workflow data and adapter protocol as the Clojure API.
+
 ## Run the local checks
 
 From the repository root:
@@ -82,6 +100,8 @@ From the repository root:
 ```bash
 clojure -M:test
 clojure -M -m karcarthy.demo
+clojure -T:build uber
+./bin/karcarthy < request.json
 ```
 
 The demos and tests default to offline adapters unless a file explicitly calls

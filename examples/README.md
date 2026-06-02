@@ -17,13 +17,13 @@ languages, to show the library is reachable from each.
 - `clojure/live.clj` - a live map/reduce run (paid `claude -p`).
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
-## Python and TypeScript (via the JSON bridge)
+## Python and TypeScript (via the executable)
 
-Non-JVM languages drive karcarthy through `karcarthy.cli`: send a workflow
+Non-JVM languages drive karcarthy through `bin/karcarthy`: send a workflow
 described as JSON on stdin, get the result as JSON. The workflow is data, so the
 language builds and can transform it before execution.
 
-The pattern examples also have JSON-bridge versions:
+The pattern examples also have executable-backed JSON versions:
 
 - `python/launch.py`
 - `typescript/launch.ts`
@@ -42,6 +42,17 @@ Both build workflows as plain dicts/objects and run them through the offline
 mock adapter. Tool names in the launch examples are adapter allowlists: they
 must already exist in the selected Agent SDK, CLI, or MCP configuration. The
 mock adapter ignores tools.
+
+Build the standalone runner once when you want the examples to avoid invoking
+the Clojure CLI:
+
+```bash
+clojure -T:build uber
+./bin/karcarthy < request.json
+```
+
+`bin/karcarthy` also honors `KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`
+and `KARCARTHY_BIN=/path/to/karcarthy` for tests or installed copies.
 
 ## Java (verified)
 
