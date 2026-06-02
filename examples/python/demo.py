@@ -5,12 +5,10 @@ karcarthy is a Clojure library, but a workflow is just data, so any language can
 build one and run it. This builds workflows as plain Python dicts, sends them to
 the karcarthy CLI bridge (`clojure -M -m karcarthy.cli`) as JSON, and reads the
 JSON result back. The homoiconic part survives the boundary: Python constructs
-(and could transform) the workflow as data, and an agent can generate or edit a
-workflow the same way.
+(and could transform) the workflow as data.
 
 Run from the repo root:
-    python3 examples/python/demo.py          # offline (mock adapter)
-    python3 examples/python/demo.py --live    # also the self-editing agent (real claude calls)
+    python3 examples/python/demo.py
 """
 import json
 import subprocess
@@ -34,15 +32,3 @@ workflow = {"type": "pipe", "steps": [
     {"type": "agent", "name": "summarizer", "instructions": "Summarize in one line."},
 ]}
 print("pipe ->", run(workflow, "what is a monad?")["text"])
-
-# 2) An agent edits its own definition at runtime, across the bridge. This needs
-#    a real model, so it uses the Claude CLI adapter (run with --live).
-if "--live" in sys.argv:
-    evolve = {"type": "evolve",
-              "agent": {"type": "agent", "name": "poet",
-                        "instructions": "You are a mediocre poet."},
-              "max-rounds": 3}
-    res = run(evolve,
-              "Improve yourself into an expert, then write one line about Lisp.",
-              adapter="claude")
-    print("evolve rounds:", res.get("rounds"), "->", res.get("text"))

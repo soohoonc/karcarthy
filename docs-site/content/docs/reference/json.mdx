@@ -31,6 +31,10 @@ names to deterministic response text. It is useful for examples and tests that
 should show realistic output without calling a live model. Agents not listed
 fall back to the default echo-style mock response.
 
+`tools` is an adapter allowlist. karcarthy passes these names to adapters that
+support tool selection; it does not create tool servers or bind MCP
+configuration. The mock adapter ignores tools.
+
 ## agent
 
 ```json
@@ -39,7 +43,7 @@ fall back to the default echo-style mock response.
   "name": "reviewer",
   "instructions": "Find launch risks.",
   "model": "sonnet",
-  "tools": ["WebSearch"],
+  "tools": ["mcp__feedback__search"],
   "adapter": "claude"
 }
 ```

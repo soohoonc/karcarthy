@@ -1,7 +1,7 @@
 // Launch-readiness tutorial through the karcarthy JSON bridge.
 // The important part is not the workflow alone; it is the agent UX around it:
-// each agent is configured from a profile with context, tools, boundaries,
-// tone, output contract, and self-checks.
+// each agent is configured from a profile with context, adapter tool
+// allowlists, boundaries, tone, output contract, and self-checks.
 
 import { execFileSync } from "node:child_process";
 
@@ -30,8 +30,12 @@ function renderInstructions(profile: AgentProfile): string {
     `Mission: ${profile.mission}`,
     profile.context?.length ? `Operating context:\n${bulletList(profile.context)}` : "",
     profile.tools?.length
-      ? `Available tools:\n${bulletList(profile.tools)}\nUse tools only when they materially improve the answer.`
-      : "Available tools: none for this offline tutorial run.",
+      ? [
+          `Adapter tool allowlist:\n${bulletList(profile.tools)}`,
+          "These names must already be bound in the selected Agent SDK, CLI, or MCP configuration.",
+          "karcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools.",
+        ].join("\n")
+      : "Adapter tool allowlist: none. The offline mock adapter ignores tool calls.",
     `Responsibilities:\n${bulletList(profile.responsibilities)}`,
     `Output contract:\n${profile.output}`,
     `Interaction style:\n${profile.tone}`,
@@ -73,8 +77,9 @@ function run(
 const launchContext = [
   "Audience: product, engineering, security, support, and launch leadership.",
   "Artifact: a launch-readiness brief that can drive a go/no-go meeting.",
+  "Evidence packet: enterprise admins requested SSO; rollout is behind a tenant feature flag; p95 auth latency is the watch metric; audit-log signoff is not complete; support has a setup draft but no rollback macro.",
   "Risk posture: be concise, specific, and explicit about missing evidence.",
-  "Do not invent dates, owners, metrics, or policy claims.",
+  "Use only facts from the user request, operating context, or adapter tool results. Do not invent dates, owners, metrics, or policy claims.",
 ];
 
 const classifier = configuredAgent({
@@ -98,7 +103,7 @@ const productReviewer = configuredAgent({
   role: "Product launch reviewer",
   mission: "Assess user value, launch narrative, customer segmentation, and adoption risk.",
   context: launchContext,
-  tools: ["customer-feedback", "roadmap-notes"],
+  tools: ["mcp__feedback__search", "mcp__roadmap__read"],
   responsibilities: [
     "Identify the primary user promise in one sentence.",
     "Call out unclear customer value or missing beta evidence.",
@@ -115,7 +120,7 @@ const engineeringReviewer = configuredAgent({
   role: "Engineering readiness reviewer",
   mission: "Evaluate rollout mechanics, operational risk, observability, and rollback quality.",
   context: launchContext,
-  tools: ["service-health", "deploy-plan", "error-budget"],
+  tools: ["mcp__metrics__query", "mcp__deployments__read", "mcp__alerts__search"],
   responsibilities: [
     "Check whether the rollout can be staged behind a feature flag.",
     "Identify the highest operational failure mode.",
@@ -132,7 +137,7 @@ const securityReviewer = configuredAgent({
   role: "Security and policy reviewer",
   mission: "Evaluate data exposure, abuse risk, permissions, auditability, and compliance concerns.",
   context: launchContext,
-  tools: ["policy-index", "audit-log-review"],
+  tools: ["mcp__policy__search", "mcp__audit_logs__query"],
   responsibilities: [
     "Identify whether the change introduces new sensitive data handling.",
     "Call out permission, logging, or abuse-review gaps.",
@@ -149,7 +154,7 @@ const supportReviewer = configuredAgent({
   role: "Support readiness reviewer",
   mission: "Evaluate customer messaging, support docs, escalation paths, and rollback communication.",
   context: launchContext,
-  tools: ["help-center", "support-macros"],
+  tools: ["mcp__help_center__search", "mcp__support_macros__read"],
   responsibilities: [
     "Check whether support can explain setup and troubleshoot common failures.",
     "Identify required FAQ, macro, or escalation updates.",

@@ -4,8 +4,9 @@
 ;;   clojure -M -e '(load-file "examples/clojure/launch.clj")'
 ;;
 ;; The workflow is data, but the agent UX is not a one-line prompt. Each agent is
-;; configured from role, mission, context, tools, boundaries, tone, output
-;; contract, and self-checks before it becomes a plain karcarthy agent map.
+;; configured from role, mission, context, adapter tool allowlists, boundaries,
+;; tone, output contract, and self-checks before it becomes a plain karcarthy
+;; agent map.
 
 (require '[clojure.pprint :as pp]
          '[clojure.string :as str]
@@ -24,9 +25,10 @@
         (str "Mission: " mission)
         (section "Operating context" (bullets context))
         (if (seq tools)
-          (str "Available tools:\n" (bullets tools)
-               "\nUse tools only when they materially improve the answer.")
-          "Available tools: none for this offline tutorial run.")
+          (str "Adapter tool allowlist:\n" (bullets tools)
+               "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
+               "\nkarcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools.")
+          "Adapter tool allowlist: none. The offline mock adapter ignores tool calls.")
         (section "Responsibilities" (bullets responsibilities))
         (str "Output contract:\n" output)
         (str "Interaction style:\n" tone)
@@ -42,8 +44,9 @@
 (def launch-context
   ["Audience: product, engineering, security, support, and launch leadership."
    "Artifact: a launch-readiness brief that can drive a go/no-go meeting."
+   "Evidence packet: enterprise admins requested SSO; rollout is behind a tenant feature flag; p95 auth latency is the watch metric; audit-log signoff is not complete; support has a setup draft but no rollback macro."
    "Risk posture: be concise, specific, and explicit about missing evidence."
-   "Do not invent dates, owners, metrics, or policy claims."])
+   "Use only facts from the user request, operating context, or adapter tool results. Do not invent dates, owners, metrics, or policy claims."])
 
 (def classifier
   (configured-agent
@@ -65,7 +68,7 @@
     :role "Product launch reviewer"
     :mission "Assess user value, launch narrative, customer segmentation, and adoption risk."
     :context launch-context
-    :tools ["customer-feedback" "roadmap-notes"]
+    :tools ["mcp__feedback__search" "mcp__roadmap__read"]
     :responsibilities ["Identify the primary user promise in one sentence."
                        "Call out unclear customer value or missing beta evidence."
                        "Recommend a launch decision from the product perspective."]
@@ -80,7 +83,7 @@
     :role "Engineering readiness reviewer"
     :mission "Evaluate rollout mechanics, operational risk, observability, and rollback quality."
     :context launch-context
-    :tools ["service-health" "deploy-plan" "error-budget"]
+    :tools ["mcp__metrics__query" "mcp__deployments__read" "mcp__alerts__search"]
     :responsibilities ["Check whether the rollout can be staged behind a feature flag."
                        "Identify the highest operational failure mode."
                        "Name one metric or alert that should be watched during rollout."]
@@ -95,7 +98,7 @@
     :role "Security and policy reviewer"
     :mission "Evaluate data exposure, abuse risk, permissions, auditability, and compliance concerns."
     :context launch-context
-    :tools ["policy-index" "audit-log-review"]
+    :tools ["mcp__policy__search" "mcp__audit_logs__query"]
     :responsibilities ["Identify whether the change introduces new sensitive data handling."
                        "Call out permission, logging, or abuse-review gaps."
                        "Recommend the minimum security gate for launch."]
@@ -110,7 +113,7 @@
     :role "Support readiness reviewer"
     :mission "Evaluate customer messaging, support docs, escalation paths, and rollback communication."
     :context launch-context
-    :tools ["help-center" "support-macros"]
+    :tools ["mcp__help_center__search" "mcp__support_macros__read"]
     :responsibilities ["Check whether support can explain setup and troubleshoot common failures."
                        "Identify required FAQ, macro, or escalation updates."
                        "Recommend the minimum customer-communication plan."]

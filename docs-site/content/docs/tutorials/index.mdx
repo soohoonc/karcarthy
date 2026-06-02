@@ -18,7 +18,7 @@ resource types:
 
 - role and mission define identity.
 - operating context acts like a compact workspace bootstrap.
-- tools describe what the adapter may expose to the agent.
+- tools are an adapter allowlist, not provisioned infrastructure.
 - responsibilities describe the job to do.
 - output contract makes downstream composition predictable.
 - tone controls the user-facing experience.
@@ -26,6 +26,13 @@ resource types:
 
 The product owns the configuration screen and templates. karcarthy only needs
 the final agent instructions and workflow data.
+
+Tool names must already exist in the selected Agent SDK, CLI, or MCP
+configuration. karcarthy passes the names through as an allowlist for adapters
+that support it, such as Claude CLI `--allowedTools`. It does not create MCP
+servers, databases, or tool implementations. The offline mock adapter ignores
+tools entirely; the examples include tool names only to show the shape a real
+host application would pass after configuring those tools.
 
 ## Workflow shape
 

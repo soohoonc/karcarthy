@@ -11,7 +11,7 @@ runnable file is `examples/typescript/launch.ts`.
 
 The example uses a small application-side profile object. This mirrors the
 shape used by mature agent products: separate identity, workspace context, tool
-surface, safety boundaries, output contract, tone, and self-checks. karcarthy
+allowlist, safety boundaries, output contract, tone, and self-checks. karcarthy
 does not need a new API for that; the helper renders the profile into the
 agent's `instructions` string.
 
@@ -39,8 +39,12 @@ function renderInstructions(profile: AgentProfile): string {
     `Mission: ${profile.mission}`,
     profile.context?.length ? `Operating context:\n${bulletList(profile.context)}` : "",
     profile.tools?.length
-      ? `Available tools:\n${bulletList(profile.tools)}\nUse tools only when they materially improve the answer.`
-      : "Available tools: none for this offline tutorial run.",
+      ? [
+          `Adapter tool allowlist:\n${bulletList(profile.tools)}`,
+          "These names must already be bound in the selected Agent SDK, CLI, or MCP configuration.",
+          "karcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools.",
+        ].join("\n")
+      : "Adapter tool allowlist: none. The offline mock adapter ignores tool calls.",
     `Responsibilities:\n${bulletList(profile.responsibilities)}`,
     `Output contract:\n${profile.output}`,
     `Interaction style:\n${profile.tone}`,
@@ -64,14 +68,15 @@ function configuredAgent(profile: AgentProfile): Workflow {
 ## Specialist profiles
 
 The shared context acts like a compact workspace bootstrap. Each specialist gets
-its own job, tools, boundaries, and output contract.
+its own job, adapter tool allowlist, boundaries, and output contract.
 
 ```ts
 const launchContext = [
   "Audience: product, engineering, security, support, and launch leadership.",
   "Artifact: a launch-readiness brief that can drive a go/no-go meeting.",
+  "Evidence packet: enterprise admins requested SSO; rollout is behind a tenant feature flag; p95 auth latency is the watch metric; audit-log signoff is not complete; support has a setup draft but no rollback macro.",
   "Risk posture: be concise, specific, and explicit about missing evidence.",
-  "Do not invent dates, owners, metrics, or policy claims.",
+  "Use only facts from the user request, operating context, or adapter tool results. Do not invent dates, owners, metrics, or policy claims.",
 ];
 
 const productReviewer = configuredAgent({
@@ -79,7 +84,7 @@ const productReviewer = configuredAgent({
   role: "Product launch reviewer",
   mission: "Assess user value, launch narrative, customer segmentation, and adoption risk.",
   context: launchContext,
-  tools: ["customer-feedback", "roadmap-notes"],
+  tools: ["mcp__feedback__search", "mcp__roadmap__read"],
   responsibilities: [
     "Identify the primary user promise in one sentence.",
     "Call out unclear customer value or missing beta evidence.",

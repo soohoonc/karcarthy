@@ -10,6 +10,11 @@ because a workflow is just data.
 For a walkthrough of the same non-trivial workflow in Clojure, Python, and
 TypeScript, start with [Tutorials](/docs/tutorials).
 
+When an example includes `tools`, read that field as an adapter allowlist. The
+names must already be configured in the selected Agent SDK, CLI, or MCP layer.
+karcarthy does not create those tools, and the offline mock adapter ignores
+them.
+
 ## Clojure
 
 ```bash

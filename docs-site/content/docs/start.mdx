@@ -37,8 +37,12 @@ Agents are just maps:
 (k/agent "planner"
   "Break the task into steps."
   :model "sonnet"
-  :tools ["WebSearch" "WebFetch"])
+  :tools ["mcp__docs__search" "mcp__repo__read"])
 ```
+
+`tools` is an adapter allowlist. Those names must already be configured in the
+selected Agent SDK, CLI, or MCP layer; karcarthy only passes the allowlist
+through.
 
 ## Run offline first
 
