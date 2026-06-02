@@ -1,71 +1,47 @@
 ---
-title: Prior Art
-description: How karcarthy maps to existing agent SDKs, CLIs, and orchestration frameworks.
+title: Compare
+description: Where karcarthy fits among agent SDKs, CLIs, and orchestration frameworks.
 ---
 
-This page is context, not API reference. It records the existing systems and
-names that shaped karcarthy's public vocabulary.
+karcarthy is a thin orchestration layer. It is not a replacement for agent
+SDKs; it is a way to keep multi-agent coordination inspectable while delegating
+single-agent execution to systems that already run model calls and tools.
 
-Most agent frameworks define agents, tools, and workflows as objects or
-decorators in a host language, and bundle the agent loop. karcarthy makes a
-different pair of choices: the workflow is plain data, and the loop is delegated
-to an agent SDK, agent framework, coding-agent CLI, or command adapter.
+## Positioning
+
+| Need | Use karcarthy when | Prefer another system when |
+| --- | --- | --- |
+| Agent loop | You already have an SDK, CLI, or command process that can run one agent. | You need a batteries-included agent runtime first. |
+| Workflow shape | You want the graph to be EDN/JSON data that can be stored, generated, diffed, and rewritten. | You want workflows only as Python/TypeScript objects. |
+| Tools | Tool execution belongs to Claude CLI, OpenAI Agents SDK, MCP config, or your command adapter. | You want karcarthy itself to define and host tool schemas. |
+| Multi-agent patterns | You want `pipe`, `map`, `reduce`, `iterate`, `bind`, or state graphs as portable values. | You want a mature framework-native graph runtime and UI. |
+| Testing | You want deterministic offline orchestration tests with `mock-adapter`. | You need provider-level simulation of model/tool behavior. |
 
 ## Comparison
 
-| Choice | PydanticAI / DSPy / Agno / Vercel AI SDK | karcarthy |
+| System | Strong at | karcarthy relationship |
 | --- | --- | --- |
-| Define an agent | Host-language object, module, decorator, or typed declaration. | A data map: `{:karcarthy/type :agent ...}`. |
-| Agent loop | The framework or SDK runs it. | The selected SDK, framework, CLI, or adapter runs it. |
-| Tools | Typed functions, schemas, callables, or SDK tool definitions. | Tool allowlists and execution are handed to that SDK/CLI. |
-| Multi-agent | Teams, handoffs, graphs, chats, or workflows. | Functional workflow values: `pipe`, `map`, `reduce`, `iterate`, `bind`. |
-| Structured output | Pydantic models, Zod, signatures, or SDK-specific schemas. | Parse the reply today; typed signatures are future work. |
-| Streaming | Framework-specific events or tokens. | SDK/CLI-specific, with Claude CLI streaming hooks today. |
-| Observability | Framework-specific tracing and dashboards. | OpenTelemetry spans via `karcarthy.otel/instrument`. |
+| Claude CLI / Claude Agent SDK | Running single agents with tools, MCP, sessions, and CLI ergonomics. | Use as an adapter. |
+| OpenAI Agents SDK | Agent loop, handoffs, tools, tracing, and structured SDK runtime. | Use as an adapter or mirror routing with `bind`. |
+| LangGraph | Durable state graphs with nodes, edges, and transitions. | Port finite graph shapes with `state-graph` when you need data-first representation. |
+| CrewAI | Role/task/crew abstractions for collaborative agent work. | Port task crews with `crew`, which compiles to `pipe` or `map`. |
+| AutoGen | Multi-agent chat and speaker selection. | Port deterministic round-robin chats with `group-chat`; use `bind` for dynamic speaker choice. |
+| DSPy | Signatures, metrics, and prompt/program optimization. | Complementary; karcarthy does not optimize prompts today. |
 
-## When karcarthy fits
+## Design choice
 
-Use karcarthy when you want orchestration that is inspectable, serializable,
-generatable, and transformable as data. It is especially useful when the graph
-itself is something an agent might create or edit.
+The important split is:
 
-Choose another framework when the main need is a mature batteries-included
-runtime, typed Python tools, a prompt optimizer, or a first-class React
-streaming UI.
+```text
+karcarthy: workflow data, routing, fan-out, loops, result shape
+adapter:   model calls, tool calls, sessions, provider-specific runtime
+```
 
-These are not strictly either-or. karcarthy is a thin coordination layer, and
-those frameworks are candidates to run inside it as command or SDK-backed
-adapters.
+That split lets the same workflow run offline, through Claude CLI, through the
+OpenAI Agents SDK bridge, or through a command process.
 
-## Agent SDKs and protocols
+## Related guides
 
-| Reference | Why it matters |
-| --- | --- |
-| [Agent Client Protocol](https://agentclientprotocol.com/protocol/v1/session-setup) | Separates conversation state, prompt turns, tool calls, and client capabilities. |
-| [OpenAI Agents SDK orchestration](https://developers.openai.com/api/docs/guides/agents/orchestration) | Describes specialist routing, handoffs, and agents-as-tools. |
-| [OpenAI Agents SDK runs](https://developers.openai.com/api/docs/guides/agents/running-agents) | Defines the agent loop, continuation, and streaming boundary. |
-| [Claude Agent SDK MCP](https://code.claude.com/docs/en/agent-sdk/mcp) | Keeps MCP configuration at the SDK boundary. |
-| [Claude subagents](https://code.claude.com/docs/en/agent-sdk/subagents) | Shows programmatic subagents with prompts, tools, and context isolation. |
-
-## Orchestration frameworks
-
-| Reference | Why it matters |
-| --- | --- |
-| [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api) | State, nodes, edges, and conditional graph transitions. |
-| [CrewAI crews](https://docs.crewai.com/en/concepts/crews) | Agents, tasks, and crew processes. |
-| [AutoGen group chat](https://autogenhub.github.io/autogen/docs/reference/agentchat/groupchat/) | Multi-agent chat coordination and speaker selection. |
-| [Google ADK workflow agents](https://google.github.io/adk-docs/agents/workflow-agents/) | Sequential, concurrent, and loop-style deterministic agents. |
-| [DSPy](https://dspy.ai/) | Typed signatures, modules, metrics, and optimization. |
-
-## Agent configuration UX
-
-| Reference | Why it matters |
-| --- | --- |
-| [OpenClaw agent configuration](https://docs.openclaw.ai/gateway/config-agents) | Agent defaults, per-agent overrides, workspace context, skills, tools, and context budgets. |
-| [OpenClaw system prompts](https://open-claw.bot/docs/concepts/system-prompt/) | Fixed-section prompts assembled from workspace, skills, docs, and safety boundaries. |
-| [Hermes Agent docs](https://hermes-agent.app/en/docs) | Setup, active config, skill registries, doctor commands, and self-learning loops. |
-| [Pi](https://hey.pi.ai/) | Consumer UX reference for tone, decision support, and conversational behavior. |
-
-The product can expose rich configuration screens. karcarthy should keep the
-orchestration layer small: agents, workflow data, adapters, operations, and
-results.
+- [Use Adapters](/docs/adapters) for execution boundaries and tool allowlists.
+- [Port Patterns](/docs/examples/mappings) for concrete framework-pattern mappings.
+- [Clojure API](/docs/reference/api) for exact signatures.

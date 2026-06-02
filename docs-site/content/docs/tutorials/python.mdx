@@ -7,6 +7,15 @@ Python sends workflow JSON to `bin/karcarthy`. The workflow is a plain Python
 dictionary, but the agents are built from richer product-level profiles before
 they become JSON. The runnable file is `examples/python/launch.py`.
 
+## Run the finished workflow
+
+```bash
+python3 examples/python/launch.py
+```
+
+The example prints the configured agents, then a launch brief. It runs offline
+with deterministic `mock-responses`.
+
 ## Configure agents
 
 The helper renders a profile into one instruction string. This keeps the
@@ -104,16 +113,10 @@ workflow = {
 }
 ```
 
-## Run it
+## Swap adapters
 
-```bash
-python3 examples/python/launch.py
-```
-
-The mock adapter uses deterministic `mock-responses`, so the example exercises
-the full workflow without model calls. With a live adapter, the same configured
-agents and workflow delegate each single-agent call to the selected Agent SDK or
-CLI.
+With a live adapter, the same configured agents and workflow delegate each
+single-agent call to the selected Agent SDK or CLI.
 
 ## Why Python uses a synthesizer agent
 

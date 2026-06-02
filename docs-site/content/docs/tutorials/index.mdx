@@ -1,16 +1,44 @@
 ---
 title: Tutorials
-description: Build a non-trivial launch-readiness workflow in Clojure, Python, and TypeScript.
+description: Build the same non-trivial launch-readiness workflow in Clojure, Python, and TypeScript.
 ---
 
-These tutorials build the same launch-readiness workflow in three languages.
-The workflow classifies a request, runs specialist reviewers, combines their
-notes, drafts a brief, and loops through critique.
+These tutorials build a launch-readiness assistant. Given a product-change
+prompt, the workflow:
 
-The workflow is intentionally more than a toy, and the agents are intentionally
-more than one-line prompts.
+1. classifies the request as launch or incident,
+2. runs product, engineering, security, and support reviewers,
+3. synthesizes their notes into a go/no-go brief,
+4. loops through critique before returning the final brief.
 
-## Agent configuration
+The examples are offline by default. They use deterministic mock responses so
+you can inspect orchestration behavior before paying for model calls.
+
+## Run the finished examples
+
+```bash
+clojure -M -e '(load-file "examples/clojure/launch.clj")'
+python3 examples/python/launch.py
+npx tsx examples/typescript/launch.ts
+```
+
+Expected final brief:
+
+```text
+Decision: launch to a staged enterprise beta cohort.
+Top risks: SSO latency, unverified audit logs, and missing rollback messaging.
+Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.
+```
+
+## What the tutorials teach
+
+| Page | Teaches |
+| --- | --- |
+| [Clojure](/docs/tutorials/clojure) | Direct API use, host reducer functions, and EDN workflow data. |
+| [Python](/docs/tutorials/python) | Building workflow JSON from application dictionaries. |
+| [TypeScript](/docs/tutorials/typescript) | Building the same workflow shape from typed application objects. |
+
+## Agent configuration model
 
 Each language builds agents from profile data before turning them into ordinary
 karcarthy agent maps. The profile fields are application UI, not new workflow
@@ -27,16 +55,9 @@ resource types:
 The product owns the configuration screen and templates. karcarthy only needs
 the final agent instructions and workflow data.
 
-Tool names must already exist in the selected Agent SDK, CLI, or MCP
-configuration. karcarthy passes the names through as an allowlist for adapters
-that support it, such as Claude CLI `--allowedTools`. It does not create MCP
-servers, databases, or tool implementations. The offline mock adapter ignores
-tools entirely; the examples include tool names only to show the shape a real
-host application would pass after configuring those tools.
-
 ## Workflow shape
 
-The workflow uses the small functional vocabulary:
+The launch workflow uses the small functional vocabulary:
 
 - `bind` chooses the launch path from a classifier result.
 - `map` runs independent reviewers.
@@ -46,22 +67,7 @@ The workflow uses the small functional vocabulary:
 
 Python and TypeScript send JSON to `bin/karcarthy`, so host-language functions
 cannot be sent as reducers. Those guides use a synthesizer agent in a `pipe`
-after `map`, which is the portable cross-language shape. Clojure can also use a
-host function with `reduce`.
-
-## Run the examples
-
-From the repository root:
-
-```bash
-clojure -M -e '(load-file "examples/clojure/launch.clj")'
-python3 examples/python/launch.py
-npx tsx examples/typescript/launch.ts
-```
-
-The examples default to the offline mock adapter so you can see the workflow
-shape without making paid model calls. Swap the adapter to `claude` where noted
-to run the same orchestration through the Claude CLI.
+after `map`, which is the portable cross-language shape.
 
 <Cards>
   <Card title="Clojure" href="/docs/tutorials/clojure" />

@@ -43,8 +43,8 @@ mock adapter. Tool names in the launch examples are adapter allowlists: they
 must already exist in the selected Agent SDK, CLI, or MCP configuration. The
 mock adapter ignores tools.
 
-Build the standalone runner once when you want the examples to avoid invoking
-the Clojure CLI:
+Build the standalone CLI once when you want the examples to avoid invoking the
+Clojure CLI:
 
 ```bash
 clojure -T:build uber

@@ -1,15 +1,83 @@
 ---
-title: Getting Started
-description: Install karcarthy from git, define agents, and run an offline workflow.
+title: Quickstart
+description: Build the CLI, run one agent, run one workflow file, then use the Clojure API.
 ---
+
+This page gets you to a successful local run first. The examples use the mock
+adapter, so they do not call a model or require API keys.
 
 ## Requirements
 
 - JDK 21 or newer
 - Clojure CLI
-- A git SHA from `soohoonc/karcarthy`
+- A checkout of `soohoonc/karcarthy`
 
-karcarthy has no published release yet, so depend on it from git:
+## 1. Build the CLI
+
+From the repository root:
+
+```bash
+clojure -T:build uber
+```
+
+That writes `target/karcarthy-0.0.2-standalone.jar`. The repo-local
+`bin/karcarthy` launcher uses that jar when it exists and falls back to source
+while developing.
+
+## 2. Run one agent
+
+```bash
+./bin/karcarthy agent echo --instructions "Echo the input." hi
+```
+
+Expected output:
+
+```text
+[echo] hi
+```
+
+By default, command output is plain text. Ask for the full result object when
+you need it:
+
+```bash
+./bin/karcarthy agent echo --instructions "Echo the input." hi --json
+```
+
+## 3. Run a workflow file
+
+`examples/workflows/echo.json` is a workflow value:
+
+```json
+{
+  "type": "agent",
+  "name": "echo",
+  "instructions": "Echo the input."
+}
+```
+
+Run it:
+
+```bash
+./bin/karcarthy run examples/workflows/echo.json hi
+```
+
+Expected output:
+
+```text
+[echo] hi
+```
+
+The same CLI also has a machine protocol:
+
+```bash
+./bin/karcarthy json < request.json
+```
+
+Use `json` from Python, TypeScript, CI jobs, and other non-JVM callers.
+
+## 4. Use the Clojure API
+
+Add karcarthy from git until a stable release is published:
 
 ```clojure title="deps.edn"
 {:deps {io.github.soohoonc/karcarthy
@@ -17,9 +85,7 @@ karcarthy has no published release yet, so depend on it from git:
          :git/sha "<commit sha>"}}}
 ```
 
-## Define agents
-
-Use the facade namespace for the common API:
+Then build and run a workflow:
 
 ```clojure
 (require '[karcarthy :as k])
@@ -29,32 +95,13 @@ Use the facade namespace for the common API:
 
 (k/defagent summarizer
   "Summarize the findings in one sentence.")
-```
 
-Agents are just maps:
-
-```clojure
-(k/agent "planner"
-  "Break the task into steps."
-  :model "sonnet"
-  :tools ["mcp__docs__search" "mcp__repo__read"])
-```
-
-`tools` is an adapter allowlist. Those names must already be configured in the
-selected Agent SDK, CLI, or MCP layer; karcarthy only passes the allowlist
-through.
-
-## Run offline first
-
-The mock adapter is deterministic and does not call a model:
-
-```clojure
 (k/run (k/mock-adapter)
        (k/pipe researcher summarizer)
        "what is a monad?")
 ```
 
-The result has one shape across adapters:
+The result shape is stable across adapters:
 
 ```clojure
 {:karcarthy/type :result
@@ -63,47 +110,9 @@ The result has one shape across adapters:
  :text "..."}
 ```
 
-## Swap in a live agent system
+## 5. Next steps
 
-Once the workflow behaves correctly offline, swap in a live agent system:
-
-```clojure
-(k/run (k/claude-cli {})
-       (k/pipe researcher summarizer)
-       "what is a monad?")
-```
-
-The workflow data does not change. Only the adapter changes.
-
-## Run as a command
-
-Build the standalone runner:
-
-```bash
-clojure -T:build uber
-```
-
-Then run agents or workflow files:
-
-```bash
-./bin/karcarthy agent echo --instructions "Echo the input." hi
-./bin/karcarthy run examples/workflows/echo.json hi
-./bin/karcarthy demo
-```
-
-Python, TypeScript, and other non-JVM hosts use this command path. The command
-still runs the same workflow data and adapter protocol as the Clojure API.
-
-## Run the local checks
-
-From the repository root:
-
-```bash
-clojure -M:test
-clojure -M -m karcarthy.demo
-clojure -T:build uber
-./bin/karcarthy agent echo --instructions "Echo the input." hi
-```
-
-The demos and tests default to offline adapters unless a file explicitly calls
-out a live model dependency.
+- Learn how data flows through [workflows](/docs/workflows).
+- Swap the mock for Claude CLI or command-backed systems in [adapters](/docs/adapters).
+- Build a realistic launch-readiness workflow in [tutorials](/docs/tutorials).
+- Look up exact function signatures in [reference](/docs/reference).
