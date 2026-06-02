@@ -24,3 +24,18 @@
   (is (string? kc/dsl-reference))
   (is (string? (kc/explain-agent {:karcarthy/type :agent})))
   (is (kc/agent? (kc/read-agent "{:karcarthy/type :agent :name \"x\" :instructions \"i\"}"))))
+
+(deftest facade-hides-low-level-execution-apis
+  (testing "normal users get one execution entrypoint: run"
+    (is (nil? (ns-resolve 'karcarthy 'run-agent)))
+    (is (nil? (ns-resolve 'karcarthy 'converse)))
+    (is (nil? (ns-resolve 'karcarthy 'dynamic-runtime)))
+    (is (nil? (ns-resolve 'karcarthy 'dynamic-agent-ref)))
+    (is (nil? (ns-resolve 'karcarthy 'dynamic-workflow-ref)))
+    (is (nil? (ns-resolve 'karcarthy 'workflow-config?)))
+    (is (nil? (ns-resolve 'karcarthy 'materialize)))
+    (is (nil? (ns-resolve 'karcarthy 'read-operation)))
+    (is (nil? (ns-resolve 'karcarthy 'apply-operation)))
+    (is (nil? (ns-resolve 'karcarthy 'evolve)))
+    (is (nil? (ns-resolve 'karcarthy 'registry)))
+    (is (nil? (ns-resolve 'karcarthy 'agent-ref)))))

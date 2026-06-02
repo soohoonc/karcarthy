@@ -1,6 +1,6 @@
 ---
 title: Clojure API
-description: Public facade for agents, workflows, execution, adapters, registry operations, and telemetry.
+description: Public facade for agents, workflows, execution, adapters, and telemetry.
 ---
 
 Use the facade namespace for normal application code:
@@ -61,20 +61,11 @@ Agent fields:
 | API | Meaning |
 | --- | --- |
 | `run` | Interpret workflow data through an adapter or adapter registry. |
-| `run-agent` | Run one agent through one adapter. |
-| `converse` | Run multiple prompts against one agent, threading adapter continuation IDs when supported. |
-
-`converse` is a convenience helper for a multi-turn call to one agent. It is not
-a separate resource type in workflow data.
 
 ```clojure
 (k/run (k/mock-adapter)
        (k/pipe researcher summarizer)
        "map the agent framework space")
-
-(k/converse adapter assistant
-  ["Summarize this repo."
-   "Now list the top risk."])
 ```
 
 ## Adapters
@@ -102,31 +93,6 @@ Adapter registry example:
        "ship the docs")
 ```
 
-## Registry Operations
-
-| API | Meaning |
-| --- | --- |
-| `dynamic-runtime` | Create a mutable registry containing named agents, workflows, and history. |
-| `dynamic-agent-ref` | Reference a named agent inside workflow data. |
-| `dynamic-workflow-ref` | Reference a named workflow inside workflow data. |
-| `workflow-config?` | Validate workflow data that may contain registry refs. |
-| `materialize` | Resolve refs into ordinary runnable workflow data. |
-| `read-operation` | Parse the first EDN operation map from text. |
-| `apply-operation` | Apply one operation: `:put`, `:patch`, `:remove`, `:call`, or `:complete`. |
-
-The registry stores agents, workflows, operations, and call history.
-
-```clojure
-{:op :put
- :resource {:kind :agent
-            :id "critic"
-            :instructions "Find flaws."}}
-
-{:op :call
- :target "critic"
- :input "Review the current plan."}
-```
-
 ## Framework Imports
 
 | API | Meaning |
@@ -140,15 +106,13 @@ The registry stores agents, workflows, operations, and call history.
 These helpers import familiar shapes. They compile back to ordinary workflow
 data.
 
-## Parsing and Generated Edits
+## Parsing
 
 | API | Meaning |
 | --- | --- |
-| `evolve` | Run an agent that may emit an EDN patch to edit itself. |
 | `read-workflow` | Parse workflow EDN from text. |
 | `read-agent` | Parse agent EDN from text. |
 | `dsl-reference` | Prompt fragment for agents that emit workflow data. |
-| `registry`, `agent-ref` | Small mutable registry helper and refs for demos. |
 
 ## Results
 
