@@ -1,10 +1,10 @@
 ---
 title: Clojure Tutorial
-description: Build a launch-readiness workflow with pipe, map, reduce, iterate, and bind.
+description: Configure realistic agents in Clojure with pipe, map, reduce, iterate, and bind.
 ---
 
-This tutorial builds a launch-readiness assistant directly in Clojure. It uses
-all five workflow primitives and a host reducer function.
+This tutorial builds a launch-readiness assistant directly in Clojure. The
+runnable file is `examples/clojure/tutorial_launch_brief.clj`.
 
 ## Goal
 
@@ -12,24 +12,67 @@ Given a product-change prompt, produce a launch brief that includes product,
 engineering, security, and support review notes. If the request looks like an
 incident instead of a launch, route to an incident response agent.
 
-## Complete example
+## Configure agents
 
-The runnable file is `examples/clojure/tutorial_launch_brief.clj`.
+Instead of defining tiny role prompts, build agents from explicit profiles. The
+profile is ordinary application data; karcarthy still receives a normal agent
+map with an instruction string.
 
 ```clojure
-(require '[clojure.string :as str]
-         '[karcarthy :as k])
+(defn bullets [items]
+  (str/join "\n" (map #(str "- " %) items)))
 
-(k/defagent classifier
-  "Classify the request as launch or incident. Reply with one word.")
+(defn section [title value]
+  (when (seq value)
+    (str title ":\n" value)))
 
-(k/defagent product-reviewer "Review launch value and user impact.")
-(k/defagent engineering-reviewer "Review operational risk and rollout plan.")
-(k/defagent security-reviewer "Review policy, data, and abuse risk.")
-(k/defagent support-reviewer "Review support readiness and customer messaging.")
-(k/defagent brief-writer "Write the final launch-readiness brief.")
-(k/defagent incident-responder "Write an incident response plan.")
+(defn agent-instructions
+  [{:keys [role mission context tools responsibilities output tone boundaries self-check]}]
+  (->> [(str "Role: " role)
+        (str "Mission: " mission)
+        (section "Operating context" (bullets context))
+        (if (seq tools)
+          (str "Available tools:\n" (bullets tools)
+               "\nUse tools only when they materially improve the answer.")
+          "Available tools: none for this offline tutorial run.")
+        (section "Responsibilities" (bullets responsibilities))
+        (str "Output contract:\n" output)
+        (str "Interaction style:\n" tone)
+        (section "Boundaries" (bullets boundaries))
+        (section "Before finalizing, verify" (bullets self-check))]
+       (remove str/blank?)
+       (str/join "\n\n")))
 
+(defn configured-agent [{:keys [name tools] :as profile}]
+  (cond-> (k/agent name (agent-instructions profile))
+    (seq tools) (assoc :tools (vec tools))))
+```
+
+One specialist profile:
+
+```clojure
+(def product-reviewer
+  (configured-agent
+   {:name "product-reviewer"
+    :role "Product launch reviewer"
+    :mission "Assess user value, launch narrative, customer segmentation, and adoption risk."
+    :context launch-context
+    :tools ["customer-feedback" "roadmap-notes"]
+    :responsibilities ["Identify the primary user promise in one sentence."
+                       "Call out unclear customer value or missing beta evidence."
+                       "Recommend a launch decision from the product perspective."]
+    :output "Three bullets: Product signal, Product risk, Product recommendation."
+    :tone "Direct, constructive, and grounded in user impact."
+    :boundaries ["Do not discuss infrastructure, security, or support unless it affects user value."]
+    :self-check ["Includes a concrete recommendation." "Names any missing evidence."]}))
+```
+
+## Compose workflow data
+
+Clojure can use a host reducer function to combine mapped reviewer output before
+the brief writer runs:
+
+```clojure
 (def reviewers
   [product-reviewer engineering-reviewer security-reviewer support-reviewer])
 
@@ -48,12 +91,7 @@ The runnable file is `examples/clojure/tutorial_launch_brief.clj`.
 (def launch-brief
   (k/iterate
    (k/pipe review-packet brief-writer)
-   (fn [draft _input]
-     (if (and (str/includes? (:text draft) "Decision")
-              (str/includes? (:text draft) "Risks"))
-       {:accept? true}
-       {:accept? false
-        :feedback "Add Decision, Risks, and Next actions sections."}))
+   critic
    :max-rounds 2))
 
 (def workflow
@@ -63,38 +101,12 @@ The runnable file is `examples/clojure/tutorial_launch_brief.clj`.
           :default launch-brief))
 ```
 
-## Offline adapter
-
-The tutorial uses a custom mock adapter so the workflow is deterministic:
-
-```clojure
-(def adapter
-  (k/mock-adapter
-   (fn [{:keys [agent prompt]}]
-     (case (:name agent)
-       "classifier" (if (str/includes? (str/lower-case prompt) "incident")
-                      "incident"
-                      "launch")
-       "product-reviewer" "Product: strong user value; beta users asked for this."
-       "engineering-reviewer" "Engineering: ship behind a flag; watch latency."
-       "security-reviewer" "Security: no new sensitive data; keep audit logs."
-       "support-reviewer" "Support: update FAQ and prepare rollback messaging."
-       "brief-writer" (str "Decision: launch with staged rollout.\n"
-                           "Signals:\n" prompt "\n"
-                           "Risks: latency regression, unclear support docs.\n"
-                           "Next actions: owner signoff, flag rollout, monitor.")
-       "incident-responder" "Incident plan: stabilize, communicate, then review."
-       (str "[" (:name agent) "] " prompt)))))
-```
-
-Run it:
+## Run it
 
 ```bash
 clojure -M -e '(load-file "examples/clojure/tutorial_launch_brief.clj")'
 ```
 
-## Why this is idiomatic karcarthy
-
-The workflow is plain data. You can print it, edit it with ordinary Clojure,
-store it as EDN, or ask an agent to emit it. The model/tool loop still belongs
-to the selected Agent SDK or CLI adapter.
+The offline adapter returns deterministic specialist notes and a final launch
+brief. Swap the adapter for `claude-cli` or another adapter when you want the
+same configured workflow to call a live agent system.

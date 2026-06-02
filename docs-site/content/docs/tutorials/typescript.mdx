@@ -1,101 +1,145 @@
 ---
 title: TypeScript Tutorial
-description: Build the same launch-readiness workflow as JSON from TypeScript.
+description: Configure realistic agents in TypeScript and run them through the JSON bridge.
 ---
 
-TypeScript also drives karcarthy through `karcarthy.cli`. The workflow is a
-plain object, so application code can generate, validate, persist, and send it
-without importing Clojure.
+TypeScript drives karcarthy through `karcarthy.cli`. The workflow is still a
+plain object, but the agent UX should not be a set of one-line prompts. The
+runnable file is `examples/typescript/tutorial_launch_brief.ts`.
 
-## Complete example
+## Agent UX shape
 
-The runnable file is `examples/typescript/tutorial_launch_brief.ts`.
+The example uses a small application-side profile object. This mirrors the
+shape used by mature agent products: separate identity, workspace context, tool
+surface, safety boundaries, output contract, tone, and self-checks. karcarthy
+does not need a new API for that; the helper renders the profile into the
+agent's `instructions` string.
 
 ```ts
-import { execFileSync } from "node:child_process";
-
 type Workflow = Record<string, unknown>;
 
-function agent(name: string, instructions: string): Workflow {
-  return { type: "agent", name, instructions };
+type AgentProfile = {
+  name: string;
+  role: string;
+  mission: string;
+  context?: string[];
+  tools?: string[];
+  responsibilities: string[];
+  output: string;
+  tone: string;
+  boundaries?: string[];
+  selfCheck?: string[];
+};
+
+function renderInstructions(profile: AgentProfile): string {
+  const bulletList = (items: string[]) => items.map((item) => `- ${item}`).join("\n");
+
+  return [
+    `Role: ${profile.role}`,
+    `Mission: ${profile.mission}`,
+    profile.context?.length ? `Operating context:\n${bulletList(profile.context)}` : "",
+    profile.tools?.length
+      ? `Available tools:\n${bulletList(profile.tools)}\nUse tools only when they materially improve the answer.`
+      : "Available tools: none for this offline tutorial run.",
+    `Responsibilities:\n${bulletList(profile.responsibilities)}`,
+    `Output contract:\n${profile.output}`,
+    `Interaction style:\n${profile.tone}`,
+    profile.boundaries?.length ? `Boundaries:\n${bulletList(profile.boundaries)}` : "",
+    profile.selfCheck?.length ? `Before finalizing, verify:\n${bulletList(profile.selfCheck)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
-function run(
-  workflow: Workflow,
-  input: string,
-  adapter = "mock",
-  mockResponses?: Record<string, string>,
-): any {
-  const req = JSON.stringify({
-    workflow,
-    input,
-    adapter,
-    ...(mockResponses ? { "mock-responses": mockResponses } : {}),
-  });
-  const out = execFileSync("clojure", ["-M", "-m", "karcarthy.cli"], {
-    input: req,
-    encoding: "utf8",
-  });
-  return JSON.parse(out);
+function configuredAgent(profile: AgentProfile): Workflow {
+  return {
+    type: "agent",
+    name: profile.name,
+    instructions: renderInstructions(profile),
+    ...(profile.tools?.length ? { tools: profile.tools } : {}),
+  };
 }
+```
 
+## Configure agents
+
+The shared context acts like a compact workspace bootstrap. Each specialist gets
+its own job, tools, boundaries, and output contract.
+
+```ts
+const launchContext = [
+  "Audience: product, engineering, security, support, and launch leadership.",
+  "Artifact: a launch-readiness brief that can drive a go/no-go meeting.",
+  "Risk posture: be concise, specific, and explicit about missing evidence.",
+  "Do not invent dates, owners, metrics, or policy claims.",
+];
+
+const productReviewer = configuredAgent({
+  name: "product-reviewer",
+  role: "Product launch reviewer",
+  mission: "Assess user value, launch narrative, customer segmentation, and adoption risk.",
+  context: launchContext,
+  tools: ["customer-feedback", "roadmap-notes"],
+  responsibilities: [
+    "Identify the primary user promise in one sentence.",
+    "Call out unclear customer value or missing beta evidence.",
+    "Recommend a launch decision from the product perspective.",
+  ],
+  output: "Three bullets: Product signal, Product risk, Product recommendation.",
+  tone: "Direct, constructive, and grounded in user impact.",
+  boundaries: ["Do not discuss infrastructure, security, or support unless it affects user value."],
+  selfCheck: ["Includes a concrete recommendation.", "Names any missing evidence."],
+});
+
+const briefWriter = configuredAgent({
+  name: "brief-writer",
+  role: "Launch-readiness brief writer",
+  mission: "Synthesize reviewer notes into a go/no-go brief that a launch lead can use immediately.",
+  context: launchContext,
+  responsibilities: [
+    "Preserve disagreements and uncertainty instead of smoothing them away.",
+    "State the decision, rationale, top risks, owners needed, and next actions.",
+    "Keep the brief compact enough for a live launch review.",
+  ],
+  output: "Markdown with sections: Decision, Rationale, Top risks, Required owners, Next actions. Use bullets.",
+  tone: "Executive concise, specific, and neutral.",
+  boundaries: ["Do not invent owner names, dates, or metrics."],
+  selfCheck: ["Contains Decision, Top risks, and Next actions.", "Flags missing evidence explicitly."],
+});
+```
+
+The full runnable file configures classifier, product, engineering, security,
+support, brief writer, critic, and incident-response agents the same way.
+
+## Compose workflow data
+
+The orchestration stays small: configured agents become ordinary workflow nodes.
+
+```ts
 const reviewers: Workflow = {
   type: "map",
-  branches: [
-    agent("product-reviewer", "Review launch value and user impact."),
-    agent("engineering-reviewer", "Review operational risk and rollout plan."),
-    agent("security-reviewer", "Review policy, data, and abuse risk."),
-    agent("support-reviewer", "Review support readiness and messaging."),
-  ],
+  branches: [productReviewer, engineeringReviewer, securityReviewer, supportReviewer],
 };
 
 const launchBrief: Workflow = {
   type: "iterate",
   worker: {
     type: "pipe",
-    steps: [
-      reviewers,
-      agent("brief-writer", "Turn reviewer notes into a launch brief."),
-    ],
+    steps: [reviewers, briefWriter],
   },
-  evaluator: agent("critic", "Reply ACCEPT when the launch brief is complete."),
+  evaluator: critic,
   "max-rounds": 2,
 };
 
 const workflow: Workflow = {
   type: "bind",
-  source: agent("classifier", "Classify as launch or incident."),
+  source: classifier,
   routes: {
     launch: launchBrief,
-    incident: agent("incident-responder", "Write an incident response plan."),
+    incident: incidentResponder,
   },
   default: launchBrief,
 };
-
-const mockResponses: Record<string, string> = {
-  classifier: "launch",
-  "product-reviewer": "Product: enterprise admins need this before rollout.",
-  "engineering-reviewer": "Engineering: ship behind a flag and watch SSO latency.",
-  "security-reviewer": "Security: no new sensitive data; retain audit logs.",
-  "support-reviewer": "Support: publish setup docs and prepare rollback messaging.",
-  "brief-writer": [
-    "Decision: launch with a staged rollout.",
-    "Risks: SSO latency, misconfigured tenants, support readiness.",
-    "Next actions: owner signoff, feature flag, docs update, launch monitor.",
-  ].join("\n"),
-  critic: "ACCEPT",
-  "incident-responder": "Incident plan: stabilize, communicate, then review.",
-};
-
-const result = run(
-  workflow,
-  "Prepare the launch brief for a new enterprise SSO feature.",
-  "mock",
-  mockResponses,
-);
-
-console.log(result.text);
-console.log(`rounds: ${result.rounds} accepted? ${result["accepted?"]}`);
 ```
 
 ## Run it
@@ -104,6 +148,16 @@ console.log(`rounds: ${result.rounds} accepted? ${result["accepted?"]}`);
 npx tsx examples/typescript/tutorial_launch_brief.ts
 ```
 
-This is the same workflow shape as the Python tutorial. That is the point:
-karcarthy's cross-language boundary is data, not a per-language agent object
-model.
+The offline example prints the configured agents, then a launch brief:
+
+```text
+Decision: launch to a staged enterprise beta cohort.
+Rationale: product demand is strong, rollout is reversible, and support can prepare clear admin guidance.
+Top risks: SSO latency, unverified audit logs, and missing rollback messaging.
+Required owners: engineering for latency monitoring, security for audit-log signoff, support for FAQ and escalation macro.
+Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.
+```
+
+This is the same JSON bridge as the Python tutorial. The important bit is that
+your product can own the agent configuration UX while karcarthy keeps the
+runtime boundary as portable workflow data.
