@@ -1,10 +1,9 @@
 {
   "title": "Reference",
   "pages": [
+    "index",
     "api",
     "schema",
-    "json",
-    "comparison",
-    "external"
+    "json"
   ]
 }

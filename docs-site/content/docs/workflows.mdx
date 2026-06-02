@@ -67,17 +67,11 @@ receives the original input:
 ```
 
 With two workflows, `bind` continues from the first result text into the second
-workflow and preserves session continuity when the selected Agent SDK or CLI
-supports it:
+workflow:
 
 ```clojure
 (k/bind triage-agent specialist-agent)
 ```
-
-## Compatibility
-
-Older constructor names still exist as wrappers while the prototype settles, but
-the docs and examples use the functional vocabulary above.
 
 ## Data stays inspectable
 

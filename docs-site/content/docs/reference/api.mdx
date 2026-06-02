@@ -1,6 +1,6 @@
 ---
-title: API Reference
-description: Clojure API surface for agents, workflows, adapters, sessions, state, framework helpers, and telemetry.
+title: Clojure API
+description: Public facade for agents, workflows, execution, adapters, registry operations, and telemetry.
 ---
 
 Use the facade namespace for normal application code:
@@ -36,6 +36,120 @@ Agent fields:
   :tools ["WebSearch"])
 ```
 
+## Workflows
+
+| API | Meaning |
+| --- | --- |
+| `pipe` | Run workflows in sequence, passing each result text to the next step. |
+| `map` | Run workflows on the same input, or run a worker over planner subtasks. |
+| `reduce` | Attach a host reducer function to mapped work. |
+| `iterate` | Run a worker/evaluator feedback loop. |
+| `bind` | Route or continue based on a previous workflow result. |
+| `workflow?` | True when a value is runnable workflow data. |
+| `defworkflow` | Define and validate a workflow var. |
+
+```clojure
+(k/defworkflow launch-review
+  (k/bind classifier
+          {"launch" launch-brief
+           "incident" incident-response}
+          :default fallback))
+```
+
+## Execution
+
+| API | Meaning |
+| --- | --- |
+| `run` | Interpret workflow data through an adapter or adapter registry. |
+| `run-agent` | Run one agent through one adapter. |
+| `converse` | Run multiple prompts against one agent, threading adapter continuation IDs when supported. |
+
+`converse` is a convenience helper for a multi-turn call to one agent. It is not
+a separate resource type in workflow data.
+
+```clojure
+(k/run (k/mock-adapter)
+       (k/pipe researcher summarizer)
+       "map the agent framework space")
+
+(k/converse adapter assistant
+  ["Summarize this repo."
+   "Now list the top risk."])
+```
+
+## Adapters
+
+| API | Meaning |
+| --- | --- |
+| `mock-adapter` | Offline deterministic adapter for tests and examples. |
+| `claude-cli` | Adapter for the Claude CLI. |
+| `command-adapter` | Wrap a local command or model process. |
+| `openai-agents-sdk` | Delegate single-agent calls to the OpenAI Agents SDK bridge. |
+| `Adapter` | Protocol implemented by custom single-agent adapters. |
+| `resolve-adapter` | Resolve one adapter or an adapter registry for an agent. |
+
+Adapter registry example:
+
+```clojure
+(def adapters
+  {:default (k/mock-adapter)
+   :claude  (k/claude-cli {})})
+
+(k/run adapters
+       (k/pipe
+        (k/agent "planner" "Plan." :adapter :claude)
+        (k/agent "checker" "Check." :adapter :default))
+       "ship the docs")
+```
+
+## Registry Operations
+
+| API | Meaning |
+| --- | --- |
+| `dynamic-runtime` | Create a mutable registry containing named agents, workflows, and history. |
+| `dynamic-agent-ref` | Reference a named agent inside workflow data. |
+| `dynamic-workflow-ref` | Reference a named workflow inside workflow data. |
+| `workflow-config?` | Validate workflow data that may contain registry refs. |
+| `materialize` | Resolve refs into ordinary runnable workflow data. |
+| `read-operation` | Parse the first EDN operation map from text. |
+| `apply-operation` | Apply one operation: `:put`, `:patch`, `:remove`, `:call`, or `:complete`. |
+
+The registry stores agents, workflows, operations, and call history.
+
+```clojure
+{:op :put
+ :resource {:kind :agent
+            :id "critic"
+            :instructions "Find flaws."}}
+
+{:op :call
+ :target "critic"
+ :input "Review the current plan."}
+```
+
+## Framework Imports
+
+| API | Meaning |
+| --- | --- |
+| `task-agent` | Extend an agent with a task assignment. |
+| `crew` | Compile CrewAI-style tasks into workflow data. |
+| `group-chat` | Compile deterministic round-robin group chat into `pipe`. |
+| `workflow-agent` | Compile ADK-style sequential, concurrent, or loop workflows. |
+| `state-graph` | Run a finite state graph with nodes, edges, and state updates. |
+
+These helpers import familiar shapes. They compile back to ordinary workflow
+data.
+
+## Parsing and Generated Edits
+
+| API | Meaning |
+| --- | --- |
+| `evolve` | Run an agent that may emit an EDN patch to edit itself. |
+| `read-workflow` | Parse workflow EDN from text. |
+| `read-agent` | Parse agent EDN from text. |
+| `dsl-reference` | Prompt fragment for agents that emit workflow data. |
+| `registry`, `agent-ref` | Small mutable registry helper and refs for demos. |
+
 ## Results
 
 | API | Meaning |
@@ -56,115 +170,7 @@ Result maps use a stable shape:
 Composite workflows may add fields such as `:results`, `:subtasks`,
 `:rounds`, `:accepted?`, `:label`, or `:state`.
 
-## Adapters
-
-| API | Meaning |
-| --- | --- |
-| `mock-adapter` | Offline deterministic adapter for tests and examples. |
-| `claude-cli` | Adapter for the Claude CLI. |
-| `command-adapter` | Wrap a local command or model process. |
-| `openai-agents-sdk` | Delegate single-agent calls to the OpenAI Agents SDK bridge. |
-| `Adapter` | Protocol implemented by custom single-agent adapters. |
-| `resolve-adapter` | Resolve one adapter or an adapter registry for an agent. |
-| `run-agent` | Run one agent through an adapter. |
-
-Adapter registry example:
-
-```clojure
-(def adapters
-  {:default (k/mock-adapter)
-   :claude  (k/claude-cli {})})
-
-(k/run adapters
-       (k/pipe
-        (k/agent "planner" "Plan." :adapter :claude)
-        (k/agent "checker" "Check." :adapter :default))
-       "ship the docs")
-```
-
-## Workflows
-
-| API | Meaning |
-| --- | --- |
-| `pipe` | Run workflows in sequence, passing each result text to the next step. |
-| `map` | Run workflows on the same input, or run a worker over planner subtasks. |
-| `reduce` | Attach a host reducer function to mapped work. |
-| `iterate` | Run a worker/evaluator feedback loop. |
-| `bind` | Route or continue based on a previous workflow result. |
-| `run` | Interpret a workflow through an adapter. |
-| `workflow?` | True when a value is runnable workflow data. |
-| `defworkflow` | Define and validate a workflow var. |
-
-```clojure
-(k/run (k/mock-adapter)
-       (k/pipe researcher summarizer)
-       "what is a monad?")
-```
-
-## Sessions
-
-| API | Meaning |
-| --- | --- |
-| `converse` | Run multiple prompts against one agent, threading `:session-id` through `:resume`. |
-
-```clojure
-(k/converse adapter assistant
-  ["Summarize this repo."
-   "Now list the top risk."])
-```
-
-The adapter must return `:session-id` and honor `:resume` for true session
-continuity. Adapters without session support still run each prompt in order.
-
-## State APIs
-
-| API | Meaning |
-| --- | --- |
-| `dynamic-runtime` | Create mutable state containing named agents, workflows, and history. |
-| `dynamic-agent-ref` | Reference a named agent inside workflow data. |
-| `dynamic-workflow-ref` | Reference a named workflow inside workflow data. |
-| `workflow-config?` | Validate workflow data that may contain registry refs. |
-| `materialize` | Resolve refs into ordinary runnable workflow data. |
-| `read-operation` | Parse the first EDN operation map from text. |
-| `apply-operation` | Apply one operation: `:put`, `:patch`, `:remove`, `:call`, or `:complete`. |
-
-Operations:
-
-```clojure
-{:op :put
- :resource {:kind :agent
-            :id "critic"
-            :instructions "Find flaws."}}
-
-{:op :call
- :target "critic"
- :input "Review the current plan."}
-```
-
-## Framework Helpers
-
-| API | Meaning |
-| --- | --- |
-| `task-agent` | Extend an agent with a task assignment. |
-| `crew` | Compile CrewAI-style tasks into workflow data. |
-| `group-chat` | Compile deterministic round-robin group chat into `pipe`. |
-| `workflow-agent` | Compile ADK-style sequential, concurrent, or loop workflows. |
-| `state-graph` | Run a finite state graph with nodes, edges, and state updates. |
-
-These helpers compile back to ordinary workflow data; they are not separate
-concepts.
-
-## Self Editing
-
-| API | Meaning |
-| --- | --- |
-| `evolve` | Run an agent that may emit an EDN patch to edit itself. |
-| `read-workflow` | Parse workflow EDN from text. |
-| `read-agent` | Parse agent EDN from text. |
-| `dsl-reference` | Prompt fragment for agents that emit workflow data. |
-| `registry`, `agent-ref` | Small mutable registry helper and refs for self-editing demos. |
-
-## Observability
+## Telemetry
 
 | API | Meaning |
 | --- | --- |
