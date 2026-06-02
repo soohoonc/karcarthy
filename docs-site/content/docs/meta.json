@@ -11,8 +11,6 @@
     "runtime",
     "---Patterns & Context---",
     "orchestrator-patterns",
-    "comparison",
-    "---Project---",
-    "deploy"
+    "comparison"
   ]
 }
