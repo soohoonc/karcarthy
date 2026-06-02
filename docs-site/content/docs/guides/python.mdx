@@ -1,5 +1,5 @@
 ---
-title: Python Tutorial
+title: Python
 description: Configure realistic agents in Python and run them through the JSON bridge.
 ---
 
@@ -11,7 +11,7 @@ they become JSON. The runnable file is `examples/python/tutorial_launch_brief.py
 
 The helper renders a profile into one instruction string. This keeps the
 cross-language boundary simple while letting your app expose a better agent
-configuration UX.
+configuration UI.
 
 ```python
 def render_instructions(profile):
@@ -116,7 +116,7 @@ CLI.
 
 ## Why Python uses a synthesizer agent
 
-The Clojure tutorial passes a host function to `reduce`. JSON cannot transmit a
+The Clojure guide passes a host function to `reduce`. JSON cannot transmit a
 Python function to Clojure safely. For cross-language workflows, put a
 synthesizer agent after `map` inside a `pipe`; the mapped outputs become that
 agent's prompt text.

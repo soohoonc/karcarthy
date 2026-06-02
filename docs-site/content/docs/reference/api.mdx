@@ -1,6 +1,6 @@
 ---
 title: API Reference
-description: Clojure API surface for agents, workflows, adapters, sessions, runtime data, patterns, and telemetry.
+description: Clojure API surface for agents, workflows, adapters, sessions, state, framework helpers, and telemetry.
 ---
 
 Use the facade namespace for normal application code:
@@ -116,14 +116,14 @@ Adapter registry example:
 The adapter must return `:session-id` and honor `:resume` for true session
 continuity. Adapters without session support still run each prompt in order.
 
-## Runtime Data
+## State APIs
 
 | API | Meaning |
 | --- | --- |
 | `dynamic-runtime` | Create mutable state containing named agents, workflows, and history. |
-| `dynamic-agent-ref` | Reference a named runtime agent inside workflow data. |
-| `dynamic-workflow-ref` | Reference a named runtime workflow inside workflow data. |
-| `workflow-config?` | Validate workflow data that may contain runtime refs. |
+| `dynamic-agent-ref` | Reference a named agent inside workflow data. |
+| `dynamic-workflow-ref` | Reference a named workflow inside workflow data. |
+| `workflow-config?` | Validate workflow data that may contain registry refs. |
 | `materialize` | Resolve refs into ordinary runnable workflow data. |
 | `read-operation` | Parse the first EDN operation map from text. |
 | `apply-operation` | Apply one operation: `:put`, `:patch`, `:remove`, `:call`, or `:complete`. |
@@ -141,7 +141,7 @@ Operations:
  :input "Review the current plan."}
 ```
 
-## Pattern Helpers
+## Framework Helpers
 
 | API | Meaning |
 | --- | --- |
@@ -152,7 +152,7 @@ Operations:
 | `state-graph` | Run a finite state graph with nodes, edges, and state updates. |
 
 These helpers compile back to ordinary workflow data; they are not separate
-runtime concepts.
+concepts.
 
 ## Self Editing
 

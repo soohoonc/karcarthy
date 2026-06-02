@@ -1,19 +1,19 @@
 ---
-title: Tutorials
+title: Launch Brief
 description: Build a non-trivial launch-readiness workflow in Clojure, Python, and TypeScript.
 ---
 
-These tutorials build the same useful workflow in three languages: a launch
-readiness assistant that classifies a request, runs multiple specialist
-reviewers, combines their notes, drafts a brief, and loops through critique.
+This guide builds the same useful workflow in three languages: a launch
+readiness assistant that classifies a request, runs specialist reviewers,
+combines their notes, drafts a brief, and loops through critique.
 
 The workflow is intentionally more than a toy, and the agents are intentionally
 more than one-line prompts.
 
-## Agent configuration UX
+## Agent configuration
 
-Each tutorial builds agents from profile data before turning them into ordinary
-karcarthy agent maps. The profile fields are application UX, not new workflow
+Each language builds agents from profile data before turning them into ordinary
+karcarthy agent maps. The profile fields are application UI, not new workflow
 concepts:
 
 - role and mission define identity.
@@ -24,8 +24,8 @@ concepts:
 - tone controls the user-facing experience.
 - boundaries and self-checks keep the agent honest.
 
-This mirrors the shape of mature agent products: the product owns agent
-configuration, while karcarthy keeps orchestration as portable data.
+The product owns the configuration screen and templates. karcarthy only needs
+the final agent instructions and workflow data.
 
 ## Workflow shape
 
@@ -38,7 +38,7 @@ The workflow uses the small functional vocabulary:
 - `iterate` gives the draft one or more critique rounds.
 
 Python and TypeScript use the JSON bridge, so host-language functions cannot be
-sent as reducers. Those tutorials use a synthesizer agent in a `pipe` after
+sent as reducers. Those guides use a synthesizer agent in a `pipe` after
 `map`, which is the portable cross-language shape. Clojure can also use a host
 function with `reduce`.
 
@@ -57,7 +57,7 @@ shape without making paid model calls. Swap the adapter to `claude` where noted
 to run the same orchestration through the Claude CLI.
 
 <Cards>
-  <Card title="Clojure Tutorial" href="/docs/tutorials/clojure" />
-  <Card title="Python Tutorial" href="/docs/tutorials/python" />
-  <Card title="TypeScript Tutorial" href="/docs/tutorials/typescript" />
+  <Card title="Clojure" href="/docs/guides/clojure" />
+  <Card title="Python" href="/docs/guides/python" />
+  <Card title="TypeScript" href="/docs/guides/typescript" />
 </Cards>

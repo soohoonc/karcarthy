@@ -1,19 +1,19 @@
 ---
-title: Runtime Vocabulary
-description: The default runtime model is agents, workflows, operations, and history as data.
+title: State
+description: Store named agents, workflows, calls, and history as data.
 ---
 
-There should not be a separate static-versus-dynamic split. The default runtime
-model is that execution state is data, and an agent can change that data while
-it runs.
+There should not be a separate static-versus-dynamic split. karcarthy treats
+the running system as editable data: named agents, named workflows, and the
+history of operations applied to them.
 
 ```text
-runtime -> agents + workflows + history -> next operation -> evolved runtime
+state -> operation -> state
 ```
 
 Pydantic AI, Codex CLI, Claude Agent SDK, OpenAI Agents SDK, local models, and
-command processes still own the inner agent loop. karcarthy owns the small
-mutable state layer around those systems.
+command processes still own the inner agent loop. karcarthy only coordinates
+the outer workflow and state changes.
 
 ## State
 
@@ -35,7 +35,7 @@ Everything else stays where it belongs until there is concrete behavior for it:
 - tools live on agents, Agent SDKs, CLIs, or their adapters;
 - integrations live in SDK/CLI options or MCP config;
 - context is input and history passed to the current call;
-- safety boundaries live in the host runtime.
+- safety boundaries live in the host application or adapter.
 
 ## Operations
 
@@ -67,7 +67,7 @@ Keep the operation surface small.
 
 ## Production requirements
 
-Production readiness means the runtime can survive and explain itself:
+Production readiness means the state layer can survive and explain itself:
 
 - append-only operation log;
 - state snapshots;
@@ -78,5 +78,5 @@ Production readiness means the runtime can survive and explain itself:
 - resource accounting for model calls, latency, tokens, and cost;
 - schema normalization so the agent can edit state reliably.
 
-Do not add a new resource kind until the runtime needs to interpret it. The
+Do not add a new resource kind until karcarthy needs to interpret it. The
 smallest useful surface is agents, workflows, calls, and history.

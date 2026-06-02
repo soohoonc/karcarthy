@@ -2,19 +2,14 @@
   "title": "karcarthy",
   "pages": [
     "index",
-    "---Start Here---",
     "getting-started",
-    "examples",
-    "---Tutorials---",
-    "tutorials",
-    "---Core Concepts---",
     "workflows",
     "agent-sdks",
-    "runtime",
-    "---Patterns & Context---",
-    "orchestrator-patterns",
+    "guides",
+    "examples",
     "comparison",
-    "---Reference---",
+    "framework-mappings",
+    "state",
     "reference"
   ]
 }

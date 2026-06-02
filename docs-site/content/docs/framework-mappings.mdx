@@ -1,11 +1,11 @@
 ---
-title: Orchestrator Patterns
-description: Express popular agent orchestration patterns as karcarthy workflow data.
+title: Framework Mappings
+description: Map familiar agent framework shapes to karcarthy workflow data.
 ---
 
-karcarthy can express recognizable orchestration styles as data without owning
-the model and tool loop. The helpers in `karcarthy.patterns` compile those
-styles back to normal workflow maps.
+karcarthy can express familiar framework shapes as data without owning the
+model and tool loop. The helpers in `karcarthy.patterns` compile those shapes
+back to normal workflow maps.
 
 Run the offline demo:
 
@@ -13,7 +13,7 @@ Run the offline demo:
 clojure -M -e '(load-file "examples/clojure/orchestrator_emulations.clj")'
 ```
 
-## Pattern map
+## Mapping table
 
 | External shape | Public docs describe | karcarthy expression |
 | --- | --- | --- |
@@ -21,13 +21,13 @@ clojure -M -e '(load-file "examples/clojure/orchestrator_emulations.clj")'
 | CrewAI | Crews contain agents, tasks, and a process such as sequential or hierarchical. | `crew` turns task maps into task-specific agents and compiles the process to `pipe`, `map`, and optional `reduce`. |
 | AutoGen | Group chats coordinate multiple agents through a manager and speaker selection. | `group-chat` models deterministic round-robin chats as a transcript threaded through `pipe`; use `bind` when an agent should pick the next speaker. |
 | OpenAI Agents SDK | Specialist ownership through SDK handoffs, plus manager-style agents-as-tools. | `bind` lets a triage agent select a specialist and also preserves session ids when the selected SDK/CLI adapter supports them. |
-| Google ADK | Workflow agents provide deterministic sequential, concurrent, and loop patterns. | `workflow-agent` maps those directly to `pipe`, `map`, and `iterate`. |
+| Google ADK | Workflow agents provide deterministic sequential, concurrent, and loop flows. | `workflow-agent` maps those directly to `pipe`, `map`, and `iterate`. |
 
-## Why this matters
+## Why this exists
 
-The emulations are intentionally shallow. karcarthy is not trying to become
+The examples are intentionally shallow. karcarthy is not trying to become
 LangGraph, CrewAI, AutoGen, OpenAI Agents SDK, or ADK. The point is that their
-recognizable control-flow shapes are data transformations over karcarthy's small
+familiar control-flow shapes are data transformations over karcarthy's small
 workflow vocabulary.
 
 Once represented as EDN, a workflow can be printed, diffed, rewritten by
