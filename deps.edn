@@ -13,7 +13,7 @@
                        io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.62.0"}}
          :main-opts   ["-m" "karcarthy.test-runner"]}
 
-  ;; Build/install a jar:  clojure -T:build jar | install
+  ;; Build/install jars:  clojure -T:build jar | uber | all | install
   :build {:deps {io.github.clojure/tools.build
                  {:git/tag "v0.9.6" :git/sha "b7258d84b36b7762b770819443042fdb8edca776"}}
           :ns-default build}

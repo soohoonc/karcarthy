@@ -77,8 +77,8 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
 ## More
 
 - Examples in Clojure, Java, Kotlin, Scala, Python, and TypeScript:
-  [`examples/`](examples/). Non-JVM languages drive it over a JSON bridge
-  (`karcarthy.cli`), since a workflow is just data.
+  [`examples/`](examples/). Non-JVM languages drive it through `bin/karcarthy`
+  over JSON, since a workflow is just data.
 - Fumadocs-powered web docs for Vercel hosting:
   [`docs-site/`](docs-site/) and
   [`karcarthy-docs.vercel.app/docs`](https://karcarthy-docs.vercel.app/docs).
@@ -90,7 +90,9 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   [`ROADMAP.md`](ROADMAP.md).
 - Proposed runtime vocabulary and protocol references:
   [`docs/`](docs/).
-- `clojure -M:test` runs the offline tests; `clojure -M -m karcarthy.demo` a demo.
+- `clojure -M:test` runs the offline tests; `clojure -M -m karcarthy.demo` runs a demo.
+- `clojure -T:build uber` builds `target/karcarthy-0.0.2-standalone.jar`;
+  `./bin/karcarthy` runs it when present.
 - Pre-release (0.0.2). JDK 21+; depends on `org.clojure/clojure`,
   `org.clojure/data.json`, and the OpenTelemetry Java API.
 

@@ -1,11 +1,11 @@
 ---
 title: TypeScript
-description: Configure realistic agents in TypeScript and run them through the JSON bridge.
+description: Configure realistic agents in TypeScript and run them through karcarthy.
 ---
 
-TypeScript drives karcarthy through `karcarthy.cli`. The workflow is still a
-plain object, but the agent configuration should not be a set of one-line prompts. The
-runnable file is `examples/typescript/launch.ts`.
+TypeScript sends workflow JSON to `bin/karcarthy`. The workflow is still a plain
+object, but the agent configuration should not be a set of one-line prompts.
+The runnable file is `examples/typescript/launch.ts`.
 
 ## Agent configuration
 
@@ -163,6 +163,6 @@ Required owners: engineering for latency monitoring, security for audit-log sign
 Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.
 ```
 
-This is the same JSON bridge as the Python guide. Your product can own the
+This is the same executable path as the Python guide. Your product can own the
 agent configuration UI while karcarthy keeps orchestration as portable workflow
 data.

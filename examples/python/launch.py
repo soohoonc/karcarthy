@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch-readiness tutorial through the karcarthy JSON bridge.
+"""Launch-readiness tutorial through the karcarthy executable.
 
 The workflow is data, but the agent UX is not a one-line prompt. Each agent is
 configured from role, mission, context, adapter tool allowlists, boundaries,
@@ -8,8 +8,8 @@ node.
 """
 
 import json
-import subprocess
-import sys
+
+from karcarthy import run
 
 
 def bullet_list(items):
@@ -55,21 +55,6 @@ def configured_agent(profile):
     if profile.get("tools"):
         agent["tools"] = profile["tools"]
     return agent
-
-
-def run(workflow, input_text, adapter="mock", mock_responses=None):
-    req = {"workflow": workflow, "input": input_text, "adapter": adapter}
-    if mock_responses:
-        req["mock-responses"] = mock_responses
-    proc = subprocess.run(
-        ["clojure", "-M", "-m", "karcarthy.cli"],
-        input=json.dumps(req),
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        sys.exit("karcarthy CLI failed:\n" + proc.stderr)
-    return json.loads(proc.stdout)
 
 
 launch_context = [

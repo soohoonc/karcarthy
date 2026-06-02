@@ -51,7 +51,8 @@ Or runs a worker once per subtask from a planner:
 
 `PLANNER` may be a function from input to subtask strings, or a workflow whose
 text is parsed as one subtask per non-blank line. `:reduce` is a Clojure
-function. Use a synthesizer agent in a `pipe` when crossing the JSON bridge.
+function. Use a synthesizer agent in a `pipe` when crossing the JSON command
+boundary.
 
 ## iterate
 

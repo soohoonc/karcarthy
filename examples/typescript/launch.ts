@@ -1,11 +1,9 @@
-// Launch-readiness tutorial through the karcarthy JSON bridge.
+// Launch-readiness tutorial through the karcarthy executable.
 // The important part is not the workflow alone; it is the agent UX around it:
 // each agent is configured from a profile with context, adapter tool
 // allowlists, boundaries, tone, output contract, and self-checks.
 
-import { execFileSync } from "node:child_process";
-
-type Workflow = Record<string, unknown>;
+import { run, type Workflow } from "./karcarthy";
 
 type AgentProfile = {
   name: string;
@@ -53,25 +51,6 @@ function configuredAgent(profile: AgentProfile): Workflow {
     instructions: renderInstructions(profile),
     ...(profile.tools?.length ? { tools: profile.tools } : {}),
   };
-}
-
-function run(
-  workflow: Workflow,
-  input: string,
-  adapter = "mock",
-  mockResponses?: Record<string, string>,
-): any {
-  const req = JSON.stringify({
-    workflow,
-    input,
-    adapter,
-    ...(mockResponses ? { "mock-responses": mockResponses } : {}),
-  });
-  const out = execFileSync("clojure", ["-M", "-m", "karcarthy.cli"], {
-    input: req,
-    encoding: "utf8",
-  });
-  return JSON.parse(out);
 }
 
 const launchContext = [

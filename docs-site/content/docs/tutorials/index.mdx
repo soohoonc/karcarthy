@@ -44,10 +44,10 @@ The workflow uses the small functional vocabulary:
 - `pipe` turns review notes into a final draft.
 - `iterate` gives the draft one or more critique rounds.
 
-Python and TypeScript use the JSON bridge, so host-language functions cannot be
-sent as reducers. Those guides use a synthesizer agent in a `pipe` after
-`map`, which is the portable cross-language shape. Clojure can also use a host
-function with `reduce`.
+Python and TypeScript send JSON to `bin/karcarthy`, so host-language functions
+cannot be sent as reducers. Those guides use a synthesizer agent in a `pipe`
+after `map`, which is the portable cross-language shape. Clojure can also use a
+host function with `reduce`.
 
 ## Run the examples
 

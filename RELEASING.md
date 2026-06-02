@@ -3,8 +3,8 @@
 Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml),
 which runs on any `v*` tag and:
 
-1. builds the jar (`clojure -T:build jar`),
-2. creates a **GitHub Release** with the jar attached (always - uses the built-in
+1. builds the library jar and standalone executable jar (`clojure -T:build all`),
+2. creates a **GitHub Release** with both jars attached (always - uses the built-in
    `GITHUB_TOKEN`, no extra setup), and
 3. **publishes to Clojars** *if* the `CLOJARS_USERNAME` / `CLOJARS_PASSWORD`
    repository secrets are set (otherwise that step is skipped).

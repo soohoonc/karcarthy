@@ -1,10 +1,9 @@
 // Drive karcarthy from TypeScript.
 //
 // karcarthy is a Clojure library, but a workflow is just data, so any language can
-// build one and run it. This builds workflows as plain objects, sends them to the
-// karcarthy CLI bridge (`clojure -M -m karcarthy.cli`) as JSON, and reads the
-// JSON result back. The workflow crosses the boundary as data, so an agent can
-// generate or edit a workflow the same way.
+// build one and run it. This builds workflows as plain objects and runs them
+// through the karcarthy executable. The workflow crosses the boundary as data,
+// so an agent can generate or edit a workflow the same way.
 //
 // Run from the repo root (any of):
 //   npx tsx examples/typescript/demo.ts
@@ -12,18 +11,7 @@
 //   ts-node examples/typescript/demo.ts
 // Add --live to also run the self-editing agent (real claude calls).
 
-import { execFileSync } from "node:child_process";
-
-type Workflow = Record<string, unknown>;
-
-function run(workflow: Workflow, input: string, adapter = "mock"): any {
-  const req = JSON.stringify({ workflow, input, adapter });
-  const out = execFileSync("clojure", ["-M", "-m", "karcarthy.cli"], {
-    input: req,
-    encoding: "utf8",
-  });
-  return JSON.parse(out);
-}
+import { run, type Workflow } from "./karcarthy";
 
 // 1) A workflow is data: a pipe of two agents, run on the offline mock adapter.
 const workflow: Workflow = {
@@ -35,7 +23,7 @@ const workflow: Workflow = {
 };
 console.log("pipe ->", run(workflow, "what is a monad?").text);
 
-// 2) An agent edits its own definition at runtime, across the bridge (real model).
+// 2) An agent edits its own definition at runtime, across the command boundary (real model).
 if (process.argv.includes("--live")) {
   const evolve: Workflow = {
     type: "evolve",
