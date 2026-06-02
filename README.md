@@ -83,7 +83,7 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   [`docs-site/`](docs-site/) and
   [`karcarthy-docs.vercel.app/docs`](https://karcarthy-docs.vercel.app/docs).
 - Runnable offline emulations of common orchestrator patterns:
-  [`examples/clojure/orchestrator_emulations.clj`](examples/clojure/orchestrator_emulations.clj).
+  [`examples/clojure/mappings.clj`](examples/clojure/mappings.clj).
 - How it compares to PydanticAI, DSPy, Agno, and the Vercel AI SDK:
   [`COMPARISON.md`](COMPARISON.md).
 - What is missing for a production-ready default runtime:

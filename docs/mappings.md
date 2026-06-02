@@ -7,7 +7,7 @@ styles back to normal workflow maps.
 Run the offline demo:
 
 ```bash
-clojure -M -e '(load-file "examples/clojure/orchestrator_emulations.clj")'
+clojure -M -e '(load-file "examples/clojure/mappings.clj")'
 ```
 
 ## Pattern map

@@ -2,7 +2,7 @@
 ;;
 ;; Run:
 ;;
-;;     clojure -M -e '(load-file "examples/clojure/orchestrator_emulations.clj")'
+;;     clojure -M -e '(load-file "examples/clojure/mappings.clj")'
 ;;
 ;; This intentionally uses the mock adapter: the point is to show that the shapes
 ;; are ordinary karcarthy data before any paid model call happens.

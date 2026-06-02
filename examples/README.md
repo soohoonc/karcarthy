@@ -7,15 +7,15 @@ languages, to show the library is reachable from each.
 
 ## Clojure
 
-- `clojure/tutorial_launch_brief.clj` - the complete launch-readiness tutorial:
+- `clojure/launch.clj` - the complete launch-readiness tutorial:
   classify, map reviewers, reduce their notes, write a brief, and iterate on
   critique.
-- `clojure/orchestrator_emulations.clj` - offline emulations of LangGraph,
+- `clojure/mappings.clj` - offline emulations of LangGraph,
   CrewAI, AutoGen, OpenAI Agents SDK, and Google ADK-style orchestration shapes.
 - `clojure/swarm/`, `clojure/crewai/`, `clojure/autogen/`, `clojure/langgraph/`
   - tiny runnable orchestration-pattern examples, with one folder per pattern.
-- `clojure/live_orchestrate.clj` - a live map/reduce run (paid `claude -p`).
-- `clojure/self_modify.clj` - an agent edits itself.
+- `clojure/live.clj` - a live map/reduce run (paid `claude -p`).
+- `clojure/evolve.clj` - an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
 ## Python and TypeScript (via the JSON bridge)
@@ -28,18 +28,18 @@ PydanticAI, Agno, and the Vercel AI SDK.
 
 The pattern examples also have JSON-bridge versions:
 
-- `python/tutorial_launch_brief.py`
-- `typescript/tutorial_launch_brief.ts`
+- `python/launch.py`
+- `typescript/launch.ts`
 - `python/swarm/`, `python/crewai/`, `python/autogen/`
 - `typescript/swarm/`, `typescript/crewai/`, `typescript/autogen/`
 
 ```bash
 python3 examples/python/demo.py            # offline (mock adapter)
-python3 examples/python/tutorial_launch_brief.py
+python3 examples/python/launch.py
 python3 examples/python/demo.py --live     # + an agent that edits itself (real claude)
 
 bun run examples/typescript/demo.ts        # or: npx tsx … / ts-node …
-npx tsx examples/typescript/tutorial_launch_brief.ts
+npx tsx examples/typescript/launch.ts
 ```
 
 Both build a workflow as a plain dict/object and run it; `--live` runs an

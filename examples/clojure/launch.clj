@@ -1,7 +1,7 @@
 ;; Launch-readiness tutorial.
 ;;
 ;; Run:
-;;   clojure -M -e '(load-file "examples/clojure/tutorial_launch_brief.clj")'
+;;   clojure -M -e '(load-file "examples/clojure/launch.clj")'
 ;;
 ;; The workflow is data, but the agent UX is not a one-line prompt. Each agent is
 ;; configured from role, mission, context, tools, boundaries, tone, output
