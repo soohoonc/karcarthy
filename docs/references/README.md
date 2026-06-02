@@ -5,18 +5,18 @@ runtime vocabulary.
 
 ## Agent Client Protocol
 
-- [Session setup](https://agentclientprotocol.com/protocol/session-setup)
+- [Session setup](https://agentclientprotocol.com/protocol/v1/session-setup)
   defines sessions as conversation/thread state, including context, history, and
   MCP servers passed at session creation or load time.
-- [Prompt turn](https://agentclientprotocol.com/protocol/prompt-turn) defines
+- [Prompt turn](https://agentclientprotocol.com/protocol/v1/prompt-turn) defines
   the main user-turn lifecycle: `session/prompt`, `session/update`, tool call
   updates, stop reasons, and cancellation.
-- [Tool calls](https://agentclientprotocol.com/protocol/tool-calls) describes
+- [Tool calls](https://agentclientprotocol.com/protocol/v1/tool-calls) describes
   how agents report tool execution progress and results to clients.
-- [Session config options](https://agentclientprotocol.com/protocol/session-config-options)
+- [Session config options](https://agentclientprotocol.com/protocol/v1/session-config-options)
   supersedes older session modes and exposes session-level selectors such as
   model, mode, and reasoning level.
-- [Session modes](https://agentclientprotocol.com/protocol/session-modes) is the
+- [Session modes](https://agentclientprotocol.com/protocol/v1/session-modes) is the
   older mode API; use it only as an adapter compatibility surface.
 
 Takeaways for karcarthy:
@@ -57,7 +57,7 @@ Takeaways for karcarthy:
 - [MCP in the SDK](https://code.claude.com/docs/en/agent-sdk/mcp) shows MCP
   servers configured in code, `.mcp.json`, or HTTP/SSE transports with allowed
   tool filters.
-- [Subagents in the SDK](https://platform.claude.com/docs/en/agent-sdk/subagents)
+- [Subagents in the SDK](https://code.claude.com/docs/en/agent-sdk/subagents)
   defines programmatic subagents with descriptions, prompts, tool restrictions,
   and context isolation.
 - [Claude Code subagents](https://code.claude.com/docs/en/sub-agents) shows

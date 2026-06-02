@@ -1,0 +1,9 @@
+{
+  "title": "Tutorials",
+  "pages": [
+    "index",
+    "clojure",
+    "python",
+    "typescript"
+  ]
+}

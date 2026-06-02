@@ -1,0 +1,10 @@
+{
+  "title": "Reference",
+  "pages": [
+    "index",
+    "api",
+    "workflow-schema",
+    "json-bridge",
+    "external"
+  ]
+}

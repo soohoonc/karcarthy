@@ -1,0 +1,174 @@
+---
+title: API Reference
+description: Clojure API surface for agents, workflows, adapters, sessions, runtime data, patterns, and telemetry.
+---
+
+Use the facade namespace for normal application code:
+
+```clojure
+(require '[karcarthy :as k])
+```
+
+## Agents
+
+| API | Meaning |
+| --- | --- |
+| `agent` | Build an agent map. |
+| `defagent` | Define a var containing an agent map. |
+| `agent?` | Validate that a value is a well-formed agent. |
+| `explain-agent` | Return a validation explanation for malformed agents. |
+
+Agent fields:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `:karcarthy/type` | yes | Always `:agent`. |
+| `:name` | yes | Stable agent name. |
+| `:instructions` | yes | System or role instructions passed to the adapter. |
+| `:model` | no | Adapter-specific model selector. |
+| `:tools` | no | Adapter-specific tool allowlist or tool names. |
+| `:adapter` | no | Registry key used when `run` receives an adapter registry. |
+
+```clojure
+(k/agent "reviewer"
+  "Find launch risks and propose mitigations."
+  :model "sonnet"
+  :tools ["WebSearch"])
+```
+
+## Results
+
+| API | Meaning |
+| --- | --- |
+| `result` | Build a result map, defaulting `:ok?` to true. |
+| `ok?` | True when a result is successful. |
+
+Result maps use a stable shape:
+
+```clojure
+{:karcarthy/type :result
+ :ok? true
+ :agent "reviewer"
+ :text "final text"
+ :raw {...}}
+```
+
+Composite workflows may add fields such as `:results`, `:subtasks`,
+`:rounds`, `:accepted?`, `:label`, or `:state`.
+
+## Adapters
+
+| API | Meaning |
+| --- | --- |
+| `mock-adapter` | Offline deterministic adapter for tests and examples. |
+| `claude-cli` | Adapter for the Claude CLI. |
+| `command-adapter` | Wrap a local command or model process. |
+| `openai-agents-sdk` | Delegate single-agent calls to the OpenAI Agents SDK bridge. |
+| `Adapter` | Protocol implemented by custom single-agent adapters. |
+| `resolve-adapter` | Resolve one adapter or an adapter registry for an agent. |
+| `run-agent` | Run one agent through an adapter. |
+
+Adapter registry example:
+
+```clojure
+(def adapters
+  {:default (k/mock-adapter)
+   :claude  (k/claude-cli {})})
+
+(k/run adapters
+       (k/pipe
+        (k/agent "planner" "Plan." :adapter :claude)
+        (k/agent "checker" "Check." :adapter :default))
+       "ship the docs")
+```
+
+## Workflows
+
+| API | Meaning |
+| --- | --- |
+| `pipe` | Run workflows in sequence, passing each result text to the next step. |
+| `map` | Run workflows on the same input, or run a worker over planner subtasks. |
+| `reduce` | Attach a host reducer function to mapped work. |
+| `iterate` | Run a worker/evaluator feedback loop. |
+| `bind` | Route or continue based on a previous workflow result. |
+| `run` | Interpret a workflow through an adapter. |
+| `workflow?` | True when a value is runnable workflow data. |
+| `defworkflow` | Define and validate a workflow var. |
+
+```clojure
+(k/run (k/mock-adapter)
+       (k/pipe researcher summarizer)
+       "what is a monad?")
+```
+
+## Sessions
+
+| API | Meaning |
+| --- | --- |
+| `converse` | Run multiple prompts against one agent, threading `:session-id` through `:resume`. |
+
+```clojure
+(k/converse adapter assistant
+  ["Summarize this repo."
+   "Now list the top risk."])
+```
+
+The adapter must return `:session-id` and honor `:resume` for true session
+continuity. Adapters without session support still run each prompt in order.
+
+## Runtime Data
+
+| API | Meaning |
+| --- | --- |
+| `dynamic-runtime` | Create mutable state containing named agents, workflows, and history. |
+| `dynamic-agent-ref` | Reference a named runtime agent inside workflow data. |
+| `dynamic-workflow-ref` | Reference a named runtime workflow inside workflow data. |
+| `workflow-config?` | Validate workflow data that may contain runtime refs. |
+| `materialize` | Resolve refs into ordinary runnable workflow data. |
+| `read-operation` | Parse the first EDN operation map from text. |
+| `apply-operation` | Apply one operation: `:put`, `:patch`, `:remove`, `:call`, or `:complete`. |
+
+Operations:
+
+```clojure
+{:op :put
+ :resource {:kind :agent
+            :id "critic"
+            :instructions "Find flaws."}}
+
+{:op :call
+ :target "critic"
+ :input "Review the current plan."}
+```
+
+## Pattern Helpers
+
+| API | Meaning |
+| --- | --- |
+| `task-agent` | Extend an agent with a task assignment. |
+| `crew` | Compile CrewAI-style tasks into workflow data. |
+| `group-chat` | Compile deterministic round-robin group chat into `pipe`. |
+| `workflow-agent` | Compile ADK-style sequential, concurrent, or loop workflows. |
+| `state-graph` | Run a finite state graph with nodes, edges, and state updates. |
+
+These helpers compile back to ordinary workflow data; they are not separate
+runtime concepts.
+
+## Self Editing
+
+| API | Meaning |
+| --- | --- |
+| `evolve` | Run an agent that may emit an EDN patch to edit itself. |
+| `read-workflow` | Parse workflow EDN from text. |
+| `read-agent` | Parse agent EDN from text. |
+| `dsl-reference` | Prompt fragment for agents that emit workflow data. |
+| `registry`, `agent-ref` | Small mutable registry helper and refs for self-editing demos. |
+
+## Observability
+
+| API | Meaning |
+| --- | --- |
+| `karcarthy.otel/instrument` | Wrap an adapter to emit OpenTelemetry spans. |
+
+The instrumentation captures workflow nodes, agent calls, embedded functions,
+child paths, success/failure state, and limited text previews.

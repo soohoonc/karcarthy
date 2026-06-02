@@ -1,0 +1,111 @@
+---
+title: Python Tutorial
+description: Drive a non-trivial karcarthy workflow through the JSON bridge from Python.
+---
+
+Python uses `karcarthy.cli` as a JSON bridge. The workflow is a plain Python
+dictionary, which keeps the orchestration inspectable and serializable.
+
+## Complete example
+
+The runnable file is `examples/python/tutorial_launch_brief.py`.
+
+```python
+#!/usr/bin/env python3
+import json
+import subprocess
+import sys
+
+
+def agent(name, instructions):
+    return {"type": "agent", "name": name, "instructions": instructions}
+
+
+def run(workflow, input_text, adapter="mock", mock_responses=None):
+    req = {"workflow": workflow, "input": input_text, "adapter": adapter}
+    if mock_responses:
+        req["mock-responses"] = mock_responses
+    req = json.dumps(req)
+    proc = subprocess.run(
+        ["clojure", "-M", "-m", "karcarthy.cli"],
+        input=req,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        sys.exit("karcarthy CLI failed:\n" + proc.stderr)
+    return json.loads(proc.stdout)
+
+
+reviewers = {
+    "type": "map",
+    "branches": [
+        agent("product-reviewer", "Review launch value and user impact."),
+        agent("engineering-reviewer", "Review operational risk and rollout plan."),
+        agent("security-reviewer", "Review policy, data, and abuse risk."),
+        agent("support-reviewer", "Review support readiness and messaging."),
+    ],
+}
+
+launch_brief = {
+    "type": "iterate",
+    "worker": {
+        "type": "pipe",
+        "steps": [
+            reviewers,
+            agent("brief-writer", "Turn reviewer notes into a launch brief."),
+        ],
+    },
+    "evaluator": agent("critic", "Reply ACCEPT when the launch brief is complete."),
+    "max-rounds": 2,
+}
+
+workflow = {
+    "type": "bind",
+    "source": agent("classifier", "Classify as launch or incident."),
+    "routes": {
+        "launch": launch_brief,
+        "incident": agent("incident-responder", "Write an incident response plan."),
+    },
+    "default": launch_brief,
+}
+
+mock_responses = {
+    "classifier": "launch",
+    "product-reviewer": "Product: enterprise admins need this before rollout.",
+    "engineering-reviewer": "Engineering: ship behind a flag and watch SSO latency.",
+    "security-reviewer": "Security: no new sensitive data; retain audit logs.",
+    "support-reviewer": "Support: publish setup docs and prepare rollback messaging.",
+    "brief-writer": (
+        "Decision: launch with a staged rollout.\n"
+        "Risks: SSO latency, misconfigured tenants, support readiness.\n"
+        "Next actions: owner signoff, feature flag, docs update, launch monitor."
+    ),
+    "critic": "ACCEPT",
+    "incident-responder": "Incident plan: stabilize, communicate, then review.",
+}
+
+result = run(
+    workflow,
+    "Prepare the launch brief for a new enterprise SSO feature.",
+    mock_responses=mock_responses,
+)
+print(result["text"])
+print(f"rounds: {result.get('rounds')} accepted? {result.get('accepted?')}")
+```
+
+## Run it
+
+```bash
+python3 examples/python/tutorial_launch_brief.py
+```
+
+The mock adapter traces the shape. With a live adapter, the same JSON workflow
+delegates every agent call to the selected Agent SDK or CLI.
+
+## Why Python uses a synthesizer agent
+
+The Clojure tutorial passes a host function to `reduce`. JSON cannot transmit a
+Python function to Clojure safely. For cross-language workflows, put a
+synthesizer agent after `map` inside a `pipe`; the mapped outputs become that
+agent's prompt text.

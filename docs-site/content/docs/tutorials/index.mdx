@@ -1,0 +1,41 @@
+---
+title: Tutorials
+description: Build a non-trivial launch-readiness workflow in Clojure, Python, and TypeScript.
+---
+
+These tutorials build the same useful workflow in three languages: a launch
+readiness assistant that classifies a request, runs multiple specialist
+reviewers, combines their notes, drafts a brief, and loops through critique.
+
+The workflow is intentionally more than a toy:
+
+- `bind` chooses the launch path from a classifier result.
+- `map` runs independent reviewers.
+- `reduce` combines mapped reviewer output in Clojure.
+- `pipe` turns review notes into a final draft.
+- `iterate` gives the draft one or more critique rounds.
+
+Python and TypeScript use the JSON bridge, so host-language functions cannot be
+sent as reducers. Those tutorials use a synthesizer agent in a `pipe` after
+`map`, which is the portable cross-language shape. Clojure can also use a host
+function with `reduce`.
+
+## Run the examples
+
+From the repository root:
+
+```bash
+clojure -M -e '(load-file "examples/clojure/tutorial_launch_brief.clj")'
+python3 examples/python/tutorial_launch_brief.py
+npx tsx examples/typescript/tutorial_launch_brief.ts
+```
+
+The examples default to the offline mock adapter so you can see the workflow
+shape without making paid model calls. Swap the adapter to `claude` where noted
+to run the same orchestration through the Claude CLI.
+
+<Cards>
+  <Card title="Clojure Tutorial" href="/docs/tutorials/clojure" />
+  <Card title="Python Tutorial" href="/docs/tutorials/python" />
+  <Card title="TypeScript Tutorial" href="/docs/tutorials/typescript" />
+</Cards>

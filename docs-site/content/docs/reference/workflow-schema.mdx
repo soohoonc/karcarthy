@@ -1,0 +1,132 @@
+---
+title: Workflow Schema
+description: EDN shapes for agents, workflows, results, dynamic operations, and compatibility inputs.
+---
+
+Workflows are EDN values. Every node is a map tagged with `:karcarthy/type`.
+
+## Agent
+
+```clojure
+{:karcarthy/type :agent
+ :name "researcher"
+ :instructions "Research the question and cite sources."
+ :model "sonnet"
+ :tools ["WebSearch"]
+ :adapter :claude}
+```
+
+Required keys: `:name`, `:instructions`.
+
+## pipe
+
+Runs each step in order. The `:text` from one result becomes the input for the
+next step.
+
+```clojure
+{:karcarthy/type :pipe
+ :steps [WORKFLOW ...]}
+```
+
+## map
+
+Runs a collection of branches on the same input:
+
+```clojure
+{:karcarthy/type :map
+ :branches [WORKFLOW ...]
+ :max-concurrency 16
+ :reduce reduce-fn}
+```
+
+Or runs a worker once per subtask from a planner:
+
+```clojure
+{:karcarthy/type :map
+ :planner PLANNER
+ :worker WORKFLOW
+ :max-concurrency 16
+ :reduce reduce-fn}
+```
+
+`PLANNER` may be a function from input to subtask strings, or a workflow whose
+text is parsed as one subtask per non-blank line. `:reduce` is a Clojure
+function. Use a synthesizer agent in a `pipe` when crossing the JSON bridge.
+
+## iterate
+
+Runs a worker and evaluator until accepted or the round limit is reached.
+
+```clojure
+{:karcarthy/type :iterate
+ :worker WORKFLOW
+ :evaluator EVALUATOR
+ :max-rounds 3}
+```
+
+`EVALUATOR` may be a function returning `{:accept? boolean :feedback string}`,
+or a workflow/agent. Workflow evaluators accept when their text starts with
+`ACCEPT`; otherwise the text becomes feedback for the next round.
+
+## bind
+
+Routes by the source result:
+
+```clojure
+{:karcarthy/type :bind
+ :source WORKFLOW
+ :routes {"label" WORKFLOW}
+ :default WORKFLOW}
+```
+
+Or continues from one workflow to another:
+
+```clojure
+{:karcarthy/type :bind
+ :source WORKFLOW
+ :to WORKFLOW
+ :prompt "optional override"}
+```
+
+When `:routes` is present, `:source` chooses a label and the selected workflow
+receives the original input. When `:to` is present, the second workflow receives
+the source result text unless `:prompt` is provided.
+
+## Result
+
+```clojure
+{:karcarthy/type :result
+ :ok? true
+ :agent "name"
+ :text "final reply"
+ :raw {...}}
+```
+
+Composite nodes add more fields:
+
+| Node | Extra fields |
+| --- | --- |
+| `pipe` | last child result fields. |
+| `map` branches | `:results`, `:gathered`, `:text`. |
+| `map` planner/worker | `:subtasks`, `:results`, `:gathered`, `:text`. |
+| `iterate` | `:rounds`, `:accepted?`. |
+| `bind` routes | selected child result fields, or `:error :no-route`. |
+| `state-graph` | `:state`, `:path`, `:results`. |
+
+## Dynamic refs
+
+Dynamic workflows may refer to runtime registry entries:
+
+```clojure
+{:karcarthy/type :agent-ref :name "writer"}
+{:karcarthy/type :workflow-ref :name "main"}
+```
+
+Refs are resolved by `materialize` immediately before execution, so patches to
+runtime state affect later calls.
+
+## Legacy compatibility
+
+The interpreter and JSON bridge still accept older saved workflow tags for
+compatibility. New docs, examples, and generated workflows should use
+`:pipe`, `:map`, `:iterate`, and `:bind`.

@@ -6,7 +6,7 @@
   (testing "core + orchestrate functions are reachable under one alias"
     (let [a (kc/agent "x" "i")]
       (is (kc/agent? a)))
-    (let [r (kc/run (kc/mock-runner)
+    (let [r (kc/run (kc/mock-adapter)
                     (kc/pipe (kc/agent "a" "i") (kc/agent "b" "i"))
                     "hi")]
       (is (kc/ok? r))
@@ -21,4 +21,6 @@
     (is (kc/workflow? facade-workflow))))
 
 (deftest facade-reexports-values
-  (is (string? kc/dsl-reference)))
+  (is (string? kc/dsl-reference))
+  (is (string? (kc/explain-agent {:karcarthy/type :agent})))
+  (is (kc/agent? (kc/read-agent "{:karcarthy/type :agent :name \"x\" :instructions \"i\"}"))))
