@@ -1,6 +1,6 @@
 ---
 title: Workflow Data
-description: EDN shapes for agents, workflows, results, and registry refs.
+description: EDN shapes for agents, workflows, and results.
 ---
 
 Workflows are EDN values. Every node is a map tagged with `:karcarthy/type`.
@@ -112,15 +112,3 @@ Composite nodes add more fields:
 | `iterate` | `:rounds`, `:accepted?`. |
 | `bind` routes | selected child result fields, or `:error :no-route`. |
 | `state-graph` | `:state`, `:path`, `:results`. |
-
-## Registry refs
-
-Workflow data may refer to named registry entries:
-
-```clojure
-{:karcarthy/type :agent-ref :name "writer"}
-{:karcarthy/type :workflow-ref :name "main"}
-```
-
-Refs are resolved by `materialize` immediately before execution, so patches to
-state affect later calls.
