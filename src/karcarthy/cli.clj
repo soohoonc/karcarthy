@@ -15,17 +15,10 @@
     {\"type\":\"bind\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
     {\"type\":\"bind\" \"source\":<workflow> \"to\":<workflow>}
     {\"type\":\"iterate\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
-  Legacy workflow type names are still accepted:
-    {\"type\":\"chain\" \"steps\":[<workflow> ...]}
-    {\"type\":\"parallel\" \"branches\":[<workflow> ...]}
-    {\"type\":\"route\" \"router\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
-    {\"type\":\"refine\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
-    {\"type\":\"orchestrate\" \"planner\":<workflow> \"worker\":<workflow>}
-    {\"type\":\"handoff\" \"from\":<workflow> \"to\":<workflow>}
     {\"type\":\"evolve\" \"agent\":<workflow> \"max-rounds\":?}
   Response is the karcarthy result map as JSON. \"adapter\" is \"mock\" (default,
-  offline) or \"claude\". The old \"flow\", \"runner\", and \"harness\" keys are
-  still accepted."
+  offline) or \"claude\". For deterministic offline demos, add
+  \"mock-responses\": {\"agent-name\":\"text\"}."
   (:require [clojure.data.json :as json]
             [karcarthy.core :as k]
             [karcarthy.orchestrate :as o]
@@ -79,18 +72,28 @@
   [m]
   (json->workflow m))
 
+(defn- mock-response-adapter [responses]
+  (if (map? responses)
+    (k/mock-adapter
+     (fn [{:keys [agent prompt]}]
+       (if (contains? responses (:name agent))
+         (str (get responses (:name agent)))
+         (str "[" (:name agent) "] " prompt))))
+    (k/mock-adapter)))
+
 (defn- adapter-for
   "Build the adapter named in the request. \"claude\" uses lean sub-agent
   defaults (replace mode, tools off) so cross-language agents answer directly."
-  [name]
-  (if (= name "claude")
-    (cc/claude-cli {:system-prompt-mode :replace
-                    :max-turns          4
-                    :model              "haiku"
-                    :dir                "/tmp/karc"
-                    :extra-args         ["--disallowedTools"
-                                         "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]})
-    (k/mock-adapter)))
+  [req]
+  (let [name (or (get req "adapter") (get req "runner") (get req "harness"))]
+    (if (= name "claude")
+      (cc/claude-cli {:system-prompt-mode :replace
+                      :max-turns          4
+                      :model              "haiku"
+                      :dir                "/tmp/karc"
+                      :extra-args         ["--disallowedTools"
+                                           "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]})
+      (mock-response-adapter (get req "mock-responses")))))
 
 (defn- result->json [r]
   (try
@@ -104,7 +107,7 @@
               (let [req     (json/read-str (slurp *in*))
                     workflow (json->workflow (or (get req "workflow") (get req "flow")))
                     input   (get req "input" "")
-                    adapter (adapter-for (or (get req "adapter") (get req "runner") (get req "harness")))]
+                    adapter (adapter-for req)]
                 (result->json (o/run adapter workflow input)))
               (catch Throwable t
                 (json/write-str {:ok false

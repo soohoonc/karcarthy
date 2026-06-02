@@ -1,0 +1,149 @@
+---
+title: JSON Bridge
+description: JSON workflow shapes for Python, TypeScript, and other non-JVM languages.
+---
+
+`karcarthy.cli` reads JSON on stdin and writes a result JSON object on stdout:
+
+```bash
+echo '{"workflow":{"type":"agent","name":"echo","instructions":"Echo."},"input":"hi"}' \
+  | clojure -M -m karcarthy.cli
+```
+
+Top-level request:
+
+```json
+{
+  "workflow": { "type": "agent", "name": "echo", "instructions": "Echo." },
+  "input": "hello",
+  "adapter": "mock",
+  "mock-responses": {
+    "echo": "hello back"
+  }
+}
+```
+
+`adapter` is `mock` by default. `claude` uses the Claude CLI adapter with
+sub-agent defaults.
+
+`mock-responses` is optional. When present with the mock adapter, it maps agent
+names to deterministic response text. It is useful for examples and tests that
+should show realistic output without calling a live model. Agents not listed
+fall back to the default echo-style mock response.
+
+## agent
+
+```json
+{
+  "type": "agent",
+  "name": "reviewer",
+  "instructions": "Find launch risks.",
+  "model": "sonnet",
+  "tools": ["WebSearch"],
+  "adapter": "claude"
+}
+```
+
+## pipe
+
+```json
+{
+  "type": "pipe",
+  "steps": [
+    { "type": "agent", "name": "researcher", "instructions": "Research." },
+    { "type": "agent", "name": "writer", "instructions": "Write." }
+  ]
+}
+```
+
+## map
+
+Branches on the same input:
+
+```json
+{
+  "type": "map",
+  "branches": [
+    { "type": "agent", "name": "api", "instructions": "Review API." },
+    { "type": "agent", "name": "docs", "instructions": "Review docs." }
+  ]
+}
+```
+
+Planner/worker shape:
+
+```json
+{
+  "type": "map",
+  "planner": { "type": "agent", "name": "planner", "instructions": "List subtasks." },
+  "worker": { "type": "agent", "name": "worker", "instructions": "Handle one subtask." }
+}
+```
+
+JSON cannot safely transmit host functions. To synthesize mapped output from a
+non-JVM language, put a synthesizer agent after `map` in a `pipe`.
+
+## iterate
+
+```json
+{
+  "type": "iterate",
+  "worker": { "type": "agent", "name": "writer", "instructions": "Draft." },
+  "evaluator": { "type": "agent", "name": "critic", "instructions": "Reply ACCEPT or feedback." },
+  "max-rounds": 3
+}
+```
+
+## bind
+
+Choice map:
+
+```json
+{
+  "type": "bind",
+  "source": { "type": "agent", "name": "classifier", "instructions": "Classify." },
+  "routes": {
+    "launch": { "type": "agent", "name": "launch", "instructions": "Handle launch." },
+    "incident": { "type": "agent", "name": "incident", "instructions": "Handle incident." }
+  },
+  "default": { "type": "agent", "name": "fallback", "instructions": "Handle fallback." }
+}
+```
+
+Continuation:
+
+```json
+{
+  "type": "bind",
+  "source": { "type": "agent", "name": "triage", "instructions": "Triage." },
+  "to": { "type": "agent", "name": "specialist", "instructions": "Continue." }
+}
+```
+
+## evolve
+
+`evolve` is available through JSON for self-editing demos:
+
+```json
+{
+  "type": "evolve",
+  "agent": { "type": "agent", "name": "poet", "instructions": "Write plainly." },
+  "max-rounds": 5
+}
+```
+
+## Response
+
+The response is a karcarthy result map encoded as JSON:
+
+```json
+{
+  "karcarthy/type": "result",
+  "ok?": true,
+  "agent": "writer",
+  "text": "..."
+}
+```
+
+If the workflow fails to parse or run, the CLI returns a JSON object with
+`ok: false`, `error`, and `exception`.

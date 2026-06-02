@@ -5,12 +5,16 @@
     "---Start Here---",
     "getting-started",
     "examples",
+    "---Tutorials---",
+    "tutorials",
     "---Core Concepts---",
     "workflows",
     "agent-sdks",
     "runtime",
     "---Patterns & Context---",
     "orchestrator-patterns",
-    "comparison"
+    "comparison",
+    "---Reference---",
+    "reference"
   ]
 }

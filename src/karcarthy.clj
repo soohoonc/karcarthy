@@ -17,10 +17,7 @@
             [karcarthy.dynamic]
             [karcarthy.runner.claude]
             [karcarthy.runner.command]
-            [karcarthy.runner.openai]
-            [karcarthy.harness.claude]
-            [karcarthy.harness.command]
-            [karcarthy.harness.openai]))
+            [karcarthy.runner.openai]))
 
 (defmacro ^:private export
   "Re-export the var named by the fully-qualified symbol `qsym` into this
@@ -43,17 +40,12 @@
 ;; data model + mock adapter
 (export karcarthy.core/agent)
 (export karcarthy.core/agent?)
+(export karcarthy.core/explain-agent)
 (export karcarthy.core/defagent)
 (export karcarthy.core/Adapter)
-(export karcarthy.core/Runner)
-(export karcarthy.core/Harness)
 (export karcarthy.core/resolve-adapter)
-(export karcarthy.core/resolve-runner)
-(export karcarthy.core/resolve-harness)
 (export karcarthy.core/run-agent)
 (export karcarthy.core/mock-adapter)
-(export karcarthy.core/mock-runner)
-(export karcarthy.core/mock-harness)
 (export karcarthy.core/result)
 (export karcarthy.core/ok?)
 
@@ -64,11 +56,8 @@
 (export karcarthy.orchestrate/iterate)
 (export karcarthy.orchestrate/bind)
 (export karcarthy.orchestrate/run)
-(export karcarthy.orchestrate/run-flow)
 (export karcarthy.orchestrate/workflow?)
-(export karcarthy.orchestrate/flow?)
 (export karcarthy.orchestrate/defworkflow)
-(export karcarthy.orchestrate/defflow)
 
 ;; common orchestrator pattern helpers
 (export karcarthy.patterns/task-agent)
@@ -85,9 +74,10 @@
 (export karcarthy.self/registry)
 (export karcarthy.self/agent-ref)
 (export karcarthy.self/read-workflow)
+(export karcarthy.self/read-agent)
 (export karcarthy.self/dsl-reference)
 
-;; dynamic data-level execution
+;; runtime data helpers
 (export karcarthy.dynamic/dynamic-runtime)
 (export karcarthy.dynamic/dynamic-agent-ref)
 (export karcarthy.dynamic/dynamic-workflow-ref)
@@ -95,18 +85,8 @@
 (export karcarthy.dynamic/materialize)
 (export karcarthy.dynamic/read-operation)
 (export karcarthy.dynamic/apply-operation)
-(export karcarthy.dynamic/run-dynamic)
-(export karcarthy.dynamic/dynamic-reference)
 
-;; Agent SDK/CLI adapters, followed by legacy aliases
+;; Agent SDK/CLI adapters
 (export karcarthy.runner.claude/claude-cli)
-(export karcarthy.runner.claude/claude-runner)
 (export karcarthy.runner.command/command-adapter)
-(export karcarthy.runner.command/command-runner)
 (export karcarthy.runner.openai/openai-agents-sdk)
-(export karcarthy.runner.openai/openai-agents-runner)
-
-;; deprecated compatibility names
-(export karcarthy.harness.claude/claude-harness)
-(export karcarthy.harness.command/command-harness)
-(export karcarthy.harness.openai/openai-agents-harness)

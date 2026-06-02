@@ -1,5 +1,6 @@
 (ns karcarthy.cli-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.data.json :as json]
+            [clojure.test :refer [deftest is testing]]
             [karcarthy.core :as k]
             [karcarthy.orchestrate :as o]
             [karcarthy.cli :as cli]))
@@ -53,3 +54,16 @@
   (let [workflow (cli/json->flow {"type" "agent" "name" "x" "instructions" "do"})]
     (is (k/agent? workflow))
     (is (= "x" (:name workflow)))))
+
+(deftest cli-main-uses-named-mock-responses
+  (let [request {"workflow" {"type"  "pipe"
+                             "steps" [{"type" "agent" "name" "a" "instructions" "i"}
+                                      {"type" "agent" "name" "b" "instructions" "i"}]}
+                 "input" "hi"
+                 "mock-responses" {"a" "one"
+                                   "b" "two"}}
+        output  (with-in-str (json/write-str request)
+                  (with-out-str (cli/-main)))
+        result  (json/read-str output)]
+    (is (= true (get result "ok?")))
+    (is (= "two" (get result "text")))))
