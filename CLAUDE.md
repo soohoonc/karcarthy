@@ -10,7 +10,7 @@ to an external **runner** rather than reimplemented here.
 clojure -M:test                                    # offline test suite (no network/API)
 KARCARTHY_LIVE=1 clojure -M:test                   # also runs the live `claude -p` test
 clojure -M -m karcarthy.demo                       # offline demo
-clojure -M -e '(load-file "examples/live_orchestrate.clj")'   # live demo (paid claude -p)
+clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid claude -p)
 ```
 
 ## Layout

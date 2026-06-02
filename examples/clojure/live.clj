@@ -3,7 +3,7 @@
 ;; Unlike the offline `karcarthy.demo`, this makes real, paid API calls, so run
 ;; it intentionally. It needs a working `claude` CLI with valid auth on PATH.
 ;;
-;;     clojure -M -e '(load-file "examples/live_orchestrate.clj")'
+;;     clojure -M -e '(load-file "examples/clojure/live.clj")'
 ;;
 ;; It demonstrates the CLI tuning that makes agents behave as constrained
 ;; sub-agents rather than as an interactive Claude Code session:

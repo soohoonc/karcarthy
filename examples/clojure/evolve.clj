@@ -3,7 +3,7 @@
 ;; Makes real, paid `claude -p` calls; run it intentionally. Needs the `claude`
 ;; CLI with valid auth on PATH.
 ;;
-;;     clojure -M -e '(load-file "examples/self_modify.clj")'
+;;     clojure -M -e '(load-file "examples/clojure/evolve.clj")'
 ;;
 ;; Demonstrates `evolve`: an agent edits its own definition at runtime via EDN
 ;; patches, then acts with the new behavior.

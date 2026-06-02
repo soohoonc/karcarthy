@@ -2,13 +2,13 @@
   "title": "karcarthy",
   "pages": [
     "index",
-    "getting-started",
+    "start",
     "workflows",
-    "agent-sdks",
+    "sdks",
     "guides",
     "examples",
     "comparison",
-    "framework-mappings",
+    "mappings",
     "state",
     "reference"
   ]
