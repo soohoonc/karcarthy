@@ -1,0 +1,35 @@
+---
+title: Comparison
+description: How karcarthy differs from agent builders such as PydanticAI, DSPy, Agno, and Vercel AI SDK.
+---
+
+Most agent frameworks define agents, tools, and workflows as objects or
+decorators in a host language, and bundle the agent loop. karcarthy makes a
+different pair of choices: the workflow is plain data, and the loop is delegated
+to a runner.
+
+## Common patterns
+
+| Pattern | PydanticAI / DSPy / Agno / Vercel AI SDK | karcarthy |
+| --- | --- | --- |
+| Define an agent | Host-language object, module, decorator, or typed declaration. | A data map: `{:karcarthy/type :agent ...}`. |
+| Agent loop | The framework runs it. | A runner runs it. |
+| Tools | Typed functions, schemas, callables, or SDK tool definitions. | Tool allowlists and execution are handed to the runner. |
+| Multi-agent | Teams, handoffs, graphs, chats, or workflows. | Workflow nodes as data: `chain`, `parallel`, `route`, `refine`, `orchestrate`, `handoff`. |
+| Structured output | Pydantic models, Zod, signatures, or SDK-specific schemas. | Parse the reply today; typed signatures are future work. |
+| Streaming | Framework-specific events or tokens. | Runner-specific, with Claude CLI streaming hooks today. |
+| Observability | Framework-specific tracing and dashboards. | OpenTelemetry spans via `karcarthy.otel/instrument`. |
+
+## When karcarthy fits
+
+Use karcarthy when you want orchestration that is inspectable, serializable,
+generatable, and transformable as data. It is especially useful when the graph
+itself is something an agent might create or edit.
+
+Choose another framework when the main need is a mature batteries-included
+runtime, typed Python tools, a prompt optimizer, or a first-class React
+streaming UI.
+
+These are not strictly either-or. karcarthy is a thin coordination layer, and
+those frameworks are candidates to run inside it as command or SDK-backed
+runners.

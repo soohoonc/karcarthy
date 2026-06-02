@@ -1,0 +1,84 @@
+---
+title: Getting Started
+description: Install karcarthy from git, define agents, and run an offline workflow.
+---
+
+## Requirements
+
+- JDK 21 or newer
+- Clojure CLI
+- A git SHA from `soohoonc/karcarthy`
+
+karcarthy has no published release yet, so depend on it from git:
+
+```clojure title="deps.edn"
+{:deps {io.github.soohoonc/karcarthy
+        {:git/url "https://github.com/soohoonc/karcarthy"
+         :git/sha "<commit sha>"}}}
+```
+
+## Define agents
+
+Use the facade namespace for the common API:
+
+```clojure
+(require '[karcarthy :as k])
+
+(k/defagent researcher
+  "Research the question and cite sources.")
+
+(k/defagent summarizer
+  "Summarize the findings in one sentence.")
+```
+
+Agents are just maps:
+
+```clojure
+(k/agent "planner"
+  "Break the task into steps."
+  :model "sonnet"
+  :tools ["WebSearch" "WebFetch"])
+```
+
+## Run offline first
+
+The mock runner is deterministic and does not call a model:
+
+```clojure
+(k/run (k/mock-runner)
+       (k/chain researcher summarizer)
+       "what is a monad?")
+```
+
+The result has one shape across runners:
+
+```clojure
+{:karcarthy/type :result
+ :ok? true
+ :agent "summarizer"
+ :text "..."}
+```
+
+## Swap in a live runner
+
+Once the workflow behaves correctly offline, swap the runner:
+
+```clojure
+(k/run (k/claude-runner {})
+       (k/chain researcher summarizer)
+       "what is a monad?")
+```
+
+The workflow data does not change. Only the runner changes.
+
+## Run the local checks
+
+From the repository root:
+
+```bash
+clojure -M:test
+clojure -M -m karcarthy.demo
+```
+
+The demos and tests default to offline runners unless a file explicitly calls
+out a live model dependency.

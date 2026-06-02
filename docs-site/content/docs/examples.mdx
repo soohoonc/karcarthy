@@ -1,0 +1,70 @@
+---
+title: Examples
+description: Run karcarthy from Clojure, JVM languages, Python, and TypeScript.
+---
+
+The examples live in the repository `examples/` directory. The Clojure and JVM
+examples call the library directly. Python and TypeScript use the JSON bridge
+because a workflow is just data.
+
+## Clojure
+
+```bash
+clojure -M -m karcarthy.demo
+clojure -M -e '(load-file "examples/clojure/orchestrator_emulations.clj")'
+```
+
+Runnable harness-shape examples:
+
+- `examples/clojure/swarm/`
+- `examples/clojure/crewai/`
+- `examples/clojure/autogen/`
+- `examples/clojure/langgraph/`
+
+Live examples are marked explicitly:
+
+- `examples/clojure/live_orchestrate.clj`
+- `examples/clojure/self_modify.clj`
+
+## Python
+
+```bash
+python3 examples/python/demo.py
+python3 examples/python/swarm/demo.py
+python3 examples/python/crewai/demo.py
+python3 examples/python/autogen/demo.py
+```
+
+The Python examples build workflow dictionaries, send them to `karcarthy.cli`,
+and read result JSON.
+
+## TypeScript
+
+```bash
+npx tsx examples/typescript/demo.ts
+npx tsx examples/typescript/swarm/demo.ts
+npx tsx examples/typescript/crewai/demo.ts
+npx tsx examples/typescript/autogen/demo.ts
+```
+
+The TypeScript examples build the same data shape as the Python examples.
+
+## Java, Kotlin, and Scala
+
+Use the Clojure Java API from each JVM language:
+
+```bash
+CP=$(clojure -Spath)
+javac -d /tmp/karc -cp "$CP" examples/java/Demo.java
+java -cp "$CP:/tmp/karc" Demo
+```
+
+Kotlin and Scala use the same classpath pattern:
+
+```bash
+kotlinc -cp "$CP" examples/kotlin/Demo.kt -include-runtime -d /tmp/demo.jar
+java -cp "$CP:/tmp/demo.jar" DemoKt
+
+scalac -cp "$CP" -d /tmp/karc-scala examples/scala/Demo.scala
+java -cp "$CP:/tmp/karc-scala" Demo
+```

@@ -1,0 +1,14 @@
+{
+  "title": "karcarthy",
+  "pages": [
+    "index",
+    "getting-started",
+    "workflows",
+    "runners",
+    "runtime",
+    "orchestrator-patterns",
+    "examples",
+    "comparison",
+    "deploy"
+  ]
+}

@@ -1,0 +1,80 @@
+---
+title: Workflows
+description: Compose agents with small data nodes instead of framework-specific objects.
+---
+
+Workflows are maps tagged with `:karcarthy/type`. Builder functions make them
+pleasant to write, but the result is still plain EDN.
+
+## Chain
+
+`chain` runs steps in order, passing each result text to the next step.
+
+```clojure
+(k/run runner
+       (k/chain researcher summarizer)
+       "map the agent harness space")
+```
+
+## Parallel
+
+`parallel` fans out independent branches and returns their results together.
+
+```clojure
+(k/parallel api-reviewer docs-reviewer ux-reviewer)
+```
+
+Use `parallel*` when the branches are already in a collection.
+
+## Route
+
+`route` lets a routing function choose the next branch.
+
+```clojure
+(k/route classifier
+         {:bug triage-bug
+          :docs triage-docs
+          :default fallback})
+```
+
+## Refine
+
+`refine` loops a worker through a reviewer until a stop condition or iteration
+limit is reached.
+
+```clojure
+(k/refine draft-writer critic :max-iterations 3)
+```
+
+## Orchestrate
+
+`orchestrate` is a manager-workers shape. The manager decides which workers
+should run, and workers remain normal agents or workflows.
+
+```clojure
+(k/orchestrate manager [researcher coder reviewer])
+```
+
+## Handoff
+
+`handoff` preserves session continuity when the selected runner supports it.
+Use it when one specialist should take over from another.
+
+```clojure
+(k/handoff triage-agent
+           {"billing" billing-agent
+            "debugging" debugger-agent})
+```
+
+## Data stays inspectable
+
+Because every workflow is a value, you can transform it before running:
+
+```clojure
+(-> (k/chain researcher summarizer)
+    (update :steps conj reviewer)
+    (->> (k/run runner "summarize the prior work")))
+```
+
+The important boundary is that karcarthy coordinates the graph. Runners still
+own the model call, tool call, and provider-specific inner loop.
