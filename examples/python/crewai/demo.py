@@ -24,7 +24,7 @@ def run(workflow, input_text):
 
 
 workflow = {
-    "type": "chain",
+    "type": "pipe",
     "steps": [
         agent("researcher/market", "Find the market signal."),
         agent("analyst/risk", "Name the main risk."),

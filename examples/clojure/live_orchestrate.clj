@@ -1,4 +1,4 @@
-;; A LIVE orchestrator-workers run against the Claude CLI adapter (`claude -p`).
+;; A LIVE map/reduce run against the Claude CLI adapter (`claude -p`).
 ;;
 ;; Unlike the offline `karcarthy.demo`, this makes real, paid API calls, so run
 ;; it intentionally. It needs a working `claude` CLI with valid auth on PATH.
@@ -39,9 +39,9 @@
            "Write ONE concise sentence about the given subtopic. Output only the sentence."))
 
 (def research
-  (o/orchestrate planner writer
-                 :synthesize (fn [results _input]
-                               (k/result {:text (str/join "\n" (map #(str "- " (:text %)) results))}))))
+  (o/map planner writer
+         :reduce (fn [results _input]
+                   (k/result {:text (str/join "\n" (map #(str "- " (:text %)) results))}))))
 
 (let [r (o/run adapter research
                "Why is homoiconicity useful for agent orchestration?")]

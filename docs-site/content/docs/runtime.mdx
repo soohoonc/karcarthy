@@ -23,7 +23,7 @@ A running system needs three core registries:
 {:agents {"planner" {:karcarthy/type :agent
                      :name "planner"
                      :instructions "..."}}
- :workflows {"main" {:karcarthy/type :chain
+ :workflows {"main" {:karcarthy/type :pipe
                      :steps [{:karcarthy/type :agent-ref
                               :name "planner"}]}}
  :history [{:operation {...}

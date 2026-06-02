@@ -16,7 +16,7 @@ layer above those systems.
 (k/defagent summarizer "Summarize the findings in one sentence.")
 
 (k/run (k/mock-adapter)
-       (k/chain researcher summarizer)
+       (k/pipe researcher summarizer)
        "what is a monad?")
 ```
 
@@ -26,7 +26,7 @@ Most agent frameworks and SDKs expose agents and workflows as host-language obje
 karcarthy, the plan is a value:
 
 ```clojure
-{:karcarthy/type :chain
+{:karcarthy/type :pipe
  :steps [{:karcarthy/type :agent
           :name "researcher"
           :instructions "Research the question and cite sources."}
@@ -45,8 +45,8 @@ stored as EDN, converted through JSON, or emitted by an agent and parsed without
 | --- | --- |
 | Agents | Plain maps tagged with `:karcarthy/type :agent`. |
 | Agent SDKs & CLIs | Pydantic AI, Claude Agent SDK/CLI, OpenAI Agents SDK, Codex CLI, command processes, and the local mock adapter. |
-| Workflows | `chain`, `parallel`, `route`, `refine`, `orchestrate`, `handoff`, and `converse`. |
-| Patterns | CrewAI, AutoGen, LangGraph, OpenAI handoff, and ADK-style helpers compiled to workflow data. |
+| Workflows | `pipe`, `map`, `reduce`, `iterate`, `bind`, and `converse`. |
+| Patterns | CrewAI, AutoGen, LangGraph, OpenAI specialist routing, and ADK-style helpers compiled to workflow data. |
 | Runtime state | Agents, workflows, operations, and history as mutable data. |
 | Observability | OpenTelemetry spans through `karcarthy.otel/instrument`. |
 

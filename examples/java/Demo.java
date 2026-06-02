@@ -19,13 +19,13 @@ public class Demo {
 
         IFn agent       = Clojure.var("karcarthy.core", "agent");
         IFn mockAdapter = Clojure.var("karcarthy.core", "mock-adapter");
-        IFn chain       = Clojure.var("karcarthy.orchestrate", "chain");
+        IFn pipe        = Clojure.var("karcarthy.orchestrate", "pipe");
         IFn run         = Clojure.var("karcarthy.orchestrate", "run");
         IFn get         = Clojure.var("clojure.core", "get");
 
         Object researcher = agent.invoke("researcher", "Research the question.");
         Object summarizer = agent.invoke("summarizer", "Summarize in one line.");
-        Object workflow   = chain.invoke(researcher, summarizer);
+        Object workflow   = pipe.invoke(researcher, summarizer);
 
         Object result = run.invoke(mockAdapter.invoke(), workflow, "what is a monad?");
 

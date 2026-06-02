@@ -55,6 +55,21 @@
     (case (:karcarthy/type x)
       :agent-ref    (contains? x :name)
       :workflow-ref (contains? x :name)
+      :pipe         (and (sequential? (:steps x))
+                         (every? workflow-config? (:steps x)))
+      :map          (or (and (sequential? (:branches x))
+                             (every? workflow-config? (:branches x)))
+                        (and (maybe-workflow-config? (:planner x))
+                             (workflow-config? (:worker x))))
+      :iterate      (and (workflow-config? (:worker x))
+                         (maybe-workflow-config? (:evaluator x)))
+      :bind         (or (and (maybe-workflow-config? (:source x))
+                             (map? (:routes x))
+                             (every? workflow-config? (vals (:routes x)))
+                             (or (not (contains? x :default))
+                                 (workflow-config? (:default x))))
+                        (and (workflow-config? (:source x))
+                             (workflow-config? (:to x))))
       :chain        (and (sequential? (:steps x))
                          (every? workflow-config? (:steps x)))
       :parallel     (and (sequential? (:branches x))
@@ -133,6 +148,32 @@
          (when (contains? seen marker)
            (throw (ex-info "cyclic dynamic workflow reference" {:name n :seen seen})))
          (materialize rt (lookup-workflow rt n) (conj seen marker)))
+
+       :pipe
+       (update workflow :steps #(mapv (fn [w] (materialize rt w seen)) %))
+
+       :map
+       (cond-> workflow
+         (:branches workflow) (update :branches #(mapv (fn [w] (materialize rt w seen)) %))
+         (and (:planner workflow) (not (fn? (:planner workflow))))
+         (update :planner #(materialize rt % seen))
+         (:worker workflow) (update :worker #(materialize rt % seen)))
+
+       :iterate
+       (cond-> workflow
+         true (update :worker #(materialize rt % seen))
+         (not (fn? (:evaluator workflow))) (update :evaluator #(materialize rt % seen)))
+
+       :bind
+       (cond-> workflow
+         (and (:source workflow) (not (fn? (:source workflow))))
+         (update :source #(materialize rt % seen))
+         (:routes workflow) (update :routes (fn [routes]
+                                              (into {} (map (fn [[label w]]
+                                                              [label (materialize rt w seen)])
+                                                            routes))))
+         (contains? workflow :default) (update :default #(materialize rt % seen))
+         (:to workflow) (update :to #(materialize rt % seen)))
 
        :chain
        (update workflow :steps #(mapv (fn [w] (materialize rt w seen)) %))
@@ -385,8 +426,8 @@
     "{:karcarthy/type :agent-ref :name \"agent-name\"}"
     "{:karcarthy/type :workflow-ref :name \"workflow-name\"}"
     ""
-    "Known workflow node types: :chain, :parallel, :route, :refine,"
-    ":orchestrate, :handoff, :evolve."]))
+    "Workflow node tags: :pipe, :map, :iterate, :bind, :evolve."
+    "Use :reduce as a key on :map nodes when mapped results need synthesis."]))
 
 (defn- state-view [rt]
   (let [{:keys [agents workflows history]} @rt]

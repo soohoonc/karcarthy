@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenAI Swarm-style triage handoff through the karcarthy JSON bridge."""
+"""OpenAI Swarm-style specialist routing through the karcarthy JSON bridge."""
 
 import json
 import subprocess
@@ -24,8 +24,8 @@ def run(workflow, input_text):
 
 
 workflow = {
-    "type": "route",
-    "router": agent("triage", "Classify as refund, sales, or support."),
+    "type": "bind",
+    "source": agent("triage", "Classify as refund, sales, or support."),
     "routes": {
         "refund": agent("refund", "Handle refunds."),
         "sales": agent("sales", "Handle sales questions."),

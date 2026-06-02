@@ -1,4 +1,4 @@
-;; OpenAI Swarm-style triage handoff, offline.
+;; OpenAI Swarm-style specialist routing, offline.
 ;;
 ;; Run:
 ;;   clojure -M -e '(load-file "examples/clojure/swarm/demo.clj")'
@@ -22,11 +22,11 @@
 (k/defagent support "Handle general support.")
 
 (def swarm-triage
-  (k/handoff-router triage
-                    {"refund" refund
-                     "sales" sales
-                     "support" support}
-                    :default support))
+  (k/bind triage
+          {"refund" refund
+           "sales" sales
+           "support" support}
+          :default support))
 
 (def adapter
   (k/mock-adapter

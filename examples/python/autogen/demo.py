@@ -24,7 +24,7 @@ def run(workflow, input_text):
 
 
 workflow = {
-    "type": "chain",
+    "type": "pipe",
     "steps": [
         agent("planner", "Plan the example."),
         agent("builder", "Build the example."),

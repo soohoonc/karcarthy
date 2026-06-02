@@ -3,7 +3,7 @@
   workflow data.
 
   These are not compatibility shims for other frameworks. They are deliberately
-  thin pattern helpers: crews, group chats, workflow agents, handoff routers, and
+  thin pattern helpers: crews, group chats, workflow agents, specialist routing, and
   finite state graphs are compiled back to ordinary karcarthy maps so they can be
   inspected, transformed, serialized, and run through any adapter."
   (:refer-clojure :exclude [agent])
@@ -74,14 +74,14 @@
   `tasks` is a sequence of maps accepted by `task-agent`.
 
   Options:
-  - `:process :sequential` threads tasks with `chain` (the default).
-  - `:process :parallel` fans tasks out with `parallel`.
-  - `:process :hierarchical` uses `orchestrate`; pass `:manager` as the planner
+  - `:process :sequential` threads tasks with `pipe` (the default).
+  - `:process :parallel` maps tasks over the same input.
+  - `:process :hierarchical` uses `map`; pass `:manager` as the planner
     and optionally `:worker` as the worker workflow. Without `:worker`, the
-    task chain becomes the worker.
-  - `:gather`, `:synthesize`, and `:max-concurrency` are forwarded to the
+    task pipe becomes the worker.
+  - `:gather`, `:synthesize`, `:reduce`, and `:max-concurrency` are forwarded to the
     underlying composite node where they apply."
-  [tasks & {:keys [process manager worker gather synthesize max-concurrency]
+  [tasks & {:keys [process manager worker gather synthesize reduce max-concurrency]
             :or   {process :sequential}}]
   (let [steps   (mapv task-agent tasks)
         process (kind-key process)]
@@ -89,31 +89,31 @@
       (throw (ex-info "crew requires at least one task" {:tasks tasks})))
     (case process
       :sequential
-      (apply o/chain steps)
+      (apply o/pipe steps)
 
       :parallel
-      (o/parallel* steps :gather gather :max-concurrency max-concurrency)
+      (o/map steps :reduce (or reduce gather) :max-concurrency max-concurrency)
 
       :hierarchical
       (let [manager     (or manager
                             (throw (ex-info "hierarchical crew requires :manager"
                                             {:process process})))
-            worker-flow (or worker (apply o/chain steps))]
-        (o/orchestrate manager worker-flow
-                       :synthesize (or synthesize gather)
-                       :max-concurrency max-concurrency))
+            worker-flow (or worker (apply o/pipe steps))]
+        (o/map manager worker-flow
+               :reduce (or reduce synthesize gather)
+               :max-concurrency max-concurrency))
 
       (throw (ex-info "unsupported crew process"
                       {:process process
                        :supported [:sequential :parallel :hierarchical]})))))
 
 (defn group-chat
-  "Compile an AutoGen-style round-robin group chat into a chain.
+  "Compile an AutoGen-style round-robin group chat into a pipe.
 
-  The current transcript is just the text threaded through the chain. An adapter can
+  The current transcript is just the text threaded through the pipe. An adapter can
   append to that transcript, summarize it, or keep opaque session state. This
   helper intentionally models the common deterministic `round_robin` speaker
-  selection mode; use `route` directly when speaker selection should be dynamic."
+  selection mode; use `bind` directly when speaker selection should be dynamic."
   [agents & {:keys [rounds speaker-selection]
              :or   {speaker-selection :round-robin}}]
   (let [agents            (mapv #(require-agent % "group-chat agent") agents)
@@ -126,23 +126,23 @@
                       {:speaker-selection speaker-selection})))
     (when (neg? rounds)
       (throw (ex-info "group-chat :rounds must be non-negative" {:rounds rounds})))
-    (apply o/chain (take rounds (cycle agents)))))
+    (apply o/pipe (take rounds (cycle agents)))))
 
 (defn workflow-agent
   "Compile a Google ADK-style deterministic workflow agent into workflow data.
 
   `kind` may be:
-  - `:sequential` -> `chain`
-  - `:parallel` -> `parallel`
-  - `:loop` -> `refine`; provide `[worker evaluator]` or pass `:evaluator`"
+  - `:sequential` -> `pipe`
+  - `:parallel` -> `map`
+  - `:loop` -> `iterate`; provide `[worker evaluator]` or pass `:evaluator`"
   [kind children & {:keys [evaluator max-rounds gather max-concurrency]}]
   (let [children (require-workflows children "workflow-agent children")]
     (case (kind-key kind)
       :sequential
-      (apply o/chain children)
+      (apply o/pipe children)
 
       :parallel
-      (o/parallel* children :gather gather :max-concurrency max-concurrency)
+      (o/map children :reduce gather :max-concurrency max-concurrency)
 
       :loop
       (let [worker    (first children)
@@ -151,23 +151,23 @@
           (throw (ex-info "loop workflow-agent requires an evaluator"
                           {:children children})))
         (if max-rounds
-          (o/refine worker evaluator :max-rounds max-rounds)
-          (o/refine worker evaluator)))
+          (o/iterate worker evaluator :max-rounds max-rounds)
+          (o/iterate worker evaluator)))
 
       (throw (ex-info "unsupported workflow-agent kind"
                       {:kind kind
                        :supported [:sequential :parallel :loop]})))))
 
 (defn handoff-router
-  "Compile an OpenAI Agents SDK-style specialist handoff router.
+  "Compile an OpenAI Agents SDK-style specialist router.
 
-  This is `route` with an agent router: the router agent decides which specialist
-  owns the next reply. For a fixed two-agent session handoff, use
-  `karcarthy.orchestrate/handoff` directly."
+  This is `bind` with an agent router: the router agent decides which specialist
+  owns the next reply. For a fixed two-agent session transfer, use
+  `karcarthy.orchestrate/bind` with two workflows."
   [router routes & {:keys [default] :as opts}]
   (if (contains? opts :default)
-    (o/route router routes :default default)
-    (o/route router routes)))
+    (o/bind router routes :default default)
+    (o/bind router routes)))
 
 ;; ---------------------------------------------------------------------------
 ;; LangGraph-style finite state graph

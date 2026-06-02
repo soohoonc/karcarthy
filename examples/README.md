@@ -1,8 +1,8 @@
 # Examples
 
 karcarthy is a Clojure library that runs on the JVM, so any JVM language can
-drive it. The Java, Kotlin, and Scala examples each build two agents, chain
-them, and run the chain through the offline mock adapter - identical work in three
+drive it. The Java, Kotlin, and Scala examples each build two agents, compose
+them with `pipe`, and run the workflow through the offline mock adapter - identical work in three
 languages, to show the library is reachable from each.
 
 ## Clojure
@@ -11,7 +11,7 @@ languages, to show the library is reachable from each.
   CrewAI, AutoGen, OpenAI Agents SDK, and Google ADK-style orchestration shapes.
 - `clojure/swarm/`, `clojure/crewai/`, `clojure/autogen/`, `clojure/langgraph/`
   - tiny runnable orchestration-pattern examples, with one folder per pattern.
-- `clojure/live_orchestrate.clj` - a live orchestrator-workers run (paid `claude -p`).
+- `clojure/live_orchestrate.clj` - a live map/reduce run (paid `claude -p`).
 - `clojure/self_modify.clj` - an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 

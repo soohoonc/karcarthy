@@ -9,6 +9,13 @@
 
   A <workflow> is JSON mirroring the EDN workflow:
     {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"adapter\":?}
+    {\"type\":\"pipe\" \"steps\":[<workflow> ...]}
+    {\"type\":\"map\" \"branches\":[<workflow> ...]}
+    {\"type\":\"map\" \"planner\":<workflow> \"worker\":<workflow>}
+    {\"type\":\"bind\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
+    {\"type\":\"bind\" \"source\":<workflow> \"to\":<workflow>}
+    {\"type\":\"iterate\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
+  Legacy workflow type names are still accepted:
     {\"type\":\"chain\" \"steps\":[<workflow> ...]}
     {\"type\":\"parallel\" \"branches\":[<workflow> ...]}
     {\"type\":\"route\" \"router\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
@@ -27,6 +34,9 @@
 
 (declare json->workflow)
 
+(defn- json->routes [routes]
+  (reduce-kv (fn [acc label f] (assoc acc label (json->workflow f))) {} routes))
+
 (defn json->workflow
   "Translate a JSON-parsed workflow map (string keys) into karcarthy workflow data.
   Route labels stay strings; `type`/`adapter` become keywords."
@@ -39,11 +49,23 @@
                              :adapter (some-> (or (g "adapter") (g "runner") (g "harness")) keyword)
                              :runner  (some-> (g "runner") keyword)
                              :harness (some-> (g "harness") keyword))
+      "pipe"        (apply o/pipe (map json->workflow (g "steps")))
+      "map"         (if (contains? m "branches")
+                      (o/map (map json->workflow (g "branches")))
+                      (o/map (json->workflow (g "planner"))
+                             (json->workflow (g "worker"))))
+      "bind"        (if (contains? m "routes")
+                      (o/bind (json->workflow (or (g "source") (g "router")))
+                              (json->routes (g "routes"))
+                              :default (some-> (g "default") json->workflow))
+                      (o/bind (json->workflow (or (g "source") (g "from")))
+                              (json->workflow (g "to"))))
+      "iterate"     (o/iterate (json->workflow (g "worker")) (json->workflow (g "evaluator"))
+                               :max-rounds (or (g "max-rounds") 3))
       "chain"       (apply o/chain (map json->workflow (g "steps")))
       "parallel"    (apply o/parallel (map json->workflow (g "branches")))
       "route"       (o/route (json->workflow (g "router"))
-                             (reduce-kv (fn [acc label f] (assoc acc label (json->workflow f)))
-                                        {} (g "routes"))
+                             (json->routes (g "routes"))
                              :default (some-> (g "default") json->workflow))
       "refine"      (o/refine (json->workflow (g "worker")) (json->workflow (g "evaluator"))
                               :max-rounds (or (g "max-rounds") 3))

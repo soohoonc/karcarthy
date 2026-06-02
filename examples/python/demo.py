@@ -28,12 +28,12 @@ def run(workflow, input_text, adapter="mock"):
     return json.loads(proc.stdout)
 
 
-# 1) A workflow is data: a chain of two agents, run on the offline mock adapter.
-chain = {"type": "chain", "steps": [
+# 1) A workflow is data: a pipe of two agents, run on the offline mock adapter.
+workflow = {"type": "pipe", "steps": [
     {"type": "agent", "name": "researcher", "instructions": "Research the question."},
     {"type": "agent", "name": "summarizer", "instructions": "Summarize in one line."},
 ]}
-print("chain ->", run(chain, "what is a monad?")["text"])
+print("pipe ->", run(workflow, "what is a monad?")["text"])
 
 # 2) An agent edits its own definition at runtime, across the bridge. This needs
 #    a real model, so it uses the Claude CLI adapter (run with --live).

@@ -21,7 +21,7 @@ A running system needs only three core registries right now:
 {:agents {"planner" {:karcarthy/type :agent
                      :name "planner"
                      :instructions "..."}}
- :workflows {"main" {:karcarthy/type :chain
+ :workflows {"main" {:karcarthy/type :pipe
                      :steps [{:karcarthy/type :agent-ref
                               :name "planner"}]}}
  :history [{:operation {...}
@@ -53,7 +53,7 @@ Create or replace an agent or workflow.
 {:op :put
  :resource {:kind :workflow
             :id "main"
-            :workflow {:karcarthy/type :chain
+            :workflow {:karcarthy/type :pipe
                        :steps [{:karcarthy/type :agent-ref
                                 :name "planner"}]}}}
 ```
@@ -89,7 +89,7 @@ Invoke an agent or workflow.
  :input "What should happen next?"}
 ```
 
-Homogeneous fanout is the same operation over many inputs:
+Homogeneous map work is the same operation over many inputs:
 
 ```clojure
 {:op :call
@@ -97,13 +97,13 @@ Homogeneous fanout is the same operation over many inputs:
  :for-each ["api.clj" "db.clj" "ui.clj"]}
 ```
 
-Heterogeneous fanout should use the existing workflow node:
+Heterogeneous map work should use workflow data:
 
 ```clojure
 {:op :put
  :resource {:kind :workflow
             :id "review-swarm"
-            :workflow {:karcarthy/type :parallel
+            :workflow {:karcarthy/type :map
                        :branches [{:karcarthy/type :agent-ref :name "api-reviewer"}
                                   {:karcarthy/type :agent-ref :name "db-reviewer"}
                                   {:karcarthy/type :agent-ref :name "ux-reviewer"}]}}}
