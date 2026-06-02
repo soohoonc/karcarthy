@@ -3,9 +3,10 @@
   "pages": [
     "index",
     "start",
-    "concepts",
-    "guides",
+    "workflows",
+    "tutorials",
     "examples",
+    "prior-art",
     "reference"
   ]
 }

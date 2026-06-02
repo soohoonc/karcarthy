@@ -1,6 +1,6 @@
 ---
-title: Workflow Schema
-description: EDN shapes for agents, workflows, results, registry refs, and compatibility inputs.
+title: Workflow Data
+description: EDN shapes for agents, workflows, results, and registry refs.
 ---
 
 Workflows are EDN values. Every node is a map tagged with `:karcarthy/type`.
@@ -124,9 +124,3 @@ Workflow data may refer to named registry entries:
 
 Refs are resolved by `materialize` immediately before execution, so patches to
 state affect later calls.
-
-## Legacy compatibility
-
-The interpreter and JSON bridge still accept older saved workflow tags for
-compatibility. New docs, examples, and generated workflows should use
-`:pipe`, `:map`, `:iterate`, and `:bind`.
