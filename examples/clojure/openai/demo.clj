@@ -1,7 +1,7 @@
-;; OpenAI Swarm-style specialist routing, offline.
+;; OpenAI Agents SDK-style specialist routing, offline.
 ;;
 ;; Run:
-;;   clojure -M -e '(load-file "examples/clojure/swarm/demo.clj")'
+;;   clojure -M -e '(load-file "examples/clojure/openai/demo.clj")'
 
 (require '[clojure.pprint :as pp]
          '[clojure.string :as str]
@@ -21,7 +21,7 @@
 (k/defagent sales "Handle sales questions.")
 (k/defagent support "Handle general support.")
 
-(def swarm-triage
+(def specialist-routing
   (k/bind triage
           {"refund" refund
            "sales" sales
@@ -41,10 +41,10 @@
        "support" "Support specialist: gather context and unblock the customer."))))
 
 (println "workflow:")
-(pp/pprint (compact swarm-triage))
+(pp/pprint (compact specialist-routing))
 
 (println "\nresult:")
-(println (:text (k/run adapter swarm-triage
+(println (:text (k/run adapter specialist-routing
                        "I was charged twice and need a refund.")))
 
 (shutdown-agents)

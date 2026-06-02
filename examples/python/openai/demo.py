@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenAI Swarm-style specialist routing through the karcarthy executable."""
+"""OpenAI Agents SDK-style specialist routing through the karcarthy executable."""
 
 import json
 import sys
@@ -27,4 +27,15 @@ workflow = {
 print("workflow:")
 print(json.dumps(workflow, indent=2))
 print("\nresult:")
-print(run(workflow, "I was charged twice and need a refund.")["text"])
+print(
+    run(
+        workflow,
+        "I was charged twice and need a refund.",
+        mock_responses={
+            "triage": "refund",
+            "refund": "Refund specialist: verify charge id, explain policy, and start reversal.",
+            "sales": "Sales specialist: answer pricing and plan-fit questions.",
+            "support": "Support specialist: gather context and unblock the customer.",
+        },
+    )["text"]
+)

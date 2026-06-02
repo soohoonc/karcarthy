@@ -102,7 +102,7 @@ Heterogeneous map work should use workflow data:
 ```clojure
 {:op :put
  :resource {:kind :workflow
-            :id "review-swarm"
+            :id "review-panel"
             :workflow {:karcarthy/type :map
                        :branches [{:karcarthy/type :agent-ref :name "api-reviewer"}
                                   {:karcarthy/type :agent-ref :name "db-reviewer"}

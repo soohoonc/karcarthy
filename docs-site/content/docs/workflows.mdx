@@ -169,9 +169,9 @@ In continuation form, the second workflow receives the source result text.
 Because workflows are data, application code can inspect and rewrite them:
 
 ```clojure
-(-> (k/pipe researcher summarizer)
-    (update :steps conj reviewer)
-    (->> (k/run (k/mock-adapter) "summarize the prior work")))
+(let [workflow (-> (k/pipe researcher summarizer)
+                   (update :steps conj reviewer))]
+  (k/run (k/mock-adapter) workflow "summarize the prior work"))
 ```
 
 That is the point of karcarthy: keep the coordination graph visible and

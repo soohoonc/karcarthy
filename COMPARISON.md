@@ -31,7 +31,7 @@ The frameworks referenced:
 | Structured output | Pydantic model / Zod / `generateObject`; DSPy signatures type input/output fields | parse the reply yourself (roadmap: typed signatures / JSON Schema) |
 | Optimization | DSPy optimizers compile programs against metrics; others mostly leave prompt tuning to the application | no optimizer yet; workflows are easy to transform because they are data |
 | Streaming | tokens/events, especially to a UI | Claude CLI streaming hooks today |
-| Sessions / memory | built in (Agno AgentOS, PydanticAI) | `converse` / `:resume` for sessions; richer memory is delegated or out of scope |
+| Sessions / memory | built in (Agno AgentOS, PydanticAI) | adapter/session state is delegated; richer memory is out of scope today |
 | Observability | Logfire, AgentOS, DSPy tracing/debugging, etc. | OpenTelemetry spans via `karcarthy.otel/instrument` |
 
 ## What karcarthy does differently
