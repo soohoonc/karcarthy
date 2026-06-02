@@ -1,97 +1,106 @@
 ---
 title: Python Tutorial
-description: Drive a non-trivial karcarthy workflow through the JSON bridge from Python.
+description: Configure realistic agents in Python and run them through the JSON bridge.
 ---
 
 Python uses `karcarthy.cli` as a JSON bridge. The workflow is a plain Python
-dictionary, which keeps the orchestration inspectable and serializable.
+dictionary, but the agents are built from richer product-level profiles before
+they become JSON. The runnable file is `examples/python/tutorial_launch_brief.py`.
 
-## Complete example
+## Configure agents
 
-The runnable file is `examples/python/tutorial_launch_brief.py`.
+The helper renders a profile into one instruction string. This keeps the
+cross-language boundary simple while letting your app expose a better agent
+configuration UX.
 
 ```python
-#!/usr/bin/env python3
-import json
-import subprocess
-import sys
-
-
-def agent(name, instructions):
-    return {"type": "agent", "name": name, "instructions": instructions}
-
-
-def run(workflow, input_text, adapter="mock", mock_responses=None):
-    req = {"workflow": workflow, "input": input_text, "adapter": adapter}
-    if mock_responses:
-        req["mock-responses"] = mock_responses
-    req = json.dumps(req)
-    proc = subprocess.run(
-        ["clojure", "-M", "-m", "karcarthy.cli"],
-        input=req,
-        capture_output=True,
-        text=True,
+def render_instructions(profile):
+    sections = [
+        f"Role: {profile['role']}",
+        f"Mission: {profile['mission']}",
+    ]
+    if profile.get("context"):
+        sections.append("Operating context:\n" + bullet_list(profile["context"]))
+    if profile.get("tools"):
+        sections.append(
+            "Available tools:\n"
+            + bullet_list(profile["tools"])
+            + "\nUse tools only when they materially improve the answer."
+        )
+    else:
+        sections.append("Available tools: none for this offline tutorial run.")
+    sections.extend(
+        [
+            "Responsibilities:\n" + bullet_list(profile["responsibilities"]),
+            "Output contract:\n" + profile["output"],
+            "Interaction style:\n" + profile["tone"],
+        ]
     )
-    if proc.returncode != 0:
-        sys.exit("karcarthy CLI failed:\n" + proc.stderr)
-    return json.loads(proc.stdout)
+    if profile.get("boundaries"):
+        sections.append("Boundaries:\n" + bullet_list(profile["boundaries"]))
+    if profile.get("self_check"):
+        sections.append("Before finalizing, verify:\n" + bullet_list(profile["self_check"]))
+    return "\n\n".join(sections)
 
 
+def configured_agent(profile):
+    agent = {
+        "type": "agent",
+        "name": profile["name"],
+        "instructions": render_instructions(profile),
+    }
+    if profile.get("tools"):
+        agent["tools"] = profile["tools"]
+    return agent
+```
+
+Example specialist profile:
+
+```python
+product_reviewer = configured_agent(
+    {
+        "name": "product-reviewer",
+        "role": "Product launch reviewer",
+        "mission": "Assess user value, launch narrative, customer segmentation, and adoption risk.",
+        "context": launch_context,
+        "tools": ["customer-feedback", "roadmap-notes"],
+        "responsibilities": [
+            "Identify the primary user promise in one sentence.",
+            "Call out unclear customer value or missing beta evidence.",
+            "Recommend a launch decision from the product perspective.",
+        ],
+        "output": "Three bullets: Product signal, Product risk, Product recommendation.",
+        "tone": "Direct, constructive, and grounded in user impact.",
+        "boundaries": ["Do not discuss infrastructure, security, or support unless it affects user value."],
+        "self_check": ["Includes a concrete recommendation.", "Names any missing evidence."],
+    }
+)
+```
+
+## Compose workflow data
+
+The profile helper only changes how agents are configured. The workflow stays the
+same JSON shape:
+
+```python
 reviewers = {
     "type": "map",
-    "branches": [
-        agent("product-reviewer", "Review launch value and user impact."),
-        agent("engineering-reviewer", "Review operational risk and rollout plan."),
-        agent("security-reviewer", "Review policy, data, and abuse risk."),
-        agent("support-reviewer", "Review support readiness and messaging."),
-    ],
+    "branches": [product_reviewer, engineering_reviewer, security_reviewer, support_reviewer],
 }
 
 launch_brief = {
     "type": "iterate",
-    "worker": {
-        "type": "pipe",
-        "steps": [
-            reviewers,
-            agent("brief-writer", "Turn reviewer notes into a launch brief."),
-        ],
-    },
-    "evaluator": agent("critic", "Reply ACCEPT when the launch brief is complete."),
+    "worker": {"type": "pipe", "steps": [reviewers, brief_writer]},
+    "evaluator": critic,
     "max-rounds": 2,
 }
 
 workflow = {
     "type": "bind",
-    "source": agent("classifier", "Classify as launch or incident."),
-    "routes": {
-        "launch": launch_brief,
-        "incident": agent("incident-responder", "Write an incident response plan."),
-    },
+    "source": classifier,
+    "routes": {"launch": launch_brief, "incident": incident_responder},
     "default": launch_brief,
 }
-
-mock_responses = {
-    "classifier": "launch",
-    "product-reviewer": "Product: enterprise admins need this before rollout.",
-    "engineering-reviewer": "Engineering: ship behind a flag and watch SSO latency.",
-    "security-reviewer": "Security: no new sensitive data; retain audit logs.",
-    "support-reviewer": "Support: publish setup docs and prepare rollback messaging.",
-    "brief-writer": (
-        "Decision: launch with a staged rollout.\n"
-        "Risks: SSO latency, misconfigured tenants, support readiness.\n"
-        "Next actions: owner signoff, feature flag, docs update, launch monitor."
-    ),
-    "critic": "ACCEPT",
-    "incident-responder": "Incident plan: stabilize, communicate, then review.",
-}
-
-result = run(
-    workflow,
-    "Prepare the launch brief for a new enterprise SSO feature.",
-    mock_responses=mock_responses,
-)
-print(result["text"])
-print(f"rounds: {result.get('rounds')} accepted? {result.get('accepted?')}")
 ```
 
 ## Run it
@@ -100,8 +109,10 @@ print(f"rounds: {result.get('rounds')} accepted? {result.get('accepted?')}")
 python3 examples/python/tutorial_launch_brief.py
 ```
 
-The mock adapter traces the shape. With a live adapter, the same JSON workflow
-delegates every agent call to the selected Agent SDK or CLI.
+The mock adapter uses deterministic `mock-responses`, so the example exercises
+the full workflow without model calls. With a live adapter, the same configured
+agents and workflow delegate each single-agent call to the selected Agent SDK or
+CLI.
 
 ## Why Python uses a synthesizer agent
 

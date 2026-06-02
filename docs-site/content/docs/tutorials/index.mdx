@@ -7,7 +7,29 @@ These tutorials build the same useful workflow in three languages: a launch
 readiness assistant that classifies a request, runs multiple specialist
 reviewers, combines their notes, drafts a brief, and loops through critique.
 
-The workflow is intentionally more than a toy:
+The workflow is intentionally more than a toy, and the agents are intentionally
+more than one-line prompts.
+
+## Agent configuration UX
+
+Each tutorial builds agents from profile data before turning them into ordinary
+karcarthy agent maps. The profile fields are application UX, not new workflow
+concepts:
+
+- role and mission define identity.
+- operating context acts like a compact workspace bootstrap.
+- tools describe what the adapter may expose to the agent.
+- responsibilities describe the job to do.
+- output contract makes downstream composition predictable.
+- tone controls the user-facing experience.
+- boundaries and self-checks keep the agent honest.
+
+This mirrors the shape of mature agent products: the product owns agent
+configuration, while karcarthy keeps orchestration as portable data.
+
+## Workflow shape
+
+The workflow uses the small functional vocabulary:
 
 - `bind` chooses the launch path from a classifier result.
 - `map` runs independent reviewers.
