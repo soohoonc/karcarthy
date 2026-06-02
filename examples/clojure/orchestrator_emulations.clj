@@ -36,7 +36,7 @@
          "generalist" "General path: answer directly and keep the next action explicit."
 
          "researcher" "Market signal: teams want orchestrators, but they also want inspectable plans."
-         "analyst" "Risk readout: keep SDK/CLI boundaries clear, add schemas where outputs cross teams, trace every handoff."
+         "analyst" "Risk readout: keep SDK/CLI boundaries clear, add schemas where outputs cross teams, trace every ownership transfer."
          "writer" (str "Brief: " prompt)
 
          "pm" (append-line prompt "PM" "Scope the demo around patterns developers already recognize.")
@@ -92,11 +92,11 @@
   (k/group-chat [pm engineer critic] :rounds 5))
 
 (def openai-agents-like
-  (k/handoff-router triage
-                    {"billing"   billing-specialist
-                     "technical" technical-specialist
-                     "general"   generalist}
-                    :default generalist))
+  (k/bind triage
+          {"billing"   billing-specialist
+           "technical" technical-specialist
+           "general"   generalist}
+          :default generalist))
 
 (defn- classify-node [{:keys [input]}]
   {:text  input
@@ -148,7 +148,7 @@
    {:name "LangGraph-style: state, nodes, and routed edges"
     :workflow langgraph-like
     :input "Should the API demo be docs-first or code-first?"}
-   {:name "Google ADK-style workflow agent: deterministic parallel checks"
+   {:name "Google ADK-style workflow agent: deterministic concurrent checks"
     :workflow adk-like
     :input "Can we launch the orchestrator emulation example?"}])
 

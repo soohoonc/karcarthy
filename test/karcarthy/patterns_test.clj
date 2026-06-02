@@ -23,39 +23,39 @@
 (deftest crew-compiles-tasks-to-process
   (let [tasks [{:agent a :id :one :description "First task."}
                {:agent b :id :two :description "Second task."}]]
-    (testing "sequential crews become chains"
+    (testing "sequential crews become pipes"
       (let [flow (p/crew tasks)]
-        (is (= :chain (:karcarthy/type flow)))
+        (is (= :pipe (:karcarthy/type flow)))
         (is (= ["a/one" "b/two"] (mapv :name (:steps flow))))))
-    (testing "parallel crews become parallel nodes"
+    (testing "concurrent crews become map nodes"
       (let [flow (p/crew tasks :process :parallel :max-concurrency 2)]
-        (is (= :parallel (:karcarthy/type flow)))
+        (is (= :map (:karcarthy/type flow)))
         (is (= 2 (:max-concurrency flow)))
         (is (= ["a/one" "b/two"] (mapv :name (:branches flow))))))
-    (testing "hierarchical crews become orchestrator-worker nodes"
+    (testing "hierarchical crews become planner/worker map nodes"
       (let [manager (k/agent "manager" "plan")
             flow    (p/crew tasks :process :hierarchical :manager manager)]
-        (is (= :orchestrate (:karcarthy/type flow)))
+        (is (= :map (:karcarthy/type flow)))
         (is (= "manager" (:name (:planner flow))))
-        (is (= :chain (:karcarthy/type (:worker flow))))))))
+        (is (= :pipe (:karcarthy/type (:worker flow))))))))
 
-(deftest group-chat-compiles-round-robin-chain
+(deftest group-chat-compiles-round-robin-pipe
   (let [flow (p/group-chat [a b c] :rounds 5)]
-    (is (= :chain (:karcarthy/type flow)))
+    (is (= :pipe (:karcarthy/type flow)))
     (is (= ["a" "b" "c" "a" "b"] (mapv :name (:steps flow))))))
 
 (deftest workflow-agent-compiles-deterministic-patterns
-  (is (= :chain (:karcarthy/type (p/workflow-agent :sequential [a b]))))
-  (is (= :parallel (:karcarthy/type (p/workflow-agent :parallel [a b]))))
+  (is (= :pipe (:karcarthy/type (p/workflow-agent :sequential [a b]))))
+  (is (= :map (:karcarthy/type (p/workflow-agent :parallel [a b]))))
   (let [loop-flow (p/workflow-agent :loop [a b] :max-rounds 4)]
-    (is (= :refine (:karcarthy/type loop-flow)))
+    (is (= :iterate (:karcarthy/type loop-flow)))
     (is (= 4 (:max-rounds loop-flow)))))
 
-(deftest handoff-router-is-route-data
+(deftest handoff-router-is-bind-data
   (let [router (k/agent "triage" "classify")
         flow   (p/handoff-router router {"billing" a} :default b)]
-    (is (= :route (:karcarthy/type flow)))
-    (is (= router (:router flow)))
+    (is (= :bind (:karcarthy/type flow)))
+    (is (= router (:source flow)))
     (is (= a (get-in flow [:routes "billing"])))
     (is (= b (:default flow)))))
 

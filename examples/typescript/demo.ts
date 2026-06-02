@@ -25,15 +25,15 @@ function run(workflow: Workflow, input: string, adapter = "mock"): any {
   return JSON.parse(out);
 }
 
-// 1) A workflow is data: a chain of two agents, run on the offline mock adapter.
-const chain: Workflow = {
-  type: "chain",
+// 1) A workflow is data: a pipe of two agents, run on the offline mock adapter.
+const workflow: Workflow = {
+  type: "pipe",
   steps: [
     { type: "agent", name: "researcher", instructions: "Research the question." },
     { type: "agent", name: "summarizer", instructions: "Summarize in one line." },
   ],
 };
-console.log("chain ->", run(chain, "what is a monad?").text);
+console.log("pipe ->", run(workflow, "what is a monad?").text);
 
 // 2) An agent edits its own definition at runtime, across the bridge (real model).
 if (process.argv.includes("--live")) {

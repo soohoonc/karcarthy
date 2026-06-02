@@ -44,7 +44,7 @@ io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
 (k/defagent summarizer "Summarize the findings in one sentence.")
 
 ;; a workflow is data; run it through any adapter (mock is offline and deterministic)
-(k/run (k/mock-adapter) (k/chain researcher summarizer) "what is a monad?")
+(k/run (k/mock-adapter) (k/pipe researcher summarizer) "what is a monad?")
 ;=> {:karcarthy/type :result, :ok? true, :text "...", ...}
 ```
 
@@ -56,11 +56,11 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   (streaming + sessions), `command` (wrap any CLI, coding agent, or local
   model), `openai`. Pass one adapter, or pass a registry and let each agent
   choose with `:adapter`.
-- **Workflow nodes**, all data: `chain`, `parallel`, `route`, `refine`,
-  `orchestrate`, `handoff`, and multi-turn `converse`.
+- **Workflows as data**: compose agents with `pipe`, `map`, `reduce`,
+  `iterate`, `bind`, and multi-turn `converse`.
 - **Popular orchestrator shapes as data**: `karcarthy.patterns` emulates
   LangGraph-style state graphs, CrewAI-style crews, AutoGen-style round-robin
-  group chats, OpenAI-style handoff routing, and ADK-style workflow agents.
+  group chats, OpenAI-style specialist routing, and ADK-style workflow agents.
 - **Agents speak karcarthy**: advanced self-modifying flows parse EDN via
   `clojure.edn`, never `eval`.
 - **OpenTelemetry-ready**: wrap an adapter with `karcarthy.otel/instrument` to
@@ -70,7 +70,7 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
 (require '[karcarthy.otel :as otel])
 
 (k/run (otel/instrument (k/mock-adapter))
-       (k/chain researcher summarizer)
+       (k/pipe researcher summarizer)
        "what is a monad?")
 ```
 

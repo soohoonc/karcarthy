@@ -47,7 +47,7 @@ Pass a registry when agents should choose a system with `:adapter`:
    :claude  (k/claude-cli {})})
 
 (k/run agent-systems
-       (k/chain
+       (k/pipe
          (k/agent "planner" "Plan." :adapter :claude)
          (k/agent "checker" "Check." :adapter :default))
        "ship a docs site")

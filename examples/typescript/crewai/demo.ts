@@ -18,7 +18,7 @@ function run(workflow: Workflow, input: string): any {
 }
 
 const workflow: Workflow = {
-  type: "chain",
+  type: "pipe",
   steps: [
     agent("researcher/market", "Find the market signal."),
     agent("analyst/risk", "Name the main risk."),

@@ -1,4 +1,4 @@
-// OpenAI Swarm-style triage handoff through the karcarthy JSON bridge.
+// OpenAI Swarm-style specialist routing through the karcarthy JSON bridge.
 
 import { execFileSync } from "node:child_process";
 
@@ -18,8 +18,8 @@ function run(workflow: Workflow, input: string): any {
 }
 
 const workflow: Workflow = {
-  type: "route",
-  router: agent("triage", "Classify as refund, sales, or support."),
+  type: "bind",
+  source: agent("triage", "Classify as refund, sales, or support."),
   routes: {
     refund: agent("refund", "Handle refunds."),
     sales: agent("sales", "Handle sales questions."),

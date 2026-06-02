@@ -47,7 +47,7 @@ Takeaways for karcarthy:
 
 - MCP, hosted tools, and function tools should stay in SDK/provider config
   until karcarthy has a concrete reason to interpret them directly.
-- fanout can map to agents-as-tools, multiple SDK runs, or graph branches.
+- `map` can target agents-as-tools, multiple SDK runs, or graph branches.
 - final output, emitted updates, and resumable state should stay separate.
 - mutable runtime state should preserve enough result data for replay and
   continuation.
@@ -70,7 +70,7 @@ Takeaways for karcarthy:
 Takeaways for karcarthy:
 
 - subagents provide context isolation and return only final messages to parents;
-  this supports explicit `context` passing and fanout synthesis.
+  this supports explicit `context` passing and `map`/`reduce` synthesis.
 - MCP servers should be scoping boundaries so tool definitions do not bloat the
   parent context unnecessarily.
 - permission modes are part of the host/runtime adapter, not first-class graph

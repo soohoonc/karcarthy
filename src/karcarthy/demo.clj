@@ -4,7 +4,7 @@
       clojure -M -m karcarthy.demo
 
   Shows the central idea - a karcarthy workflow is *data* - plus the DSL sugar
-  (`defagent` / `defworkflow`) and orchestrator-workers fanning out over the
+  (`defagent` / `defworkflow`) and map/reduce over the
   command adapter with real subprocesses. No API key or network required."
   (:require [clojure.pprint :as pp]
             [clojure.string :as str]
@@ -21,9 +21,9 @@
 
 ;; --- A workflow via defworkflow: validated at load time --------------------
 (o/defworkflow support-desk
-  (o/route triage
+  (o/bind triage
            {"billing"   billing
-            "technical" (o/chain technical reviewer)   ; draft, then review
+            "technical" (o/pipe technical reviewer)   ; draft, then review
             "general"   general}
            :default general))
 
@@ -55,14 +55,14 @@
     (println "ok?  " (k/ok? r))
     (println "text:" (:text r)))
 
-  (println "\n=== Orchestrate over the command adapter (real subprocesses) ===")
+  (println "\n=== Map/reduce over the command adapter (real subprocesses) ===")
   ;; planner splits into words; each worker is `tr a-z A-Z` (uppercase via a
-  ;; real subprocess); synthesize rejoins. This actually fans out and gathers.
+  ;; real subprocess); reduce rejoins the mapped results.
   (let [shell    (k/command-adapter ["tr" "a-z" "A-Z"])
-        pipeline (o/orchestrate (fn [s] (str/split (str/trim s) #"\s+"))
-                                (k/agent "shout" "uppercase")
-                                :synthesize (fn [rs _]
-                                              (k/result {:text (str/join " " (map :text rs))})))
+        pipeline (o/map (fn [s] (str/split (str/trim s) #"\s+"))
+                        (k/agent "shout" "uppercase")
+                        :reduce (fn [rs _]
+                                  (k/result {:text (str/join " " (map :text rs))})))
         r        (o/run shell pipeline "homoiconic agents are data")]
     (println "subtasks:" (:subtasks r))
     (println "result:  " (:text r)))

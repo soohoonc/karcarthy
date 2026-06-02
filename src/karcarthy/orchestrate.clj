@@ -2,17 +2,15 @@
   "Orchestration as data.
 
   A *workflow* is a plain Clojure value describing how to coordinate agents. It is
-  either an agent (a leaf; see `karcarthy.core/agent`) or a composite node
-  tagged with `:karcarthy/type`:
+  either an agent (a leaf; see `karcarthy.core/agent`) or a composite built with
+  functional constructors:
 
-    :chain        run workflows in sequence, threading each result's :text into the
-                  next; short-circuits on the first failure.
-    :parallel     run workflows concurrently on the same input (bounded); gather.
-    :route        pick one downstream workflow by a label from a router (a fn of the
-                  input, or an agent whose reply is the label).
-    :refine       evaluator-optimizer: draft, critique, repeat until accepted.
-    :orchestrate  orchestrator-workers: plan subtasks, fan out, gather.
-    :handoff      run one workflow, then hand off to another with shared session.
+    pipe     run workflows in sequence, threading each result's :text into the next.
+    map      run a collection of workflows on the same input, or run a worker over
+             subtasks produced by a planner.
+    reduce   combine mapped results.
+    iterate  draft, critique, and retry until accepted or a round limit is reached.
+    bind     choose or continue to the next workflow from a previous result.
 
   Because a workflow is data, you build, generate and serialize it with ordinary
   Clojure. `run` interprets a workflow through an adapter.
@@ -21,6 +19,7 @@
   output of one is valid input to another. Composite nodes are fault-isolated,
   so a child that throws becomes a not-ok result instead of crashing the run
   (see `safe-run`)."
+  (:refer-clojure :exclude [iterate map reduce])
   (:require [clojure.string :as str]
             [karcarthy.core :as k]
             [karcarthy.otel :as otel])
@@ -31,82 +30,114 @@
 ;; ---------------------------------------------------------------------------
 
 (defn chain
-  "A workflow that runs `steps` (agents or workflows) in sequence, threading the :text
-  of each result into the next step's input. Returns the last result, or the
-  first failing result (short-circuiting)."
+  "Compatibility name for `pipe`."
   [& steps]
-  {:karcarthy/type :chain :steps (vec steps)})
+  {:karcarthy/type :pipe :steps (vec steps)})
 
 (defn parallel
-  "A workflow that runs each of `branches` concurrently on the same input and
-  returns a result whose :results is the vector of branch results (in order).
-  Its :text is the branch texts joined by blank lines, and :ok? is true only if
-  every branch succeeded. Concurrency is bounded (default 16).
-
-  Use `parallel*` for `:gather` / `:max-concurrency` options."
+  "Compatibility name for `map` over a collection of workflows."
   [& branches]
-  {:karcarthy/type :parallel :branches (vec branches)})
+  {:karcarthy/type :map :branches (vec branches)})
 
 (defn parallel*
-  "Like `parallel` but with options:
-    :gather           fn of the results vector -> a result/map; its :text
-                      becomes the node's :text.
-    :max-concurrency  max branches running at once (default 16)."
-  [branches & {:keys [gather max-concurrency]}]
-  (cond-> {:karcarthy/type :parallel :branches (vec branches)}
-    gather          (assoc :gather gather)
-    max-concurrency (assoc :max-concurrency max-concurrency)))
+  "Compatibility name for `map` over workflows with `:reduce` and concurrency options."
+  [branches & {:keys [gather reduce max-concurrency]}]
+  (let [gather (or gather reduce)]
+    (cond-> {:karcarthy/type :map :branches (vec branches)}
+      gather          (assoc :reduce gather)
+      max-concurrency (assoc :max-concurrency max-concurrency))))
 
 (defn route
-  "A workflow that dispatches to one downstream workflow chosen by `router`:
-    - if `router` is a fn, it is called with the input and must return a label;
-    - otherwise `router` is run as a workflow and its result's :text is the label.
-  `routes` maps labels to workflows. Matching is exact first, then (for string
-  labels) case-insensitive and substring - so an agent that replies \"This is a
-  billing question\" still matches the route \"billing\". `:default` (optional
-  kwarg) is used when nothing matches."
+  "Compatibility name for `bind` with a choice map."
   [router routes & {:keys [default]}]
-  (cond-> {:karcarthy/type :route :router router :routes routes}
+  (cond-> {:karcarthy/type :bind :source router :routes routes}
     default (assoc :default default)))
 
 (defn refine
-  "Evaluator-optimizer: a `worker` drafts an answer, an `evaluator` critiques it,
-  and the worker revises using that critique - repeating until the evaluator
-  accepts or `:max-rounds` (default 3) is reached. Returns the final worker
-  result annotated with `:rounds` and `:accepted?`.
-
-  `evaluator` is either:
-    - a fn of [draft-result input] -> {:accept? boolean :feedback string}, or
-    - a workflow/agent run on the draft; its reply is the verdict - accepted when the
-      trimmed text begins with \"ACCEPT\" (case-insensitive), otherwise the whole
-      reply is treated as feedback."
+  "Compatibility name for `iterate`."
   [worker evaluator & {:keys [max-rounds] :or {max-rounds 3}}]
-  {:karcarthy/type :refine :worker worker :evaluator evaluator :max-rounds max-rounds})
+  {:karcarthy/type :iterate :worker worker :evaluator evaluator :max-rounds max-rounds})
 
 (defn orchestrate
-  "Orchestrator-workers: a `planner` decomposes the input into subtasks, a
-  `worker` workflow handles each subtask (fanned out, at most :max-concurrency at a
-  time, default 16), and an optional
-  `:synthesize` fn combines the worker results.
-
-  `planner` is either a fn of input -> seq of subtask strings, or a workflow/agent
-  whose reply is parsed into subtasks (one per non-blank line, with leading list
-  markers like '-', '*', '1.' stripped). `:synthesize` is a fn of
-  [results input] -> result/map; when present its :text becomes the node :text."
-  [planner worker & {:keys [synthesize max-concurrency] :or {max-concurrency 16}}]
-  (cond-> {:karcarthy/type  :orchestrate
-           :planner         planner
-           :worker          worker
-           :max-concurrency max-concurrency}
-    synthesize (assoc :synthesize synthesize)))
+  "Compatibility name for `map` with planner and worker arguments."
+  [planner worker & {:keys [synthesize reduce max-concurrency] :or {max-concurrency 16}}]
+  (let [synthesize (or synthesize reduce)]
+    (cond-> {:karcarthy/type  :map
+             :planner         planner
+             :worker          worker
+             :max-concurrency max-concurrency}
+      synthesize (assoc :reduce synthesize))))
 
 (defn handoff
-  "Run `from`, then hand off to `to`, threading `from`'s session so `to` inherits
-  its context on adapters that support sessions (e.g. claude-cli, via --resume).
-  `to`'s input defaults to `from`'s :text; pass `:prompt` to override. On
-  adapters without sessions the handoff still runs both workflows in sequence."
+  "Compatibility name for `bind` with two workflows."
   [from to & {:keys [prompt]}]
-  {:karcarthy/type :handoff :from from :to to :prompt prompt})
+  {:karcarthy/type :bind :source from :to to :prompt prompt})
+
+(defn pipe
+  "Run `steps` in sequence, threading each result's :text into the next step."
+  [& steps]
+  (apply chain steps))
+
+(defn map
+  "Map work over a collection.
+
+  With one collection argument, each workflow in the collection runs on the same
+  input. With planner and worker arguments, the planner yields subtasks and the
+  worker runs once per subtask. Options:
+    :reduce           fn combining mapped results into a result/map.
+    :max-concurrency  max mapped calls running at once."
+  [& args]
+  (let [first-arg (first args)
+        opts?     (or (= 1 (count args)) (keyword? (second args)))]
+    (if (and (sequential? first-arg) opts?)
+      (let [{:keys [reduce max-concurrency]} (apply hash-map (rest args))]
+        (parallel* first-arg :reduce reduce :max-concurrency max-concurrency))
+      (let [[planner worker & opts] args]
+        (apply orchestrate planner worker opts)))))
+
+(defn reduce
+  "Attach a reducer to mapped work.
+
+  `f` receives the mapped result vector for `map` over branches, or
+  [results input] for planner/worker `map`."
+  [f mapped & {:keys [max-concurrency]}]
+  (let [node (if (sequential? mapped) (map mapped) mapped)]
+    (case (:karcarthy/type node)
+      :map
+      (cond-> (assoc node :reduce f)
+        max-concurrency (assoc :max-concurrency max-concurrency))
+
+      :parallel
+      (cond-> (assoc node :gather f)
+        max-concurrency (assoc :max-concurrency max-concurrency))
+
+      :orchestrate
+      (cond-> (assoc node :synthesize f)
+        max-concurrency (assoc :max-concurrency max-concurrency))
+
+      (throw (ex-info "reduce expects mapped workflow data"
+                      {:workflow mapped :type (:karcarthy/type node)})))))
+
+(defn iterate
+  "Run a worker/evaluator loop until accepted or `:max-rounds` is reached."
+  [worker evaluator & opts]
+  (apply refine worker evaluator opts))
+
+(defn bind
+  "Run `source`, then bind its result to the next workflow.
+
+  When `next` is a choice map, `source` picks the key and the selected workflow
+  receives the original input. Otherwise `next` is treated as the continuation
+  workflow and receives `source`'s result text, preserving session ids when the
+  adapter supports them."
+  [source next & {:keys [default prompt] :as opts}]
+  (if (and (map? next) (not (contains? next :karcarthy/type)))
+    (if (contains? opts :default)
+      (route source next :default default)
+      (route source next))
+    (if (contains? opts :prompt)
+      (handoff source next :prompt prompt)
+      (handoff source next))))
 
 ;; ---------------------------------------------------------------------------
 ;; Interpreter
@@ -168,6 +199,54 @@
 (defmethod run-node :agent
   [runner agent input opts]
   (k/run-agent runner agent input opts))
+
+(defmethod run-node :pipe
+  [runner node input opts]
+  (run-node runner (assoc node :karcarthy/type :chain) input opts))
+
+(defmethod run-node :map
+  [runner {:keys [branches planner worker reduce gather synthesize] :as node} input opts]
+  (cond
+    branches
+    (run-node runner
+              (cond-> (assoc node :karcarthy/type :parallel)
+                (or reduce gather) (assoc :gather (or reduce gather)))
+              input opts)
+
+    (and planner worker)
+    (run-node runner
+              (cond-> (assoc node :karcarthy/type :orchestrate)
+                (or reduce synthesize) (assoc :synthesize (or reduce synthesize)))
+              input opts)
+
+    :else
+    (throw (ex-info "map workflow requires :branches or :planner/:worker"
+                    {:node node}))))
+
+(defmethod run-node :iterate
+  [runner node input opts]
+  (run-node runner (assoc node :karcarthy/type :refine) input opts))
+
+(defmethod run-node :bind
+  [runner {:keys [source router from routes default to prompt] :as node} input opts]
+  (let [source (or source router from)]
+    (cond
+      routes
+      (run-node runner {:karcarthy/type :route
+                        :router         source
+                        :routes         routes
+                        :default        default}
+                input opts)
+
+      to
+      (run-node runner {:karcarthy/type :handoff
+                        :from           source
+                        :to             to
+                        :prompt         prompt}
+                input opts)
+
+      :else
+      (throw (ex-info "bind workflow requires :routes or :to" {:node node})))))
 
 (defmethod run-node :chain
   [runner {:keys [steps]} input opts]
@@ -253,8 +332,8 @@
       #(vec (planner input)))
     (->> (str/split-lines (str (:text (safe-run runner planner input
                                                 (otel/with-child-path opts [:planner])))))
-         (map #(str/replace % list-marker ""))
-         (map str/trim)
+         (clojure.core/map #(str/replace % list-marker ""))
+         (clojure.core/map str/trim)
          (remove str/blank?)
          vec)))
 
@@ -327,8 +406,8 @@
   "Define a var holding a workflow, validating at load time that it is runnable.
 
     (defworkflow support-desk
-      (route triage {\"billing\"   billing
-                     \"technical\" (chain technical reviewer)}))"
+      (bind triage {\"billing\"   billing
+                    \"technical\" (pipe technical reviewer)}))"
   [sym workflow-form]
   `(def ~sym
      (let [f# ~workflow-form]
@@ -341,8 +420,8 @@
   validates at load time that it is runnable.
 
     (defflow support-desk
-      (route triage {\"billing\"   billing
-                     \"technical\" (chain technical reviewer)}))"
+      (bind triage {\"billing\"   billing
+                    \"technical\" (pipe technical reviewer)}))"
   [sym flow-form]
   `(def ~sym
      (let [f# ~flow-form]

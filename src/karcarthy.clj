@@ -3,12 +3,12 @@
   namespace, so you can use a single alias instead of juggling several:
 
       (require '[karcarthy :as k])
-      (k/run (k/claude-cli {}) (k/chain a b) \"hi\")
+      (k/run (k/claude-cli {}) (k/pipe a b) \"hi\")
 
   The canonical homes are still `karcarthy.core`, `karcarthy.orchestrate`,
   `karcarthy.session`, `karcarthy.self`, and the implementation adapters;
   this namespace only forwards to them."
-  (:refer-clojure :exclude [agent])
+  (:refer-clojure :exclude [agent iterate map reduce])
   (:require [karcarthy.core]
             [karcarthy.orchestrate]
             [karcarthy.patterns]
@@ -58,13 +58,11 @@
 (export karcarthy.core/ok?)
 
 ;; orchestration
-(export karcarthy.orchestrate/chain)
-(export karcarthy.orchestrate/parallel)
-(export karcarthy.orchestrate/parallel*)
-(export karcarthy.orchestrate/route)
-(export karcarthy.orchestrate/refine)
-(export karcarthy.orchestrate/orchestrate)
-(export karcarthy.orchestrate/handoff)
+(export karcarthy.orchestrate/pipe)
+(export karcarthy.orchestrate/map)
+(export karcarthy.orchestrate/reduce)
+(export karcarthy.orchestrate/iterate)
+(export karcarthy.orchestrate/bind)
 (export karcarthy.orchestrate/run)
 (export karcarthy.orchestrate/run-flow)
 (export karcarthy.orchestrate/workflow?)
@@ -77,7 +75,6 @@
 (export karcarthy.patterns/crew)
 (export karcarthy.patterns/group-chat)
 (export karcarthy.patterns/workflow-agent)
-(export karcarthy.patterns/handoff-router)
 (export karcarthy.patterns/state-graph)
 
 ;; sessions

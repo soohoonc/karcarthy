@@ -31,10 +31,22 @@
 
 (deftest constructors-build-data
   (testing "workflows are plain tagged data"
-    (is (= {:karcarthy/type :chain :steps [a b]} (o/chain a b)))
-    (is (= {:karcarthy/type :parallel :branches [a b]} (o/parallel a b)))
-    (is (= {:karcarthy/type :route :router :r :routes {}} (o/route :r {})))
+    (is (= {:karcarthy/type :pipe :steps [a b]} (o/pipe a b)))
+    (is (= {:karcarthy/type :map :branches [a b]} (o/map [a b])))
+    (is (= {:karcarthy/type :bind :source :r :routes {}} (o/bind :r {})))
+    (is (= {:karcarthy/type :iterate :worker a :evaluator b :max-rounds 2}
+           (o/iterate a b :max-rounds 2)))
+    (is (= {:karcarthy/type :pipe :steps [a b]} (o/chain a b)))
+    (is (= {:karcarthy/type :map :branches [a b]} (o/parallel a b)))
+    (is (= {:karcarthy/type :bind :source :r :routes {}} (o/route :r {})))
     (is (= c (get-in (o/route :r {} :default c) [:default])))))
+
+(deftest reduce-adds-a-combiner-to-mapped-work
+  (testing "reduce attaches a gather function to a mapped branch collection"
+    (let [gather (fn [rs] (k/result {:text (str/join "|" (map :text rs))}))
+          flow   (o/reduce gather (o/map [a b c]))
+          r      (o/run h flow "hi")]
+      (is (= "[a] hi|[b] hi|[c] hi" (:text r))))))
 
 (deftest chain-threads-text
   (testing "each result's text feeds the next step"
@@ -222,7 +234,7 @@
   (testing "defworkflow defines and validates a workflow"
     (o/defworkflow good-workflow (o/chain a b))
     (is (o/workflow? good-workflow))
-    (is (= :chain (:karcarthy/type good-workflow))))
+    (is (= :pipe (:karcarthy/type good-workflow))))
   (testing "defworkflow rejects a non-workflow at load time"
     (let [ex   (try (eval '(karcarthy.orchestrate/defworkflow bad-workflow
                              {:karcarthy/type :nonsense}))
@@ -238,7 +250,7 @@
   (testing "defflow remains as a compatibility alias"
     (o/defflow good-flow (o/chain a b))
     (is (o/workflow? good-flow))
-    (is (= :chain (:karcarthy/type good-flow))))
+    (is (= :pipe (:karcarthy/type good-flow))))
   (testing "defflow rejects a non-flow at load time"
     ;; eval of a top-level def wraps the runtime throw in a CompilerException,
     ;; so assert our message appears somewhere in the cause chain.

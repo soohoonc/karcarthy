@@ -7,7 +7,7 @@
     (let [a (kc/agent "x" "i")]
       (is (kc/agent? a)))
     (let [r (kc/run (kc/mock-runner)
-                    (kc/chain (kc/agent "a" "i") (kc/agent "b" "i"))
+                    (kc/pipe (kc/agent "a" "i") (kc/agent "b" "i"))
                     "hi")]
       (is (kc/ok? r))
       (is (= "[b] [a] hi" (:text r))))))
@@ -17,7 +17,7 @@
     (kc/defagent facade-agent "instr" :model "m")
     (is (= "facade-agent" (:name facade-agent)))
     (is (= "m" (:model facade-agent)))
-    (kc/defworkflow facade-workflow (kc/chain facade-agent))
+    (kc/defworkflow facade-workflow (kc/pipe facade-agent))
     (is (kc/workflow? facade-workflow))))
 
 (deftest facade-reexports-values

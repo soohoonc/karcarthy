@@ -46,7 +46,7 @@ The mock adapter is deterministic and does not call a model:
 
 ```clojure
 (k/run (k/mock-adapter)
-       (k/chain researcher summarizer)
+       (k/pipe researcher summarizer)
        "what is a monad?")
 ```
 
@@ -65,7 +65,7 @@ Once the workflow behaves correctly offline, swap in a live agent system:
 
 ```clojure
 (k/run (k/claude-cli {})
-       (k/chain researcher summarizer)
+       (k/pipe researcher summarizer)
        "what is a monad?")
 ```
 

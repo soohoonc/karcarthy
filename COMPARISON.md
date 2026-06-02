@@ -27,7 +27,7 @@ The frameworks referenced:
 | Define an agent | a host-language object/module: `Agent(model, instructions, tools)`, a DSPy `Signature` + module, or `{ model, tools }` (TS) | a data map: `{:karcarthy/type :agent :name … :instructions … :model …}` |
 | The agent loop | the framework runs it for you | delegated to the `claude` CLI, OpenAI Agents SDK, Codex CLI, a local model, or another adapter |
 | Tools | typed functions: Pydantic models / Zod schemas / Python callables; DSPy `ReAct` can use tools | a tool allowlist handed to the selected SDK/CLI, when that system supports it |
-| Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | workflow nodes as data: `chain`, `parallel`, `route`, `refine`, `orchestrate`, `handoff` |
+| Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | functional workflow data: `pipe`, `map`, `reduce`, `iterate`, `bind` |
 | Structured output | Pydantic model / Zod / `generateObject`; DSPy signatures type input/output fields | parse the reply yourself (roadmap: typed signatures / JSON Schema) |
 | Optimization | DSPy optimizers compile programs against metrics; others mostly leave prompt tuning to the application | no optimizer yet; workflows are easy to transform because they are data |
 | Streaming | tokens/events, especially to a UI | Claude CLI streaming hooks today |

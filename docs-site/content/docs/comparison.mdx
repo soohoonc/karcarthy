@@ -15,7 +15,7 @@ to an agent SDK, agent framework, coding-agent CLI, or command adapter.
 | Define an agent | Host-language object, module, decorator, or typed declaration. | A data map: `{:karcarthy/type :agent ...}`. |
 | Agent loop | The framework or SDK runs it. | The selected SDK, framework, CLI, or adapter runs it. |
 | Tools | Typed functions, schemas, callables, or SDK tool definitions. | Tool allowlists and execution are handed to that SDK/CLI. |
-| Multi-agent | Teams, handoffs, graphs, chats, or workflows. | Workflow nodes as data: `chain`, `parallel`, `route`, `refine`, `orchestrate`, `handoff`. |
+| Multi-agent | Teams, handoffs, graphs, chats, or workflows. | Functional workflow values: `pipe`, `map`, `reduce`, `iterate`, `bind`. |
 | Structured output | Pydantic models, Zod, signatures, or SDK-specific schemas. | Parse the reply today; typed signatures are future work. |
 | Streaming | Framework-specific events or tokens. | SDK/CLI-specific, with Claude CLI streaming hooks today. |
 | Observability | Framework-specific tracing and dashboards. | OpenTelemetry spans via `karcarthy.otel/instrument`. |

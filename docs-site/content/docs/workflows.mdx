@@ -1,77 +1,90 @@
 ---
 title: Workflows
-description: Compose agents with small data nodes instead of framework-specific objects.
+description: Compose agents with pipe, map, reduce, iterate, and bind.
 ---
 
 Workflows are maps tagged with `:karcarthy/type`. Builder functions make them
-pleasant to write, but the result is still plain EDN.
+pleasant to write, but the result is still plain EDN. The public names are the
+small functional set: `pipe`, `map`, `reduce`, `iterate`, and `bind`.
 
-## Chain
+## pipe
 
-`chain` runs steps in order, passing each result text to the next step.
+`pipe` runs steps in order, passing each result text to the next step.
 
 ```clojure
 (k/run agent-system
-       (k/chain researcher summarizer)
+       (k/pipe researcher summarizer)
        "map the agent framework space")
 ```
 
-## Parallel
+## map
 
-`parallel` fans out independent branches and returns their results together.
-
-```clojure
-(k/parallel api-reviewer docs-reviewer ux-reviewer)
-```
-
-Use `parallel*` when the branches are already in a collection.
-
-## Route
-
-`route` lets a routing function choose the next branch.
+`map` applies work across a collection. Pass a collection of workflows to run
+them all on the same input:
 
 ```clojure
-(k/route classifier
-         {:bug triage-bug
-          :docs triage-docs
-          :default fallback})
+(k/map [api-reviewer docs-reviewer ux-reviewer])
 ```
 
-## Refine
+Pass a planner and worker when the planner should produce subtasks and the
+worker should run once per subtask:
 
-`refine` loops a worker through a reviewer until a stop condition or iteration
+```clojure
+(k/map planner writer)
+```
+
+## reduce
+
+`reduce` combines the results of mapped work.
+
+```clojure
+(k/reduce summarize-results
+          (k/map [api-reviewer docs-reviewer ux-reviewer]))
+```
+
+For planner/worker mapping, the reducer receives `[results input]`.
+
+## iterate
+
+`iterate` loops a worker through a reviewer until a stop condition or round
 limit is reached.
 
 ```clojure
-(k/refine draft-writer critic :max-iterations 3)
+(k/iterate draft-writer critic :max-rounds 3)
 ```
 
-## Orchestrate
+## bind
 
-`orchestrate` is a manager-workers shape. The manager decides which workers
-should run, and workers remain normal agents or workflows.
+`bind` uses one workflow's result to select or continue to the next workflow.
+With a choice map, the first workflow chooses the key and the selected workflow
+receives the original input:
 
 ```clojure
-(k/orchestrate manager [researcher coder reviewer])
+(k/bind classifier
+        {"bug" triage-bug
+         "docs" triage-docs}
+        :default fallback)
 ```
 
-## Handoff
-
-`handoff` preserves session continuity when the selected Agent SDK or CLI supports it.
-Use it when one specialist should take over from another.
+With two workflows, `bind` continues from the first result text into the second
+workflow and preserves session continuity when the selected Agent SDK or CLI
+supports it:
 
 ```clojure
-(k/handoff triage-agent
-           {"billing" billing-agent
-            "debugging" debugger-agent})
+(k/bind triage-agent specialist-agent)
 ```
+
+## Compatibility
+
+Older constructor names still exist as wrappers while the prototype settles, but
+the docs and examples use the functional vocabulary above.
 
 ## Data stays inspectable
 
 Because every workflow is a value, you can transform it before running:
 
 ```clojure
-(-> (k/chain researcher summarizer)
+(-> (k/pipe researcher summarizer)
     (update :steps conj reviewer)
     (->> (k/run agent-system "summarize the prior work")))
 ```
