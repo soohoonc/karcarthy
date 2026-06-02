@@ -8,6 +8,12 @@ the plan to remain inspectable data. The helpers in `karcarthy.patterns`
 compile familiar shapes back to ordinary `pipe`, `map`, `iterate`, `bind`, and
 state-graph workflow data.
 
+All Clojure snippets below assume:
+
+```clojure
+(require '[karcarthy :as k])
+```
+
 Run the offline overview:
 
 ```bash
@@ -57,8 +63,8 @@ Equivalent JSON shape:
 Run it:
 
 ```bash
-python3 examples/python/swarm/demo.py
-npx tsx examples/typescript/swarm/demo.ts
+python3 examples/python/openai/demo.py
+npx tsx examples/typescript/openai/demo.ts
 ```
 
 ## Sequential crew
@@ -73,11 +79,10 @@ the previous task's result text.
 The `crew` helper lets you keep task maps at the edge:
 
 ```clojure
-(patterns/crew
- {:process :sequential
-  :tasks [{:name "market" :agent researcher :description "Find market signal."}
-          {:name "risk" :agent analyst :description "Name the main risk."}
-          {:name "brief" :agent writer :description "Write the final brief."}]})
+(k/crew [{:id :market :agent researcher :description "Find market signal."}
+         {:id :risk :agent analyst :description "Name the main risk."}
+         {:id :brief :agent writer :description "Write the final brief."}]
+        :process :sequential)
 ```
 
 Run it:
@@ -93,9 +98,7 @@ AutoGen-style deterministic group chat can be represented as a transcript
 threaded through `pipe`.
 
 ```clojure
-(patterns/group-chat
- {:agents [planner builder reviewer]
-  :rounds 1})
+(k/group-chat [planner builder reviewer] :rounds 1)
 ```
 
 Use this when the speaker order is known. Use `bind` when an agent should pick
@@ -113,9 +116,7 @@ npx tsx examples/typescript/autogen/demo.ts
 Google ADK-style workflow agents are deterministic orchestration nodes:
 
 ```clojure
-(patterns/workflow-agent
- {:type :sequential
-  :steps [planner worker reviewer]})
+(k/workflow-agent :sequential [planner worker reviewer])
 ```
 
 Mapping:
@@ -133,7 +134,7 @@ combinator. Use `state-graph` when named nodes update shared state and edges
 choose the next node.
 
 ```clojure
-(patterns/state-graph
+(k/state-graph
  {:start :triage
   :nodes {:triage triage-node
           :launch launch-node

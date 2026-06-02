@@ -12,7 +12,7 @@ languages, to show the library is reachable from each.
   critique.
 - `clojure/mappings.clj` - offline emulations of LangGraph,
   CrewAI, AutoGen, OpenAI Agents SDK, and Google ADK-style orchestration shapes.
-- `clojure/swarm/`, `clojure/crewai/`, `clojure/autogen/`, `clojure/langgraph/`
+- `clojure/openai/`, `clojure/crewai/`, `clojure/autogen/`, `clojure/langgraph/`
   - tiny runnable orchestration-pattern examples, with one folder per pattern.
 - `clojure/live.clj` - a live map/reduce run (paid `claude -p`).
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
@@ -27,8 +27,8 @@ The pattern examples also have executable-backed JSON versions:
 
 - `python/launch.py`
 - `typescript/launch.ts`
-- `python/swarm/`, `python/crewai/`, `python/autogen/`
-- `typescript/swarm/`, `typescript/crewai/`, `typescript/autogen/`
+- `python/openai/`, `python/crewai/`, `python/autogen/`
+- `typescript/openai/`, `typescript/crewai/`, `typescript/autogen/`
 
 ```bash
 python3 examples/python/demo.py            # offline (mock adapter)

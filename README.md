@@ -57,7 +57,7 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   model), `openai`. Pass one adapter, or pass a registry and let each agent
   choose with `:adapter`.
 - **Workflows as data**: compose agents with `pipe`, `map`, `reduce`,
-  `iterate`, `bind`, and multi-turn `converse`.
+  `iterate`, and `bind`.
 - **Popular orchestrator shapes as data**: `karcarthy.patterns` emulates
   LangGraph-style state graphs, CrewAI-style crews, AutoGen-style round-robin
   group chats, OpenAI-style specialist routing, and ADK-style workflow agents.
