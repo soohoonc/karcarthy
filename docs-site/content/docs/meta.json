@@ -2,13 +2,17 @@
   "title": "karcarthy",
   "pages": [
     "index",
+    "---Start Here---",
     "getting-started",
+    "examples",
+    "---Core Concepts---",
     "workflows",
     "runners",
     "runtime",
+    "---Patterns & Context---",
     "orchestrator-patterns",
-    "examples",
     "comparison",
+    "---Project---",
     "deploy"
   ]
 }
