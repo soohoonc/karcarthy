@@ -1,0 +1,147 @@
+---
+title: Use Adapters
+description: Connect workflow data to mock, Claude CLI, command, and SDK-backed agent systems.
+---
+
+karcarthy coordinates workflows. An adapter runs one agent to completion. That
+boundary is the core design: workflows stay portable data, while model calls,
+tool calls, sessions, streaming, and provider details stay inside the selected
+agent system.
+
+## Adapter model
+
+```clojure
+(k/run adapter workflow input)
+```
+
+`adapter` can be one adapter for every agent:
+
+```clojure
+(k/run (k/mock-adapter)
+       (k/pipe researcher summarizer)
+       "map the agent framework space")
+```
+
+or a registry selected per agent:
+
+```clojure
+(def adapters
+  {:default (k/mock-adapter)
+   :claude  (k/claude-cli {})})
+
+(k/run adapters
+       (k/pipe
+        (k/agent "planner" "Plan the rollout." :adapter :claude)
+        (k/agent "checker" "Check for missing owners." :adapter :default))
+       "enterprise SSO beta")
+```
+
+Agent-level `:adapter` is a registry key. It does not change the workflow
+shape.
+
+## Mock adapter
+
+Use the mock adapter for tests, docs, and local workflow design:
+
+```clojure
+(k/run (k/mock-adapter)
+       (k/agent "echo" "Echo the input.")
+       "hi")
+```
+
+Output:
+
+```clojure
+{:karcarthy/type :result
+ :ok? true
+ :agent "echo"
+ :text "[echo] hi"
+ :raw {:adapter :mock}}
+```
+
+Pass a response function when tests need deterministic named behavior:
+
+```clojure
+(k/mock-adapter
+ (fn [{:keys [agent prompt]}]
+   (case (:name agent)
+     "classifier" "launch"
+     (str "[" (:name agent) "] " prompt))))
+```
+
+## Claude CLI adapter
+
+Use Claude CLI when each agent call should run through `claude`:
+
+```clojure
+(k/run (k/claude-cli {:model "haiku"
+                      :max-turns 4})
+       (k/agent "reviewer"
+         "Find one launch risk and one mitigation."
+         :tools ["mcp__feedback__search"])
+       "enterprise SSO beta")
+```
+
+`tools` is an allowlist passed to adapters that support tool selection. The
+tool server, MCP config, and credentials must already exist in the selected
+agent system.
+
+## Command adapter
+
+Use `command-adapter` to wrap a local model, script, or coding-agent CLI:
+
+```clojure
+(def local-model
+  (k/command-adapter
+   ["./bin/local-agent"]
+   {:timeout-ms 120000}))
+
+(k/run local-model
+       (k/agent "writer" "Write the final answer.")
+       "Summarize the rollout risk.")
+```
+
+The command receives the prompt and returns text. That makes it useful for
+prototyping new adapters before writing a direct integration.
+
+## OpenAI Agents SDK bridge
+
+`openai-agents-sdk` delegates single-agent calls to the OpenAI Agents SDK
+bridge. Keep karcarthy responsible for orchestration and keep SDK-specific
+agent-loop behavior in that bridge.
+
+```clojure
+(k/run (k/openai-agents-sdk {})
+       (k/agent "triage" "Route to refund, sales, or support.")
+       "I was charged twice.")
+```
+
+## Tools
+
+Tools are not provisioned by karcarthy. They are names the selected adapter may
+use to restrict what an agent system can call.
+
+| Field | Meaning |
+| --- | --- |
+| `:tools ["mcp__feedback__search"]` | Allow this agent to use a tool already configured in the adapter's environment. |
+| No `:tools` | Let the adapter default decide, or use no tools for mock/offline runs. |
+| Unknown tool name | Adapter-specific failure or ignored by adapters that do not use tools. |
+
+This keeps orchestration portable. The same workflow can run offline with
+`mock-adapter`, through Claude CLI with MCP tools, or through a command adapter
+without changing the graph.
+
+## Failure behavior
+
+Top-level `run` fails fast for malformed workflows. Composite workflow nodes
+isolate child failures by returning not-ok result maps, so one failed branch
+does not crash an entire `map`.
+
+```clojure
+{:karcarthy/type :result
+ :ok? false
+ :error "..."
+ :exception "..."}
+```
+
+Use this result shape for retries, audit logs, and UI status displays.

@@ -1,85 +1,77 @@
 ---
-title: Run Examples
-description: Run karcarthy from Clojure, JVM languages, Python, and TypeScript.
+title: Examples
+description: Choose a runnable example by what you want to learn.
 ---
 
-The examples live in the repository `examples/` directory. The Clojure and JVM
-examples call the library directly. Python and TypeScript use `bin/karcarthy`
-over JSON because a workflow is just data.
+Use examples when you want to see a complete command, expected output, and the
+workflow idea it demonstrates. Start with the quick checks, then move to the
+launch-readiness tutorial when you want a realistic multi-agent workflow.
 
-For a walkthrough of the same non-trivial workflow in Clojure, Python, and
-TypeScript, start with [Tutorials](/docs/tutorials).
+## Quick checks
 
-When an example includes `tools`, read that field as an adapter allowlist. The
-names must already be configured in the selected Agent SDK, CLI, or MCP layer.
-karcarthy does not create those tools, and the offline mock adapter ignores
-them.
+| Goal | Command | What it proves |
+| --- | --- | --- |
+| Run one CLI agent | `./bin/karcarthy agent echo --instructions "Echo the input." hi` | The standalone CLI works and returns text by default. |
+| Run a workflow file | `./bin/karcarthy run examples/workflows/echo.json hi` | Workflow data can live outside Clojure. |
+| Run the bundled Clojure demo | `clojure -M -m karcarthy.demo` | The library runs offline through the mock adapter. |
 
-## Clojure
+Expected output for the first two commands:
+
+```text
+[echo] hi
+```
+
+## Full workflow tutorial
+
+The launch-readiness examples classify a request, run product/engineering/
+security/support reviewers, synthesize their notes, and iterate with a critic.
+
+| Language | Command | Use this when |
+| --- | --- | --- |
+| Clojure | `clojure -M -e '(load-file "examples/clojure/launch.clj")'` | You want host reducers and direct API usage. |
+| Python | `python3 examples/python/launch.py` | You want to generate workflow JSON from application code. |
+| TypeScript | `npx tsx examples/typescript/launch.ts` | You want the same JSON workflow shape from a TS app. |
+
+All three default to deterministic mock responses, so they run without model
+credentials. See [Tutorials](/docs/tutorials) for the walkthrough.
+
+## Port familiar orchestration patterns
+
+These examples show how common framework shapes compile into karcarthy's small
+workflow vocabulary:
+
+| Pattern | Clojure | Python | TypeScript |
+| --- | --- | --- | --- |
+| Specialist routing | `examples/clojure/swarm/` | `examples/python/swarm/` | `examples/typescript/swarm/` |
+| Sequential crew | `examples/clojure/crewai/` | `examples/python/crewai/` | `examples/typescript/crewai/` |
+| Round-robin group chat | `examples/clojure/autogen/` | `examples/python/autogen/` | `examples/typescript/autogen/` |
+| State graph | `examples/clojure/langgraph/` | - | - |
+
+Run the mapping overview:
 
 ```bash
-clojure -M -m karcarthy.demo
 clojure -M -e '(load-file "examples/clojure/mappings.clj")'
-clojure -M -e '(load-file "examples/clojure/launch.clj")'
 ```
 
-Runnable framework-mapping examples:
+Read [Port Patterns](/docs/examples/mappings) for concrete before/after
+examples.
 
-- `examples/clojure/swarm/`
-- `examples/clojure/crewai/`
-- `examples/clojure/autogen/`
-- `examples/clojure/langgraph/`
+## JVM language interop
 
-Live example:
-
-- `examples/clojure/live.clj`
-
-Guide example:
-
-- `examples/clojure/launch.clj`
-
-## Python
-
-```bash
-python3 examples/python/demo.py
-python3 examples/python/launch.py
-python3 examples/python/swarm/demo.py
-python3 examples/python/crewai/demo.py
-python3 examples/python/autogen/demo.py
-```
-
-The Python examples build workflow dictionaries, send them to `bin/karcarthy`,
-and read result JSON.
-
-Guide example:
-
-- `examples/python/launch.py`
-
-## TypeScript
-
-```bash
-npx tsx examples/typescript/demo.ts
-npx tsx examples/typescript/launch.ts
-npx tsx examples/typescript/swarm/demo.ts
-npx tsx examples/typescript/crewai/demo.ts
-npx tsx examples/typescript/autogen/demo.ts
-```
-
-The TypeScript examples build the same data shape as the Python examples and
-send it to `bin/karcarthy`.
-
-Guide example:
-
-- `examples/typescript/launch.ts`
-
-## Java, Kotlin, and Scala
-
-Use the Clojure Java API from each JVM language:
+Java, Kotlin, and Scala can call the Clojure API through the Clojure Java API.
+The Java example is the verified baseline:
 
 ```bash
 CP=$(clojure -Spath)
 javac -d /tmp/karc -cp "$CP" examples/java/Demo.java
 java -cp "$CP:/tmp/karc" Demo
+```
+
+Expected output:
+
+```text
+ok?  true
+text [summarizer] [researcher] what is a monad?
 ```
 
 Kotlin and Scala use the same classpath pattern:
@@ -91,3 +83,8 @@ java -cp "$CP:/tmp/demo.jar" DemoKt
 scalac -cp "$CP" -d /tmp/karc-scala examples/scala/Demo.scala
 java -cp "$CP:/tmp/karc-scala" Demo
 ```
+
+## Live model example
+
+`examples/clojure/live.clj` uses a paid live model path. Keep the mock examples
+as the default path for docs, tests, and CI.

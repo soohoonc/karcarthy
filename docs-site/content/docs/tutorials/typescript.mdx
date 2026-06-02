@@ -7,6 +7,22 @@ TypeScript sends workflow JSON to `bin/karcarthy`. The workflow is still a plain
 object, but the agent configuration should not be a set of one-line prompts.
 The runnable file is `examples/typescript/launch.ts`.
 
+## Run the finished workflow
+
+```bash
+npx tsx examples/typescript/launch.ts
+```
+
+The offline example prints the configured agents, then a launch brief:
+
+```text
+Decision: launch to a staged enterprise beta cohort.
+Rationale: product demand is strong, rollout is reversible, and support can prepare clear admin guidance.
+Top risks: SSO latency, unverified audit logs, and missing rollback messaging.
+Required owners: engineering for latency monitoring, security for audit-log signoff, support for FAQ and escalation macro.
+Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.
+```
+
 ## Agent configuration
 
 The example uses a small application-side profile object. This mirrors the
@@ -145,22 +161,6 @@ const workflow: Workflow = {
   },
   default: launchBrief,
 };
-```
-
-## Run it
-
-```bash
-npx tsx examples/typescript/launch.ts
-```
-
-The offline example prints the configured agents, then a launch brief:
-
-```text
-Decision: launch to a staged enterprise beta cohort.
-Rationale: product demand is strong, rollout is reversible, and support can prepare clear admin guidance.
-Top risks: SSO latency, unverified audit logs, and missing rollback messaging.
-Required owners: engineering for latency monitoring, security for audit-log signoff, support for FAQ and escalation macro.
-Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.
 ```
 
 This is the same executable path as the Python guide. Your product can own the

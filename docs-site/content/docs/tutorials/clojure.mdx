@@ -6,6 +6,15 @@ description: Configure realistic agents in Clojure with pipe, map, reduce, itera
 This guide builds a launch-readiness assistant directly in Clojure. The
 runnable file is `examples/clojure/launch.clj`.
 
+## Run the finished workflow
+
+```bash
+clojure -M -e '(load-file "examples/clojure/launch.clj")'
+```
+
+The example prints the configured agents, then a launch brief. It runs offline
+with deterministic mock responses.
+
 ## Goal
 
 Given a product-change prompt, produce a launch brief that includes product,
@@ -102,12 +111,8 @@ the brief writer runs:
           :default launch-brief))
 ```
 
-## Run it
-
-```bash
-clojure -M -e '(load-file "examples/clojure/launch.clj")'
-```
+## Swap adapters
 
 The offline adapter returns deterministic specialist notes and a final launch
-brief. Swap the adapter for `claude-cli` or another adapter when you want the
-same configured workflow to call a live agent system.
+brief. Swap the adapter for `claude-cli`, `command-adapter`, or another adapter
+when you want the same configured workflow to call a live agent system.

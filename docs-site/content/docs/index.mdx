@@ -1,13 +1,12 @@
 ---
 title: Overview
-description: Homoiconic agent orchestration for Clojure.
+description: Data-first agent orchestration for Clojure and command-line workflows.
 ---
 
-karcarthy coordinates many AI agents while keeping agents and workflows as
-ordinary data. The inner model and tool loop still belongs to a system such as
-Pydantic AI, Claude Agent SDK, OpenAI Agents SDK, Codex CLI, a command-line
-model, or a local mock. karcarthy owns the data-first coordination layer above
-those systems.
+karcarthy coordinates multi-agent workflows while keeping the plan as ordinary
+data. The model/tool loop belongs to an adapter such as Claude CLI, the OpenAI
+Agents SDK bridge, a command process, or the local mock adapter. karcarthy owns
+the orchestration value above those systems.
 
 ```clojure
 (require '[karcarthy :as k])
@@ -20,10 +19,10 @@ those systems.
        "what is a monad?")
 ```
 
-## Why data-first orchestration
+## Why data-first
 
-Most agent frameworks and SDKs expose agents and workflows as host-language objects. In
-karcarthy, the plan is a value:
+Most agent frameworks make the workflow a host-language object. In karcarthy,
+the workflow is a value you can inspect, diff, store, generate, and rewrite:
 
 ```clojure
 {:karcarthy/type :pipe
@@ -35,29 +34,39 @@ karcarthy, the plan is a value:
           :instructions "Summarize the findings in one sentence."}]}
 ```
 
-That shape can be printed, diffed, generated, rewritten with `clojure.walk`,
-stored as EDN, converted through JSON, or emitted by an agent and parsed without
-`eval`.
+That value can live as EDN, cross a JSON boundary, or be produced by an agent
+and parsed without `eval`.
 
-## What karcarthy provides
+## What you can build
 
-| Area | Surface |
+| Task | Start here |
+| --- | --- |
+| Run one agent or workflow file from the command line | [Quickstart](/docs/start) |
+| Understand how data moves through `pipe`, `map`, `reduce`, `iterate`, and `bind` | [Build Workflows](/docs/workflows) |
+| Swap mock execution for Claude CLI, OpenAI Agents SDK, or a command process | [Use Adapters](/docs/adapters) |
+| Build a realistic launch-readiness workflow | [Tutorials](/docs/tutorials) |
+| Port familiar LangGraph/CrewAI/AutoGen-style patterns | [Examples](/docs/examples) |
+| Look up signatures and JSON shapes | [Reference](/docs/reference) |
+
+## Core surfaces
+
+| Surface | Description |
 | --- | --- |
 | Agents | Plain maps tagged with `:karcarthy/type :agent`. |
-| Agent systems | Pydantic AI, Claude Agent SDK/CLI, OpenAI Agents SDK, Codex CLI, command processes, and the local mock adapter. |
 | Workflows | `pipe`, `map`, `reduce`, `iterate`, and `bind`. |
-| Framework mappings | CrewAI, AutoGen, LangGraph, OpenAI specialist routing, and ADK-style helpers compiled to workflow data. |
+| Adapters | Mock, Claude CLI, command processes, and OpenAI Agents SDK bridge. |
+| CLI | `bin/karcarthy agent`, `run`, `demo`, and `json`. |
 | Observability | OpenTelemetry spans through `karcarthy.otel/instrument`. |
 
 ## Current status
 
-karcarthy is early and not yet published as a stable release. Use it from git,
-expect the public vocabulary to stay small, and treat the docs as the public
-surface rather than a dump of every internal helper.
+karcarthy is early and not yet published as a stable release. The docs treat
+the small public vocabulary as the product surface and keep compatibility names
+and implementation internals out of the main path.
 
 <Cards>
-  <Card title="Getting Started" href="/docs/start" />
-  <Card title="Workflows" href="/docs/workflows" />
-  <Card title="Tutorials" href="/docs/tutorials" />
+  <Card title="Quickstart" href="/docs/start" />
+  <Card title="Build Workflows" href="/docs/workflows" />
+  <Card title="Use Adapters" href="/docs/adapters" />
   <Card title="Reference" href="/docs/reference" />
 </Cards>
