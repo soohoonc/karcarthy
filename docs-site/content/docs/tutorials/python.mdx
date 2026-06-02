@@ -23,12 +23,13 @@ def render_instructions(profile):
         sections.append("Operating context:\n" + bullet_list(profile["context"]))
     if profile.get("tools"):
         sections.append(
-            "Available tools:\n"
+            "Adapter tool allowlist:\n"
             + bullet_list(profile["tools"])
-            + "\nUse tools only when they materially improve the answer."
+            + "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
+            + "\nkarcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools."
         )
     else:
-        sections.append("Available tools: none for this offline tutorial run.")
+        sections.append("Adapter tool allowlist: none. The offline mock adapter ignores tool calls.")
     sections.extend(
         [
             "Responsibilities:\n" + bullet_list(profile["responsibilities"]),
@@ -63,7 +64,7 @@ product_reviewer = configured_agent(
         "role": "Product launch reviewer",
         "mission": "Assess user value, launch narrative, customer segmentation, and adoption risk.",
         "context": launch_context,
-        "tools": ["customer-feedback", "roadmap-notes"],
+        "tools": ["mcp__feedback__search", "mcp__roadmap__read"],
         "responsibilities": [
             "Identify the primary user promise in one sentence.",
             "Call out unclear customer value or missing beta evidence.",

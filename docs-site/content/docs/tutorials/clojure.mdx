@@ -32,9 +32,10 @@ map with an instruction string.
         (str "Mission: " mission)
         (section "Operating context" (bullets context))
         (if (seq tools)
-          (str "Available tools:\n" (bullets tools)
-               "\nUse tools only when they materially improve the answer.")
-          "Available tools: none for this offline tutorial run.")
+          (str "Adapter tool allowlist:\n" (bullets tools)
+               "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
+               "\nkarcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools.")
+          "Adapter tool allowlist: none. The offline mock adapter ignores tool calls.")
         (section "Responsibilities" (bullets responsibilities))
         (str "Output contract:\n" output)
         (str "Interaction style:\n" tone)
@@ -57,7 +58,7 @@ One specialist profile:
     :role "Product launch reviewer"
     :mission "Assess user value, launch narrative, customer segmentation, and adoption risk."
     :context launch-context
-    :tools ["customer-feedback" "roadmap-notes"]
+    :tools ["mcp__feedback__search" "mcp__roadmap__read"]
     :responsibilities ["Identify the primary user promise in one sentence."
                        "Call out unclear customer value or missing beta evidence."
                        "Recommend a launch decision from the product perspective."]

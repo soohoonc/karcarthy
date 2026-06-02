@@ -26,14 +26,14 @@ Agent fields:
 | `:name` | yes | Stable agent name. |
 | `:instructions` | yes | System or role instructions passed to the adapter. |
 | `:model` | no | Adapter-specific model selector. |
-| `:tools` | no | Adapter-specific tool allowlist or tool names. |
+| `:tools` | no | Adapter-specific tool allowlist. Names must already exist in the selected Agent SDK, CLI, or MCP configuration. |
 | `:adapter` | no | Registry key used when `run` receives an adapter registry. |
 
 ```clojure
 (k/agent "reviewer"
   "Find launch risks and propose mitigations."
   :model "sonnet"
-  :tools ["WebSearch"])
+  :tools ["mcp__feedback__search"])
 ```
 
 ## Workflows

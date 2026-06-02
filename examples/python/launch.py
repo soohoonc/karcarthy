@@ -2,8 +2,9 @@
 """Launch-readiness tutorial through the karcarthy JSON bridge.
 
 The workflow is data, but the agent UX is not a one-line prompt. Each agent is
-configured from role, mission, context, tools, boundaries, tone, output contract,
-and self-checks before it becomes a plain JSON workflow node.
+configured from role, mission, context, adapter tool allowlists, boundaries,
+tone, output contract, and self-checks before it becomes a plain JSON workflow
+node.
 """
 
 import json
@@ -24,12 +25,13 @@ def render_instructions(profile):
         sections.append("Operating context:\n" + bullet_list(profile["context"]))
     if profile.get("tools"):
         sections.append(
-            "Available tools:\n"
+            "Adapter tool allowlist:\n"
             + bullet_list(profile["tools"])
-            + "\nUse tools only when they materially improve the answer."
+            + "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
+            + "\nkarcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools."
         )
     else:
-        sections.append("Available tools: none for this offline tutorial run.")
+        sections.append("Adapter tool allowlist: none. The offline mock adapter ignores tool calls.")
     sections.extend(
         [
             "Responsibilities:\n" + bullet_list(profile["responsibilities"]),
@@ -73,8 +75,9 @@ def run(workflow, input_text, adapter="mock", mock_responses=None):
 launch_context = [
     "Audience: product, engineering, security, support, and launch leadership.",
     "Artifact: a launch-readiness brief that can drive a go/no-go meeting.",
+    "Evidence packet: enterprise admins requested SSO; rollout is behind a tenant feature flag; p95 auth latency is the watch metric; audit-log signoff is not complete; support has a setup draft but no rollback macro.",
     "Risk posture: be concise, specific, and explicit about missing evidence.",
-    "Do not invent dates, owners, metrics, or policy claims.",
+    "Use only facts from the user request, operating context, or adapter tool results. Do not invent dates, owners, metrics, or policy claims.",
 ]
 
 classifier = configured_agent(
@@ -101,7 +104,7 @@ product_reviewer = configured_agent(
         "role": "Product launch reviewer",
         "mission": "Assess user value, launch narrative, customer segmentation, and adoption risk.",
         "context": launch_context,
-        "tools": ["customer-feedback", "roadmap-notes"],
+        "tools": ["mcp__feedback__search", "mcp__roadmap__read"],
         "responsibilities": [
             "Identify the primary user promise in one sentence.",
             "Call out unclear customer value or missing beta evidence.",
@@ -120,7 +123,7 @@ engineering_reviewer = configured_agent(
         "role": "Engineering readiness reviewer",
         "mission": "Evaluate rollout mechanics, operational risk, observability, and rollback quality.",
         "context": launch_context,
-        "tools": ["service-health", "deploy-plan", "error-budget"],
+        "tools": ["mcp__metrics__query", "mcp__deployments__read", "mcp__alerts__search"],
         "responsibilities": [
             "Check whether the rollout can be staged behind a feature flag.",
             "Identify the highest operational failure mode.",
@@ -139,7 +142,7 @@ security_reviewer = configured_agent(
         "role": "Security and policy reviewer",
         "mission": "Evaluate data exposure, abuse risk, permissions, auditability, and compliance concerns.",
         "context": launch_context,
-        "tools": ["policy-index", "audit-log-review"],
+        "tools": ["mcp__policy__search", "mcp__audit_logs__query"],
         "responsibilities": [
             "Identify whether the change introduces new sensitive data handling.",
             "Call out permission, logging, or abuse-review gaps.",
@@ -158,7 +161,7 @@ support_reviewer = configured_agent(
         "role": "Support readiness reviewer",
         "mission": "Evaluate customer messaging, support docs, escalation paths, and rollback communication.",
         "context": launch_context,
-        "tools": ["help-center", "support-macros"],
+        "tools": ["mcp__help_center__search", "mcp__support_macros__read"],
         "responsibilities": [
             "Check whether support can explain setup and troubleshoot common failures.",
             "Identify required FAQ, macro, or escalation updates.",

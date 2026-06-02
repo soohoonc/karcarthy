@@ -15,16 +15,13 @@ languages, to show the library is reachable from each.
 - `clojure/swarm/`, `clojure/crewai/`, `clojure/autogen/`, `clojure/langgraph/`
   - tiny runnable orchestration-pattern examples, with one folder per pattern.
 - `clojure/live.clj` - a live map/reduce run (paid `claude -p`).
-- `clojure/evolve.clj` - an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
 ## Python and TypeScript (via the JSON bridge)
 
 Non-JVM languages drive karcarthy through `karcarthy.cli`: send a workflow
 described as JSON on stdin, get the result as JSON. The workflow is data, so the
-language builds (and could transform) it, and an agent can generate or edit one the
-same way. See [`../COMPARISON.md`](../COMPARISON.md) for how this differs from
-PydanticAI, Agno, and the Vercel AI SDK.
+language builds and can transform it before execution.
 
 The pattern examples also have JSON-bridge versions:
 
@@ -36,15 +33,15 @@ The pattern examples also have JSON-bridge versions:
 ```bash
 python3 examples/python/demo.py            # offline (mock adapter)
 python3 examples/python/launch.py
-python3 examples/python/demo.py --live     # + an agent that edits itself (real claude)
 
 bun run examples/typescript/demo.ts        # or: npx tsx … / ts-node …
 npx tsx examples/typescript/launch.ts
 ```
 
-Both build a workflow as a plain dict/object and run it; `--live` runs an
-`evolve` workflow where the agent rewrites its own instructions, all over the
-bridge.
+Both build workflows as plain dicts/objects and run them through the offline
+mock adapter. Tool names in the launch examples are adapter allowlists: they
+must already exist in the selected Agent SDK, CLI, or MCP configuration. The
+mock adapter ignores tools.
 
 ## Java (verified)
 
