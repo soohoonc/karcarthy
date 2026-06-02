@@ -16,8 +16,8 @@ import { execFileSync } from "node:child_process";
 
 type Workflow = Record<string, unknown>;
 
-function run(workflow: Workflow, input: string, runner = "mock"): any {
-  const req = JSON.stringify({ workflow, input, runner });
+function run(workflow: Workflow, input: string, adapter = "mock"): any {
+  const req = JSON.stringify({ workflow, input, adapter });
   const out = execFileSync("clojure", ["-M", "-m", "karcarthy.cli"], {
     input: req,
     encoding: "utf8",
@@ -25,7 +25,7 @@ function run(workflow: Workflow, input: string, runner = "mock"): any {
   return JSON.parse(out);
 }
 
-// 1) A workflow is data: a chain of two agents, run on the offline mock runner.
+// 1) A workflow is data: a chain of two agents, run on the offline mock adapter.
 const chain: Workflow = {
   type: "chain",
   steps: [

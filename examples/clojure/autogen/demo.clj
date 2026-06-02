@@ -23,18 +23,18 @@
 (def chat
   (k/group-chat [planner builder reviewer] :rounds 3))
 
-(def runner
-  (k/mock-runner
+(def adapter
+  (k/mock-adapter
    (fn [{:keys [agent prompt]}]
      (case (:name agent)
-       "planner"  (append-line prompt "Planner" "Pick one familiar harness and show the equivalent data.")
-       "builder"  (append-line prompt "Builder" "Keep the runner offline so the example is deterministic.")
+       "planner"  (append-line prompt "Planner" "Pick one familiar orchestration style and show the equivalent data.")
+       "builder"  (append-line prompt "Builder" "Keep the adapter offline so the example is deterministic.")
        "reviewer" (append-line prompt "Reviewer" "Print the workflow data before the result.")))))
 
 (println "workflow:")
 (pp/pprint (compact chat))
 
 (println "\nresult:")
-(println (:text (k/run runner chat "Plan a tiny harness demo.")))
+(println (:text (k/run adapter chat "Plan a tiny orchestration demo.")))
 
 (shutdown-agents)

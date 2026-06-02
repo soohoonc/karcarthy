@@ -11,7 +11,7 @@ def agent(name, instructions):
 
 
 def run(workflow, input_text):
-    req = json.dumps({"workflow": workflow, "input": input_text, "runner": "mock"})
+    req = json.dumps({"workflow": workflow, "input": input_text, "adapter": "mock"})
     proc = subprocess.run(
         ["clojure", "-M", "-m", "karcarthy.cli"],
         input=req,
@@ -35,4 +35,4 @@ workflow = {
 print("workflow:")
 print(json.dumps(workflow, indent=2))
 print("\nresult:")
-print(run(workflow, "Plan a tiny harness demo.")["text"])
+print(run(workflow, "Plan a tiny orchestration demo.")["text"])

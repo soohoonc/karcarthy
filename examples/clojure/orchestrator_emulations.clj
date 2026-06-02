@@ -4,7 +4,7 @@
 ;;
 ;;     clojure -M -e '(load-file "examples/clojure/orchestrator_emulations.clj")'
 ;;
-;; This intentionally uses the mock runner: the point is to show that the shapes
+;; This intentionally uses the mock adapter: the point is to show that the shapes
 ;; are ordinary karcarthy data before any paid model call happens.
 
 (require '[clojure.pprint :as pp]
@@ -21,8 +21,8 @@
 (defn- append-line [transcript speaker line]
   (str (str/trim (str transcript)) "\n" speaker ": " line))
 
-(def demo-runner
-  (k/mock-runner
+(def demo-adapter
+  (k/mock-adapter
    (fn [{:keys [agent prompt]}]
      (let [n (base-name (:name agent))]
        (case n
@@ -36,19 +36,19 @@
          "generalist" "General path: answer directly and keep the next action explicit."
 
          "researcher" "Market signal: teams want orchestrators, but they also want inspectable plans."
-         "analyst" "Risk readout: keep runner boundaries clear, add schemas where outputs cross teams, trace every handoff."
+         "analyst" "Risk readout: keep SDK/CLI boundaries clear, add schemas where outputs cross teams, trace every handoff."
          "writer" (str "Brief: " prompt)
 
          "pm" (append-line prompt "PM" "Scope the demo around patterns developers already recognize.")
          "engineer" (append-line prompt "Engineer" "Compile those patterns to data so they can be diffed and rewritten.")
          "critic" (append-line prompt "Critic" "Show the generated workflow, not only the final answer.")
 
-         "docs-agent" "Docs path: explain the API by showing the EDN workflow and its runner boundary."
-         "code-agent" "Code path: build the thin adapter first, then verify it with the offline runner."
+         "docs-agent" "Docs path: explain the API by showing the EDN workflow and its SDK/CLI boundary."
+         "code-agent" "Code path: build the thin adapter first, then verify it with the offline mock."
          "synthesizer" (str "Synthesized answer from graph state: " prompt)
 
          "policy-check" "Policy: no risky side effects in this demo."
-         "cost-check" "Cost: mock runner keeps the demo free; real runners can be swapped in."
+         "cost-check" "Cost: the mock adapter keeps the demo free; live Agent SDKs and CLIs can be swapped in."
          "launch-check" "Launch: examples are load-file runnable."
 
          (str "[" (:name agent) "] " prompt))))))
@@ -130,7 +130,7 @@
   (walk/postwalk
    (fn [x]
      (cond
-       (k/agent? x) (select-keys x [:karcarthy/type :name :model :runner])
+       (k/agent? x) (select-keys x [:karcarthy/type :name :model :adapter])
        (fn? x)      :fn
        :else        x))
    workflow))
@@ -158,7 +158,7 @@
   (pp/pprint (compact-workflow (or workflow shape)))
   (let [r (if run
             (run input)
-            (k/run demo-runner workflow input))]
+            (k/run demo-adapter workflow input))]
     (println "ok? " (k/ok? r))
     (println "text:")
     (println (:text r))))

@@ -22,8 +22,8 @@ runtime vocabulary.
 Takeaways for karcarthy:
 
 - `context` should be session/message state, not a broad resource kind.
-- `:mode` should not be a core resource. It belongs in session config or runner
-  options.
+- `:mode` should not be a core resource. It belongs in session config or
+  SDK/CLI adapter options.
 - tool calls are runtime events, not resource definitions.
 - permission requests are protocol adapter behavior, not graph IR.
 
@@ -45,7 +45,7 @@ Takeaways for karcarthy:
 
 Takeaways for karcarthy:
 
-- MCP, hosted tools, and function tools should stay in runner/provider config
+- MCP, hosted tools, and function tools should stay in SDK/provider config
   until karcarthy has a concrete reason to interpret them directly.
 - fanout can map to agents-as-tools, multiple SDK runs, or graph branches.
 - final output, emitted updates, and resumable state should stay separate.

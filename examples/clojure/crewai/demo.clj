@@ -21,11 +21,11 @@
            {:agent analyst :id :risk :description "Name the main risk."}
            {:agent writer :id :brief :description "Write the final brief."}]))
 
-(def runner
-  (k/mock-runner
+(def adapter
+  (k/mock-adapter
    (fn [{:keys [agent prompt]}]
      (case (:name agent)
-       "researcher/market" "Finding: developers already know these harness shapes."
+       "researcher/market" "Finding: developers already know these orchestration patterns."
        "analyst/risk"      "Risk: naming drift creates more confusion than missing features."
        "writer/brief"      (str "Brief: " prompt)))))
 
@@ -33,6 +33,6 @@
 (pp/pprint (compact crew))
 
 (println "\nresult:")
-(println (:text (k/run runner crew "Show why karcarthy is useful.")))
+(println (:text (k/run adapter crew "Show why karcarthy is useful.")))
 
 (shutdown-agents)

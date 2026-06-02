@@ -5,7 +5,7 @@
   These are not compatibility shims for other frameworks. They are deliberately
   thin pattern helpers: crews, group chats, workflow agents, handoff routers, and
   finite state graphs are compiled back to ordinary karcarthy maps so they can be
-  inspected, transformed, serialized, and run on any runner."
+  inspected, transformed, serialized, and run through any adapter."
   (:refer-clojure :exclude [agent])
   (:require [clojure.string :as str]
             [karcarthy.core :as k]
@@ -42,7 +42,7 @@
   "Return an agent whose role instructions are extended with a task assignment.
 
   This is the useful core of a CrewAI-style task: the base agent keeps its model,
-  tools, runner, and handoffs, while the task description becomes data in the
+  tools, adapter choice, and handoffs, while the task description becomes data in the
   instructions.
 
     (task-agent analyst \"Find risks\" :id :risk :expected-output \"3 bullets\")"
@@ -110,7 +110,7 @@
 (defn group-chat
   "Compile an AutoGen-style round-robin group chat into a chain.
 
-  The current transcript is just the text threaded through the chain. A runner can
+  The current transcript is just the text threaded through the chain. An adapter can
   append to that transcript, summarize it, or keep opaque session state. This
   helper intentionally models the common deterministic `round_robin` speaker
   selection mode; use `route` directly when speaker selection should be dynamic."

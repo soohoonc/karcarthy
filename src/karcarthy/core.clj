@@ -6,9 +6,9 @@
   Clojure.
 
   karcarthy does not implement the inner agent loop (model calls and tool
-  execution). It delegates that to a *runner*, such as the `claude -p` CLI, and
-  concentrates on coordinating many agents over it. Runner adapters live in
-  `karcarthy.runner.*`."
+  execution). It delegates that to an Agent SDK, coding-agent CLI, command
+  process, or test adapter, and concentrates on coordinating many agents over
+  it."
   ;; `agent` deliberately shadows clojure.core/agent (the STM primitive); this
   ;; is an agent library. Use `clojure.core/agent` if you need the original.
   (:refer-clojure :exclude [agent])
@@ -27,12 +27,13 @@
 (s/def ::model       (s/nilable string?))
 (s/def ::tools       (s/coll-of string? :kind vector?))
 (s/def ::handoffs    (s/coll-of string? :kind vector?))
-(s/def ::runner      keyword?)   ; id into a runner registry (optional)
-(s/def ::harness     keyword?)   ; deprecated alias for ::runner
+(s/def ::adapter     keyword?)   ; id into an adapter registry (optional)
+(s/def ::runner      keyword?)   ; legacy alias for ::adapter
+(s/def ::harness     keyword?)   ; deprecated alias for ::adapter
 
 (s/def ::agent
   (s/keys :req-un [::name ::instructions]
-          :opt-un [::model ::tools ::handoffs ::runner ::harness]))
+          :opt-un [::model ::tools ::handoffs ::adapter ::runner ::harness]))
 
 (defn agent
   "Build an agent value. `name` and `instructions` are required; the rest are
@@ -46,13 +47,14 @@
     ;    :instructions \"Research questions thoroughly.\"
     ;    :model \"sonnet\"
     ;    :tools [\"WebSearch\" \"WebFetch\"]}"
-  [name instructions & {:keys [model tools handoffs runner harness]}]
+  [name instructions & {:keys [model tools handoffs adapter runner harness]}]
   (cond-> {:karcarthy/type :agent
            :name           name
            :instructions   instructions}
     model    (assoc :model model)
     tools    (assoc :tools (vec tools))
     handoffs (assoc :handoffs (vec handoffs))
+    adapter  (assoc :adapter adapter)
     runner   (assoc :runner runner)
     harness  (assoc :harness harness)))
 
@@ -91,7 +93,7 @@
 ;; Results
 ;;
 ;; Running an agent yields a *result map*. Keeping a single, well-known shape
-;; lets orchestration combinators treat every runner uniformly.
+;; lets orchestration combinators treat every adapter uniformly.
 ;; ===========================================================================
 
 (defn result
@@ -101,7 +103,7 @@
      :ok?   true
      :agent \"researcher\"      ; name of the agent that produced it
      :text  \"...final reply...\"
-     :raw   <runner-specific payload>}"
+     :raw   <adapter-specific payload>}"
   [m]
   (merge {:karcarthy/type :result :ok? true} m))
 
@@ -111,47 +113,62 @@
   (boolean (:ok? result)))
 
 ;; ===========================================================================
-;; Runner protocol
+;; Adapter implementation protocol
 ;;
-;; A runner runs a *single* agent's model<->tool loop to completion. This is
-;; the boundary between karcarthy (orchestration) and the underlying agent runner
-;; (Claude Agent SDK, OpenAI Agents SDK, a mock, ...).
+;; An adapter runs a *single* agent's model<->tool loop to completion. The
+;; protocol name is still `Runner`, but public docs should describe the concrete
+;; systems: Agent SDKs, coding-agent CLIs, command processes, and mocks.
 ;; ===========================================================================
 
 (defprotocol Runner
-  "Runs one agent to completion.
+  "Implementation protocol for adapters that run one agent to completion.
 
   `-run` receives a validated agent map, a prompt string, and an options map,
-  and returns a result map (see `result`). Implementations live in
-  `karcarthy.runner.*`. Prefer calling `run-agent`, which validates first."
+  and returns a result map (see `result`). Prefer calling `run-agent`, which
+  validates first."
   (-run [runner agent prompt opts]))
 
 (def Harness
-  "Deprecated alias for `Runner`. Use `Runner` in new code."
+  "Deprecated alias for the implementation protocol."
   Runner)
 
-(defn- runner-id [agent]
-  (or (:runner agent) (:harness agent) :default))
+(def Adapter
+  "Alias for the implementation protocol. Prefer adapter terminology in public
+  docs; the protocol name remains `Runner` for now because this is still the
+  existing implementation boundary."
+  Runner)
+
+(defn- adapter-id [agent]
+  (or (:adapter agent) (:runner agent) (:harness agent) :default))
 
 (defn resolve-runner
-  "Pick the runner to run `agent` with. `runner` is either a Runner directly,
-  or a registry map {id -> Runner} - in which case the agent's `:runner` id
-  selects one, falling back to `:harness` for compatibility, then `:default`.
+  "Legacy name for `resolve-adapter`. Pick the adapter to run `agent` with.
+  The first argument is either a single adapter or a registry map {id -> adapter}.
+  The agent's `:adapter` id selects one, falling back to legacy keys, then
+  `:default`.
 
-    (resolve-runner {:claude cc :default mk} (agent \"a\" \"i\" :runner :claude))
+    (resolve-runner {:claude cc :default mk} (agent \"a\" \"i\" :adapter :claude))
     ;=> cc"
-  [runner agent]
+  [adapter agent]
   (cond
-    (satisfies? Runner runner) runner
-    (map? runner) (let [id (runner-id agent)]
-                    (or (get runner id)
-                        (get runner :default)
-                        (throw (ex-info (str "no runner registered for " (pr-str id))
-                                        {:runner-id id
+    (satisfies? Runner adapter) adapter
+    (map? adapter) (let [id (adapter-id agent)]
+                    (or (get adapter id)
+                        (get adapter :default)
+                        (throw (ex-info (str "no adapter registered for " (pr-str id))
+                                        {:adapter-id id
+                                         :runner-id id
                                          :harness-id id
-                                         :registered (vec (keys runner))}))))
-    :else (throw (ex-info "runner must be a Runner or a registry map {id -> Runner}"
-                          {:got runner}))))
+                                         :registered (vec (keys adapter))}))))
+    :else (throw (ex-info "adapter must be a single adapter or a registry map {id -> adapter}"
+                          {:got adapter}))))
+
+(defn resolve-adapter
+  "Pick the adapter to run `agent` with. `adapter` is either a single adapter or
+  a registry map {id -> adapter}; the agent's `:adapter` id selects from the
+  registry, falling back to legacy `:runner` and `:harness` keys."
+  [adapter agent]
+  (resolve-runner adapter agent))
 
 (defn resolve-harness
   "Deprecated alias for `resolve-runner`; accepts the same inputs."
@@ -159,40 +176,45 @@
   (resolve-runner harness agent))
 
 (defn run-agent
-  "Validate `agent`, then run it on `prompt`. `runner` is either a Runner or a
-  registry map {id -> Runner} (see `resolve-runner`). Returns a result map;
+  "Validate `agent`, then run it on `prompt`. `adapter` is either a single
+  adapter or a registry map {id -> adapter} (see `resolve-adapter`). Returns a result map;
   throws `ExceptionInfo` if the agent is malformed."
-  ([runner agent prompt] (run-agent runner agent prompt {}))
-  ([runner agent prompt opts]
+  ([adapter agent prompt] (run-agent adapter agent prompt {}))
+  ([adapter agent prompt opts]
    (when-let [msg (explain-agent agent)]
      (throw (ex-info (str "Invalid agent: " msg)
                      {:agent agent :problems (s/explain-data ::agent agent)})))
-   (-run (resolve-runner runner agent) agent prompt opts)))
+   (-run (resolve-adapter adapter agent) agent prompt opts)))
 
 ;; ===========================================================================
-;; Mock runner
+;; Mock adapter
 ;;
-;; A fully offline runner for tests, demos, and developing orchestration logic
+;; A fully offline adapter for tests, demos, and developing orchestration logic
 ;; without burning tokens or needing network access.
 ;; ===========================================================================
 
-(defn mock-runner
-  "An offline runner. `respond` is a fn of {:agent :prompt :opts} -> String
+(defn mock-adapter
+  "An offline adapter. `respond` is a fn of {:agent :prompt :opts} -> String
   (the agent's final reply). With no args it echoes the prompt, tagged with the
   agent name, which is handy for asserting how orchestration routes work.
 
-    (run-agent (mock-runner) (agent \"echo\" \"e\") \"hi\")
+    (run-agent (mock-adapter) (agent \"echo\" \"e\") \"hi\")
     ;=> {:karcarthy/type :result :ok? true :agent \"echo\" :text \"[echo] hi\" ...}"
-  ([] (mock-runner (fn [{:keys [agent prompt]}]
-                     (str "[" (:name agent) "] " prompt))))
+  ([] (mock-adapter (fn [{:keys [agent prompt]}]
+                      (str "[" (:name agent) "] " prompt))))
   ([respond]
    (reify Runner
      (-run [_ agent prompt opts]
        (result {:agent (:name agent)
                 :text  (respond {:agent agent :prompt prompt :opts opts})
-                :raw   {:runner :mock :harness :mock}})))))
+                :raw   {:adapter :mock}})))))
+
+(defn mock-runner
+  "Legacy alias for `mock-adapter`."
+  ([] (mock-adapter))
+  ([respond] (mock-adapter respond)))
 
 (defn mock-harness
-  "Deprecated alias for `mock-runner`."
-  ([] (mock-runner))
-  ([respond] (mock-runner respond)))
+  "Deprecated alias for `mock-adapter`."
+  ([] (mock-adapter))
+  ([respond] (mock-adapter respond)))

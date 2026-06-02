@@ -7,7 +7,7 @@
     "examples",
     "---Core Concepts---",
     "workflows",
-    "runners",
+    "agent-sdks",
     "runtime",
     "---Patterns & Context---",
     "orchestrator-patterns",

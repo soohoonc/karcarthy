@@ -3,10 +3,10 @@
   namespace, so you can use a single alias instead of juggling several:
 
       (require '[karcarthy :as k])
-      (k/run (k/claude-runner {}) (k/chain a b) \"hi\")
+      (k/run (k/claude-cli {}) (k/chain a b) \"hi\")
 
   The canonical homes are still `karcarthy.core`, `karcarthy.orchestrate`,
-  `karcarthy.session`, `karcarthy.self`, and the `karcarthy.runner.*` adapters;
+  `karcarthy.session`, `karcarthy.self`, and the implementation adapters;
   this namespace only forwards to them."
   (:refer-clojure :exclude [agent])
   (:require [karcarthy.core]
@@ -40,15 +40,18 @@
              (alter-meta! (var ~nm) merge '~(select-keys m [:doc :arglists]))
              (var ~nm))))))
 
-;; data model + mock runner
+;; data model + mock adapter
 (export karcarthy.core/agent)
 (export karcarthy.core/agent?)
 (export karcarthy.core/defagent)
+(export karcarthy.core/Adapter)
 (export karcarthy.core/Runner)
 (export karcarthy.core/Harness)
+(export karcarthy.core/resolve-adapter)
 (export karcarthy.core/resolve-runner)
 (export karcarthy.core/resolve-harness)
 (export karcarthy.core/run-agent)
+(export karcarthy.core/mock-adapter)
 (export karcarthy.core/mock-runner)
 (export karcarthy.core/mock-harness)
 (export karcarthy.core/result)
@@ -98,9 +101,12 @@
 (export karcarthy.dynamic/run-dynamic)
 (export karcarthy.dynamic/dynamic-reference)
 
-;; runner adapters
+;; Agent SDK/CLI adapters, followed by legacy aliases
+(export karcarthy.runner.claude/claude-cli)
 (export karcarthy.runner.claude/claude-runner)
+(export karcarthy.runner.command/command-adapter)
 (export karcarthy.runner.command/command-runner)
+(export karcarthy.runner.openai/openai-agents-sdk)
 (export karcarthy.runner.openai/openai-agents-runner)
 
 ;; deprecated compatibility names

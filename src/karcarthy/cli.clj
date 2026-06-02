@@ -4,11 +4,11 @@
   exchanging data, so the homoiconic part (a workflow is data you can build,
   transform, and have an agent generate or edit) survives the boundary.
 
-      echo '{\"workflow\": <workflow>, \"input\": \"...\", \"runner\": \"mock\"}' \\
+      echo '{\"workflow\": <workflow>, \"input\": \"...\", \"adapter\": \"mock\"}' \\
         | clojure -M -m karcarthy.cli
 
   A <workflow> is JSON mirroring the EDN workflow:
-    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"runner\":?}
+    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"adapter\":?}
     {\"type\":\"chain\" \"steps\":[<workflow> ...]}
     {\"type\":\"parallel\" \"branches\":[<workflow> ...]}
     {\"type\":\"route\" \"router\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
@@ -16,8 +16,9 @@
     {\"type\":\"orchestrate\" \"planner\":<workflow> \"worker\":<workflow>}
     {\"type\":\"handoff\" \"from\":<workflow> \"to\":<workflow>}
     {\"type\":\"evolve\" \"agent\":<workflow> \"max-rounds\":?}
-  Response is the karcarthy result map as JSON. \"runner\" is \"mock\" (default,
-  offline) or \"claude\". The old \"flow\" and \"harness\" keys are still accepted."
+  Response is the karcarthy result map as JSON. \"adapter\" is \"mock\" (default,
+  offline) or \"claude\". The old \"flow\", \"runner\", and \"harness\" keys are
+  still accepted."
   (:require [clojure.data.json :as json]
             [karcarthy.core :as k]
             [karcarthy.orchestrate :as o]
@@ -28,14 +29,15 @@
 
 (defn json->workflow
   "Translate a JSON-parsed workflow map (string keys) into karcarthy workflow data.
-  Route labels stay strings; `type`/`runner` become keywords."
+  Route labels stay strings; `type`/`adapter` become keywords."
   [m]
   (let [g #(get m %)]
     (case (g "type")
       "agent"       (k/agent (g "name") (g "instructions")
                              :model   (g "model")
                              :tools   (g "tools")
-                             :runner  (some-> (or (g "runner") (g "harness")) keyword)
+                             :adapter (some-> (or (g "adapter") (g "runner") (g "harness")) keyword)
+                             :runner  (some-> (g "runner") keyword)
                              :harness (some-> (g "harness") keyword))
       "chain"       (apply o/chain (map json->workflow (g "steps")))
       "parallel"    (apply o/parallel (map json->workflow (g "branches")))
@@ -55,18 +57,18 @@
   [m]
   (json->workflow m))
 
-(defn- runner-for
-  "Build the runner named in the request. \"claude\" uses lean sub-agent
+(defn- adapter-for
+  "Build the adapter named in the request. \"claude\" uses lean sub-agent
   defaults (replace mode, tools off) so cross-language agents answer directly."
   [name]
   (if (= name "claude")
-    (cc/claude-runner {:system-prompt-mode :replace
-                       :max-turns          4
-                       :model              "haiku"
-                       :dir                "/tmp/karc"
-                       :extra-args         ["--disallowedTools"
-                                            "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]})
-    (k/mock-runner)))
+    (cc/claude-cli {:system-prompt-mode :replace
+                    :max-turns          4
+                    :model              "haiku"
+                    :dir                "/tmp/karc"
+                    :extra-args         ["--disallowedTools"
+                                         "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]})
+    (k/mock-adapter)))
 
 (defn- result->json [r]
   (try
@@ -80,8 +82,8 @@
               (let [req     (json/read-str (slurp *in*))
                     workflow (json->workflow (or (get req "workflow") (get req "flow")))
                     input   (get req "input" "")
-                    runner (runner-for (or (get req "runner") (get req "harness")))]
-                (result->json (o/run runner workflow input)))
+                    adapter (adapter-for (or (get req "adapter") (get req "runner") (get req "harness")))]
+                (result->json (o/run adapter workflow input)))
               (catch Throwable t
                 (json/write-str {:ok false
                                  :error (.getMessage t)

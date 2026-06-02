@@ -8,9 +8,9 @@ controller can change.
 runtime -> agents + workflows + history -> next operation -> evolved runtime
 ```
 
-Claude, Codex, OpenAI Agents SDK, local models, and command runners still own the
-inner agent loop. karcarthy owns the small mutable state layer around those
-runners.
+Claude, Codex, OpenAI Agents SDK, local models, and command adapters still own
+the inner agent loop. karcarthy owns the small mutable state layer around those
+systems.
 
 ## What production-ready means
 
@@ -74,8 +74,8 @@ Do not promote tools, integrations, memory, policies, or environments into new
 runtime resource kinds until the interpreter has a concrete behavior for them.
 For now:
 
-- tools stay on agents/runners;
-- MCP and provider integrations stay in runner config;
+- tools stay on agents, Agent SDKs, CLIs, or their adapters;
+- MCP and provider integrations stay in SDK/CLI config;
 - context is passed as input/history;
 - safety boundaries are host runtime concerns.
 

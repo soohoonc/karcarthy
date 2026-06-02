@@ -11,9 +11,9 @@ pleasant to write, but the result is still plain EDN.
 `chain` runs steps in order, passing each result text to the next step.
 
 ```clojure
-(k/run runner
+(k/run agent-system
        (k/chain researcher summarizer)
-       "map the agent harness space")
+       "map the agent framework space")
 ```
 
 ## Parallel
@@ -57,7 +57,7 @@ should run, and workers remain normal agents or workflows.
 
 ## Handoff
 
-`handoff` preserves session continuity when the selected runner supports it.
+`handoff` preserves session continuity when the selected Agent SDK or CLI supports it.
 Use it when one specialist should take over from another.
 
 ```clojure
@@ -73,8 +73,9 @@ Because every workflow is a value, you can transform it before running:
 ```clojure
 (-> (k/chain researcher summarizer)
     (update :steps conj reviewer)
-    (->> (k/run runner "summarize the prior work")))
+    (->> (k/run agent-system "summarize the prior work")))
 ```
 
-The important boundary is that karcarthy coordinates the graph. Runners still
-own the model call, tool call, and provider-specific inner loop.
+The important boundary is that karcarthy coordinates the graph. Agent SDKs,
+coding agents, and CLIs still own the model call, tool call, and
+provider-specific inner loop.

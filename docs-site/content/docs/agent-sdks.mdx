@@ -1,0 +1,72 @@
+---
+title: Agent SDKs & CLIs
+description: Delegate model calls and tool loops to the agent systems people already use.
+---
+
+karcarthy should speak the language people already use: agent SDKs, agent
+frameworks, coding agents, and CLIs. Pydantic AI calls itself a Python agent
+framework. OpenAI and Anthropic both expose Agent SDKs. Codex CLI is a local
+coding agent that runs in the terminal.
+
+karcarthy sits above those systems. It keeps the multi-agent plan as EDN and
+delegates each single-agent model/tool loop to one of those existing systems.
+
+## What karcarthy delegates to
+
+| System | What karcarthy delegates |
+| --- | --- |
+| Pydantic AI | A Python agent framework with typed agents and tools. |
+| Claude Agent SDK / Claude CLI | Claude-backed agent execution, tools, sessions, and streaming. |
+| OpenAI Agents SDK | Agent handoffs, tools, tracing, and SDK-managed runs. |
+| Codex CLI | Local terminal-oriented coding-agent execution. |
+| Local command or model process | Anything that can be wrapped as a command. |
+| Mock adapter | Offline examples and deterministic tests. |
+
+## Built-in adapters
+
+| Adapter function | Use it for |
+| --- | --- |
+| `mock-adapter` | Offline tests, examples, deterministic demos. |
+| `claude-cli` | Live execution through the Claude CLI. |
+| `command-adapter` | Wrapping any CLI or local model process. |
+| `openai-agents-sdk` | Delegating a single-agent loop to OpenAI Agents SDK. |
+
+## Choosing per agent
+
+Pass one adapter directly when every agent should use the same agent system:
+
+```clojure
+(k/run (k/mock-adapter) workflow input)
+```
+
+Pass a registry when agents should choose a system with `:adapter`:
+
+```clojure
+(def agent-systems
+  {:default (k/mock-adapter)
+   :claude  (k/claude-cli {})})
+
+(k/run agent-systems
+       (k/chain
+         (k/agent "planner" "Plan." :adapter :claude)
+         (k/agent "checker" "Check." :adapter :default))
+       "ship a docs site")
+```
+
+## JSON bridge
+
+Non-JVM languages can send workflow data to `karcarthy.cli` over stdin and read
+JSON back. The Python and TypeScript examples use the same workflow vocabulary
+without importing Clojure directly.
+
+```bash
+python3 examples/python/demo.py
+npx tsx examples/typescript/demo.ts
+```
+
+## Compatibility note
+
+Because this is a prototype, the preferred public names are the adapter names
+above. Internally, karcarthy still has an implementation protocol for one
+single-agent call, but docs should lead with Agent SDKs, agent frameworks,
+coding-agent CLIs, command processes, or the local mock.

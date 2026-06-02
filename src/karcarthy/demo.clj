@@ -4,14 +4,13 @@
       clojure -M -m karcarthy.demo
 
   Shows the central idea - a karcarthy workflow is *data* - plus the DSL sugar
-  (`defagent` / `defworkflow`) and orchestrator-workers fanning out over the command
-  runner with real subprocesses. No API key or network required."
+  (`defagent` / `defworkflow`) and orchestrator-workers fanning out over the
+  command adapter with real subprocesses. No API key or network required."
   (:require [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.walk :as walk]
-            [karcarthy.core :as k]
-            [karcarthy.orchestrate :as o]
-            [karcarthy.runner.command :as cmd]))
+            [karcarthy :as k]
+            [karcarthy.orchestrate :as o]))
 
 ;; --- Agents via defagent: the var name becomes the agent name --------------
 (k/defagent triage    "Classify the request as billing, technical or general. Reply with one word." :model "haiku")
@@ -50,16 +49,16 @@
     (println "before:" (mapv :model (agents-in support-desk)))
     (println "after: " (mapv :model (agents-in opusified))))
 
-  (println "\n=== Run the support desk on the offline mock runner ===")
-  (let [r (o/run (k/mock-runner canned) support-desk
+  (println "\n=== Run the support desk on the offline mock adapter ===")
+  (let [r (o/run (k/mock-adapter canned) support-desk
                  "my deploy 500s intermittently")]
     (println "ok?  " (k/ok? r))
     (println "text:" (:text r)))
 
-  (println "\n=== Orchestrate over the command runner (real subprocesses) ===")
+  (println "\n=== Orchestrate over the command adapter (real subprocesses) ===")
   ;; planner splits into words; each worker is `tr a-z A-Z` (uppercase via a
   ;; real subprocess); synthesize rejoins. This actually fans out and gathers.
-  (let [shell    (cmd/command-runner ["tr" "a-z" "A-Z"])
+  (let [shell    (k/command-adapter ["tr" "a-z" "A-Z"])
         pipeline (o/orchestrate (fn [s] (str/split (str/trim s) #"\s+"))
                                 (k/agent "shout" "uppercase")
                                 :synthesize (fn [rs _]

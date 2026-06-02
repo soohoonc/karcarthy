@@ -9,7 +9,7 @@ function agent(name: string, instructions: string): Workflow {
 }
 
 function run(workflow: Workflow, input: string): any {
-  const req = JSON.stringify({ workflow, input, runner: "mock" });
+  const req = JSON.stringify({ workflow, input, adapter: "mock" });
   const out = execFileSync("clojure", ["-M", "-m", "karcarthy.cli"], {
     input: req,
     encoding: "utf8",

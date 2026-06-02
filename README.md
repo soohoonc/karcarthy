@@ -8,7 +8,7 @@
 karcarthy coordinates many AI agents. The agents, tools, and the workflow itself
 are plain Clojure data (EDN).
 
-## Why Lisp, and why a runner
+## Why Lisp, and why Agent SDKs & CLIs
 
 Running a single agent (the model-call and tool-call loop) is close to a
 commodity now: the `claude` CLI, the OpenAI Agents SDK, and local models all do
@@ -17,10 +17,12 @@ keeping the plan something you can see and change.
 
 In a Lisp, code is data, so karcarthy makes the plan a value. A workflow is an
 EDN structure you generate, transform with `clojure.walk`, store, and diff like
-any other data. karcarthy delegates the inner loop to a *runner* and keeps only
-the data-first coordination layer on top. Two things fall out of that:
+any other data. karcarthy delegates the inner loop to systems people already
+use: Pydantic AI, Claude Agent SDK/CLI, OpenAI Agents SDK, Codex CLI, command
+processes, or a local mock. karcarthy keeps only the data-first coordination
+layer on top. Two things fall out of that:
 
-- you swap runners, or pick one per agent, without touching the workflow; and
+- you swap Agent SDK/CLI adapters, or pick one per agent, without touching the workflow; and
 - because the plan is data in a Lisp, an agent can **write a workflow as EDN
   that karcarthy runs, or rewrite its own definition at runtime**. The language
   the agents are described in is available to the agents themselves.
@@ -41,18 +43,19 @@ io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
 (k/defagent researcher "Research the question and cite sources.")
 (k/defagent summarizer "Summarize the findings in one sentence.")
 
-;; a workflow is data; run it on any runner (mock is offline and deterministic)
-(k/run (k/mock-runner) (k/chain researcher summarizer) "what is a monad?")
+;; a workflow is data; run it through any adapter (mock is offline and deterministic)
+(k/run (k/mock-adapter) (k/chain researcher summarizer) "what is a monad?")
 ;=> {:karcarthy/type :result, :ok? true, :text "...", ...}
 ```
 
-Swap `(k/mock-runner)` for `(k/claude-runner {})` to run it against `claude`.
+Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
 
 ## Highlights
 
-- **Runners** behind one protocol: `mock`, `claude-cli` (streaming + sessions),
-  `command` (wrap any CLI or local model), `openai`. Pass one, or pass a registry
-  `{id -> runner}` and let each agent choose with `:runner`.
+- **Agent SDK/CLI adapters** behind one protocol: `mock`, `claude-cli`
+  (streaming + sessions), `command` (wrap any CLI, coding agent, or local
+  model), `openai`. Pass one adapter, or pass a registry and let each agent
+  choose with `:adapter`.
 - **Workflow nodes**, all data: `chain`, `parallel`, `route`, `refine`,
   `orchestrate`, `handoff`, and multi-turn `converse`.
 - **Popular orchestrator shapes as data**: `karcarthy.patterns` emulates
@@ -60,13 +63,13 @@ Swap `(k/mock-runner)` for `(k/claude-runner {})` to run it against `claude`.
   group chats, OpenAI-style handoff routing, and ADK-style workflow agents.
 - **Agents speak karcarthy**: advanced self-modifying flows parse EDN via
   `clojure.edn`, never `eval`.
-- **OpenTelemetry-ready**: wrap a runner with `karcarthy.otel/instrument` to
+- **OpenTelemetry-ready**: wrap an adapter with `karcarthy.otel/instrument` to
   emit spans for workflow nodes, embedded functions, and agent calls.
 
 ```clojure
 (require '[karcarthy.otel :as otel])
 
-(k/run (otel/instrument (k/mock-runner))
+(k/run (otel/instrument (k/mock-adapter))
        (k/chain researcher summarizer)
        "what is a monad?")
 ```
