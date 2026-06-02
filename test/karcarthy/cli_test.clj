@@ -5,25 +5,25 @@
             [karcarthy.cli :as cli]))
 
 (deftest json->workflow-builds-and-runs
-  (testing "a JSON chain translates to workflow data and runs on the mock runner"
+  (testing "a JSON chain translates to workflow data and runs on the mock adapter"
     (let [workflow (cli/json->workflow {"type"  "chain"
                                         "steps" [{"type" "agent" "name" "a" "instructions" "i"}
                                                  {"type" "agent" "name" "b" "instructions" "i"}]})]
       (is (= :chain (:karcarthy/type workflow)))
       (is (k/agent? (first (:steps workflow))))
-      (is (= "[b] [a] hi" (:text (o/run (k/mock-runner) workflow "hi")))))))
+      (is (= "[b] [a] hi" (:text (o/run (k/mock-adapter) workflow "hi")))))))
 
 (deftest json->workflow-agent-fields
   (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
-                               "model" "haiku" "runner" "claude"})]
+                               "model" "haiku" "adapter" "claude"})]
     (is (= "x" (:name a)))
     (is (= "haiku" (:model a)))
-    (is (= :claude (:runner a)))))
+    (is (= :claude (:adapter a)))))
 
 (deftest json->workflow-accepts-old-harness-field
   (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
                                "harness" "claude"})]
-    (is (= :claude (:runner a)))
+    (is (= :claude (:adapter a)))
     (is (= :claude (:harness a)))))
 
 (deftest json->workflow-route-keeps-string-labels

@@ -25,17 +25,17 @@
     (is (nil? (k/explain-agent (k/agent "a" "i"))))))
 
 (deftest run-via-mock-echo
-  (testing "default mock runner echoes the prompt tagged with agent name"
-    (let [r (k/run-agent (k/mock-runner) (k/agent "echo" "e") "hello")]
+  (testing "default mock adapter echoes the prompt tagged with agent name"
+    (let [r (k/run-agent (k/mock-adapter) (k/agent "echo" "e") "hello")]
       (is (k/ok? r))
       (is (= :result (:karcarthy/type r)))
       (is (= "echo" (:agent r)))
       (is (= "[echo] hello" (:text r))))))
 
 (deftest run-with-custom-responder
-  (testing "mock runner can return scripted replies"
-    (let [runner (k/mock-runner (fn [{:keys [prompt]}] (str "got:" prompt)))
-          r      (k/run-agent runner (k/agent "a" "i") "x")]
+  (testing "mock adapter can return scripted replies"
+    (let [adapter (k/mock-adapter (fn [{:keys [prompt]}] (str "got:" prompt)))
+          r       (k/run-agent adapter (k/agent "a" "i") "x")]
       (is (= "got:x" (:text r))))))
 
 (deftest run-validates-agent
@@ -60,24 +60,24 @@
     (is (= "Research questions thoroughly."
            (:doc (meta #'test-researcher))))))
 
-(deftest runner-registry-resolution
-  (testing "an agent's :runner id selects from a registry; :default is fallback"
-    (let [reg {:a       (k/mock-runner (fn [{:keys [prompt]}] (str "A:" prompt)))
-               :b       (k/mock-runner (fn [{:keys [prompt]}] (str "B:" prompt)))
-               :default (k/mock-runner (fn [{:keys [prompt]}] (str "D:" prompt)))}]
-      (is (= "A:hi" (:text (k/run-agent reg (k/agent "x" "i" :runner :a) "hi"))))
-      (is (= "B:hi" (:text (k/run-agent reg (k/agent "y" "i" :runner :b) "hi"))))
-      (is (= "D:hi" (:text (k/run-agent reg (k/agent "z" "i") "hi"))))   ; no :runner
-      (is (= :a (:runner (k/agent "x" "i" :runner :a)))))))
+(deftest adapter-registry-resolution
+  (testing "an agent's :adapter id selects from a registry; :default is fallback"
+    (let [reg {:a       (k/mock-adapter (fn [{:keys [prompt]}] (str "A:" prompt)))
+               :b       (k/mock-adapter (fn [{:keys [prompt]}] (str "B:" prompt)))
+               :default (k/mock-adapter (fn [{:keys [prompt]}] (str "D:" prompt)))}]
+      (is (= "A:hi" (:text (k/run-agent reg (k/agent "x" "i" :adapter :a) "hi"))))
+      (is (= "B:hi" (:text (k/run-agent reg (k/agent "y" "i" :adapter :b) "hi"))))
+      (is (= "D:hi" (:text (k/run-agent reg (k/agent "z" "i") "hi"))))   ; no :adapter
+      (is (= :a (:adapter (k/agent "x" "i" :adapter :a)))))))
 
-(deftest runner-registry-missing-id
+(deftest adapter-registry-missing-id
   (testing "a missing id with no :default throws"
     (is (thrown? clojure.lang.ExceptionInfo
-                 (k/run-agent {:a (k/mock-runner)} (k/agent "x" "i" :runner :nope) "hi")))))
+                 (k/run-agent {:a (k/mock-adapter)} (k/agent "x" "i" :adapter :nope) "hi")))))
 
-(deftest single-runner
-  (testing "passing a Runner directly works"
-    (is (= "[e] hi" (:text (k/run-agent (k/mock-runner) (k/agent "e" "i") "hi"))))))
+(deftest single-adapter
+  (testing "passing one adapter directly works"
+    (is (= "[e] hi" (:text (k/run-agent (k/mock-adapter) (k/agent "e" "i") "hi"))))))
 
 (deftest harness-compatibility
   (testing "old Harness, :harness and mock-harness names still work"

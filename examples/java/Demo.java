@@ -6,7 +6,7 @@
 //   java  -cp "$CP:/tmp/karc-java" Demo
 //
 // Agents and workflows are Clojure data; you build and run them by resolving the
-// library's vars and invoking them. The mock runner keeps this offline.
+// library's vars and invoking them. The mock adapter keeps this offline.
 
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
@@ -18,7 +18,7 @@ public class Demo {
         require.invoke(Clojure.read("karcarthy.orchestrate"));
 
         IFn agent       = Clojure.var("karcarthy.core", "agent");
-        IFn mockRunner  = Clojure.var("karcarthy.core", "mock-runner");
+        IFn mockAdapter = Clojure.var("karcarthy.core", "mock-adapter");
         IFn chain       = Clojure.var("karcarthy.orchestrate", "chain");
         IFn run         = Clojure.var("karcarthy.orchestrate", "run");
         IFn get         = Clojure.var("clojure.core", "get");
@@ -27,7 +27,7 @@ public class Demo {
         Object summarizer = agent.invoke("summarizer", "Summarize in one line.");
         Object workflow   = chain.invoke(researcher, summarizer);
 
-        Object result = run.invoke(mockRunner.invoke(), workflow, "what is a monad?");
+        Object result = run.invoke(mockAdapter.invoke(), workflow, "what is a monad?");
 
         System.out.println("ok?  " + get.invoke(result, Clojure.read(":ok?")));
         System.out.println("text " + get.invoke(result, Clojure.read(":text")));

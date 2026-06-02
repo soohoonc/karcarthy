@@ -43,8 +43,8 @@
             :code :final
             :final :end}}))
 
-(def runner
-  (k/mock-runner
+(def adapter
+  (k/mock-adapter
    (fn [{:keys [agent prompt]}]
      (case (:name agent)
        "docs"  "Docs worker: explain with a short snippet."
@@ -55,7 +55,7 @@
 (pp/pprint (compact graph))
 
 (println "\nresult:")
-(println (:text (k/run runner graph
+(println (:text (k/run adapter graph
                        "Should this example show code or docs first?")))
 
 (shutdown-agents)

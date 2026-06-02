@@ -42,15 +42,15 @@ Agents are just maps:
 
 ## Run offline first
 
-The mock runner is deterministic and does not call a model:
+The mock adapter is deterministic and does not call a model:
 
 ```clojure
-(k/run (k/mock-runner)
+(k/run (k/mock-adapter)
        (k/chain researcher summarizer)
        "what is a monad?")
 ```
 
-The result has one shape across runners:
+The result has one shape across adapters:
 
 ```clojure
 {:karcarthy/type :result
@@ -59,17 +59,17 @@ The result has one shape across runners:
  :text "..."}
 ```
 
-## Swap in a live runner
+## Swap in a live agent system
 
-Once the workflow behaves correctly offline, swap the runner:
+Once the workflow behaves correctly offline, swap in a live agent system:
 
 ```clojure
-(k/run (k/claude-runner {})
+(k/run (k/claude-cli {})
        (k/chain researcher summarizer)
        "what is a monad?")
 ```
 
-The workflow data does not change. Only the runner changes.
+The workflow data does not change. Only the adapter changes.
 
 ## Run the local checks
 
@@ -80,5 +80,5 @@ clojure -M:test
 clojure -M -m karcarthy.demo
 ```
 
-The demos and tests default to offline runners unless a file explicitly calls
+The demos and tests default to offline adapters unless a file explicitly calls
 out a live model dependency.

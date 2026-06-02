@@ -14,10 +14,10 @@ clojure -M -e '(load-file "examples/clojure/orchestrator_emulations.clj")'
 
 | External shape | Public docs describe | karcarthy expression |
 | --- | --- | --- |
-| LangGraph | State, nodes, and edges, including conditional routing. | `state-graph` runs finite state graphs where function nodes return state updates and workflow nodes run through any runner. |
+| LangGraph | State, nodes, and edges, including conditional routing. | `state-graph` runs finite state graphs where function nodes return state updates and workflow nodes run through any Agent SDK/CLI adapter. |
 | CrewAI | Crews contain agents, tasks, and a process such as sequential or hierarchical. | `crew` turns task maps into task-specific agents and compiles the process to `chain`, `parallel`, or `orchestrate`. |
 | AutoGen | Group chats coordinate multiple agents through a manager and speaker selection. | `group-chat` models deterministic round-robin chats as a transcript threaded through a chain; use `route` when an agent should pick the next speaker. |
-| OpenAI Agents SDK | Specialist ownership through handoffs, plus manager-style agents-as-tools. | `handoff-router` routes a triage agent to a specialist; `handoff` preserves session ids when the runner supports them. |
+| OpenAI Agents SDK | Specialist ownership through handoffs, plus manager-style agents-as-tools. | `handoff-router` routes a triage agent to a specialist; `handoff` preserves session ids when the selected SDK/CLI adapter supports them. |
 | Google ADK | Workflow agents provide deterministic sequential, parallel, and loop patterns. | `workflow-agent` maps those directly to `chain`, `parallel`, and `refine`. |
 
 ## Why this matters

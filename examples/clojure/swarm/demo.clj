@@ -28,8 +28,8 @@
                      "support" support}
                     :default support))
 
-(def runner
-  (k/mock-runner
+(def adapter
+  (k/mock-adapter
    (fn [{:keys [agent prompt]}]
      (case (:name agent)
        "triage"  (cond
@@ -44,7 +44,7 @@
 (pp/pprint (compact swarm-triage))
 
 (println "\nresult:")
-(println (:text (k/run runner swarm-triage
+(println (:text (k/run adapter swarm-triage
                        "I was charged twice and need a refund.")))
 
 (shutdown-agents)

@@ -2,7 +2,7 @@
 
 karcarthy is a Clojure library that runs on the JVM, so any JVM language can
 drive it. The Java, Kotlin, and Scala examples each build two agents, chain
-them, and run the chain on the offline mock runner - identical work in three
+them, and run the chain through the offline mock adapter - identical work in three
 languages, to show the library is reachable from each.
 
 ## Clojure
@@ -10,7 +10,7 @@ languages, to show the library is reachable from each.
 - `clojure/orchestrator_emulations.clj` - offline emulations of LangGraph,
   CrewAI, AutoGen, OpenAI Agents SDK, and Google ADK-style orchestration shapes.
 - `clojure/swarm/`, `clojure/crewai/`, `clojure/autogen/`, `clojure/langgraph/`
-  - tiny runnable harness-shape examples, with one folder per harness.
+  - tiny runnable orchestration-pattern examples, with one folder per pattern.
 - `clojure/live_orchestrate.clj` - a live orchestrator-workers run (paid `claude -p`).
 - `clojure/self_modify.clj` - an agent edits itself.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
@@ -23,13 +23,13 @@ language builds (and could transform) it, and an agent can generate or edit one 
 same way. See [`../COMPARISON.md`](../COMPARISON.md) for how this differs from
 PydanticAI, Agno, and the Vercel AI SDK.
 
-The harness examples also have JSON-bridge versions:
+The pattern examples also have JSON-bridge versions:
 
 - `python/swarm/`, `python/crewai/`, `python/autogen/`
 - `typescript/swarm/`, `typescript/crewai/`, `typescript/autogen/`
 
 ```bash
-python3 examples/python/demo.py            # offline (mock runner)
+python3 examples/python/demo.py            # offline (mock adapter)
 python3 examples/python/demo.py --live     # + an agent that edits itself (real claude)
 
 bun run examples/typescript/demo.ts        # or: npx tsx … / ts-node …

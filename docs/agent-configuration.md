@@ -10,8 +10,8 @@ runtime -> agents + workflows + history -> next operation -> evolved runtime
 ```
 
 The runtime should stay small. Claude, Codex, OpenAI Agents SDK, local models,
-and command runners still own the inner model/tool loop. karcarthy only owns the
-data substrate around that loop.
+and command adapters still own the inner model/tool loop. karcarthy only owns
+the data substrate around that loop.
 
 ## State
 
@@ -31,8 +31,8 @@ A running system needs only three core registries right now:
 Everything else should stay where it already belongs until there is a concrete
 need to promote it:
 
-- tools live on agents or runners;
-- integrations live in runner options or MCP config;
+- tools live on agents, Agent SDKs, CLIs, or their adapters;
+- integrations live in SDK/CLI options or MCP config;
 - context is input/history passed to the current call;
 - safety boundaries live in the host runtime, not in the graph vocabulary.
 

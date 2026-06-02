@@ -1,7 +1,7 @@
 (ns karcarthy.otel
   "OpenTelemetry instrumentation for karcarthy.
 
-  The public entrypoint is `instrument`, which wraps a runner so workflow nodes,
+  The public entrypoint is `instrument`, which wraps an adapter so workflow nodes,
   embedded functions, and agent calls produce OpenTelemetry spans. Applications
   provide their own OpenTelemetry SDK/exporter setup; without one, the global
   OpenTelemetry instance is a no-op, matching the Java API's normal behavior."
@@ -37,7 +37,7 @@
     (not (:otel/tracer opts)) (assoc :otel/tracer (tracer-from opts))))
 
 (defn ^:no-doc instrumented-opts
-  "Merge OTel defaults from an instrumented runner into run opts."
+  "Merge OTel defaults from an instrumented adapter into run opts."
   [runner opts]
   (cond
     (:otel/tracer opts) opts
@@ -141,7 +141,7 @@
   (with-span opts "karcarthy.agent"
     (merge {"karcarthy.agent.name" (:name agent)
             "karcarthy.agent.model" (:model agent)
-            "karcarthy.agent.runner" (some-> (or (:runner agent) (:harness agent)) name)
+            "karcarthy.agent.adapter" (some-> (or (:adapter agent) (:runner agent) (:harness agent)) name)
             "karcarthy.workflow.path" (or (path-string opts) "")}
            (maybe-preview opts "karcarthy.prompt.preview" prompt))
     (fn [span]
@@ -174,7 +174,7 @@
         v))))
 
 (defn instrument
-  "Wrap a runner or runner registry with OpenTelemetry instrumentation.
+  "Wrap an adapter or adapter registry with OpenTelemetry instrumentation.
 
   Options:
     :open-telemetry      an io.opentelemetry.api.OpenTelemetry instance

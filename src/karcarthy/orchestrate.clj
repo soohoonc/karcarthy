@@ -15,7 +15,7 @@
     :handoff      run one workflow, then hand off to another with shared session.
 
   Because a workflow is data, you build, generate and serialize it with ordinary
-  Clojure. `run` interprets a workflow against a `Runner`.
+  Clojure. `run` interprets a workflow through an adapter.
 
   Every workflow run returns a `karcarthy.core` result map, so workflows compose: the
   output of one is valid input to another. Composite nodes are fault-isolated,
@@ -102,9 +102,9 @@
 
 (defn handoff
   "Run `from`, then hand off to `to`, threading `from`'s session so `to` inherits
-  its context on runners that support sessions (e.g. claude-cli, via --resume).
+  its context on adapters that support sessions (e.g. claude-cli, via --resume).
   `to`'s input defaults to `from`'s :text; pass `:prompt` to override. On
-  runners without sessions the handoff still runs both workflows in sequence."
+  adapters without sessions the handoff still runs both workflows in sequence."
   [from to & {:keys [prompt]}]
   {:karcarthy/type :handoff :from from :to to :prompt prompt})
 
@@ -117,7 +117,7 @@
 (defmulti run-node
   "Execute one workflow node, dispatching on (:karcarthy/type node). This is the
   interpreter's extension point: teach it a new node by adding a constructor and
-  a `(defmethod run-node :your-type [runner node input opts] ...)` returning a
+  a `(defmethod run-node :your-type [adapter node input opts] ...)` returning a
   `karcarthy.core` result. See `karcarthy.self` for examples (`:evolve`)."
   (fn [_runner node _input _opts] (:karcarthy/type node)))
 
@@ -291,7 +291,7 @@
                   {:node node})))
 
 (defn run
-  "Interpret `workflow` against `runner`, starting from `input` (a string).
+  "Interpret `workflow` through `adapter`, starting from `input` (a string).
   Returns a `karcarthy.core` result map. `workflow` may be an agent or any
   composite node."
   ([runner workflow input] (run runner workflow input {}))

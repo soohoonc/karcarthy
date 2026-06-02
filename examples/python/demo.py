@@ -9,7 +9,7 @@ JSON result back. The homoiconic part survives the boundary: Python constructs
 workflow the same way.
 
 Run from the repo root:
-    python3 examples/python/demo.py          # offline (mock runner)
+    python3 examples/python/demo.py          # offline (mock adapter)
     python3 examples/python/demo.py --live    # also the self-editing agent (real claude calls)
 """
 import json
@@ -17,8 +17,8 @@ import subprocess
 import sys
 
 
-def run(workflow, input_text, runner="mock"):
-    req = json.dumps({"workflow": workflow, "input": input_text, "runner": runner})
+def run(workflow, input_text, adapter="mock"):
+    req = json.dumps({"workflow": workflow, "input": input_text, "adapter": adapter})
     proc = subprocess.run(
         ["clojure", "-M", "-m", "karcarthy.cli"],
         input=req, capture_output=True, text=True,
@@ -28,7 +28,7 @@ def run(workflow, input_text, runner="mock"):
     return json.loads(proc.stdout)
 
 
-# 1) A workflow is data: a chain of two agents, run on the offline mock runner.
+# 1) A workflow is data: a chain of two agents, run on the offline mock adapter.
 chain = {"type": "chain", "steps": [
     {"type": "agent", "name": "researcher", "instructions": "Research the question."},
     {"type": "agent", "name": "summarizer", "instructions": "Summarize in one line."},
@@ -36,7 +36,7 @@ chain = {"type": "chain", "steps": [
 print("chain ->", run(chain, "what is a monad?")["text"])
 
 # 2) An agent edits its own definition at runtime, across the bridge. This needs
-#    a real model, so it uses the claude runner (run with --live).
+#    a real model, so it uses the Claude CLI adapter (run with --live).
 if "--live" in sys.argv:
     evolve = {"type": "evolve",
               "agent": {"type": "agent", "name": "poet",
@@ -44,5 +44,5 @@ if "--live" in sys.argv:
               "max-rounds": 3}
     res = run(evolve,
               "Improve yourself into an expert, then write one line about Lisp.",
-              runner="claude")
+              adapter="claude")
     print("evolve rounds:", res.get("rounds"), "->", res.get("text"))

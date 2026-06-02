@@ -11,9 +11,9 @@ it runs.
 runtime -> agents + workflows + history -> next operation -> evolved runtime
 ```
 
-Claude, Codex, OpenAI Agents SDK, local models, and command runners still own
-the inner agent loop. karcarthy owns the small mutable state layer around those
-runners.
+Pydantic AI, Codex CLI, Claude Agent SDK, OpenAI Agents SDK, local models, and
+command processes still own the inner agent loop. karcarthy owns the small
+mutable state layer around those systems.
 
 ## State
 
@@ -32,8 +32,8 @@ A running system needs three core registries:
 
 Everything else stays where it belongs until there is concrete behavior for it:
 
-- tools live on agents or runners;
-- integrations live in runner options or MCP config;
+- tools live on agents, Agent SDKs, CLIs, or their adapters;
+- integrations live in SDK/CLI options or MCP config;
 - context is input and history passed to the current call;
 - safety boundaries live in the host runtime.
 
