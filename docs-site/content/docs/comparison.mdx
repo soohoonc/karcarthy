@@ -8,9 +8,9 @@ decorators in a host language, and bundle the agent loop. karcarthy makes a
 different pair of choices: the workflow is plain data, and the loop is delegated
 to an agent SDK, agent framework, coding-agent CLI, or command adapter.
 
-## Common patterns
+## Common choices
 
-| Pattern | PydanticAI / DSPy / Agno / Vercel AI SDK | karcarthy |
+| Choice | PydanticAI / DSPy / Agno / Vercel AI SDK | karcarthy |
 | --- | --- | --- |
 | Define an agent | Host-language object, module, decorator, or typed declaration. | A data map: `{:karcarthy/type :agent ...}`. |
 | Agent loop | The framework or SDK runs it. | The selected SDK, framework, CLI, or adapter runs it. |

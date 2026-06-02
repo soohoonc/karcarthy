@@ -1,6 +1,6 @@
 ---
 title: Workflow Schema
-description: EDN shapes for agents, workflows, results, dynamic operations, and compatibility inputs.
+description: EDN shapes for agents, workflows, results, registry refs, and compatibility inputs.
 ---
 
 Workflows are EDN values. Every node is a map tagged with `:karcarthy/type`.
@@ -113,9 +113,9 @@ Composite nodes add more fields:
 | `bind` routes | selected child result fields, or `:error :no-route`. |
 | `state-graph` | `:state`, `:path`, `:results`. |
 
-## Dynamic refs
+## Registry refs
 
-Dynamic workflows may refer to runtime registry entries:
+Workflow data may refer to named registry entries:
 
 ```clojure
 {:karcarthy/type :agent-ref :name "writer"}
@@ -123,7 +123,7 @@ Dynamic workflows may refer to runtime registry entries:
 ```
 
 Refs are resolved by `materialize` immediately before execution, so patches to
-runtime state affect later calls.
+state affect later calls.
 
 ## Legacy compatibility
 

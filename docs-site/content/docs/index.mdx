@@ -4,7 +4,7 @@ description: Homoiconic agent orchestration for Clojure.
 ---
 
 karcarthy coordinates many AI agents while keeping agents, workflows, and
-runtime state as ordinary data. The inner model and tool loop still belongs to a
+state as ordinary data. The inner model and tool loop still belongs to a
 system such as Pydantic AI, Claude Agent SDK, OpenAI Agents SDK, Codex CLI, a
 command-line model, or a local mock. karcarthy owns the data-first coordination
 layer above those systems.
@@ -46,19 +46,19 @@ stored as EDN, converted through JSON, or emitted by an agent and parsed without
 | Agents | Plain maps tagged with `:karcarthy/type :agent`. |
 | Agent SDKs & CLIs | Pydantic AI, Claude Agent SDK/CLI, OpenAI Agents SDK, Codex CLI, command processes, and the local mock adapter. |
 | Workflows | `pipe`, `map`, `reduce`, `iterate`, `bind`, and `converse`. |
-| Patterns | CrewAI, AutoGen, LangGraph, OpenAI specialist routing, and ADK-style helpers compiled to workflow data. |
-| Runtime state | Agents, workflows, operations, and history as mutable data. |
+| Framework mappings | CrewAI, AutoGen, LangGraph, OpenAI specialist routing, and ADK-style helpers compiled to workflow data. |
+| State | Agents, workflows, operations, and history as mutable data. |
 | Observability | OpenTelemetry spans through `karcarthy.otel/instrument`. |
 
 ## Current status
 
 karcarthy is early and not yet published as a stable release. Use it from git,
-expect the public vocabulary to stay small, and treat the runtime docs as the
+expect the public vocabulary to stay small, and treat the state docs as the
 direction for the default model rather than a separate mode.
 
 <Cards>
   <Card title="Getting Started" href="/docs/getting-started" />
   <Card title="Workflows" href="/docs/workflows" />
   <Card title="Agent SDKs & CLIs" href="/docs/agent-sdks" />
-  <Card title="Runtime Vocabulary" href="/docs/runtime" />
+  <Card title="State" href="/docs/state" />
 </Cards>

@@ -1,10 +1,10 @@
 ---
 title: External References
-description: Protocol and SDK references that informed karcarthy's runtime vocabulary.
+description: Protocol and SDK references that informed karcarthy's public names.
 ---
 
 These links are the outside protocol and SDK surfaces used to keep karcarthy's
-public vocabulary grounded in existing agent systems.
+public names grounded in existing agent systems.
 
 ## Agent Client Protocol
 
@@ -12,14 +12,14 @@ public vocabulary grounded in existing agent systems.
 | --- | --- |
 | [Session setup](https://agentclientprotocol.com/protocol/v1/session-setup) | Sessions are conversation state, including context, history, and MCP server setup. |
 | [Prompt turn](https://agentclientprotocol.com/protocol/v1/prompt-turn) | Defines the user-turn lifecycle, updates, tool calls, stop reasons, and cancellation. |
-| [Tool calls](https://agentclientprotocol.com/protocol/v1/tool-calls) | Treats tools as runtime events rather than workflow node definitions. |
+| [Tool calls](https://agentclientprotocol.com/protocol/v1/tool-calls) | Treats tools as agent events rather than workflow node definitions. |
 | [Session config options](https://agentclientprotocol.com/protocol/v1/session-config-options) | Keeps model, mode, and reasoning selectors in session or adapter config. |
 | [Session modes](https://agentclientprotocol.com/protocol/v1/session-modes) | Older compatibility surface; not a core karcarthy resource. |
 
 Takeaways:
 
 - `context` should be session/message state, not a broad resource kind.
-- tool calls are adapter/runtime events, not graph IR.
+- tool calls are adapter events, not graph IR.
 - permission requests belong to the host adapter boundary.
 
 ## OpenAI Agents SDK and Responses API
@@ -68,14 +68,14 @@ Takeaways:
 
 Takeaways:
 
-- recognizable orchestration patterns should compile to the small workflow data
+- familiar framework shapes should compile to the small workflow data
   vocabulary instead of becoming new public concepts.
 - typed input/output signatures are future work once validation needs them.
 - metrics and optimization can help agents patch behavior, but they should not
-  expand the runtime surface before the interpreter has concrete behavior for
+  expand the state surface before the interpreter has concrete behavior for
   them.
 
-## Agent configuration UX
+## Agent configuration
 
 | Reference | Why it matters |
 | --- | --- |
