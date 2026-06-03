@@ -309,6 +309,32 @@
           flow (o/pipe (k/agent "shout" "i" :adapter :up) (k/agent "echo" "i"))]
       (is (= "HI" (:text (o/run reg flow "hi")))))))
 
+(deftest observe-emits-span-compatible-events
+  (testing "workflow and agent events include span ids, parent ids, paths, and attributes"
+    (let [events   (atom [])
+          observer #(swap! events conj %)
+          flow     (o/pipe a b)
+          r        (o/run h flow "hi" {:observe observer})
+          starts   (filter #(= :start (:event %)) @events)
+          finishes (filter #(= :finish (:event %)) @events)
+          top      (first starts)
+          children (vec (rest starts))]
+      (is (k/ok? r))
+      (is (= :workflow (:kind top)))
+      (is (= "karcarthy.workflow.pipe" (:name top)))
+      (is (string? (:span/id top)))
+      (is (every? :span/id @events))
+      (is (every? :attributes @events))
+      (is (= (:span/id top) (:parent/span-id (children 0))))
+      (is (= (:span/id (children 0)) (:parent/span-id (children 1))))
+      (is (= (:span/id top) (:parent/span-id (children 2))))
+      (is (= (:span/id (children 2)) (:parent/span-id (children 3))))
+      (is (= [[:steps 0] [:steps 0] [:steps 1] [:steps 1]]
+             (mapv :path (filter #(#{:workflow :agent} (:kind %)) children))))
+      (is (every? #(contains? % :duration-ms) finishes))
+      (is (not-any? #(contains? % :text) @events))
+      (is (not-any? #(contains? % :prompt) @events)))))
+
 (deftest unknown-node-throws
   (is (thrown? clojure.lang.ExceptionInfo
                (o/run h {:karcarthy/type :nonsense} "hi"))))

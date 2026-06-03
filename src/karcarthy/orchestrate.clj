@@ -29,7 +29,8 @@
   (:require [clojure.string :as str]
             [karcarthy.core :as k]
             [karcarthy.edn :as kedn])
-  (:import [java.util.concurrent Executors Callable Future]))
+  (:import [java.util UUID]
+           [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
 ;; Constructors - build workflow data
@@ -142,6 +143,47 @@
 
 ;; --- shared helpers --------------------------------------------------------
 
+(defn- span-id [] (str (UUID/randomUUID)))
+
+(defn- now-ms [] (System/currentTimeMillis))
+
+(defn- duration-ms [started-ns]
+  (/ (double (- (System/nanoTime) started-ns)) 1000000.0))
+
+(defn- observe!
+  [opts event]
+  (when-let [observe (:observe opts)]
+    (try
+      (observe event)
+      (catch Throwable _ nil))))
+
+(defn- child-opts
+  [opts & path-segments]
+  (if (:observe opts)
+    (update opts :karcarthy/path (fnil into []) path-segments)
+    opts))
+
+(defn- workflow-event
+  [phase span-id parent-span-id workflow attrs]
+  (let [type      (:karcarthy/type workflow)
+        type-name (if type (name type) "unknown")]
+    (cond-> {:karcarthy/type :event
+             :event          phase
+             :kind           :workflow
+             :name           (str "karcarthy.workflow." type-name)
+             :span/kind      :internal
+             :span/id        span-id
+             :time-ms        (now-ms)
+             :path           (:karcarthy/path attrs)
+             :attributes     {"karcarthy.kind"          "workflow"
+                              "karcarthy.workflow.type" type-name}}
+      parent-span-id (assoc :parent/span-id parent-span-id)
+      (:karcarthy/path attrs)
+      (assoc-in [:attributes "karcarthy.path"] (pr-str (:karcarthy/path attrs)))
+      (:duration-ms attrs) (assoc :duration-ms (:duration-ms attrs))
+      (contains? attrs :ok?) (assoc :ok? (:ok? attrs))
+      (:error attrs) (assoc :error (:error attrs)))))
+
 (defn safe-run
   "Run a child workflow, converting a thrown exception into a not-ok result so one
   bad branch can't crash a whole multi-agent run. Composite nodes run their
@@ -218,8 +260,8 @@
   (loop [input input, indexed-steps (map-indexed vector steps), last-result nil]
     (if (empty? indexed-steps)
       (or last-result (k/result {:ok? true :text input :empty-pipe? true}))
-      (let [[_idx step] (first indexed-steps)
-            r           (safe-run adapter step input opts)]
+      (let [[idx step] (first indexed-steps)
+            r          (safe-run adapter step input (child-opts opts :steps idx))]
         (if (k/ok? r)
           (recur (:text r) (rest indexed-steps) r)
           r)))))                                    ; short-circuit on failure
@@ -227,14 +269,14 @@
 (defn- run-branch-map [adapter {:keys [branches max-concurrency]} input opts]
   (let [results  (bounded-pmap max-concurrency
                                (fn [[idx branch]]
-                                 (safe-run adapter branch input opts))
+                                 (safe-run adapter branch input (child-opts opts :branches idx)))
                                (map-indexed vector branches))]
     (k/result {:ok?      (every? k/ok? results)
                :results  results
                :text     (str/join "\n\n" (keep :text results))})))
 
 (defn- run-route [adapter source routes default input opts]
-  (let [r (safe-run adapter source input opts)]
+  (let [r (safe-run adapter source input (child-opts opts :source))]
     (if-not (k/ok? r)
       r
       (try
@@ -248,7 +290,9 @@
                              {:output m :result r})
 
             workflow
-            (safe-run adapter workflow input opts)
+            (if (contains? routes label)
+              (safe-run adapter workflow input (child-opts opts :routes label))
+              (safe-run adapter workflow input (child-opts opts :default)))
 
             :else
             (k/result {:ok? false :error :no-route :label label
@@ -289,10 +333,11 @@
 
 (defn- run-iterate [adapter {:keys [worker evaluator max-rounds]} input opts]
   (loop [round 1, worker-input input]
-    (let [draft (safe-run adapter worker worker-input opts)]
+    (let [draft (safe-run adapter worker worker-input (child-opts opts :worker round))]
       (if-not (k/ok? draft)
         draft                                       ; worker failed; bail out
-        (let [{:keys [accept? feedback]} (evaluate adapter evaluator draft input opts)]
+        (let [{:keys [accept? feedback]} (evaluate adapter evaluator draft input
+                                                   (child-opts opts :evaluator round))]
           (if (or accept? (>= round max-rounds))
             (k/result (assoc draft :rounds round :accepted? (boolean accept?)))
             (recur (inc round)
@@ -306,7 +351,7 @@
 
   The planner must reply with EDN `{:subtasks [\"...\"]}`."
   [adapter planner input opts]
-  (let [r (safe-run adapter planner input opts)]
+  (let [r (safe-run adapter planner input (child-opts opts :planner))]
     (if-not (k/ok? r)
       r
       (try
@@ -325,7 +370,7 @@
       subtasks
       (let [results (bounded-pmap max-concurrency
                                   (fn [[idx subtask]]
-                                    (safe-run adapter worker subtask opts))
+                                    (safe-run adapter worker subtask (child-opts opts :worker idx)))
                                   (map-indexed vector subtasks))]
         (k/result {:ok?      (every? k/ok? results)
                    :subtasks subtasks
@@ -333,12 +378,12 @@
                    :text     (str/join "\n\n" (keep :text results))})))))
 
 (defn- run-continuation [adapter source to prompt input opts]
-  (let [r1 (safe-run adapter source input opts)]
+  (let [r1 (safe-run adapter source input (child-opts opts :source))]
     (if-not (k/ok? r1)
       r1                                              ; bail if the first agent failed
       (let [opts' (cond-> opts
                     (:session-id r1) (assoc :resume (:session-id r1)))]
-        (safe-run adapter to (or prompt (:text r1)) opts')))))
+        (safe-run adapter to (or prompt (:text r1)) (child-opts opts' :to))))))
 
 (defmethod run-node :map
   [adapter {:keys [branches planner worker] :as node} input opts]
@@ -360,8 +405,9 @@
 (defmethod run-node :reduce
   [adapter {:keys [mapped reducer] :as node} input opts]
   (if (and mapped reducer)
-    (let [mapped-result  (safe-run adapter mapped input opts)
-          reducer-result (safe-run adapter reducer (reduce-input input mapped-result) opts)]
+    (let [mapped-result  (safe-run adapter mapped input (child-opts opts :mapped))
+          reducer-result (safe-run adapter reducer (reduce-input input mapped-result)
+                                   (child-opts opts :reducer))]
       (k/result (assoc reducer-result
                        :ok? (and (k/ok? mapped-result) (k/ok? reducer-result))
                        :mapped mapped-result
@@ -391,7 +437,27 @@
   composite node."
   ([adapter workflow input] (run adapter workflow input {}))
   ([adapter workflow input opts]
-   (run-node adapter workflow input opts)))
+   (if-not (:observe opts)
+     (run-node adapter workflow input opts)
+     (let [span-id        (span-id)
+           parent-span-id (:karcarthy/parent-span-id opts)
+           started-ns     (System/nanoTime)
+           opts'          (assoc opts :karcarthy/parent-span-id span-id)]
+       (observe! opts (workflow-event :start span-id parent-span-id workflow opts))
+       (try
+         (let [result (run-node adapter workflow input opts')]
+           (observe! opts (workflow-event :finish span-id parent-span-id workflow
+                                          (assoc opts
+                                                 :duration-ms (duration-ms started-ns)
+                                                 :ok? (k/ok? result))))
+           result)
+         (catch Throwable t
+           (observe! opts (workflow-event :error span-id parent-span-id workflow
+                                          (assoc opts
+                                                 :duration-ms (duration-ms started-ns)
+                                                 :ok? false
+                                                 :error (or (.getMessage t) (str t)))))
+           (throw t)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; DSL sugar

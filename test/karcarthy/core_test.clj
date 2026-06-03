@@ -78,3 +78,12 @@
 (deftest single-adapter
   (testing "passing one adapter directly works"
     (is (= "[e] hi" (:text (k/run-agent (k/mock-adapter) (k/agent "e" "i") "hi"))))))
+
+(deftest observer-errors-do-not-break-agent-runs
+  (testing "observer hooks are best-effort"
+    (let [r (k/run-agent (k/mock-adapter)
+                         (k/agent "e" "i")
+                         "hi"
+                         {:observe (fn [_] (throw (ex-info "observer failed" {})))})]
+      (is (k/ok? r))
+      (is (= "[e] hi" (:text r))))))

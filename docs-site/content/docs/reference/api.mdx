@@ -271,6 +271,38 @@ Returns a result map:
 Top-level `run` throws for malformed input. Composite nodes convert child
 exceptions into not-ok result maps.
 
+### Observability
+
+Pass `:observe` to receive OpenTelemetry-compatible span events as plain data:
+
+```clojure
+(k/run (k/mock-adapter)
+       (k/pipe researcher summarizer)
+       "map the agent framework space"
+       {:observe (fn [event] ...)})
+```
+
+Events contain span ids, parent span ids, names, attributes, paths, status, and
+duration metadata. They do not include prompt text or result text.
+
+```clojure
+{:karcarthy/type :event
+ :event :start                  ; :start, :finish, or :error
+ :kind :workflow                ; or :agent
+ :name "karcarthy.workflow.pipe"
+ :span/kind :internal
+ :span/id "..."
+ :parent/span-id "..."
+ :path [:steps 0]
+ :attributes {"karcarthy.kind" "workflow"
+              "karcarthy.workflow.type" "pipe"
+              "karcarthy.path" "[:steps 0]"}}
+```
+
+For OpenTelemetry, start a span on `:start`, end it on `:finish` or `:error`,
+use `:name` as the span name, and attach `:attributes`. karcarthy does not take
+an OpenTelemetry dependency.
+
 ## Adapters
 
 ### `mock-adapter`

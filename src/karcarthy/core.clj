@@ -12,7 +12,8 @@
   ;; `agent` deliberately shadows clojure.core/agent (the STM primitive); this
   ;; is an agent library. Use `clojure.core/agent` if you need the original.
   (:refer-clojure :exclude [agent])
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s])
+  (:import [java.util UUID]))
 
 ;; ===========================================================================
 ;; Data model
@@ -141,6 +142,42 @@
     :else (throw (ex-info "adapter must be a single adapter or a registry map {id -> adapter}"
                           {:got adapter}))))
 
+(defn- span-id [] (str (UUID/randomUUID)))
+
+(defn- now-ms [] (System/currentTimeMillis))
+
+(defn- duration-ms [started-ns]
+  (/ (double (- (System/nanoTime) started-ns)) 1000000.0))
+
+(defn- observe!
+  [opts event]
+  (when-let [observe (:observe opts)]
+    (try
+      (observe event)
+      (catch Throwable _ nil))))
+
+(defn- agent-event
+  [phase span-id parent-span-id agent attrs]
+  (cond-> {:karcarthy/type :event
+           :event          phase
+           :kind           :agent
+           :name           "karcarthy.agent"
+           :span/kind      :internal
+           :span/id        span-id
+           :time-ms        (now-ms)
+           :path           (:karcarthy/path attrs)
+           :attributes     (cond-> {"karcarthy.kind"       "agent"
+                                    "karcarthy.agent.name" (:name agent)
+                                    "karcarthy.adapter.id" (name (adapter-id agent))}
+                             (:karcarthy/path attrs)
+                             (assoc "karcarthy.path" (pr-str (:karcarthy/path attrs)))
+                             (:model agent) (assoc "karcarthy.agent.model" (:model agent))
+                             (:tools agent) (assoc "karcarthy.agent.tools.count" (count (:tools agent))))}
+    parent-span-id (assoc :parent/span-id parent-span-id)
+    (:duration-ms attrs) (assoc :duration-ms (:duration-ms attrs))
+    (contains? attrs :ok?) (assoc :ok? (:ok? attrs))
+    (:error attrs) (assoc :error (:error attrs))))
+
 (defn run-agent
   "Validate `agent`, then run it on `prompt`. `adapter` is either a single
   adapter or a registry map {id -> adapter} (see `resolve-adapter`). Returns a result map;
@@ -150,7 +187,26 @@
    (when-let [msg (explain-agent agent)]
      (throw (ex-info (str "Invalid agent: " msg)
                      {:agent agent :problems (s/explain-data ::agent agent)})))
-   (-run (resolve-adapter adapter agent) agent prompt opts)))
+   (if-not (:observe opts)
+     (-run (resolve-adapter adapter agent) agent prompt opts)
+     (let [span-id        (span-id)
+           parent-span-id (:karcarthy/parent-span-id opts)
+           started-ns     (System/nanoTime)]
+       (observe! opts (agent-event :start span-id parent-span-id agent opts))
+       (try
+         (let [result (-run (resolve-adapter adapter agent) agent prompt opts)]
+           (observe! opts (agent-event :finish span-id parent-span-id agent
+                                       (assoc opts
+                                              :duration-ms (duration-ms started-ns)
+                                              :ok? (ok? result))))
+           result)
+         (catch Throwable t
+           (observe! opts (agent-event :error span-id parent-span-id agent
+                                       (assoc opts
+                                              :duration-ms (duration-ms started-ns)
+                                              :ok? false
+                                              :error (or (.getMessage t) (str t)))))
+           (throw t)))))))
 
 ;; ===========================================================================
 ;; Mock adapter
