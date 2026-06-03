@@ -99,6 +99,12 @@
   [agent & {:keys [max-rounds] :or {max-rounds 5}}]
   {:karcarthy/type :evolve :agent agent :max-rounds max-rounds})
 
+(defmethod o/extension-workflow? :evolve
+  [{:keys [agent max-rounds]}]
+  (and (k/agent? agent)
+       (or (nil? max-rounds)
+           (and (integer? max-rounds) (pos? max-rounds)))))
+
 (def ^:private no-patch ::no-patch)
 
 (def ^:private patch-keys

@@ -29,6 +29,8 @@
       (is (= :map (:karcarthy/type mapped)))
       (is (= :reduce (:karcarthy/type reduced)))
       (is (= :bind (:karcarthy/type bound)))
+      (is (o/workflow? bound))
+      (is (not (contains? bound :default)))
       (is (contains? (:routes bound) "billing")))))
 
 (deftest json->agent-workflow-fields
@@ -44,7 +46,17 @@
                                         "source" {"type" "agent" "name" "r" "instructions" "i"}
                                         "routes" {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}})]
       (is (= :bind (:karcarthy/type workflow)))
+      (is (o/workflow? workflow))
       (is (contains? (:routes workflow) "billing")))))
+
+(deftest json->workflow-bind-accepts-default
+  (testing "JSON bind includes a default only when one is present"
+    (let [workflow (cli/json->workflow {"type"    "bind"
+                                        "source"  {"type" "agent" "name" "r" "instructions" "i"}
+                                        "routes"  {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}
+                                        "default" {"type" "agent" "name" "fallback" "instructions" "i"}})]
+      (is (o/workflow? workflow))
+      (is (= "fallback" (get-in workflow [:default :name]))))))
 
 (deftest json->workflow-unknown-type
   (is (thrown? clojure.lang.ExceptionInfo (cli/json->workflow {"type" "nope"}))))

@@ -275,6 +275,8 @@
     (is (o/workflow? (o/pipe a b)))
     (is (o/workflow? (o/map planner a)))
     (is (o/workflow? (o/reduce (o/map [a b]) reducer)))
+    (is (not (o/workflow? (assoc a :host/fn (fn [] :x)))))
+    (is (not (o/workflow? (assoc (o/pipe a b) :host/fn (fn [] :x)))))
     (is (not (o/workflow? (o/map (fn [_] []) a))))
     (is (not (o/workflow? (o/iterate a (fn [_] {:accept? true})))))
     (is (not (o/workflow? (o/bind (fn [_] :x) {:x a}))))

@@ -130,6 +130,16 @@
   `karcarthy.core` result. See `karcarthy.self` for examples (`:evolve`)."
   (fn [_adapter node _input _opts] (:karcarthy/type node)))
 
+(defmulti extension-workflow?
+  "Validate a non-core workflow node for `workflow?`.
+
+  Extension namespaces that add `run-node` methods should also add an
+  `extension-workflow?` method for the same `:karcarthy/type`; otherwise
+  `workflow?` will reject the node."
+  (fn [node] (:karcarthy/type node)))
+
+(defmethod extension-workflow? :default [_] false)
+
 ;; --- shared helpers --------------------------------------------------------
 
 (defn safe-run
@@ -389,7 +399,11 @@
 
 (declare workflow?)
 
-(defn- extension-workflow? [x]
+(defn- host-function-free?
+  [x]
+  (not-any? fn? (tree-seq coll? seq x)))
+
+(defn- extension-node-type? [x]
   (contains? (disj (set (keys (methods run-node))) :default
                    :agent :pipe :map :reduce :iterate :bind)
              (:karcarthy/type x)))
@@ -397,44 +411,45 @@
 (defn workflow?
   "True if `x` is a runnable workflow.
 
-  Core workflow nodes are validated recursively. Extension nodes registered with
-  `run-node` are accepted as runnable, but their namespaces own their internal
-  validation."
+  Core workflow nodes are validated recursively. Extension nodes must be
+  registered with `run-node` and validated by an `extension-workflow?` method."
   [x]
   (boolean
-   (cond
-     (k/agent? x) true
-     (not (map? x)) false
-     :else
-     (case (:karcarthy/type x)
-       :pipe
-       (and (sequential? (:steps x))
-            (every? workflow? (:steps x)))
+   (and (host-function-free? x)
+        (cond
+          (k/agent? x) true
+          (not (map? x)) false
+          :else
+          (case (:karcarthy/type x)
+            :pipe
+            (and (sequential? (:steps x))
+                 (every? workflow? (:steps x)))
 
-       :map
-       (or (and (sequential? (:branches x))
-                (every? workflow? (:branches x)))
-           (and (workflow? (:planner x))
-                (workflow? (:worker x))))
+            :map
+            (or (and (sequential? (:branches x))
+                     (every? workflow? (:branches x)))
+                (and (workflow? (:planner x))
+                     (workflow? (:worker x))))
 
-       :reduce
-       (and (workflow? (:mapped x))
-            (workflow? (:reducer x)))
+            :reduce
+            (and (workflow? (:mapped x))
+                 (workflow? (:reducer x)))
 
-       :iterate
-       (and (workflow? (:worker x))
-            (workflow? (:evaluator x)))
+            :iterate
+            (and (workflow? (:worker x))
+                 (workflow? (:evaluator x)))
 
-       :bind
-       (or (and (workflow? (:source x))
-                (map? (:routes x))
-                (every? workflow? (vals (:routes x)))
-                (or (not (contains? x :default))
-                    (workflow? (:default x))))
-           (and (workflow? (:source x))
-                (workflow? (:to x))))
+            :bind
+            (or (and (workflow? (:source x))
+                     (map? (:routes x))
+                     (every? workflow? (vals (:routes x)))
+                     (or (not (contains? x :default))
+                         (workflow? (:default x))))
+                (and (workflow? (:source x))
+                     (workflow? (:to x))))
 
-       (extension-workflow? x)))))
+            (and (extension-node-type? x)
+                 (extension-workflow? x)))))))
 
 (defmacro defworkflow
   "Define a var holding a workflow, validating at load time that it is runnable.

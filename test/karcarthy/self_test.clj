@@ -48,6 +48,19 @@
 
 ;; --- evolve: an agent edits its own definition at runtime ------------------
 
+(deftest evolve-workflow-predicate-validates-extension-data
+  (testing "extension nodes must validate their own workflow data"
+    (is (o/workflow? (self/evolve (k/agent "self" "i"))))
+    (is (not (o/workflow? (assoc (self/evolve (k/agent "self" "i"))
+                                  :host/fn
+                                  (fn [] :x)))))
+    (is (not (o/workflow? {:karcarthy/type :evolve
+                           :agent (fn [_] :x)
+                           :max-rounds 5})))
+    (is (not (o/workflow? {:karcarthy/type :evolve
+                           :agent (k/agent "self" "i")
+                           :max-rounds 0})))))
+
 (deftest evolve-self-modifies-then-answers
   (testing "the agent patches its own instructions, then answers with new behavior"
     (let [h (k/mock-adapter
