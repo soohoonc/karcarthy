@@ -12,6 +12,7 @@
   (:require [karcarthy.core]
             [karcarthy.orchestrate]
             [karcarthy.rewrite]
+            [karcarthy.schema]
             [karcarthy.self]
             [karcarthy.adapter.claude]
             [karcarthy.adapter.command]
@@ -53,6 +54,10 @@
 (export karcarthy.orchestrate/run)
 (export karcarthy.orchestrate/workflow?)
 (export karcarthy.orchestrate/defworkflow)
+
+;; schema reference values
+(export karcarthy.schema/edn-schema)
+(export karcarthy.schema/json-schema)
 
 ;; structural workflow rewrites
 (export karcarthy.rewrite/agents)

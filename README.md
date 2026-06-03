@@ -18,7 +18,7 @@ keeping the plan something you can see and change.
 In a Lisp, code is data, so karcarthy makes the plan a value. A workflow is an
 EDN structure you generate, transform with `clojure.walk`, store, and diff like
 any other data. karcarthy delegates the inner loop to systems people already
-use: Pydantic AI, Claude Agent SDK/CLI, OpenAI Agents SDK, Codex CLI, command
+use: Pydantic AI, Claude Agent SDK/CLI, OpenAI Agents SDK, command
 processes, or a local mock. karcarthy keeps only the data-first coordination
 layer on top. Two things fall out of that:
 
@@ -69,6 +69,8 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   ```
 - **Agents speak karcarthy**: advanced self-modifying flows parse EDN via
   `clojure.edn`, never `eval`.
+- **Schemas as data**: `edn-schema` and `json-schema` keep generated workflows
+  inspectable without adding another runtime.
 
 ## More
 

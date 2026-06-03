@@ -1,4 +1,4 @@
-# karcarthy - guide for Claude Code
+# karcarthy - guide for Codex
 
 Homoiconic agent **orchestration** in Clojure. Agents, tools, and workflows are
 plain EDN data; the inner agent loop (model calls + tool execution) is delegated
@@ -8,9 +8,8 @@ to an external **adapter** rather than reimplemented here.
 
 ```bash
 clojure -M:test                                    # offline test suite (no network/API)
-KARCARTHY_LIVE=1 clojure -M:test                   # also runs the live `claude -p` test
 clojure -M -m karcarthy.demo                       # offline demo
-clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid claude -p)
+clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid Claude CLI)
 ```
 
 ## Layout
@@ -44,4 +43,4 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
   (`KARCARTHY_LIVE`) so `clojure -M:test` stays offline and free.
 - **Driving real Claude sub-agents:** use `:system-prompt-mode :replace` and
   disable tools (`:extra-args ["--disallowedTools" "…"]`) so they answer
-  directly instead of inheriting Claude Code's interactive persona.
+  directly instead of inheriting Claude's interactive persona.

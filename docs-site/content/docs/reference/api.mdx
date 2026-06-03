@@ -168,7 +168,29 @@ With two workflows, the continuation receives the source result text.
 (k/defworkflow symbol workflow)
 ```
 
-Use these when storing or publishing workflows from application code.
+Use these when storing, generating, or publishing workflows from application
+code.
+
+## Schemas
+
+### `edn-schema` and `json-schema`
+
+```clojure
+k/edn-schema
+k/json-schema
+```
+
+These are plain data reference values for the public workflow shapes. Use
+`edn-schema` when documenting or generating EDN workflows, and `json-schema`
+for the CLI JSON bridge.
+
+```clojure
+(keys k/edn-schema)
+;=> (:agent :result :workflow :pipe :map-branches ...)
+
+(get k/json-schema "$ref")
+;=> "#/$defs/workflow"
+```
 
 ## Rewrites
 

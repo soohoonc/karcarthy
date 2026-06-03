@@ -38,6 +38,8 @@
 (deftest facade-reexports-values
   (is (string? kc/dsl-reference))
   (is (string? (kc/explain-agent {:karcarthy/type :agent})))
+  (is (map? kc/edn-schema))
+  (is (map? kc/json-schema))
   (is (kc/agent? (kc/read-agent "{:karcarthy/type :agent :name \"x\" :instructions \"i\"}"))))
 
 (deftest facade-hides-low-level-execution-apis

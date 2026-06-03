@@ -4,6 +4,16 @@ description: EDN shapes for agents, workflows, and results.
 ---
 
 Workflows are EDN values. Every node is a map tagged with `:karcarthy/type`.
+The code-level schema references are plain data:
+
+```clojure
+(require '[karcarthy :as k])
+
+k/edn-schema
+k/json-schema
+```
+
+Validate EDN workflows with `workflow?`.
 
 ## Agent
 
