@@ -36,6 +36,24 @@ security/support reviewers, synthesize their notes, and iterate with a critic.
 All three default to deterministic mock responses, so they run without model
 credentials. See [Tutorials](/docs/tutorials) for the walkthrough.
 
+## Research workflow
+
+The Deep Research-shaped example models a longer agentic research loop as
+workflow data: plan tracks, investigate in parallel, filter evidence, synthesize
+a cited report, and critique/iterate.
+
+```bash
+clojure -M -e '(load-file "examples/clojure/deep_research.clj")'
+```
+
+It runs offline with canned source metadata. The file also includes an opt-in
+live Codex CLI `command-adapter` path for users who want Codex to perform the
+inner agent loop:
+
+```bash
+KARCARTHY_CODEX_LIVE=1 clojure -M -e '(load-file "examples/clojure/deep_research.clj")'
+```
+
 ## JVM language interop
 
 Java, Kotlin, and Scala can call the Clojure API through the Clojure Java API.

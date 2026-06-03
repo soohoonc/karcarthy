@@ -10,6 +10,10 @@ languages, to show the library is reachable from each.
 - `clojure/launch.clj` - the complete launch-readiness tutorial:
   classify with an EDN route, map reviewers, write a brief, and iterate on
   EDN critique verdicts.
+- `clojure/deep_research.clj` - a Deep Research-shaped workflow:
+  plan research tracks, investigate them in parallel, filter evidence, write a
+  cited report, and critique/iterate. Runs offline with canned evidence and
+  includes an opt-in live Codex CLI `command-adapter` path.
 - `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
   adapter/model/instruction config, then run the rewritten value.
 - `clojure/live.clj` - a live map/reduce run (paid `claude -p`).
