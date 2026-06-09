@@ -128,6 +128,35 @@ selected workflow receives the original input. Route matching is exact. When
 `:to` is present, the second workflow receives the source result text unless
 `:prompt` is provided.
 
+## dynamic
+
+Lets an agent define, patch, call, spawn, and complete work while a workflow run
+is in progress:
+
+```clojure
+{:karcarthy/type :dynamic
+ :agent AGENT
+ :max-steps 25}
+```
+
+The agent emits EDN ops:
+
+```clojure
+{:op :define :agent {:name "reader" :instructions "..."}}
+{:op :define :name "review" :workflow WORKFLOW}
+{:op :patch :agent "reader" :merge {:instructions "..."}}
+{:op :call :workflow "review" :input "..."}
+{:op :spawn :agent "reader" :inputs ["a" "b"]}
+{:op :complete :text "final answer"}
+```
+
+Refs are only resolved inside a dynamic run:
+
+```clojure
+{:karcarthy/type :agent-ref :name "reader"}
+{:karcarthy/type :workflow-ref :name "review"}
+```
+
 ## Result
 
 ```clojure

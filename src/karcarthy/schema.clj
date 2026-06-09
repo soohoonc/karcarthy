@@ -28,7 +28,7 @@
 
    :workflow
    {:one-of [:agent :pipe :branch :delegate
-             :reduce :revise :route :continue]}
+             :reduce :revise :route :continue :dynamic]}
 
    :pipe
    {:karcarthy/type :pipe
@@ -66,7 +66,22 @@
    {:karcarthy/type :continue
     :required        {:source :workflow
                       :to :workflow}
-    :optional        {:prompt :string}}})
+    :optional        {:prompt :string}}
+
+   :dynamic
+   {:karcarthy/type :dynamic
+    :required        {:agent :agent}
+    :optional        {:max-steps :integer}}
+
+   :agent-ref
+   {:karcarthy/type :agent-ref
+    :required        {:name :string}
+    :dynamic-only?   true}
+
+   :workflow-ref
+   {:karcarthy/type :workflow-ref
+    :required        {:name :string}
+    :dynamic-only?   true}})
 
 (def json-schema
   "JSON Schema for CLI workflow objects.
@@ -87,7 +102,8 @@
               {"$ref" "#/$defs/reduce"}
               {"$ref" "#/$defs/revise"}
               {"$ref" "#/$defs/route"}
-              {"$ref" "#/$defs/continue"}]}
+              {"$ref" "#/$defs/continue"}
+              {"$ref" "#/$defs/dynamic"}]}
 
     "agent"
     {"type" "object"
@@ -160,4 +176,12 @@
      "properties" {"type" {"const" "continue"}
                    "source" {"$ref" "#/$defs/workflow"}
                    "to" {"$ref" "#/$defs/workflow"}
-                   "prompt" {"type" "string"}}}}})
+                   "prompt" {"type" "string"}}}
+
+    "dynamic"
+    {"type" "object"
+     "required" ["type" "agent"]
+     "additionalProperties" false
+     "properties" {"type" {"const" "dynamic"}
+                   "agent" {"$ref" "#/$defs/agent"}
+                   "max-steps" {"type" "integer" "minimum" 1}}}}})

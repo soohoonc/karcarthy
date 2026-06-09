@@ -1,6 +1,6 @@
 ---
 title: Build Workflows
-description: Understand how pipe, branch, delegate, reduce, revise, route, and continue move data through agents.
+description: Understand how pipe, branch, delegate, reduce, revise, route, continue, and dynamic move data through agents.
 ---
 
 A workflow is a value. `run` interprets that value through an adapter and
@@ -27,6 +27,7 @@ how child result text is routed to the next node.
 | `revise` | A draft needs critique and revision. | Worker receives the input, then revision prompts. | Final draft plus `:rounds` and `:accepted?`. |
 | `route` | A classifier should choose the next path. | Source receives original input. | Selected workflow result, or `:error :no-route`. |
 | `continue` | One step should hand off to another. | Second workflow receives source result text. | Continued workflow result. |
+| `dynamic` | The workflow should decide its next step while it runs. | An agent emits one EDN op at a time. | Final `:complete` result plus the run `:state`. |
 
 ## pipe
 
@@ -180,6 +181,34 @@ Use `continue` for a direct handoff:
 ```
 
 The second workflow receives the source result text.
+
+## dynamic
+
+Use `dynamic` when the workflow should shape itself during the run:
+
+```clojure
+(def workflow
+  (k/dynamic workflow-agent :max-steps 25))
+
+(k/run adapter workflow "audit this migration")
+```
+
+The dynamic workflow agent replies with one EDN op at a time:
+
+```clojure
+{:op :define :agent {:name "reader" :instructions "Inspect one file."}}
+{:op :define :name "review"
+ :workflow {:karcarthy/type :pipe
+            :steps [{:karcarthy/type :agent-ref :name "reader"}]}}
+{:op :call :workflow "review" :input "src/foo.clj"}
+{:op :patch :agent "reader" :merge {:instructions "Inspect one file and list risks."}}
+{:op :spawn :agent "reader" :inputs ["src/a.clj" "src/b.clj"]}
+{:op :complete :text "done"}
+```
+
+`agent-ref` and `workflow-ref` are late-bound. If the agent patches `"reader"`,
+later calls to workflows containing `(k/agent-ref "reader")` use the patched
+agent. The run state is local to that one workflow run.
 
 ## Transform before running
 

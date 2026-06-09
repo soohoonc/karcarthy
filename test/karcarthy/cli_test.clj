@@ -62,6 +62,17 @@
     (is (= "haiku" (:model a)))
     (is (= :claude (:adapter a)))))
 
+(deftest json->workflow-accepts-dynamic
+  (let [workflow (cli/json->workflow {"type" "dynamic"
+                                      "max-steps" 7
+                                      "agent" {"type" "agent"
+                                               "name" "workflow"
+                                               "instructions" "emit EDN ops"}})]
+    (is (= :dynamic (:karcarthy/type workflow)))
+    (is (= 7 (:max-steps workflow)))
+    (is (= "workflow" (get-in workflow [:agent :name])))
+    (is (o/workflow? workflow))))
+
 (deftest json->workflow-route-keeps-string-labels
   (testing "route labels stay strings (not coerced to keywords)"
     (let [workflow (cli/json->workflow {"type"   "route"

@@ -114,7 +114,7 @@
       (is (= ["[a] alpha" "[a] beta" "[a] gamma"] (map :text (:results r)))))))
 
 (deftest delegate-rejects-unstructured-subtasks
-  (testing "planner prose is a failed control message"
+  (testing "planner prose is a failed EDN reply"
     (let [adapter (scripted-adapter {"planner" "- alpha\n- beta"})
           r       (o/run adapter (o/delegate planner a) "do stuff")]
       (is (not (k/ok? r)))
@@ -204,7 +204,7 @@
       (is (= "[b] hi" (:text r))))))
 
 (deftest route-rejects-prose
-  (testing "router prose is a failed control message"
+  (testing "router prose is a failed EDN reply"
     (let [adapter (scripted-adapter {"router" "billing"})
           flow    (o/route router {:billing a})
           r       (o/run adapter flow "hi")]

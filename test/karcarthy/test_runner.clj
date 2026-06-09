@@ -12,6 +12,7 @@
     karcarthy.adapter.command-test
     karcarthy.adapter.openai-test
     karcarthy.orchestrate-test
+    karcarthy.dynamic-test
     karcarthy.schema-test
     karcarthy.rewrite-test
     karcarthy.self-test])

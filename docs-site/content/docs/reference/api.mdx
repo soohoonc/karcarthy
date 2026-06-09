@@ -173,6 +173,44 @@ The continuation receives the source result text.
 (k/continue triage-agent specialist-agent)
 ```
 
+### `dynamic`
+
+```clojure
+(k/dynamic agent & {:keys [max-steps]})
+```
+
+Builds a workflow whose agent emits EDN ops while the run is in progress.
+Run it with the same `run` function as any other workflow:
+
+```clojure
+(k/run adapter
+       (k/dynamic workflow-agent :max-steps 25)
+       "audit this migration")
+```
+
+Supported ops are:
+
+```clojure
+{:op :define :agent {:name "reader" :instructions "..."}}
+{:op :define :name "review" :workflow WORKFLOW}
+{:op :patch :agent "reader" :merge {:instructions "..."}}
+{:op :patch :workflow "review" :merge MAP}
+{:op :remove :agent "reader"}
+{:op :remove :workflow "review"}
+{:op :call :agent "reader" :input "..."}
+{:op :call :workflow "review" :input "..."}
+{:op :spawn :agent "reader" :inputs ["a" "b"]}
+{:op :complete :text "final answer"}
+```
+
+Use `agent-ref` and `workflow-ref` inside workflows defined during a dynamic
+run when later patches should affect later calls.
+
+```clojure
+(k/agent-ref "reader")
+(k/workflow-ref "review")
+```
+
 ### `workflow?` and `defworkflow`
 
 ```clojure

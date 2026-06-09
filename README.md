@@ -57,8 +57,8 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   model), `openai`. Pass one adapter, or pass a map and let each agent choose
   with `:adapter`.
 - **Workflows as data**: compose agents with `pipe`, `branch`, `delegate`,
-  `reduce`, `revise`, `route`, and `continue`; inspect and rewrite those
-  workflow values before running them.
+  `reduce`, `revise`, `route`, `continue`, and `dynamic`; inspect and rewrite
+  those workflow values before running them.
 - **Structural rewrites**: stamp configuration onto every agent without changing the
   original workflow:
   ```clojure
@@ -67,8 +67,9 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
                      :model "claude-sonnet-4"
                      :instructions/suffix "State assumptions before final answer."}))
   ```
-- **Agents speak karcarthy**: advanced self-modifying flows parse EDN via
-  `clojure.edn`, never `eval`.
+- **Agents speak karcarthy**: advanced workflows parse EDN via `clojure.edn`,
+  never `eval`, so an agent can write a workflow before a run or adapt the
+  workflow while the run is in progress.
 - **Schemas as data**: `edn-schema` and `json-schema` keep generated workflows
   inspectable without adding another runtime.
 

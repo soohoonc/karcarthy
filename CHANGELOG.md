@@ -16,7 +16,10 @@ Early and not yet released. What works so far:
   `command` (wrap any CLI as an agent), and `openai` (OpenAI Agents SDK via a
   bundled Python bridge).
 - Workflow nodes interpreted by `run`: `pipe`, `branch`, `delegate`, `reduce`,
-  `revise`, `route`, and `continue`.
+  `revise`, `route`, `continue`, and `dynamic`.
+- Dynamic workflows: an agent can emit EDN ops (`:define`, `:patch`, `:remove`,
+  `:call`, `:spawn`, `:complete`) during a run; `agent-ref` and `workflow-ref`
+  resolve against that run's state.
 - `karcarthy.self`: safe EDN parsing for agent-authored workflows and agents,
   plus the `evolve` extension node for runtime instruction/model/tool patches.
 - `karcarthy.schema`: EDN and JSON schema reference values.

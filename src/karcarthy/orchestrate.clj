@@ -12,9 +12,10 @@
     revise    draft, critique, and retry until accepted or a round limit is reached.
     route     choose the next workflow from a previous result.
     continue  send the previous result to the next workflow, preserving session ids.
+    dynamic   let an agent define, patch, call, and spawn work during a run.
 
   Because a workflow is data, you build, generate and serialize it with ordinary
-  Clojure. Model-facing control messages are EDN maps:
+  Clojure. Model-facing replies are EDN maps:
 
     planner   {:subtasks [\"...\"]}
     evaluator {:accept? true} or {:accept? false :feedback \"...\"}
@@ -36,6 +37,12 @@
 ;; ---------------------------------------------------------------------------
 ;; Constructors - build workflow data
 ;; ---------------------------------------------------------------------------
+
+(defn- name-key [x]
+  (cond
+    (keyword? x) (name x)
+    (string? x) x
+    :else (str x)))
 
 (defn pipe
   "Run `steps` in sequence, threading each result's :text into the next step."
@@ -115,6 +122,23 @@
   (if (contains? opts :prompt)
     {:karcarthy/type :continue :source source :to to :prompt prompt}
     {:karcarthy/type :continue :source source :to to}))
+
+(defn agent-ref
+  "A late-bound reference to an agent in a dynamic workflow run."
+  [name]
+  {:karcarthy/type :agent-ref :name (name-key name)})
+
+(defn workflow-ref
+  "A late-bound reference to a named workflow in a dynamic workflow run."
+  [name]
+  {:karcarthy/type :workflow-ref :name (name-key name)})
+
+(defn dynamic
+  "Build a dynamic workflow. The agent emits EDN ops during the run."
+  [agent & {:keys [max-steps] :or {max-steps 25}}]
+  {:karcarthy/type :dynamic
+   :agent      agent
+   :max-steps  max-steps})
 
 ;; ---------------------------------------------------------------------------
 ;; Interpreter
@@ -215,13 +239,13 @@
              :text message
              :data data}))
 
-(defn- control!
+(defn- result->map
   [kind result]
   (try
     (let [m (kedn/extract-map! (:text result))]
       (if (map? m)
         m
-        (throw (ex-info "control output must be an EDN map" {:parsed m}))))
+        (throw (ex-info "agent output must be an EDN map" {:parsed m}))))
     (catch Throwable t
       (throw (ex-info (str kind " output must be an EDN map")
                       {:text (:text result)
@@ -273,7 +297,7 @@
     (if-not (k/ok? r)
       r
       (try
-        (let [m        (control! :route r)
+        (let [m        (result->map :route r)
               label    (:route m)
               workflow (or (get routes label) default)]
           (cond
@@ -305,7 +329,7 @@
     (if-not (k/ok? r)
       {:accept? false :feedback (:text r) :evaluation r}
       (try
-        (let [m (control! :evaluation r)]
+        (let [m (result->map :evaluation r)]
           (cond
             (not (contains? m :accept?))
             {:accept? false :feedback "evaluation output must contain :accept?" :evaluation r}
@@ -348,7 +372,7 @@
     (if-not (k/ok? r)
       r
       (try
-        (let [m        (control! :planner r)
+        (let [m        (result->map :planner r)
               subtasks (:subtasks m)]
           (if (and (vector? subtasks) (every? string? subtasks))
             subtasks
@@ -504,6 +528,427 @@
 
             (and (extension? x)
                  (node? x)))))))
+
+;; ---------------------------------------------------------------------------
+;; Dynamic workflows
+;; ---------------------------------------------------------------------------
+
+(defn- dynamic-workflow?
+  "Like `workflow?`, but allows `agent-ref` and `workflow-ref` leaves."
+  [x]
+  (cond
+    (workflow? x) true
+    (not (map? x)) false
+    :else
+    (case (:karcarthy/type x)
+      :agent-ref    (contains? x :name)
+      :workflow-ref (contains? x :name)
+      :pipe         (and (sequential? (:steps x))
+                         (every? dynamic-workflow? (:steps x)))
+      :branch       (and (sequential? (:branches x))
+                         (every? dynamic-workflow? (:branches x)))
+      :delegate     (and (dynamic-workflow? (:planner x))
+                         (dynamic-workflow? (:worker x)))
+      :reduce       (and (dynamic-workflow? (:source x))
+                         (dynamic-workflow? (:reducer x)))
+      :revise       (and (dynamic-workflow? (:worker x))
+                         (dynamic-workflow? (:evaluator x)))
+      :route        (and (dynamic-workflow? (:source x))
+                         (map? (:routes x))
+                         (every? dynamic-workflow? (vals (:routes x)))
+                         (or (not (contains? x :default))
+                             (dynamic-workflow? (:default x))))
+      :continue     (and (dynamic-workflow? (:source x))
+                         (dynamic-workflow? (:to x)))
+      :evolve       (dynamic-workflow? (:agent x))
+      :dynamic      (node? x)
+      false)))
+
+(defn- validate-agent [agent]
+  (if (k/agent? agent)
+    agent
+    (throw (ex-info "invalid agent"
+                    {:agent agent
+                     :explain (k/explain-agent agent)}))))
+
+(defn- validate-dynamic-workflow [workflow]
+  (if (dynamic-workflow? workflow)
+    workflow
+    (throw (ex-info "invalid workflow" {:workflow workflow}))))
+
+(defn state
+  "Create mutable state for one dynamic workflow run."
+  [& {:keys [agents workflows history]}]
+  (doseq [agent agents] (validate-agent agent))
+  (doseq [[_ workflow] workflows] (validate-dynamic-workflow workflow))
+  (atom {:agents    (into {} (clojure.core/map
+                              (fn [agent]
+                                [(name-key (:name agent)) agent])
+                              agents))
+         :workflows (into {} (clojure.core/map
+                              (fn [[name workflow]]
+                                [(name-key name) workflow])
+                              workflows))
+         :history   (vec history)}))
+
+(defn snapshot
+  "Return dynamic workflow run state as plain data."
+  [state]
+  @state)
+
+(defn- lookup-agent [state name]
+  (let [n (name-key name)]
+    (or (get-in @state [:agents n])
+        (throw (ex-info (str "unknown agent: " (pr-str n))
+                        {:name n :known (vec (keys (:agents @state)))})))))
+
+(defn- lookup-workflow [state name]
+  (let [n (name-key name)]
+    (or (get-in @state [:workflows n])
+        (throw (ex-info (str "unknown workflow: " (pr-str n))
+                        {:name n :known (vec (keys (:workflows @state)))})))))
+
+(defn refs->workflow
+  "Resolve `agent-ref` and `workflow-ref` values against dynamic run state."
+  ([state workflow] (refs->workflow state workflow #{}))
+  ([state workflow seen]
+   (cond
+     (k/agent? workflow) workflow
+     (not (map? workflow)) workflow
+     :else
+     (case (:karcarthy/type workflow)
+       :agent-ref
+       (lookup-agent state (:name workflow))
+
+       :workflow-ref
+       (let [n      (name-key (:name workflow))
+             marker [:workflow n]]
+         (when (contains? seen marker)
+           (throw (ex-info "cyclic workflow reference"
+                           {:name n :seen seen})))
+         (refs->workflow state (lookup-workflow state n) (conj seen marker)))
+
+       :pipe
+       (update workflow :steps #(mapv (fn [w] (refs->workflow state w seen)) %))
+
+       :branch
+       (update workflow :branches #(mapv (fn [w] (refs->workflow state w seen)) %))
+
+       :delegate
+       (-> workflow
+           (update :planner #(refs->workflow state % seen))
+           (update :worker #(refs->workflow state % seen)))
+
+       :reduce
+       (-> workflow
+           (update :source #(refs->workflow state % seen))
+           (update :reducer #(refs->workflow state % seen)))
+
+       :revise
+       (-> workflow
+           (update :worker #(refs->workflow state % seen))
+           (update :evaluator #(refs->workflow state % seen)))
+
+       :route
+       (cond-> workflow
+         true (update :source #(refs->workflow state % seen))
+         true (update :routes (fn [routes]
+                                (into {} (clojure.core/map
+                                          (fn [[label w]]
+                                            [label (refs->workflow state w seen)])
+                                          routes))))
+         (contains? workflow :default)
+         (update :default #(refs->workflow state % seen)))
+
+       :continue
+       (-> workflow
+           (update :source #(refs->workflow state % seen))
+           (update :to #(refs->workflow state % seen)))
+
+       :evolve
+       (update workflow :agent #(refs->workflow state % seen))
+
+       workflow))))
+
+(def ^:private op-kinds
+  #{:define :patch :remove :call :spawn :complete})
+
+(defn- op-kind [op]
+  (let [k (or (:op op) (:karcarthy/op op))]
+    (cond
+      (keyword? k) k
+      (string? k) (keyword k)
+      :else k)))
+
+(defn- normalize-op [op]
+  (let [k (op-kind op)]
+    (when-not (contains? op-kinds k)
+      (throw (ex-info "unknown dynamic workflow op"
+                      {:op op :known (vec op-kinds)})))
+    (assoc op :op k)))
+
+(defn text->op
+  "Parse the first EDN map in `text` into a dynamic workflow op."
+  [text]
+  (normalize-op (kedn/extract-map! text)))
+
+(defn- compact-result [result]
+  (select-keys result [:karcarthy/type :ok? :agent :text :error :rounds
+                       :subtasks :results :kind :name :removed? :value]))
+
+(defn- remember! [state op result]
+  (swap! state update :history conj {:op     (select-keys op [:op :agent :workflow :name])
+                                     :result (compact-result result)})
+  result)
+
+(defn- op-input [op]
+  (or (:input op) (:prompt op) ""))
+
+(defn- op-target-name [op target-key]
+  (let [target (get op target-key)]
+    (cond
+      (or (string? target) (keyword? target)) target
+      (map? target) (or (:name target) (:id target))
+      :else (or (:name op) (:id op) (:target op)))))
+
+(defn- op-agent [op]
+  (let [agent (:agent op)]
+    (if (k/agent? agent)
+      agent
+      (let [source (if (map? agent) agent op)
+            n      (or (:name source)
+                       (:name op)
+                       (when (or (string? agent) (keyword? agent)) agent))]
+        (validate-agent
+         (cond-> {:karcarthy/type :agent
+                  :name           (name-key n)
+                  :instructions   (:instructions source)}
+           (:model source)   (assoc :model (:model source))
+           (:tools source)   (assoc :tools (vec (:tools source)))
+           (:adapter source) (assoc :adapter (:adapter source))))))))
+
+(defn- define! [state op]
+  (cond
+    (contains? op :agent)
+    (let [agent (op-agent op)
+          n     (name-key (:name agent))]
+      (swap! state assoc-in [:agents n] agent)
+      (k/result {:agent "dynamic" :kind :agent :name n
+                 :text  (str "defined agent " n)}))
+
+    (contains? op :workflow)
+    (let [n        (name-key (:name op))
+          workflow (validate-dynamic-workflow (:workflow op))]
+      (when (str/blank? n)
+        (throw (ex-info "define workflow requires :name" {:op op})))
+      (swap! state assoc-in [:workflows n] workflow)
+      (k/result {:agent "dynamic" :kind :workflow :name n
+                 :text  (str "defined workflow " n)}))
+
+    :else
+    (throw (ex-info "define requires :agent or :workflow" {:op op}))))
+
+(defn- patch! [state op]
+  (let [patch (or (:merge op) (:patch op))]
+    (when-not (map? patch)
+      (throw (ex-info "patch requires :merge map" {:op op})))
+    (cond
+      (contains? op :agent)
+      (let [n       (name-key (op-target-name op :agent))
+            current (lookup-agent state n)
+            updated (validate-agent (merge current patch))]
+        (swap! state assoc-in [:agents n] updated)
+        (k/result {:agent "dynamic" :kind :agent :name n
+                   :text  (str "patched agent " n)}))
+
+      (contains? op :workflow)
+      (let [n       (name-key (op-target-name op :workflow))
+            current (lookup-workflow state n)
+            updated (validate-dynamic-workflow (merge current patch))]
+        (swap! state assoc-in [:workflows n] updated)
+        (k/result {:agent "dynamic" :kind :workflow :name n
+                   :text  (str "patched workflow " n)}))
+
+      :else
+      (throw (ex-info "patch requires :agent or :workflow target" {:op op})))))
+
+(defn- remove! [state op]
+  (cond
+    (contains? op :agent)
+    (let [n (name-key (op-target-name op :agent))]
+      (swap! state update :agents dissoc n)
+      (k/result {:agent "dynamic" :kind :agent :name n :removed? true
+                 :text  (str "removed agent " n)}))
+
+    (contains? op :workflow)
+    (let [n (name-key (op-target-name op :workflow))]
+      (swap! state update :workflows dissoc n)
+      (k/result {:agent "dynamic" :kind :workflow :name n :removed? true
+                 :text  (str "removed workflow " n)}))
+
+    :else
+    (throw (ex-info "remove requires :agent or :workflow target" {:op op}))))
+
+(defn- call-once [adapter state op input opts]
+  (cond
+    (contains? op :agent)
+    (let [target (:agent op)
+          agent  (if (k/agent? target)
+                   target
+                   (lookup-agent state (op-target-name op :agent)))]
+      (k/run-agent adapter agent input opts))
+
+    (contains? op :workflow)
+    (let [target   (:workflow op)
+          workflow (if (or (string? target) (keyword? target))
+                     (lookup-workflow state target)
+                     target)]
+      (run adapter (refs->workflow state workflow) input opts))
+
+    :else
+    (throw (ex-info "call requires :agent or :workflow target" {:op op}))))
+
+(defn- call! [adapter state op opts]
+  (call-once adapter state op (op-input op) opts))
+
+(defn- op-workflow [state op]
+  (let [target (:workflow op)]
+    (if (or (string? target) (keyword? target))
+      (lookup-workflow state target)
+      target)))
+
+(defn- op-callable [state op]
+  (cond
+    (contains? op :agent)
+    (let [target (:agent op)]
+      (if (k/agent? target)
+        target
+        (lookup-agent state (op-target-name op :agent))))
+
+    (contains? op :workflow)
+    (refs->workflow state (op-workflow state op))
+
+    :else
+    (throw (ex-info "spawn requires :agent or :workflow target" {:op op}))))
+
+(defn- spawn! [adapter state op opts]
+  (let [inputs (:inputs op)]
+    (when-not (sequential? inputs)
+      (throw (ex-info "spawn requires :inputs" {:op op})))
+    (let [workflow (op-callable state op)
+          indexed  (map-indexed vector inputs)
+          results  (dispatch (:max-concurrency op)
+                             (fn [[idx input]]
+                               (safe-run adapter workflow (str input)
+                                         (descend opts :spawn idx)))
+                             indexed)]
+      (k/result {:agent   "dynamic"
+                 :ok?     (every? k/ok? results)
+                 :results results
+                 :text    (str/join "\n\n" (keep :text results))}))))
+
+(defn step!
+  "Apply one dynamic workflow op to state."
+  ([adapter state op] (step! adapter state op {}))
+  ([adapter state op opts]
+   (let [op     (normalize-op op)
+         result (case (:op op)
+                  :define   (define! state op)
+                  :patch    (patch! state op)
+                  :remove   (remove! state op)
+                  :call     (call! adapter state op opts)
+                  :spawn    (spawn! adapter state op opts)
+                  :complete (k/result {:agent "dynamic"
+                                       :text  (str (or (:text op)
+                                                       (:content op)
+                                                       (:value op)
+                                                       ""))
+                                       :value (:value op)}))]
+     (remember! state op result))))
+
+(def dynamic-reference
+  "Prompt fragment for dynamic workflow agents."
+  (str/join
+   "\n"
+   ["You are the agent running one karcarthy dynamic workflow."
+    "Output exactly one EDN op map. Do not output prose."
+    ""
+    "Ops:"
+    "{:op :define :agent {:name \"writer\" :instructions \"...\"}}"
+    "{:op :define :name \"draft\" :workflow WORKFLOW}"
+    "{:op :patch :agent \"writer\" :merge {:instructions \"...\"}}"
+    "{:op :patch :workflow \"draft\" :merge MAP}"
+    "{:op :remove :agent \"writer\"}"
+    "{:op :remove :workflow \"draft\"}"
+    "{:op :call :agent \"writer\" :input \"...\"}"
+    "{:op :call :workflow \"draft\" :input \"...\"}"
+    "{:op :spawn :agent \"reviewer\" :inputs [\"a\" \"b\"]}"
+    "{:op :spawn :workflow \"review\" :inputs [\"a\" \"b\"]}"
+    "{:op :complete :text \"final answer\"}"
+    ""
+    "Late-bound refs inside workflows:"
+    "{:karcarthy/type :agent-ref :name \"agent-name\"}"
+    "{:karcarthy/type :workflow-ref :name \"workflow-name\"}"]))
+
+(defn- state-view [state]
+  (let [{:keys [agents workflows history]} @state]
+    {:agents    (into {} (clojure.core/map
+                          (fn [[n agent]]
+                            [n (select-keys agent [:karcarthy/type :name
+                                                    :instructions :model
+                                                    :tools :adapter])])
+                          agents))
+     :workflows workflows
+     :history   history}))
+
+(defn- dynamic-prompt [task state last-result step]
+  (str dynamic-reference
+       "\n\nTASK:\n" task
+       "\n\nSTEP: " step
+       "\n\nSTATE EDN:\n" (pr-str (state-view state))
+       "\n\nLAST RESULT EDN:\n" (pr-str (compact-result last-result))
+       "\n\nOutput exactly one EDN op now."))
+
+(defmethod node? :dynamic
+  [{:keys [agent max-steps]}]
+  (and (k/agent? agent)
+       (or (nil? max-steps)
+           (and (integer? max-steps) (pos? max-steps)))))
+
+(defmethod run-node :dynamic
+  [adapter {:keys [agent max-steps]} input opts]
+  (let [st (or (:state opts) (state))]
+    (loop [step 1, last-result nil]
+      (if (and max-steps (> step max-steps))
+        (k/result {:agent (:name agent)
+                   :ok?   false
+                   :error :max-steps
+                   :text  (str "dynamic workflow exceeded max steps: " max-steps)
+                   :state (snapshot st)})
+        (let [agent-result (k/run-agent adapter agent
+                                        (dynamic-prompt input st last-result step)
+                                        opts)]
+          (if-not (k/ok? agent-result)
+            (k/result (assoc agent-result :state (snapshot st)))
+            (let [outcome (try
+                            (let [op     (text->op (:text agent-result))
+                                  result (step! adapter st op opts)]
+                              {:op op :result (assoc result
+                                                     :state (snapshot st)
+                                                     :steps step)})
+                            (catch Throwable t
+                              {:error t}))]
+              (if-let [t (:error outcome)]
+                (k/result {:agent (:name agent)
+                           :ok?   false
+                           :error (or (ex-message t) (str t))
+                           :text  (:text agent-result)
+                           :state (snapshot st)
+                           :raw   {:agent agent-result}})
+                (let [{:keys [op result]} outcome]
+                  (if (= :complete (:op op))
+                    result
+                    (recur (inc step) result)))))))))))
 
 (defmacro defworkflow
   "Define a var holding a workflow, validating at load time that it is runnable.

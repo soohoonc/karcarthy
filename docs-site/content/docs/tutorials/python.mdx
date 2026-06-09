@@ -118,9 +118,9 @@ workflow = {
 With a live adapter, the same configured agents and workflow delegate each
 single-agent call to the selected Agent SDK or CLI.
 
-## Why control outputs are EDN
+## Why replies are EDN
 
 The JSON bridge carries workflow shape, not host-language functions. Router and
 critic agents still return EDN text, such as `{:route "launch"}` or
 `{:accept? true}`, because the Clojure interpreter can parse and validate those
-control messages the same way for Python, TypeScript, and Clojure callers.
+EDN replies the same way for Python, TypeScript, and Clojure callers.

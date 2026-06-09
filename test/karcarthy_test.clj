@@ -15,7 +15,8 @@
           b (kc/agent "b" "i")]
       (is (kc/workflow? (kc/branch [a b])))
       (is (kc/workflow? (kc/route a {:next b})))
-      (is (kc/workflow? (kc/continue a b))))))
+      (is (kc/workflow? (kc/continue a b)))
+      (is (kc/workflow? (kc/dynamic a))))))
 
 (deftest facade-reexports-macros
   (testing "defagent and defworkflow are re-exported as working macros"
@@ -46,6 +47,16 @@
   (is (map? kc/edn-schema))
   (is (map? kc/json-schema))
   (is (kc/agent? (kc/read-agent "{:karcarthy/type :agent :name \"x\" :instructions \"i\"}"))))
+
+(deftest facade-reexports-dynamic-workflow-helpers
+  (testing "the one-alias surface gets workflow builders, not the stepping API"
+    (is (kc/workflow? (kc/dynamic (kc/agent "workflow" "emit EDN ops"))))
+    (is (map? (kc/agent-ref "worker")))
+    (is (map? (kc/workflow-ref "draft")))
+    (is (nil? (ns-resolve 'karcarthy 'step!)))
+    (is (nil? (ns-resolve 'karcarthy 'state)))
+    (is (nil? (ns-resolve 'karcarthy 'text->op)))
+    (is (nil? (ns-resolve 'karcarthy 'dynamic-reference)))))
 
 (deftest facade-hides-low-level-execution-apis
   (testing "normal users get one execution entrypoint: run"

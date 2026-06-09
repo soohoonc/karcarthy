@@ -14,6 +14,7 @@
     {\"type\":\"route\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
     {\"type\":\"continue\" \"source\":<workflow> \"to\":<workflow>}
     {\"type\":\"revise\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
+    {\"type\":\"dynamic\" \"agent\":<agent> \"max-steps\":?}
   Response is the karcarthy result map as JSON. \"adapter\" is \"mock\" (default,
   offline) or \"claude\". For deterministic offline demos, add
   \"mock-responses\": {\"agent-name\":\"text\"}."
@@ -87,6 +88,8 @@
                                 (json->workflow (g "to")))
       "revise"      (o/revise (json->workflow (g "worker")) (json->workflow (g "evaluator"))
                                :max-rounds (or (g "max-rounds") 3))
+      "dynamic"     (o/dynamic (json->workflow (g "agent"))
+                                :max-steps (or (g "max-steps") 25))
       (throw (ex-info (str "unknown workflow type: " (pr-str (g "type"))) {:node m})))))
 
 (defn- mock [responses]
