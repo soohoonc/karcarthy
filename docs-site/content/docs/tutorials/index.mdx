@@ -59,10 +59,10 @@ the final agent instructions and workflow data.
 
 The launch workflow uses the small functional vocabulary:
 
-- `bind` chooses the launch path from a classifier result.
-- `map` runs independent reviewers.
+- `route` chooses the launch path from a classifier result.
+- `branch` runs independent reviewers.
 - `pipe` turns review notes into a final draft.
-- `iterate` gives the draft one or more critique rounds.
+- `revise` gives the draft one or more critique rounds.
 
 Planner, evaluator, and router control outputs are EDN maps, so the workflow
 shape stays portable across the Clojure API and the JSON bridge.

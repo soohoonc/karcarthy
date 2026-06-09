@@ -138,12 +138,12 @@ The orchestration stays small: configured agents become ordinary workflow nodes.
 
 ```ts
 const reviewers: Workflow = {
-  type: "map",
+  type: "branch",
   branches: [productReviewer, engineeringReviewer, securityReviewer, supportReviewer],
 };
 
 const launchBrief: Workflow = {
-  type: "iterate",
+  type: "revise",
   worker: {
     type: "pipe",
     steps: [reviewers, briefWriter],
@@ -153,7 +153,7 @@ const launchBrief: Workflow = {
 };
 
 const workflow: Workflow = {
-  type: "bind",
+  type: "route",
   source: classifier,
   routes: {
     launch: launchBrief,

@@ -198,12 +198,12 @@ const incidentResponder = configuredAgent({
 });
 
 const reviewers: Workflow = {
-  type: "map",
+  type: "branch",
   branches: [productReviewer, engineeringReviewer, securityReviewer, supportReviewer],
 };
 
 const launchBrief: Workflow = {
-  type: "iterate",
+  type: "revise",
   worker: {
     type: "pipe",
     steps: [reviewers, briefWriter],
@@ -213,7 +213,7 @@ const launchBrief: Workflow = {
 };
 
 const workflow: Workflow = {
-  type: "bind",
+  type: "route",
   source: classifier,
   routes: {
     launch: launchBrief,
@@ -279,7 +279,7 @@ console.log(
         tools: agent.tools ?? [],
         instructionSections: String(agent.instructions).split("\n\n").length,
       })),
-      workflow: "bind(classifier, { launch: iterate(pipe(map(reviewers), briefWriter), critic), incident })",
+      workflow: "route(classifier, { launch: revise(pipe(branch(reviewers), briefWriter), critic), incident })",
     },
     null,
     2,

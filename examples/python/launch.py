@@ -215,19 +215,19 @@ incident_responder = configured_agent(
 )
 
 reviewers = {
-    "type": "map",
+    "type": "branch",
     "branches": [product_reviewer, engineering_reviewer, security_reviewer, support_reviewer],
 }
 
 launch_brief = {
-    "type": "iterate",
+    "type": "revise",
     "worker": {"type": "pipe", "steps": [reviewers, brief_writer]},
     "evaluator": critic,
     "max-rounds": 2,
 }
 
 workflow = {
-    "type": "bind",
+    "type": "route",
     "source": classifier,
     "routes": {"launch": launch_brief, "incident": incident_responder},
     "default": launch_brief,
@@ -304,7 +304,7 @@ if __name__ == "__main__":
                     }
                     for agent in configured
                 ],
-                "workflow": "bind(classifier, { launch: iterate(pipe(map(reviewers), briefWriter), critic), incident })",
+                "workflow": "route(classifier, { launch: revise(pipe(branch(reviewers), briefWriter), critic), incident })",
             },
             indent=2,
         )

@@ -38,20 +38,22 @@ next step.
  :steps [WORKFLOW ...]}
 ```
 
-## map
+## branch
 
 Runs a collection of branches on the same input:
 
 ```clojure
-{:karcarthy/type :map
+{:karcarthy/type :branch
  :branches [WORKFLOW ...]
  :max-concurrency 16}
 ```
 
-Or runs a worker once per subtask from a planner:
+## delegate
+
+Runs a worker once per subtask from a planner:
 
 ```clojure
-{:karcarthy/type :map
+{:karcarthy/type :delegate
  :planner PLANNER
  :worker WORKFLOW
  :max-concurrency 16}
@@ -65,11 +67,11 @@ Or runs a worker once per subtask from a planner:
 
 ## reduce
 
-Runs mapped work, then passes an EDN summary to a reducer workflow.
+Runs branch/delegate work, then passes an EDN summary to a reducer workflow.
 
 ```clojure
 {:karcarthy/type :reduce
- :mapped {:karcarthy/type :map ...}
+ :source {:karcarthy/type :branch ...}
  :reducer WORKFLOW}
 ```
 
@@ -81,12 +83,12 @@ The reducer receives EDN shaped like:
  :results [{:agent "worker" :ok? true :text "..."}]}
 ```
 
-## iterate
+## revise
 
 Runs a worker and evaluator until accepted or the round limit is reached.
 
 ```clojure
-{:karcarthy/type :iterate
+{:karcarthy/type :revise
  :worker WORKFLOW
  :evaluator EVALUATOR
  :max-rounds 3}
@@ -99,21 +101,23 @@ Runs a worker and evaluator until accepted or the round limit is reached.
 {:accept? false :feedback "specific revision feedback"}
 ```
 
-## bind
+## route
 
 Routes by the source result:
 
 ```clojure
-{:karcarthy/type :bind
+{:karcarthy/type :route
  :source WORKFLOW
  :routes {:label WORKFLOW}
  :default WORKFLOW}
 ```
 
-Or continues from one workflow to another:
+## continue
+
+Continues from one workflow to another:
 
 ```clojure
-{:karcarthy/type :bind
+{:karcarthy/type :continue
  :source WORKFLOW
  :to WORKFLOW
  :prompt "optional override"}
@@ -139,8 +143,9 @@ Composite nodes add more fields:
 | Node | Extra fields |
 | --- | --- |
 | `pipe` | last child result fields. |
-| `map` branches | `:results`, `:text`. |
-| `map` planner/worker | `:subtasks`, `:results`, `:text`. |
-| `reduce` | `:mapped`, `:reduced`, reducer `:text`. |
-| `iterate` | `:rounds`, `:accepted?`. |
-| `bind` routes | selected child result fields, or `:error :no-route`. |
+| `branch` | `:results`, `:text`. |
+| `delegate` | `:subtasks`, `:results`, `:text`. |
+| `reduce` | `:source`, `:reduced`, reducer `:text`. |
+| `revise` | `:rounds`, `:accepted?`. |
+| `route` | selected child result fields, or `:error :no-route`. |
+| `continue` | continued workflow result fields. |

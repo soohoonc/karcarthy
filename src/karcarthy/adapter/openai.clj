@@ -16,7 +16,7 @@
             [karcarthy.core :as k]
             [karcarthy.proc :as proc]))
 
-(defn openai-request
+(defn request
   "Pure: build the JSON request map sent to the Python bridge. `opts` :model
   overrides the agent's :model."
   [agent prompt opts]
@@ -25,7 +25,7 @@
            :input        prompt}
     (or (:model opts) (:model agent)) (assoc :model (or (:model opts) (:model agent)))))
 
-(defn parse-openai-result
+(defn stdout->result
   "Parse the Python script's JSON stdout into a karcarthy result map."
   [agent-name stdout]
   (let [m (json/read-str stdout :key-fn keyword)]
@@ -60,7 +60,7 @@
        (let [opts   (merge default-opts opts)
              python (get opts :python-bin "python3")
              script (or (:script opts) @bridge-file)
-             req    (json/write-str (openai-request agent prompt opts))
+             req    (json/write-str (request agent prompt opts))
              {:keys [exit out err timed-out?]}
              (proc/run [python script] {:in         req
                                         :dir        (:dir opts)
@@ -74,7 +74,7 @@
 
            (seq (str/trim (or out "")))
            (try
-             (parse-openai-result (:name agent) out)
+             (stdout->result (:name agent) out)
              (catch Exception e
                (k/result {:agent (:name agent) :ok? false
                           :text  (or (not-empty err) out)

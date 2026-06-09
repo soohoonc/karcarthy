@@ -1,6 +1,6 @@
 ---
 title: Build Workflows
-description: Understand how pipe, map, reduce, iterate, and bind move data through agents.
+description: Understand how pipe, branch, delegate, reduce, revise, route, and continue move data through agents.
 ---
 
 A workflow is a value. `run` interprets that value through an adapter and
@@ -21,10 +21,12 @@ how child result text is routed to the next node.
 | Node | Use it when | Input behavior | Output behavior |
 | --- | --- | --- | --- |
 | `pipe` | Steps must happen in order. | First step receives the original input; each later step receives previous `:text`. | Last successful step's result. |
-| `map` | Several reviewers or workers should run independently. | Each branch receives the same input, or each worker receives one planner subtask. | A result with `:results` and combined `:text`. |
-| `reduce` | Mapped outputs need synthesis by another workflow. | Runs mapped work, then sends an EDN result summary to the reducer workflow. | Reducer result plus `:mapped` and `:reduced`. |
-| `iterate` | A draft needs critique and revision. | Worker receives the input, then revision prompts. | Final draft plus `:rounds` and `:accepted?`. |
-| `bind` | A classifier should choose the next path, or one step should continue into another. | Source receives original input. | Selected/continued workflow result. |
+| `branch` | Several reviewers should inspect the same input independently. | Each branch receives the same input. | A result with `:results` and combined `:text`. |
+| `delegate` | A planner should create subtasks for a worker. | Planner receives the original input; worker receives one subtask at a time. | A result with `:subtasks`, `:results`, and combined `:text`. |
+| `reduce` | Branch or delegate outputs need synthesis by another workflow. | Runs the source workflow, then sends an EDN result summary to the reducer workflow. | Reducer result plus `:source` and `:reduced`. |
+| `revise` | A draft needs critique and revision. | Worker receives the input, then revision prompts. | Final draft plus `:rounds` and `:accepted?`. |
+| `route` | A classifier should choose the next path. | Source receives original input. | Selected workflow result, or `:error :no-route`. |
+| `continue` | One step should hand off to another. | Second workflow receives source result text. | Continued workflow result. |
 
 ## pipe
 
@@ -48,13 +50,13 @@ summarizer: [summarizer] [researcher] what is a monad?
 The next step receives only the previous result text. If a step fails, the pipe
 returns that not-ok result and stops.
 
-## map
+## branch
 
-Use `map` when independent agents should inspect the same input:
+Use `branch` when independent agents should inspect the same input:
 
 ```clojure
 (def reviewers
-  (k/map [product-reviewer engineering-reviewer security-reviewer]))
+  (k/branch [product-reviewer engineering-reviewer security-reviewer]))
 ```
 
 Trace:
@@ -77,10 +79,12 @@ The result contains ordered child results:
  :text "...joined child text..."}
 ```
 
-Use planner/worker mapping when a planner should create subtasks:
+## delegate
+
+Use `delegate` when a planner should create subtasks:
 
 ```clojure
-(k/map planner worker :max-concurrency 8)
+(k/delegate planner worker :max-concurrency 8)
 ```
 
 The planner replies with EDN:
@@ -93,12 +97,12 @@ The worker runs once per subtask.
 
 ## reduce
 
-Use `reduce` when mapped outputs need synthesis by another workflow:
+Use `reduce` when branch or delegate outputs need synthesis by another workflow:
 
 ```clojure
 (def review-packet
   (k/reduce
-    (k/map [product-reviewer engineering-reviewer security-reviewer])
+    (k/branch [product-reviewer engineering-reviewer security-reviewer])
     brief-writer))
 ```
 
@@ -113,13 +117,13 @@ The reducer receives a prompt containing EDN data:
 Because reducers are workflows, not host functions, the workflow stays
 serializable.
 
-## iterate
+## revise
 
-Use `iterate` for draft, critique, revise loops:
+Use `revise` for draft, critique, revise loops:
 
 ```clojure
 (def launch-brief
-  (k/iterate brief-writer critic :max-rounds 2))
+  (k/revise brief-writer critic :max-rounds 2))
 ```
 
 Trace:
@@ -147,15 +151,15 @@ Evaluator workflows reply with EDN verdict maps:
 {:accept? false :feedback "name the missing rollback owner"}
 ```
 
-## bind
+## route
 
-Use `bind` with a route map when one workflow chooses the next path:
+Use `route` when one workflow chooses the next path:
 
 ```clojure
-(k/bind classifier
-        {:launch launch-brief
-         :incident incident-plan}
-        :default launch-brief)
+(k/route classifier
+         {:launch launch-brief
+          :incident incident-plan}
+         :default launch-brief)
 ```
 
 Trace:
@@ -167,13 +171,15 @@ selected workflow:      launch-brief
 launch-brief input:     Prepare a launch review.
 ```
 
-Use `bind` with two workflows for continuation:
+## continue
+
+Use `continue` for a direct handoff:
 
 ```clojure
-(k/bind triage-agent specialist-agent)
+(k/continue triage-agent specialist-agent)
 ```
 
-In continuation form, the second workflow receives the source result text.
+The second workflow receives the source result text.
 
 ## Transform before running
 
@@ -183,9 +189,9 @@ before `run` interprets them:
 ```clojure
 (def production-workflow
   (->> (k/pipe researcher summarizer)
-       (k/config {:adapter :claude
-                  :model "claude-sonnet-4"
-                  :instructions/suffix "State assumptions before final answer."})))
+       (k/configure {:adapter :claude
+                     :model "claude-sonnet-4"
+                     :instructions/suffix "State assumptions before final answer."})))
 
 (map #(select-keys % [:name :adapter :model])
      (k/agents production-workflow))

@@ -21,9 +21,9 @@
 
 (def production-workflow
   (->> workflow
-       (k/config {:adapter :primary
-                  :model "claude-sonnet-4"
-                  :instructions/suffix "State assumptions before final answer."})))
+       (k/configure {:adapter :primary
+                     :model "claude-sonnet-4"
+                     :instructions/suffix "State assumptions before final answer."})))
 
 (def adapter
   {:primary

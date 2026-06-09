@@ -131,9 +131,9 @@
   (k/pipe source-scout evidence-reader source-judge))
 
 (def deep-research-workflow
-  (k/iterate
+  (k/revise
    (k/reduce
-    (k/map research-planner investigation-pipeline :max-concurrency 4)
+    (k/delegate research-planner investigation-pipeline :max-concurrency 4)
     report-writer)
    report-critic
    :max-rounds 2))

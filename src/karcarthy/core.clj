@@ -123,7 +123,7 @@
   validates first."
   (-run [adapter agent prompt opts]))
 
-(defn- adapter-id [agent]
+(defn- adapter-key [agent]
   (or (:adapter agent) :default))
 
 (defn resolve-adapter
@@ -133,11 +133,11 @@
   [adapter agent]
   (cond
     (satisfies? Adapter adapter) adapter
-    (map? adapter) (let [id (adapter-id agent)]
+    (map? adapter) (let [id (adapter-key agent)]
                     (or (get adapter id)
                         (get adapter :default)
                         (throw (ex-info (str "no adapter registered for " (pr-str id))
-                                        {:adapter-id id
+                                        {:adapter-key id
                                          :registered (vec (keys adapter))}))))
     :else (throw (ex-info "adapter must be a single adapter or a registry map {id -> adapter}"
                           {:got adapter}))))
@@ -168,7 +168,7 @@
            :path           (:karcarthy/path attrs)
            :attributes     (cond-> {"karcarthy.kind"       "agent"
                                     "karcarthy.agent.name" (:name agent)
-                                    "karcarthy.adapter.id" (name (adapter-id agent))}
+                                    "karcarthy.adapter.id" (name (adapter-key agent))}
                              (:karcarthy/path attrs)
                              (assoc "karcarthy.path" (pr-str (:karcarthy/path attrs)))
                              (:model agent) (assoc "karcarthy.agent.model" (:model agent))

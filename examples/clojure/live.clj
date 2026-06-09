@@ -1,4 +1,4 @@
-;; A LIVE map/reduce run against the Claude CLI adapter (`claude -p`).
+;; A LIVE delegate/reduce run against the Claude CLI adapter (`claude -p`).
 ;;
 ;; Unlike the offline `karcarthy.demo`, this makes real, paid API calls, so run
 ;; it intentionally. It needs a working `claude` CLI with valid auth on PATH.
@@ -42,15 +42,15 @@
            "You receive EDN with :input, :subtasks, and :results. Write a concise bullet list using only the :text from successful results."))
 
 (def research
-  (o/reduce (o/map planner writer) reducer))
+  (o/reduce (o/delegate planner writer) reducer))
 
 (let [r (o/run adapter research
                "Why is homoiconicity useful for agent orchestration?")]
-  (println "SUBTASKS:" (pr-str (get-in r [:mapped :subtasks])))
+  (println "SUBTASKS:" (pr-str (get-in r [:source :subtasks])))
   (println "OK?      " (k/ok? r))
   (println "RESULT:")
   (println (:text r))
-  (doseq [w (get-in r [:mapped :results])]
+  (doseq [w (get-in r [:source :results])]
     (println (format "  [worker] ok=%s turns=%s cost=$%.4f"
                      (k/ok? w) (:num-turns w) (or (:cost-usd w) 0.0)))))
 

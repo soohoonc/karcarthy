@@ -10,25 +10,25 @@
 
 (deftest agents-finds-leaf-agents
   (testing "agents returns valid agent leaves in traversal order"
-    (let [workflow (o/pipe researcher (o/map [writer reviewer]))]
+    (let [workflow (o/pipe researcher (o/branch [writer reviewer]))]
       (is (= ["researcher" "writer" "reviewer"]
              (map :name (rw/agents workflow)))))))
 
 (deftest over-transforms-selected-values
   (testing "over rewrites the values selected by a predicate"
-    (let [workflow  (o/pipe researcher (o/map [writer reviewer]))
+    (let [workflow  (o/pipe researcher (o/branch [writer reviewer]))
           rewritten (rw/over k/agent? #(assoc % :model "claude-sonnet-4") workflow)]
       (is (o/workflow? rewritten))
       (is (= ["claude-sonnet-4" "claude-sonnet-4" "claude-sonnet-4"]
              (map :model (rw/agents rewritten)))))))
 
-(deftest config-stamps-agent-runtime-config
-  (testing "config applies common runtime settings in one pass"
-    (let [workflow  (o/pipe researcher (o/map [writer reviewer]))
-          rewritten (rw/config {:adapter :claude
-                                :model "claude-sonnet-4"
-                                :instructions/suffix "State assumptions before final answer."}
-                               workflow)]
+(deftest configure-stamps-agent-runtime-configuration
+  (testing "configure applies common runtime settings in one pass"
+    (let [workflow  (o/pipe researcher (o/branch [writer reviewer]))
+          rewritten (rw/configure {:adapter :claude
+                                   :model "claude-sonnet-4"
+                                   :instructions/suffix "State assumptions before final answer."}
+                                  workflow)]
       (is (o/workflow? rewritten))
       (is (= [:claude :claude :claude]
              (map :adapter (rw/agents rewritten))))
@@ -50,26 +50,26 @@
          clojure.lang.ExceptionInfo
          #"over expects workflow data"
          (rw/over k/agent? identity {:not :a-workflow}))))
-  (testing "config input must already be workflow data"
+  (testing "configure input must already be workflow data"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"expects workflow data"
-         (rw/config {:adapter :claude} {:not :a-workflow}))))
-  (testing "config rejects invalid values clearly"
+         (rw/configure {:adapter :claude} {:not :a-workflow}))))
+  (testing "configure rejects invalid values clearly"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
-         #"config :adapter expects a keyword"
-         (rw/config {:adapter "claude"} researcher)))
+         #"configure :adapter expects a keyword"
+         (rw/configure {:adapter "claude"} researcher)))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
-         #"config :model expects a string"
-         (rw/config {:model :sonnet} researcher)))
+         #"configure :model expects a string"
+         (rw/configure {:model :sonnet} researcher)))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
-         #"config :instructions/suffix expects a string"
-         (rw/config {:instructions/suffix nil} researcher))))
-  (testing "config rejects unknown keys"
+         #"configure :instructions/suffix expects a string"
+         (rw/configure {:instructions/suffix nil} researcher))))
+  (testing "configure rejects unknown keys"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
-         #"config contains unknown keys"
-         (rw/config {:temperature 0.2} researcher)))))
+         #"configure contains unknown keys"
+         (rw/configure {:temperature 0.2} researcher)))))

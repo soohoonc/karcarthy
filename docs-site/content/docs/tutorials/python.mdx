@@ -94,19 +94,19 @@ same JSON shape:
 
 ```python
 reviewers = {
-    "type": "map",
+    "type": "branch",
     "branches": [product_reviewer, engineering_reviewer, security_reviewer, support_reviewer],
 }
 
 launch_brief = {
-    "type": "iterate",
+    "type": "revise",
     "worker": {"type": "pipe", "steps": [reviewers, brief_writer]},
     "evaluator": critic,
     "max-rounds": 2,
 }
 
 workflow = {
-    "type": "bind",
+    "type": "route",
     "source": classifier,
     "routes": {"launch": launch_brief, "incident": incident_responder},
     "default": launch_brief,

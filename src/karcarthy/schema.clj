@@ -27,43 +27,43 @@
                       :raw :any}}
 
    :workflow
-   {:one-of [:agent :pipe :map-branches :map-planner-worker
-             :reduce :iterate :bind-routes :bind-continuation]}
+   {:one-of [:agent :pipe :branch :delegate
+             :reduce :revise :route :continue]}
 
    :pipe
    {:karcarthy/type :pipe
     :required        {:steps [:vector :workflow]}}
 
-   :map-branches
-   {:karcarthy/type :map
+   :branch
+   {:karcarthy/type :branch
     :required        {:branches [:vector :workflow]}
     :optional        {:max-concurrency :integer}}
 
-   :map-planner-worker
-   {:karcarthy/type :map
+   :delegate
+   {:karcarthy/type :delegate
     :required        {:planner :workflow
                       :worker :workflow}
     :optional        {:max-concurrency :integer}}
 
    :reduce
    {:karcarthy/type :reduce
-    :required        {:mapped :workflow
+    :required        {:source :workflow
                       :reducer :workflow}}
 
-   :iterate
-   {:karcarthy/type :iterate
+   :revise
+   {:karcarthy/type :revise
     :required        {:worker :workflow
                       :evaluator :workflow}
     :optional        {:max-rounds :integer}}
 
-   :bind-routes
-   {:karcarthy/type :bind
+   :route
+   {:karcarthy/type :route
     :required        {:source :workflow
-                      :routes [:map :any :workflow]}
+                      :routes [:object :any :workflow]}
     :optional        {:default :workflow}}
 
-   :bind-continuation
-   {:karcarthy/type :bind
+   :continue
+   {:karcarthy/type :continue
     :required        {:source :workflow
                       :to :workflow}
     :optional        {:prompt :string}}})
@@ -82,12 +82,12 @@
    {"workflow"
     {"oneOf" [{"$ref" "#/$defs/agent"}
               {"$ref" "#/$defs/pipe"}
-              {"$ref" "#/$defs/mapBranches"}
-              {"$ref" "#/$defs/mapPlannerWorker"}
+              {"$ref" "#/$defs/branch"}
+              {"$ref" "#/$defs/delegate"}
               {"$ref" "#/$defs/reduce"}
-              {"$ref" "#/$defs/iterate"}
-              {"$ref" "#/$defs/bindRoutes"}
-              {"$ref" "#/$defs/bindContinuation"}]}
+              {"$ref" "#/$defs/revise"}
+              {"$ref" "#/$defs/route"}
+              {"$ref" "#/$defs/continue"}]}
 
     "agent"
     {"type" "object"
@@ -108,56 +108,56 @@
                    "steps" {"type" "array"
                             "items" {"$ref" "#/$defs/workflow"}}}}
 
-    "mapBranches"
+    "branch"
     {"type" "object"
      "required" ["type" "branches"]
      "additionalProperties" false
-     "properties" {"type" {"const" "map"}
+     "properties" {"type" {"const" "branch"}
                    "branches" {"type" "array"
                                "items" {"$ref" "#/$defs/workflow"}}
                    "max-concurrency" {"type" "integer" "minimum" 1}}}
 
-    "mapPlannerWorker"
+    "delegate"
     {"type" "object"
      "required" ["type" "planner" "worker"]
      "additionalProperties" false
-     "properties" {"type" {"const" "map"}
+     "properties" {"type" {"const" "delegate"}
                    "planner" {"$ref" "#/$defs/workflow"}
                    "worker" {"$ref" "#/$defs/workflow"}
                    "max-concurrency" {"type" "integer" "minimum" 1}}}
 
     "reduce"
     {"type" "object"
-     "required" ["type" "mapped" "reducer"]
+     "required" ["type" "source" "reducer"]
      "additionalProperties" false
      "properties" {"type" {"const" "reduce"}
-                   "mapped" {"$ref" "#/$defs/workflow"}
+                   "source" {"$ref" "#/$defs/workflow"}
                    "reducer" {"$ref" "#/$defs/workflow"}}}
 
-    "iterate"
+    "revise"
     {"type" "object"
      "required" ["type" "worker" "evaluator"]
      "additionalProperties" false
-     "properties" {"type" {"const" "iterate"}
+     "properties" {"type" {"const" "revise"}
                    "worker" {"$ref" "#/$defs/workflow"}
                    "evaluator" {"$ref" "#/$defs/workflow"}
                    "max-rounds" {"type" "integer" "minimum" 1}}}
 
-    "bindRoutes"
+    "route"
     {"type" "object"
      "required" ["type" "source" "routes"]
      "additionalProperties" false
-     "properties" {"type" {"const" "bind"}
+     "properties" {"type" {"const" "route"}
                    "source" {"$ref" "#/$defs/workflow"}
                    "routes" {"type" "object"
                              "additionalProperties" {"$ref" "#/$defs/workflow"}}
                    "default" {"$ref" "#/$defs/workflow"}}}
 
-    "bindContinuation"
+    "continue"
     {"type" "object"
      "required" ["type" "source" "to"]
      "additionalProperties" false
-     "properties" {"type" {"const" "bind"}
+     "properties" {"type" {"const" "continue"}
                    "source" {"$ref" "#/$defs/workflow"}
                    "to" {"$ref" "#/$defs/workflow"}
                    "prompt" {"type" "string"}}}}})

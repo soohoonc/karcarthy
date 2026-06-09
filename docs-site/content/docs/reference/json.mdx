@@ -137,13 +137,13 @@ k/json-schema
 }
 ```
 
-### map
+### branch
 
 Branches on the same input:
 
 ```json
 {
-  "type": "map",
+  "type": "branch",
   "branches": [
     { "type": "agent", "name": "api", "instructions": "Review API." },
     { "type": "agent", "name": "docs", "instructions": "Review docs." }
@@ -151,11 +151,13 @@ Branches on the same input:
 }
 ```
 
+### delegate
+
 Planner/worker shape:
 
 ```json
 {
-  "type": "map",
+  "type": "delegate",
   "planner": { "type": "agent", "name": "planner", "instructions": "Reply with EDN: {:subtasks [\"...\"]}." },
   "worker": { "type": "agent", "name": "worker", "instructions": "Handle one subtask." }
 }
@@ -166,8 +168,8 @@ Planner/worker shape:
 ```json
 {
   "type": "reduce",
-  "mapped": {
-    "type": "map",
+  "source": {
+    "type": "branch",
     "branches": [
       { "type": "agent", "name": "api", "instructions": "Review API." },
       { "type": "agent", "name": "docs", "instructions": "Review docs." }
@@ -177,24 +179,24 @@ Planner/worker shape:
 }
 ```
 
-### iterate
+### revise
 
 ```json
 {
-  "type": "iterate",
+  "type": "revise",
   "worker": { "type": "agent", "name": "writer", "instructions": "Draft." },
   "evaluator": { "type": "agent", "name": "critic", "instructions": "Reply with EDN: {:accept? true} or {:accept? false :feedback \"...\"}." },
   "max-rounds": 3
 }
 ```
 
-### bind
+### route
 
 Choice map:
 
 ```json
 {
-  "type": "bind",
+  "type": "route",
   "source": { "type": "agent", "name": "classifier", "instructions": "Classify." },
   "routes": {
     "launch": { "type": "agent", "name": "launch", "instructions": "Handle launch." },
@@ -211,7 +213,7 @@ Continuation:
 
 ```json
 {
-  "type": "bind",
+  "type": "continue",
   "source": { "type": "agent", "name": "triage", "instructions": "Triage." },
   "to": { "type": "agent", "name": "specialist", "instructions": "Continue." }
 }

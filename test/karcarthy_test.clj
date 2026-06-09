@@ -10,7 +10,12 @@
                     (kc/pipe (kc/agent "a" "i") (kc/agent "b" "i"))
                     "hi")]
       (is (kc/ok? r))
-      (is (= "[b] [a] hi" (:text r))))))
+      (is (= "[b] [a] hi" (:text r))))
+    (let [a (kc/agent "a" "i")
+          b (kc/agent "b" "i")]
+      (is (kc/workflow? (kc/branch [a b])))
+      (is (kc/workflow? (kc/route a {:next b})))
+      (is (kc/workflow? (kc/continue a b))))))
 
 (deftest facade-reexports-macros
   (testing "defagent and defworkflow are re-exported as working macros"
@@ -23,7 +28,7 @@
 (deftest facade-reexports-rewrites
   (testing "workflow rewrites are reachable under the facade"
     (let [workflow  (kc/pipe (kc/agent "a" "i") (kc/agent "b" "j"))
-          rewritten (kc/config {:adapter :mock :model "m"} workflow)]
+          rewritten (kc/configure {:adapter :mock :model "m"} workflow)]
       (is (kc/workflow? rewritten))
       (is (= ["a" "b"] (map :name (kc/agents rewritten))))
       (is (= [:mock :mock] (map :adapter (kc/agents rewritten))))
@@ -48,4 +53,8 @@
     (is (nil? (ns-resolve 'karcarthy 'Adapter)))
     (is (nil? (ns-resolve 'karcarthy 'resolve-adapter)))
     (is (nil? (ns-resolve 'karcarthy 'evolve)))
+    (is (nil? (ns-resolve 'karcarthy 'map)))
+    (is (nil? (ns-resolve 'karcarthy 'bind)))
+    (is (nil? (ns-resolve 'karcarthy 'iterate)))
+    (is (nil? (ns-resolve 'karcarthy 'config)))
     (is (nil? (ns-resolve 'karcarthy '-run)))))

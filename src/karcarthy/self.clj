@@ -28,7 +28,7 @@
   Uses `clojure.edn/read-string` - data only, never evaluates code. Throws
   ex-info if no map is found or it doesn't parse."
   [s]
-  (kedn/extract-map s))
+  (kedn/extract-map! s))
 
 (defn read-workflow
   "Parse `s` (an agent's output) into a runnable karcarthy workflow, validating
@@ -68,19 +68,19 @@
     "   :model \"sonnet\"}            ; :model optional"
     ""
     "NODES (compose workflows):"
-    "  pipe    {:karcarthy/type :pipe :steps [WORKFLOW ...]}"
-    "          run in sequence, feeding each result's text into the next."
-    "  map     {:karcarthy/type :map :branches [WORKFLOW ...]}"
-    "          run each workflow on the same input."
-    "  map     {:karcarthy/type :map :planner AGENT :worker WORKFLOW}"
-    "          planner replies {:subtasks [\"...\"]}; worker handles each."
-    "  reduce  {:karcarthy/type :reduce :mapped MAP :reducer WORKFLOW}"
-    "          reducer receives {:input ... :subtasks ... :results [...]}"
-    "  iterate {:karcarthy/type :iterate :worker WORKFLOW :evaluator AGENT"
+    "  pipe     {:karcarthy/type :pipe :steps [WORKFLOW ...]}"
+    "           run in sequence, feeding each result's text into the next."
+    "  branch   {:karcarthy/type :branch :branches [WORKFLOW ...]}"
+    "           run each workflow on the same input."
+    "  delegate {:karcarthy/type :delegate :planner AGENT :worker WORKFLOW}"
+    "           planner replies {:subtasks [\"...\"]}; worker handles each."
+    "  reduce   {:karcarthy/type :reduce :source BRANCH-OR-DELEGATE :reducer WORKFLOW}"
+    "           reducer receives {:input ... :subtasks ... :results [...]}"
+    "  revise   {:karcarthy/type :revise :worker WORKFLOW :evaluator AGENT"
     "           :max-rounds 3} ; evaluator replies {:accept? bool :feedback \"...\"}"
-    "  bind    {:karcarthy/type :bind :source AGENT"
+    "  route    {:karcarthy/type :route :source AGENT"
     "           :routes {:label WORKFLOW ...}} ; source replies {:route :label}"
-    "  bind    {:karcarthy/type :bind :source WORKFLOW :to WORKFLOW}"
+    "  continue {:karcarthy/type :continue :source WORKFLOW :to WORKFLOW}"
     ""
     "Rules: output EDN only (optionally inside an ```edn fence), no prose. Use"
     "only the keys shown. Nest freely - any WORKFLOW position may hold an agent"
@@ -99,7 +99,7 @@
   [agent & {:keys [max-rounds] :or {max-rounds 5}}]
   {:karcarthy/type :evolve :agent agent :max-rounds max-rounds})
 
-(defmethod o/extension-workflow? :evolve
+(defmethod o/node? :evolve
   [{:keys [agent max-rounds]}]
   (and (k/agent? agent)
        (or (nil? max-rounds)
@@ -140,7 +140,7 @@
                        :problems (k/explain-agent agent')}))))
   patch)
 
-(defn- read-patch
+(defn- text->patch
   "Return a validated :karcarthy/patch map, or `no-patch` for a plain answer."
   [agent text]
   (try
@@ -166,30 +166,30 @@
     (let [r (k/run-agent adapter agent (evolve-prompt input) opts)]
       (if-not (k/ok? r)
         r
-        (let [patch (try
-                      (read-patch agent (:text r))
-                      (catch Throwable t
-                        {::error t}))]
+        (let [p (try
+                  (text->patch agent (:text r))
+                  (catch Throwable t
+                    {::error t}))]
           (cond
-            (::error patch)
+            (::error p)
             (k/result {:ok? false
                        :error :invalid-patch
-                       :text (ex-message (::error patch))
+                       :text (ex-message (::error p))
                        :agent (:name agent)
                        :rounds round
                        :patches patches
                        :evolved agent})
 
             ;; agent wants to change itself and has rounds left -> apply + retry
-            (and (not= no-patch patch) (< round max-rounds))
-            (recur (inc round) (merge agent patch) (conj patches patch))
+            (and (not= no-patch p) (< round max-rounds))
+            (recur (inc round) (merge agent p) (conj patches p))
 
             ;; out of rounds but still patching -> apply once and force a final answer
-            (not= no-patch patch)
-            (let [final-agent (merge agent patch)
+            (not= no-patch p)
+            (let [final-agent (merge agent p)
                   fr          (k/run-agent adapter final-agent input opts)]
               (k/result (assoc fr :agent (:name final-agent) :rounds round
-                               :patches (conj patches patch) :evolved final-agent)))
+                               :patches (conj patches p) :evolved final-agent)))
 
             ;; a plain final answer
             :else

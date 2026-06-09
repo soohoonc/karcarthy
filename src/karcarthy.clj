@@ -8,7 +8,7 @@
   The canonical homes are still `karcarthy.core`, `karcarthy.orchestrate`,
   `karcarthy.self`, and the implementation adapters; this namespace only
   forwards the public surface."
-  (:refer-clojure :exclude [agent iterate map reduce])
+  (:refer-clojure :exclude [agent map iterate reduce])
   (:require [karcarthy.core]
             [karcarthy.orchestrate]
             [karcarthy.rewrite]
@@ -47,10 +47,12 @@
 
 ;; orchestration
 (export karcarthy.orchestrate/pipe)
-(export karcarthy.orchestrate/map)
+(export karcarthy.orchestrate/branch)
+(export karcarthy.orchestrate/delegate)
 (export karcarthy.orchestrate/reduce)
-(export karcarthy.orchestrate/iterate)
-(export karcarthy.orchestrate/bind)
+(export karcarthy.orchestrate/revise)
+(export karcarthy.orchestrate/route)
+(export karcarthy.orchestrate/continue)
 (export karcarthy.orchestrate/run)
 (export karcarthy.orchestrate/workflow?)
 (export karcarthy.orchestrate/defworkflow)
@@ -62,7 +64,7 @@
 ;; structural workflow rewrites
 (export karcarthy.rewrite/agents)
 (export karcarthy.rewrite/over)
-(export karcarthy.rewrite/config)
+(export karcarthy.rewrite/configure)
 
 ;; parsing generated agent/workflow data
 (export karcarthy.self/read-workflow)

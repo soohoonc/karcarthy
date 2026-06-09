@@ -8,15 +8,21 @@ languages, to show the library is reachable from each.
 ## Clojure
 
 - `clojure/launch.clj` - the complete launch-readiness tutorial:
-  classify with an EDN route, map reviewers, write a brief, and iterate on
+  classify with an EDN route, branch reviewers, write a brief, and revise on
   EDN critique verdicts.
+- `clojure/claude_dynamic_agents.clj` - a Claude dynamic-workflow style run:
+  a lead agent can patch its own instructions, a planner creates parallel
+  workstreams, workers verify each stream, and a critic accepts the memo.
+- `clojure/openai_deep_research.clj` - wraps the OpenAI Responses API Deep
+  Research shape as a karcarthy leaf adapter. Offline by default; live calls are
+  gated by `KARCARTHY_OPENAI_LIVE=1` and `OPENAI_API_KEY`.
 - `clojure/deep_research.clj` - a Deep Research-shaped workflow:
   plan research tracks, investigate them in parallel, filter evidence, write a
-  cited report, and critique/iterate. Runs offline with canned evidence and
+  cited report, and critique/revise. Runs offline with canned evidence and
   includes an opt-in live Codex CLI `command-adapter` path.
 - `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
-  adapter/model/instruction config, then run the rewritten value.
-- `clojure/live.clj` - a live map/reduce run (paid `claude -p`).
+  adapter/model/instruction configuration, then run the rewritten value.
+- `clojure/live.clj` - a live delegate/reduce run (paid `claude -p`).
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
 ## Python and TypeScript (via the executable)
@@ -40,6 +46,22 @@ Both build workflows as plain dicts/objects and run them through the offline
 mock adapter. Tool names in the launch examples are adapter allowlists: they
 must already exist in the selected Agent SDK, CLI, or MCP configuration. The
 mock adapter ignores tools.
+
+## JavaScript
+
+- `javascript/claude_dynamic_agents.mjs` - builds a dynamic Claude-style
+  delegate/reduce/critic workflow as JSON and sends it through
+  `bin/karcarthy json`. Offline by default; set `KARCARTHY_CLAUDE_LIVE=1` for
+  the Claude CLI adapter.
+- `javascript/openai_deep_research.mjs` - calls the OpenAI Responses API Deep
+  Research shape directly with `background`, web search, code interpreter, and
+  optional vector-store or MCP data sources. Offline by default; set
+  `KARCARTHY_OPENAI_LIVE=1` and `OPENAI_API_KEY` for a live call.
+
+```bash
+node examples/javascript/claude_dynamic_agents.mjs --print
+node examples/javascript/openai_deep_research.mjs
+```
 
 Build the standalone CLI once when you want the examples to avoid invoking the
 Clojure CLI:

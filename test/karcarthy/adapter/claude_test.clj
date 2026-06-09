@@ -12,7 +12,7 @@
   (testing "agent fields map to the expected flags"
     (let [a    (k/agent "researcher" "Research well."
                         :model "sonnet" :tools ["WebSearch" "WebFetch"])
-          argv (cc/claude-command a "find X" {})]
+          argv (cc/command a "find X" {})]
       (is (= ["claude" "-p" "find X"] (subvec argv 0 3)))
       (is (= "json" (after argv "--output-format")))
       (is (= "Research well." (after argv "--append-system-prompt")))
@@ -22,7 +22,7 @@
 
 (deftest command-building-options
   (testing "opts control bin, system-prompt mode, turns, permissions, extras"
-    (let [argv (cc/claude-command
+    (let [argv (cc/command
                 (k/agent "a" "i") "p"
                 {:claude-bin         "/opt/node22/bin/claude"
                  :system-prompt-mode :replace
@@ -38,7 +38,7 @@
 
 (deftest command-omits-absent-options
   (testing "optional flags are absent when the agent/opts don't supply them"
-    (let [argv (cc/claude-command (k/agent "a" "i") "p" {})]
+    (let [argv (cc/command (k/agent "a" "i") "p" {})]
       (is (nil? (after argv "--model")))
       (is (nil? (after argv "--allowedTools")))
       (is (nil? (after argv "--max-turns")))
@@ -50,8 +50,8 @@
        "\"result\":\"pong\",\"session_id\":\"19f413cf\",\"num_turns\":1,"
        "\"total_cost_usd\":0.078,\"usage\":{\"input_tokens\":3}}"))
 
-(deftest parse-result-extracts-fields
-  (let [r (cc/parse-result "tester" sample-success)]
+(deftest stdout->result-extracts-fields
+  (let [r (cc/stdout->result "tester" sample-success)]
     (is (k/ok? r))
     (is (= :result (:karcarthy/type r)))
     (is (= "tester" (:agent r)))
@@ -60,14 +60,14 @@
     (is (= 0.078 (:cost-usd r)))
     (is (= {:input_tokens 3} (:usage r)))))
 
-(deftest parse-result-flags-errors
-  (let [r (cc/parse-result "t" "{\"is_error\":true,\"result\":\"boom\"}")]
+(deftest stdout->result-flags-errors
+  (let [r (cc/stdout->result "t" "{\"is_error\":true,\"result\":\"boom\"}")]
     (is (not (k/ok? r)))
     (is (= "boom" (:text r)))))
 
 (deftest command-streaming-and-session-flags
   (testing "stream-json, resume, continue and partial-messages flags"
-    (let [argv (cc/claude-command (k/agent "a" "i") "p"
+    (let [argv (cc/command (k/agent "a" "i") "p"
                                   {:output-format    "stream-json"
                                    :resume           "S123"
                                    :continue?        true
@@ -88,12 +88,12 @@
        "'{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,"
        "\"result\":\"hi\",\"session_id\":\"S1\",\"total_cost_usd\":0.01}'"))
 
-(deftest read-stream-parses-and-callbacks
+(deftest stream!-parses-and-callbacks
   (testing "events parse, on-event fires per event, garbage skipped, result found"
     (let [seen (atom [])
           {:keys [events exit result]}
-          (cc/read-stream ["bash" "-c" stream-script]
-                          {:on-event #(swap! seen conj (:type %))})]
+          (cc/stream! ["bash" "-c" stream-script]
+                      {:on-event #(swap! seen conj (:type %))})]
       (is (zero? exit))
       (is (= ["system" "assistant" "result"] @seen))  ; "oops not json" skipped
       (is (= 3 (count events)))
@@ -102,8 +102,8 @@
 
 (deftest streaming-result-event-becomes-result
   (testing "the terminal result event maps to a karcarthy result"
-    (let [{:keys [result]} (cc/read-stream ["bash" "-c" stream-script] {})
-          r (cc/result-map->result "streamer" result)]
+    (let [{:keys [result]} (cc/stream! ["bash" "-c" stream-script] {})
+          r (cc/payload->result "streamer" result)]
       (is (k/ok? r))
       (is (= "hi" (:text r)))
       (is (= "S1" (:session-id r)))
@@ -117,7 +117,7 @@
 ;; deliberately does NOT assert the model's turn-by-turn behavior: whether a
 ;; trivial prompt resolves in one turn or wanders into tool use depends on the
 ;; ambient environment (available tools, any discovered CLAUDE.md), which is
-  ;; outside the adapter's contract. The deterministic `parse-result` tests above
+  ;; outside the adapter's contract. The deterministic `stdout->result` tests above
 ;; already cover both the success and error payload shapes.
 (deftest ^:live live-claude-roundtrip
   (when (System/getenv "KARCARTHY_LIVE")

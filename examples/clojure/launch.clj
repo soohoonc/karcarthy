@@ -167,19 +167,19 @@
   [product-reviewer engineering-reviewer security-reviewer support-reviewer])
 
 (def review-packet
-  (k/map reviewers :max-concurrency 4))
+  (k/branch reviewers :max-concurrency 4))
 
 (def launch-brief
-  (k/iterate
+  (k/revise
    (k/pipe review-packet brief-writer)
    critic
    :max-rounds 2))
 
 (def workflow
-  (k/bind classifier
-          {:launch launch-brief
-           :incident incident-responder}
-          :default launch-brief))
+  (k/route classifier
+           {:launch launch-brief
+            :incident incident-responder}
+           :default launch-brief))
 
 (def adapter
   (k/mock-adapter
@@ -219,7 +219,7 @@
         support-reviewer brief-writer critic incident-responder]))
 
 (println "\nworkflow:")
-(println "bind(classifier, {launch: iterate(pipe(map(reviewers), brief-writer), critic), incident})")
+(println "route(classifier, {launch: revise(pipe(branch(reviewers), brief-writer), critic), incident})")
 
 (println "\nresult:")
 (let [r (k/run adapter workflow

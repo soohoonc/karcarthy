@@ -14,24 +14,46 @@
       (is (k/agent? (first (:steps workflow))))
       (is (= "[b] [a] hi" (:text (o/run (k/mock-adapter) workflow "hi")))))))
 
-(deftest json->workflow-accepts-map-and-bind
-  (testing "JSON map, reduce, and bind nodes compile to runnable workflow data"
-    (let [mapped (cli/json->workflow {"type"     "map"
-                                      "branches" [{"type" "agent" "name" "a" "instructions" "i"}
-                                                  {"type" "agent" "name" "b" "instructions" "i"}]})
+(deftest json->workflow-accepts-branch-and-route
+  (testing "JSON branch, reduce, and route nodes compile to runnable workflow data"
+    (let [branched (cli/json->workflow {"type"     "branch"
+                                        "max-concurrency" 2
+                                        "branches" [{"type" "agent" "name" "a" "instructions" "i"}
+                                                    {"type" "agent" "name" "b" "instructions" "i"}]})
           reduced (cli/json->workflow {"type" "reduce"
-                                       "mapped" {"type"     "map"
+                                       "source" {"type"     "branch"
                                                  "branches" [{"type" "agent" "name" "a" "instructions" "i"}]}
                                        "reducer" {"type" "agent" "name" "r" "instructions" "i"}})
-          bound  (cli/json->workflow {"type"   "bind"
-                                      "source" {"type" "agent" "name" "router" "instructions" "i"}
-                                      "routes" {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}})]
-      (is (= :map (:karcarthy/type mapped)))
+          routed  (cli/json->workflow {"type"   "route"
+                                       "source" {"type" "agent" "name" "router" "instructions" "i"}
+                                       "routes" {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}})]
+      (is (= :branch (:karcarthy/type branched)))
+      (is (= 2 (:max-concurrency branched)))
       (is (= :reduce (:karcarthy/type reduced)))
-      (is (= :bind (:karcarthy/type bound)))
-      (is (o/workflow? bound))
-      (is (not (contains? bound :default)))
-      (is (contains? (:routes bound) "billing")))))
+      (is (= :route (:karcarthy/type routed)))
+      (is (o/workflow? routed))
+      (is (not (contains? routed :default)))
+      (is (contains? (:routes routed) "billing")))))
+
+(deftest json->workflow-accepts-delegate-continue-and-revise
+  (testing "the rest of the preferred JSON node names compile"
+    (let [delegated (cli/json->workflow {"type"            "delegate"
+                                         "max-concurrency" 3
+                                         "planner"         {"type" "agent" "name" "p" "instructions" "i"}
+                                         "worker"          {"type" "agent" "name" "w" "instructions" "i"}})
+          continued (cli/json->workflow {"type"   "continue"
+                                         "source" {"type" "agent" "name" "a" "instructions" "i"}
+                                         "to"     {"type" "agent" "name" "b" "instructions" "i"}})
+          revised   (cli/json->workflow {"type"       "revise"
+                                         "max-rounds"  4
+                                         "worker"     {"type" "agent" "name" "w" "instructions" "i"}
+                                         "evaluator"  {"type" "agent" "name" "j" "instructions" "i"}})]
+      (is (= :delegate (:karcarthy/type delegated)))
+      (is (= 3 (:max-concurrency delegated)))
+      (is (= :continue (:karcarthy/type continued)))
+      (is (= :revise (:karcarthy/type revised)))
+      (is (= 4 (:max-rounds revised)))
+      (is (every? o/workflow? [delegated continued revised])))))
 
 (deftest json->agent-workflow-fields
   (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
@@ -40,18 +62,18 @@
     (is (= "haiku" (:model a)))
     (is (= :claude (:adapter a)))))
 
-(deftest json->workflow-bind-keeps-string-labels
+(deftest json->workflow-route-keeps-string-labels
   (testing "route labels stay strings (not coerced to keywords)"
-    (let [workflow (cli/json->workflow {"type"   "bind"
+    (let [workflow (cli/json->workflow {"type"   "route"
                                         "source" {"type" "agent" "name" "r" "instructions" "i"}
                                         "routes" {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}})]
-      (is (= :bind (:karcarthy/type workflow)))
+      (is (= :route (:karcarthy/type workflow)))
       (is (o/workflow? workflow))
       (is (contains? (:routes workflow) "billing")))))
 
-(deftest json->workflow-bind-accepts-default
-  (testing "JSON bind includes a default only when one is present"
-    (let [workflow (cli/json->workflow {"type"    "bind"
+(deftest json->workflow-route-accepts-default
+  (testing "JSON route includes a default only when one is present"
+    (let [workflow (cli/json->workflow {"type"    "route"
                                         "source"  {"type" "agent" "name" "r" "instructions" "i"}
                                         "routes"  {"billing" {"type" "agent" "name" "bill" "instructions" "i"}}
                                         "default" {"type" "agent" "name" "fallback" "instructions" "i"}})]
@@ -60,6 +82,11 @@
 
 (deftest json->workflow-unknown-type
   (is (thrown? clojure.lang.ExceptionInfo (cli/json->workflow {"type" "nope"}))))
+
+(deftest json->workflow-rejects-legacy-types
+  (doseq [type ["map" "bind" "iterate"]]
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (cli/json->workflow {"type" type})))))
 
 (deftest cli-main-uses-named-mock-responses
   (let [request {"workflow" {"type"  "pipe"

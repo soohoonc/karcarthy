@@ -3,7 +3,7 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]))
 
-(defn extract-map
+(defn extract-map!
   "Pull the first EDN map out of `s`, which may contain prose or a fenced block.
   Uses `clojure.edn/read-string` - data only, never evaluates code."
   [s]

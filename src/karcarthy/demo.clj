@@ -4,7 +4,7 @@
       clojure -M -m karcarthy.demo
 
   Shows the central idea - a karcarthy workflow is *data* - plus the DSL sugar
-  (`defagent` / `defworkflow`), structural rewrites, and structured map/reduce
+  (`defagent` / `defworkflow`), structural rewrites, and structured delegate/reduce
   with real subprocess workers. No API key or network required."
   (:require [clojure.edn :as edn]
             [clojure.pprint :as pp]
@@ -21,7 +21,7 @@
 
 ;; --- A workflow via defworkflow: validated at load time --------------------
 (o/defworkflow support-desk
-  (o/bind triage
+  (o/route triage
            {:billing   billing
             :technical (o/pipe technical reviewer)   ; draft, then review
             :general   general}
@@ -41,7 +41,7 @@
   (pp/pprint support-desk)
 
   (println "\n=== Transform the workflow as data: bump every agent to opus ===")
-  (let [opusified (k/config {:model "opus"} support-desk)]
+  (let [opusified (k/configure {:model "opus"} support-desk)]
     (println "before:" (mapv :model (k/agents support-desk)))
     (println "after: " (mapv :model (k/agents opusified))))
 
@@ -51,13 +51,13 @@
     (println "ok?  " (k/ok? r))
     (println "text:" (:text r)))
 
-  (println "\n=== Structured map/reduce with real subprocess workers ===")
+  (println "\n=== Structured delegate/reduce with real subprocess workers ===")
   ;; The planner emits EDN data, each worker is `tr a-z A-Z` (uppercase via a
-  ;; real subprocess), and the reducer receives the mapped result summary as EDN.
+  ;; real subprocess), and the reducer receives the source result summary as EDN.
   (let [workflow (o/reduce
-                  (o/map (k/agent "split" "Return EDN subtasks." :adapter :plan)
-                         (k/agent "shout" "uppercase" :adapter :shell))
-                  (k/agent "join" "Join mapped result text." :adapter :join))
+                  (o/delegate (k/agent "split" "Return EDN subtasks." :adapter :plan)
+                              (k/agent "shout" "uppercase" :adapter :shell))
+                  (k/agent "join" "Join source result text." :adapter :join))
         adapter  {:plan  (k/mock-adapter
                           (fn [{:keys [prompt]}]
                             (pr-str {:subtasks (str/split (str/trim prompt) #"\s+")})))
@@ -68,7 +68,7 @@
                                  (map :text)
                                  (str/join " "))))}
         r        (o/run adapter workflow "homoiconic agents are data")]
-    (println "subtasks:" (get-in r [:mapped :subtasks]))
+    (println "subtasks:" (get-in r [:source :subtasks]))
     (println "result:  " (:text r)))
 
   (shutdown-agents))

@@ -56,16 +56,16 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   (streaming + sessions), `command` (wrap any CLI, coding agent, or local
   model), `openai`. Pass one adapter, or pass a map and let each agent choose
   with `:adapter`.
-- **Workflows as data**: compose agents with `pipe`, `map`, `reduce`,
-  `iterate`, and `bind`; inspect and rewrite those workflow values before
-  running them.
-- **Structural rewrites**: stamp config onto every agent without changing the
+- **Workflows as data**: compose agents with `pipe`, `branch`, `delegate`,
+  `reduce`, `revise`, `route`, and `continue`; inspect and rewrite those
+  workflow values before running them.
+- **Structural rewrites**: stamp configuration onto every agent without changing the
   original workflow:
   ```clojure
   (->> workflow
-       (k/config {:adapter :claude
-                  :model "claude-sonnet-4"
-                  :instructions/suffix "State assumptions before final answer."}))
+       (k/configure {:adapter :claude
+                     :model "claude-sonnet-4"
+                     :instructions/suffix "State assumptions before final answer."}))
   ```
 - **Agents speak karcarthy**: advanced self-modifying flows parse EDN via
   `clojure.edn`, never `eval`.
@@ -74,7 +74,7 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
 
 ## More
 
-- Examples in Clojure, Java, Kotlin, Scala, Python, and TypeScript:
+- Examples in Clojure, JavaScript, Java, Kotlin, Scala, Python, and TypeScript:
   [`examples/`](examples/). Non-JVM languages drive it through `bin/karcarthy`
   over JSON, since a workflow is just data.
 - Fumadocs-powered web docs for Vercel hosting:

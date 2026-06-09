@@ -6,7 +6,7 @@
            --append-system-prompt <instructions>
            [--model M] [--allowedTools t1,t2] [--max-turns N] ...
 
-  The command builder (`claude-command`) is a pure function returning a vector
+  The command builder (`command`) is a pure function returning a vector
   of strings - the command is data too, so you can inspect or transform it
   before running."
   (:require [clojure.data.json :as json]
@@ -15,7 +15,7 @@
             [karcarthy.core :as k]
             [karcarthy.proc :as proc]))
 
-(defn claude-command
+(defn command
   "Pure: build the argv (vector of strings) to run `agent` on `prompt`.
 
   `opts`:
@@ -57,7 +57,7 @@
       partial-messages? (conj "--include-partial-messages")
       (seq extra-args)  (into (vec extra-args)))))
 
-(defn result-map->result
+(defn payload->result
   "Turn a parsed `claude -p` result object (keyword-keyed map - the JSON `result`
   payload, or the terminal `result` event in a stream) into a karcarthy result."
   [agent-name m]
@@ -71,13 +71,13 @@
              :usage      (:usage m)
              :raw        m}))
 
-(defn parse-result
+(defn stdout->result
   "Parse the stdout of `claude -p --output-format json` (one JSON object) into a
   karcarthy result map. Exposed for unit testing against captured JSON."
   [agent-name stdout]
-  (result-map->result agent-name (json/read-str stdout :key-fn keyword)))
+  (payload->result agent-name (json/read-str stdout :key-fn keyword)))
 
-(defn read-stream
+(defn stream!
   "Run `argv` as a subprocess, parse each stdout line as a JSON event (keyword
   keys), call `(on-event ev)` per event, and return
   {:events [...] :exit n :result <terminal \"result\" event map, or nil>}.
@@ -107,22 +107,22 @@
         (finally
           (when watchdog (future-cancel watchdog)))))))
 
-(defn- run-streaming
+(defn- stream
   "Stream `claude -p --output-format stream-json`, invoking (:on-event opts) per
   event, and return the karcarthy result built from the terminal result event."
   [agent prompt opts]
-  (let [argv (claude-command agent prompt (assoc opts :output-format "stream-json"))
-        {:keys [result exit events]} (read-stream argv (select-keys opts [:on-event :dir :timeout-ms]))]
+  (let [argv (command agent prompt (assoc opts :output-format "stream-json"))
+        {:keys [result exit events]} (stream! argv (select-keys opts [:on-event :dir :timeout-ms]))]
     (if result
-      (result-map->result (:name agent) result)
+      (payload->result (:name agent) result)
       (k/result {:agent (:name agent) :ok? false :text nil
                  :error (str "stream ended without a result event (exit " exit ")")
                  :raw   {:exit exit :events events :argv argv}}))))
 
-(defn- run-buffered
+(defn- buffer
   [agent prompt opts]
   (let [output-format (get opts :output-format "json")
-        argv          (claude-command agent prompt opts)
+        argv          (command agent prompt opts)
         {:keys [exit out err timed-out?]}
         (proc/run argv {:dir (:dir opts) :timeout-ms (:timeout-ms opts)})]
     (cond
@@ -136,7 +136,7 @@
       ;; stdout and let the payload's `is_error` decide `:ok?`.
       (and (= output-format "json") (seq (str/trim (or out ""))))
       (try
-        (parse-result (:name agent) out)
+        (stdout->result (:name agent) out)
         (catch Exception e
           (k/result {:agent (:name agent) :ok? false
                      :text  (or (not-empty err) out)
@@ -155,17 +155,17 @@
                  :error (str "claude exited with status " exit)
                  :raw   {:exit exit :out out :err err :argv argv}}))))
 
-(defn- run-claude
+(defn- invoke!
   "Dispatch to the streaming reader when an :on-event callback is supplied or
   :output-format is \"stream-json\"; otherwise run buffered."
   [agent prompt opts]
   (if (or (:on-event opts) (= "stream-json" (get opts :output-format)))
-    (run-streaming agent prompt opts)
-    (run-buffered agent prompt opts)))
+    (stream agent prompt opts)
+    (buffer agent prompt opts)))
 
 (defn claude-cli
   "Adapter for live execution through the Claude CLI. `default-opts` are merged
-  beneath per-run opts (per-run wins). See `claude-command` for command-building
+  beneath per-run opts (per-run wins). See `command` for command-building
   option keys; additionally `:dir` sets the agent's working directory,
   `:timeout-ms` force-kills a hung run, and `:on-event` (a fn of each stream
   event) streams via --output-format stream-json."
@@ -173,4 +173,4 @@
   ([default-opts]
    (reify k/Adapter
      (-run [_ agent prompt opts]
-       (run-claude agent prompt (merge default-opts opts))))))
+       (invoke! agent prompt (merge default-opts opts))))))

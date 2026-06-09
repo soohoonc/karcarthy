@@ -2,7 +2,7 @@
   "Rewrite workflows before running them.
 
   This is the Clojure-native payoff: a workflow is plain EDN, so host code can
-  inspect it, stamp config onto it, and mechanically rewrite it before
+  inspect it, stamp configuration onto it, and mechanically rewrite it before
   `karcarthy.orchestrate/run` interprets it. Rewrites do not call adapters and
   do not use `clojure.core/eval`."
   (:require [clojure.string :as str]
@@ -62,33 +62,33 @@
     (workflow! "over result" workflow')
     workflow'))
 
-(def ^:private config-keys
+(def ^:private configure-keys
   #{:adapter :model :instructions/suffix})
 
-(defn- known-config! [opts]
-  (let [unknown (seq (remove config-keys (keys opts)))]
+(defn- configure! [opts]
+  (let [unknown (seq (remove configure-keys (keys opts)))]
     (when unknown
-      (throw (ex-info "config contains unknown keys"
+      (throw (ex-info "configure contains unknown keys"
                       {:unknown (vec unknown)
-                       :supported (vec config-keys)}))))
+                       :supported (vec configure-keys)}))))
   opts)
 
-(defn config
-  "Apply agent config to a workflow in one pass.
+(defn configure
+  "Apply agent configuration to a workflow in one pass.
 
   Supported keys:
     :adapter               adapter registry key
     :model                 model selector string
     :instructions/suffix   text appended to every agent instruction"
   [opts workflow]
-  (let [opts (known-config! (map! "config" opts))
+  (let [opts (configure! (map! "configure" opts))
         {:keys [adapter model instructions/suffix]} opts]
     (when (contains? opts :adapter)
-      (keyword! "config :adapter" adapter))
+      (keyword! "configure :adapter" adapter))
     (when (contains? opts :model)
-      (string! "config :model" model))
+      (string! "configure :model" model))
     (when (contains? opts :instructions/suffix)
-      (string! "config :instructions/suffix" suffix))
+      (string! "configure :instructions/suffix" suffix))
     (over k/agent?
           (fn [agent]
             (cond-> agent

@@ -1,6 +1,6 @@
 ---
 title: Clojure
-description: Configure realistic agents in Clojure with pipe, map, iterate, bind, and EDN control outputs.
+description: Configure realistic agents in Clojure with pipe, branch, revise, route, and EDN control outputs.
 ---
 
 This guide builds a launch-readiness assistant directly in Clojure. The
@@ -79,27 +79,27 @@ One specialist profile:
 
 ## Compose workflow data
 
-Clojure keeps the coordination graph as data. `map` gathers reviewer output;
-the brief writer receives the combined mapped text in the next `pipe` step:
+Clojure keeps the coordination graph as data. `branch` gathers reviewer output;
+the brief writer receives the combined branch text in the next `pipe` step:
 
 ```clojure
 (def reviewers
   [product-reviewer engineering-reviewer security-reviewer support-reviewer])
 
 (def review-packet
-  (k/map reviewers :max-concurrency 4))
+  (k/branch reviewers :max-concurrency 4))
 
 (def launch-brief
-  (k/iterate
+  (k/revise
    (k/pipe review-packet brief-writer)
    critic
    :max-rounds 2))
 
 (def workflow
-  (k/bind classifier
-          {:launch launch-brief
-           :incident incident-responder}
-          :default launch-brief))
+  (k/route classifier
+           {:launch launch-brief
+            :incident incident-responder}
+           :default launch-brief))
 ```
 
 ## Swap adapters

@@ -8,12 +8,12 @@
   A <workflow> is JSON mirroring the EDN workflow:
     {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"adapter\":?}
     {\"type\":\"pipe\" \"steps\":[<workflow> ...]}
-    {\"type\":\"map\" \"branches\":[<workflow> ...]}
-    {\"type\":\"map\" \"planner\":<workflow> \"worker\":<workflow>}
-    {\"type\":\"reduce\" \"mapped\":<map-workflow> \"reducer\":<workflow>}
-    {\"type\":\"bind\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
-    {\"type\":\"bind\" \"source\":<workflow> \"to\":<workflow>}
-    {\"type\":\"iterate\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
+    {\"type\":\"branch\" \"branches\":[<workflow> ...] \"max-concurrency\":?}
+    {\"type\":\"delegate\" \"planner\":<workflow> \"worker\":<workflow> \"max-concurrency\":?}
+    {\"type\":\"reduce\" \"source\":<branch-or-delegate-workflow> \"reducer\":<workflow>}
+    {\"type\":\"route\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
+    {\"type\":\"continue\" \"source\":<workflow> \"to\":<workflow>}
+    {\"type\":\"revise\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
   Response is the karcarthy result map as JSON. \"adapter\" is \"mock\" (default,
   offline) or \"claude\". For deterministic offline demos, add
   \"mock-responses\": {\"agent-name\":\"text\"}."
@@ -62,32 +62,34 @@
   "Translate a JSON-parsed workflow map (string keys) into karcarthy workflow data.
   Route labels stay strings; `type`/`adapter` become keywords."
   [m]
-  (let [g #(get m %)]
+  (let [g                #(get m %)
+        with-concurrency #(cond-> %
+                            (g "max-concurrency") (assoc :max-concurrency (g "max-concurrency")))]
     (case (g "type")
       "agent"       (k/agent (g "name") (g "instructions")
                              :model   (g "model")
                              :tools   (g "tools")
                              :adapter (some-> (g "adapter") keyword))
       "pipe"        (apply o/pipe (map json->workflow (g "steps")))
-      "map"         (if (contains? m "branches")
-                      (o/map (map json->workflow (g "branches")))
-                      (o/map (json->workflow (g "planner"))
-                             (json->workflow (g "worker"))))
-      "reduce"      (o/reduce (json->workflow (g "mapped"))
+      "branch"      (with-concurrency
+                      (o/branch (map json->workflow (g "branches"))))
+      "delegate"    (with-concurrency
+                      (o/delegate (json->workflow (g "planner"))
+                                  (json->workflow (g "worker"))))
+      "reduce"      (o/reduce (json->workflow (g "source"))
                                (json->workflow (g "reducer")))
-      "bind"        (if (contains? m "routes")
-                      (let [source (json->workflow (g "source"))
-                            routes (json->routes (g "routes"))]
-                        (if (contains? m "default")
-                          (o/bind source routes :default (json->workflow (g "default")))
-                          (o/bind source routes)))
-                      (o/bind (json->workflow (g "source"))
-                              (json->workflow (g "to"))))
-      "iterate"     (o/iterate (json->workflow (g "worker")) (json->workflow (g "evaluator"))
+      "route"       (let [source (json->workflow (g "source"))
+                          routes (json->routes (g "routes"))]
+                      (if (contains? m "default")
+                        (o/route source routes :default (json->workflow (g "default")))
+                        (o/route source routes)))
+      "continue"    (o/continue (json->workflow (g "source"))
+                                (json->workflow (g "to")))
+      "revise"      (o/revise (json->workflow (g "worker")) (json->workflow (g "evaluator"))
                                :max-rounds (or (g "max-rounds") 3))
       (throw (ex-info (str "unknown workflow type: " (pr-str (g "type"))) {:node m})))))
 
-(defn- mock-response-adapter [responses]
+(defn- mock [responses]
   (if (map? responses)
     (k/mock-adapter
      (fn [{:keys [agent prompt]}]
@@ -96,7 +98,7 @@
          (str "[" (:name agent) "] " prompt))))
     (k/mock-adapter)))
 
-(defn- adapter-for
+(defn- adapter
   "Build the adapter named in the request. \"claude\" uses lean sub-agent
   defaults (replace mode, tools off) so cross-language agents answer directly."
   [req]
@@ -108,7 +110,7 @@
                       :dir                "/tmp/karc"
                       :extra-args         ["--disallowedTools"
                                            "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]})
-      (mock-response-adapter (get req "mock-responses")))))
+      (mock (get req "mock-responses")))))
 
 (defn- result->json [r]
   (try
@@ -116,7 +118,7 @@
     (catch Throwable _
       (json/write-str (select-keys r [:karcarthy/type :ok? :text :agent :rounds :subtasks])))))
 
-(defn- error-result [t]
+(defn- throwable->result [t]
   {:ok false
    :error (.getMessage t)
    :exception (.getName (class t))})
@@ -132,36 +134,36 @@
       (get r "text")
       (result->json r)))
 
-(defn- run-request [req]
+(defn- invoke! [req]
   (let [workflow (json->workflow (get req "workflow"))
         input    (get req "input" "")
-        adapter  (adapter-for req)]
-    (o/run adapter workflow input)))
+        h        (adapter req)]
+    (o/run h workflow input)))
 
-(defn- render-result [result opts]
+(defn- render [result opts]
   (cond
     (:pretty? opts) (result->pretty-json result)
     (:json? opts)   (result->json result)
     :else           (str (result->text result) "\n")))
 
-(defn- read-json [s]
+(defn- json! [s]
   (json/read-str s))
 
-(defn- read-file-or-stdin [path]
+(defn- source! [path]
   (if (= "-" path)
     (slurp *in*)
     (slurp path)))
 
-(defn- missing-value [flag]
+(defn- value! [flag]
   (throw (ex-info (str flag " requires a value") {:flag flag})))
 
-(defn- split-pair [s]
+(defn- mock! [s]
   (let [[k v] (str/split s #"=" 2)]
     (when (or (str/blank? k) (nil? v))
       (throw (ex-info "--mock-response expects AGENT=TEXT" {:value s})))
     [k v]))
 
-(defn- parse-opts [args]
+(defn- opts [args]
   (loop [args (seq args)
          opts {:positionals [] :tools [] :mock-responses {}}]
     (if-not args
@@ -170,23 +172,23 @@
         (case arg
           "--adapter"       (if-let [v (first more)]
                               (recur (next more) (assoc opts :adapter v))
-                              (missing-value arg))
+                              (value! arg))
           "--instructions"  (if-let [v (first more)]
                               (recur (next more) (assoc opts :instructions v))
-                              (missing-value arg))
+                              (value! arg))
           "--input"         (if-let [v (first more)]
                               (recur (next more) (assoc opts :input v))
-                              (missing-value arg))
+                              (value! arg))
           "--model"         (if-let [v (first more)]
                               (recur (next more) (assoc opts :model v))
-                              (missing-value arg))
+                              (value! arg))
           "--tool"          (if-let [v (first more)]
                               (recur (next more) (update opts :tools conj v))
-                              (missing-value arg))
+                              (value! arg))
           "--mock-response" (if-let [v (first more)]
-                              (let [[k text] (split-pair v)]
+                              (let [[k text] (mock! v)]
                                 (recur (next more) (assoc-in opts [:mock-responses k] text)))
-                              (missing-value arg))
+                              (value! arg))
           "--json"          (recur more (assoc opts :json? true))
           "--pretty"        (recur more (assoc opts :json? true :pretty? true))
           "--help"          (recur more (assoc opts :help? true))
@@ -194,66 +196,66 @@
           "--"              (update opts :positionals into more)
           (recur more (update opts :positionals conj arg)))))))
 
-(defn- prompt-input [opts prompt]
+(defn- input [opts prompt]
   (or (:input opts)
       (some->> prompt seq (str/join " "))
       ""))
 
-(defn- with-common-request-opts [req opts]
+(defn- request-opts [req opts]
   (cond-> req
     (:adapter opts)                         (assoc "adapter" (:adapter opts))
     (seq (:mock-responses opts))            (assoc "mock-responses" (:mock-responses opts))))
 
-(defn- agent-request [opts]
+(defn- agent->request [opts]
   (let [[name & prompt] (:positionals opts)]
     (when-not name
       (throw (ex-info "agent requires NAME" {})))
-    (with-common-request-opts
+    (request-opts
       {"workflow" (cond-> {"type"         "agent"
                            "name"         name
                            "instructions" (or (:instructions opts) "Respond to the input.")}
                     (:model opts)       (assoc "model" (:model opts))
                     (seq (:tools opts)) (assoc "tools" (:tools opts)))
-       "input"    (prompt-input opts prompt)}
+       "input"    (input opts prompt)}
       opts)))
 
-(defn- request-from-json [m opts input]
-  (with-common-request-opts
+(defn- json->request [m opts input]
+  (request-opts
     (if (contains? m "workflow")
       (assoc m "input" (or input (get m "input" "")))
       {"workflow" m
        "input"    (or input "")})
     opts))
 
-(defn- run-file-request [opts]
+(defn- file->request [opts]
   (let [[path & prompt] (:positionals opts)]
     (when-not path
       (throw (ex-info "run requires WORKFLOW.json" {})))
-    (request-from-json (read-json (read-file-or-stdin path))
-                       opts
-                       (or (:input opts)
-                           (some->> prompt seq (str/join " "))))))
+    (json->request (json! (source! path))
+                   opts
+                   (or (:input opts)
+                       (some->> prompt seq (str/join " "))))))
 
-(defn- json-stdin-output [opts]
+(defn- json-command! [opts]
   (let [json-opts (assoc opts :json? true)]
     (try
-      (render-result (run-request (read-json (slurp *in*))) json-opts)
+      (render (invoke! (json! (slurp *in*))) json-opts)
       (catch Throwable t
-        (render-result (error-result t) json-opts)))))
+        (render (throwable->result t) json-opts)))))
 
-(defn- command-output [args]
+(defn- dispatch! [args]
   (let [[cmd & rest] args
-        opts (parse-opts rest)]
+        parsed (opts rest)]
     (cond
-      (or (:help? opts) (= cmd "help") (= cmd "--help") (= cmd "-h")) help-text
-      (= cmd "agent")                  (render-result (run-request (agent-request opts)) opts)
-      (= cmd "run")                    (render-result (run-request (run-file-request opts)) opts)
-      (= cmd "json")                   (json-stdin-output opts)
-      (= cmd "demo")                   (render-result (run-request {"workflow" {"type" "agent"
-                                                                                 "name" "echo"
-                                                                                 "instructions" "Echo the input."}
-                                                                    "input"    "hi"})
-                                                     opts)
+      (or (:help? parsed) (= cmd "help") (= cmd "--help") (= cmd "-h")) help-text
+      (= cmd "agent")                  (render (invoke! (agent->request parsed)) parsed)
+      (= cmd "run")                    (render (invoke! (file->request parsed)) parsed)
+      (= cmd "json")                   (json-command! parsed)
+      (= cmd "demo")                   (render (invoke! {"workflow" {"type" "agent"
+                                                                      "name" "echo"
+                                                                      "instructions" "Echo the input."}
+                                                         "input"    "hi"})
+                                               parsed)
       (nil? cmd)                       help-text
       :else                            (throw (ex-info (str "unknown command: " cmd) {:command cmd})))))
 
@@ -262,7 +264,7 @@
   (let [out (try
               (if (and (empty? args) (System/console))
                 help-text
-                (command-output args))
+                (dispatch! args))
               (catch Throwable t
                 (binding [*out* *err*]
                   (println (str "karcarthy: " (.getMessage t)))

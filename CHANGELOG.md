@@ -15,8 +15,8 @@ Early and not yet released. What works so far:
   (`claude -p`, buffered or `stream-json` streaming, sessions via `:resume`),
   `command` (wrap any CLI as an agent), and `openai` (OpenAI Agents SDK via a
   bundled Python bridge).
-- Workflow nodes interpreted by `run`: `pipe`, `map`, `reduce`, `iterate`, and
-  `bind`.
+- Workflow nodes interpreted by `run`: `pipe`, `branch`, `delegate`, `reduce`,
+  `revise`, `route`, and `continue`.
 - `karcarthy.self`: safe EDN parsing for agent-authored workflows and agents,
   plus the `evolve` extension node for runtime instruction/model/tool patches.
 - `karcarthy.schema`: EDN and JSON schema reference values.
@@ -29,5 +29,7 @@ Early and not yet released. What works so far:
 - Adapters selectable by id: pass a registry map `{id -> Adapter}` and set
   `:adapter` on an agent; workflows stay plain data.
 - Usage examples in Java, Kotlin, and Scala; MIT license; CI.
+- JavaScript and Clojure examples for Claude dynamic-agent style workflows and
+  OpenAI Deep Research request setup.
 
 [Unreleased]: https://github.com/soohoonc/karcarthy

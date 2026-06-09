@@ -135,7 +135,7 @@ without changing the graph.
 
 Top-level `run` fails fast for malformed workflows. Composite workflow nodes
 isolate child failures by returning not-ok result maps, so one failed branch
-does not crash an entire `map`.
+does not crash an entire `branch`.
 
 ```clojure
 {:karcarthy/type :result
