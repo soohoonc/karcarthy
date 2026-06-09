@@ -1,7 +1,7 @@
 # Roadmap
 
 karcarthy is a small Clojure experiment: workflows are EDN, Clojure rewrites
-that EDN, and `run` interprets it through an adapter. Future work should make
+that EDN, and `run` interprets it through a runner. Future work should make
 that loop sharper, not broader.
 
 ## Keep sharpening
@@ -13,12 +13,12 @@ that loop sharper, not broader.
 - Improve the rewrite API only when it removes real repetition.
 - Keep the CLI focused on running plain workflow JSON.
 
-## Adapters
+## Runners
 
-- Keep adapters thin: one agent in, one result map out.
+- Keep runners thin: one agent in, one result map out.
 - Add live conformance tests for Claude CLI and OpenAI only as opt-in tests.
 - Avoid turning karcarthy into a tool host; tools stay in SDKs, CLIs, MCP
-  config, or command adapters.
+  config, or subprocess-backed runners.
 
 ## Non-goals
 

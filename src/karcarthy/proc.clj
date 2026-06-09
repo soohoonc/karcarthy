@@ -1,6 +1,7 @@
 (ns karcarthy.proc
   "Subprocess execution with timeout - the shared primitive behind the
-  shell-based adapters (`claude-cli`, `command`, `openai`).
+  subprocess-backed runners (`claude-cli-runner`, `process-runner`,
+  `shell-runner`, `openai-agents-runner`).
 
   Uses `ProcessBuilder` directly (so the process can be killed on timeout) and
   drains stdout/stderr on separate threads to avoid pipe-buffer deadlock."

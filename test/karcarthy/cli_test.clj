@@ -6,13 +6,13 @@
             [karcarthy.cli :as cli]))
 
 (deftest json->workflow-builds-and-runs
-  (testing "a JSON pipe translates to workflow data and runs on the mock adapter"
+  (testing "a JSON pipe translates to workflow data and runs on the mock runner"
     (let [workflow (cli/json->workflow {"type"  "pipe"
                                         "steps" [{"type" "agent" "name" "a" "instructions" "i"}
                                                  {"type" "agent" "name" "b" "instructions" "i"}]})]
       (is (= :pipe (:karcarthy/type workflow)))
       (is (k/agent? (first (:steps workflow))))
-      (is (= "[b] [a] hi" (:text (o/run (k/mock-adapter) workflow "hi")))))))
+      (is (= "[b] [a] hi" (:text (o/run (k/mock-runner) workflow "hi")))))))
 
 (deftest json->workflow-accepts-branch-and-route
   (testing "JSON branch, reduce, and route nodes compile to runnable workflow data"
@@ -57,10 +57,10 @@
 
 (deftest json->agent-workflow-fields
   (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
-                               "model" "haiku" "adapter" "claude"})]
+                               "model" "haiku" "runner" "claude"})]
     (is (= "x" (:name a)))
     (is (= "haiku" (:model a)))
-    (is (= :claude (:adapter a)))))
+    (is (= :claude (:runner a)))))
 
 (deftest json->workflow-accepts-dynamic
   (let [workflow (cli/json->workflow {"type" "dynamic"

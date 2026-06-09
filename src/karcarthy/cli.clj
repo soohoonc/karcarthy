@@ -6,7 +6,7 @@
       ./bin/karcarthy json < request.json
 
   A <workflow> is JSON mirroring the EDN workflow:
-    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"adapter\":?}
+    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"runner\":?}
     {\"type\":\"pipe\" \"steps\":[<workflow> ...]}
     {\"type\":\"branch\" \"branches\":[<workflow> ...] \"max-concurrency\":?}
     {\"type\":\"delegate\" \"planner\":<workflow> \"worker\":<workflow> \"max-concurrency\":?}
@@ -15,7 +15,7 @@
     {\"type\":\"continue\" \"source\":<workflow> \"to\":<workflow>}
     {\"type\":\"revise\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
     {\"type\":\"dynamic\" \"agent\":<agent> \"max-steps\":?}
-  Response is the karcarthy result map as JSON. \"adapter\" is \"mock\" (default,
+  Response is the karcarthy result map as JSON. \"runner\" is \"mock\" (default,
   offline) or \"claude\". For deterministic offline demos, add
   \"mock-responses\": {\"agent-name\":\"text\"}."
   (:gen-class)
@@ -23,7 +23,7 @@
             [clojure.string :as str]
             [karcarthy.core :as k]
             [karcarthy.orchestrate :as o]
-            [karcarthy.adapter.claude :as cc]))
+            [karcarthy.runner.claude :as cc]))
 
 (declare json->workflow)
 
@@ -40,11 +40,11 @@
    "  karcarthy demo\n"
    "\n"
    "Options:\n"
-   "  --adapter NAME          Adapter to use: mock (default) or claude\n"
+   "  --runner NAME          Runner to use: mock (default) or claude\n"
    "  --instructions TEXT     Agent instructions for `agent`\n"
    "  --input TEXT            Input text instead of positional PROMPT\n"
    "  --model NAME            Model hint on the agent node\n"
-   "  --tool NAME             Add an adapter tool allowlist entry; repeatable\n"
+   "  --tool NAME             Add a tool allowlist entry for the selected runner; repeatable\n"
    "  --mock-response A=TEXT  Deterministic mock response for agent A; repeatable\n"
    "  --json                  Print the full result JSON\n"
    "  --pretty                Pretty-print JSON\n"
@@ -61,7 +61,7 @@
 
 (defn json->workflow
   "Translate a JSON-parsed workflow map (string keys) into karcarthy workflow data.
-  Route labels stay strings; `type`/`adapter` become keywords."
+  Route labels stay strings; `type`/`runner` become keywords."
   [m]
   (let [g                #(get m %)
         with-concurrency #(cond-> %
@@ -70,7 +70,7 @@
       "agent"       (k/agent (g "name") (g "instructions")
                              :model   (g "model")
                              :tools   (g "tools")
-                             :adapter (some-> (g "adapter") keyword))
+                             :runner (some-> (g "runner") keyword))
       "pipe"        (apply o/pipe (map json->workflow (g "steps")))
       "branch"      (with-concurrency
                       (o/branch (map json->workflow (g "branches"))))
@@ -94,20 +94,20 @@
 
 (defn- mock [responses]
   (if (map? responses)
-    (k/mock-adapter
+    (k/mock-runner
      (fn [{:keys [agent prompt]}]
        (if (contains? responses (:name agent))
          (str (get responses (:name agent)))
          (str "[" (:name agent) "] " prompt))))
-    (k/mock-adapter)))
+    (k/mock-runner)))
 
-(defn- adapter
-  "Build the adapter named in the request. \"claude\" uses lean sub-agent
+(defn- runner
+  "Build the runner named in the request. \"claude\" uses lean sub-agent
   defaults (replace mode, tools off) so cross-language agents answer directly."
   [req]
-  (let [name (get req "adapter")]
+  (let [name (get req "runner")]
     (if (= name "claude")
-      (cc/claude-cli {:system-prompt-mode :replace
+      (cc/claude-cli-runner {:system-prompt-mode :replace
                       :max-turns          4
                       :model              "haiku"
                       :dir                "/tmp/karc"
@@ -140,7 +140,7 @@
 (defn- invoke! [req]
   (let [workflow (json->workflow (get req "workflow"))
         input    (get req "input" "")
-        h        (adapter req)]
+        h        (runner req)]
     (o/run h workflow input)))
 
 (defn- render [result opts]
@@ -173,8 +173,8 @@
       opts
       (let [[arg & more] args]
         (case arg
-          "--adapter"       (if-let [v (first more)]
-                              (recur (next more) (assoc opts :adapter v))
+          "--runner"       (if-let [v (first more)]
+                              (recur (next more) (assoc opts :runner v))
                               (value! arg))
           "--instructions"  (if-let [v (first more)]
                               (recur (next more) (assoc opts :instructions v))
@@ -206,7 +206,7 @@
 
 (defn- request-opts [req opts]
   (cond-> req
-    (:adapter opts)                         (assoc "adapter" (:adapter opts))
+    (:runner opts)                         (assoc "runner" (:runner opts))
     (seq (:mock-responses opts))            (assoc "mock-responses" (:mock-responses opts))))
 
 (defn- agent->request [opts]

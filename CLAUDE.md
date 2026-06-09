@@ -2,7 +2,7 @@
 
 Homoiconic agent **orchestration** in Clojure. Agents, tools, and workflows are
 plain EDN data; the inner agent loop (model calls + tool execution) is delegated
-to an external **adapter** rather than reimplemented here.
+to an external **runner** rather than reimplemented here.
 
 ## Commands
 
@@ -17,14 +17,14 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 
 | File | Role |
 |------|------|
-| `src/karcarthy/core.clj` | data model (`agent`), spec validation, `result`, the `Adapter` protocol, the offline `mock-adapter`, and the `defagent` macro |
+| `src/karcarthy/core.clj` | data model (`agent`), spec validation, `result`, the `Runner` protocol, `mock-runner`, `fn-runner`, and the `defagent` macro |
 | `src/karcarthy/orchestrate.clj` | the workflow DSL - `pipe` / `map` / `reduce` / `iterate` / `bind`, the `run` interpreter (a `run-node` multimethod), and `defworkflow` / `workflow?` |
 | `src/karcarthy/schema.clj` | EDN and JSON schema reference values for public workflow data |
 | `src/karcarthy/rewrite.clj` | structural workflow rewrites: `agents`, `over`, and `config` |
 | `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node |
-| `src/karcarthy/adapter/claude.clj` | Claude CLI adapter |
-| `src/karcarthy/adapter/command.clj` | command adapter; wrap any CLI as an agent (prompt → stdin, stdout → result) |
-| `src/karcarthy/adapter/openai.clj` | OpenAI Agents SDK adapter via `resources/karcarthy/openai_runner.py` |
+| `src/karcarthy/runner/claude.clj` | Claude CLI runner |
+| `src/karcarthy/runner/process.clj` | process and shell runners; wrap CLIs or shell commands as agents (prompt → stdin, stdout → result) |
+| `src/karcarthy/runner/openai.clj` | OpenAI Agents SDK runner via `resources/karcarthy/openai_runner.py` |
 | `test/…` | mirrors `src/`; the test runner lists namespaces in `test/karcarthy/test_runner.clj` |
 
 ## Conventions
@@ -33,7 +33,7 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
   HTTP uses Java's built-in client or shelling out - no HTTP-client dep.
 - **Everything is data.** Each entity is a map tagged with `:karcarthy/type`
   (`:agent`, `:result`, `:pipe`, `:map`, …). Prefer plain maps over records.
-- **An adapter** implements `karcarthy.core/Adapter` (`-run`) and returns a
+- **A runner** implements `karcarthy.core/Runner` (`-run`) and returns a
   result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
 - **Adding a workflow node:** add a constructor in `orchestrate.clj`, a `run-node`
   defmethod, schema entries in `schema.clj`, and tests.

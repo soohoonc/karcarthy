@@ -63,7 +63,7 @@
 
 (deftest evolve-self-modifies-then-answers
   (testing "the agent patches its own instructions, then answers with new behavior"
-    (let [h (k/mock-adapter
+    (let [h (k/mock-runner
              (fn [{:keys [agent]}]
                ;; until it has 'EVOLVED' instructions, it asks to patch itself
                (if (str/includes? (:instructions agent) "EVOLVED")
@@ -79,7 +79,7 @@
 (deftest evolve-stops-at-max-rounds
   (testing "an agent that always patches is capped, then forced to a final run"
     (let [calls (atom 0)
-          h (k/mock-adapter
+          h (k/mock-runner
              (fn [_]
                (swap! calls inc)
                ;; always returns a patch -> should hit max-rounds and force-finish
@@ -91,7 +91,7 @@
 
 (deftest evolve-no-change-passes-through
   (testing "if the agent answers immediately, no patches are applied"
-    (let [h (k/mock-adapter (fn [_] "immediate answer"))
+    (let [h (k/mock-runner (fn [_] "immediate answer"))
           r (o/run h (self/evolve (k/agent "a" "i")) "x")]
       (is (= "immediate answer" (:text r)))
       (is (= 1 (:rounds r)))
@@ -99,7 +99,7 @@
 
 (deftest evolve-rejects-unknown-patch-keys
   (testing "self-modification cannot smuggle arbitrary agent fields"
-    (let [h (k/mock-adapter
+    (let [h (k/mock-runner
              (fn [_] "{:karcarthy/patch {:name \"renamed\"} :reason \"bad\"}"))
           r (o/run h (self/evolve (k/agent "a" "i")) "x")]
       (is (not (k/ok? r)))
@@ -108,7 +108,7 @@
 
 (deftest evolve-rejects-invalid-patch-values
   (testing "a patch must still produce a valid agent"
-    (let [h (k/mock-adapter
+    (let [h (k/mock-runner
              (fn [_] "{:karcarthy/patch {:tools [42]} :reason \"bad\"}"))
           r (o/run h (self/evolve (k/agent "a" "i")) "x")]
       (is (not (k/ok? r)))

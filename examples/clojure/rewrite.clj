@@ -21,13 +21,13 @@
 
 (def production-workflow
   (->> workflow
-       (k/configure {:adapter :primary
+       (k/configure {:runner :primary
                      :model "claude-sonnet-4"
                      :instructions/suffix "State assumptions before final answer."})))
 
-(def adapter
+(def runner
   {:primary
-   (k/mock-adapter
+   (k/mock-runner
     (fn [{:keys [agent prompt]}]
       (let [last-instruction (last (str/split-lines (:instructions agent)))]
         (str "[" (:name agent) " via " (:model agent) "] "
@@ -39,12 +39,12 @@
 
 (println "\n=== rewritten agents ===")
 (pp/pprint
- (map #(select-keys % [:name :adapter :model :instructions])
+ (map #(select-keys % [:name :runner :model :instructions])
       (k/agents production-workflow)))
 
 (println "\n=== run rewritten workflow ===")
 (println
  (:text
-  (k/run adapter
+  (k/run runner
          production-workflow
          "Why does representing workflows as EDN matter?")))

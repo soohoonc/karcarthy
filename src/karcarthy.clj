@@ -3,10 +3,10 @@
   namespace, so you can use a single alias instead of juggling several:
 
       (require '[karcarthy :as k])
-      (k/run (k/claude-cli {}) (k/pipe a b) \"hi\")
+      (k/run (k/claude-cli-runner {}) (k/pipe a b) \"hi\")
 
   The canonical homes are still `karcarthy.core`, `karcarthy.orchestrate`,
-  `karcarthy.self`, and the implementation adapters; this namespace only
+  `karcarthy.self`, and the implementation runners; this namespace only
   forwards the public surface."
   (:refer-clojure :exclude [agent map iterate reduce])
   (:require [karcarthy.core]
@@ -14,9 +14,9 @@
             [karcarthy.rewrite]
             [karcarthy.schema]
             [karcarthy.self]
-            [karcarthy.adapter.claude]
-            [karcarthy.adapter.command]
-            [karcarthy.adapter.openai]))
+            [karcarthy.runner.claude]
+            [karcarthy.runner.process]
+            [karcarthy.runner.openai]))
 
 (defmacro ^:private export
   "Re-export the var named by the fully-qualified symbol `qsym` into this
@@ -36,12 +36,13 @@
              (alter-meta! (var ~nm) merge '~(select-keys m [:doc :arglists]))
              (var ~nm))))))
 
-;; data model + mock adapter
+;; data model + mock runner
 (export karcarthy.core/agent)
 (export karcarthy.core/agent?)
 (export karcarthy.core/explain-agent)
 (export karcarthy.core/defagent)
-(export karcarthy.core/mock-adapter)
+(export karcarthy.core/mock-runner)
+(export karcarthy.core/fn-runner)
 (export karcarthy.core/result)
 (export karcarthy.core/ok?)
 
@@ -74,7 +75,8 @@
 (export karcarthy.self/read-agent)
 (export karcarthy.self/dsl-reference)
 
-;; Agent SDK/CLI adapters
-(export karcarthy.adapter.claude/claude-cli)
-(export karcarthy.adapter.command/command-adapter)
-(export karcarthy.adapter.openai/openai-agents-sdk)
+;; Agent SDK/CLI runners
+(export karcarthy.runner.claude/claude-cli-runner)
+(export karcarthy.runner.process/process-runner)
+(export karcarthy.runner.process/shell-runner)
+(export karcarthy.runner.openai/openai-agents-runner)

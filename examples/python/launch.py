@@ -2,7 +2,7 @@
 """Launch-readiness tutorial through the karcarthy executable.
 
 The workflow is data, but the agent UX is not a one-line prompt. Each agent is
-configured from role, mission, context, adapter tool allowlists, boundaries,
+configured from role, mission, context, tool allowlists for the selected runner, boundaries,
 tone, output contract, and self-checks before it becomes a plain JSON workflow
 node.
 """
@@ -25,13 +25,13 @@ def render_instructions(profile):
         sections.append("Operating context:\n" + bullet_list(profile["context"]))
     if profile.get("tools"):
         sections.append(
-            "Adapter tool allowlist:\n"
+            "Tool allowlist:\n"
             + bullet_list(profile["tools"])
             + "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
-            + "\nkarcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools."
+            + "\nkarcarthy passes the allowlist; it does not create tool servers. The mock runner ignores tools."
         )
     else:
-        sections.append("Adapter tool allowlist: none. The offline mock adapter ignores tool calls.")
+        sections.append("Tool allowlist: none. The offline mock runner ignores tool calls.")
     sections.extend(
         [
             "Responsibilities:\n" + bullet_list(profile["responsibilities"]),
@@ -62,7 +62,7 @@ launch_context = [
     "Artifact: a launch-readiness brief that can drive a go/no-go meeting.",
     "Evidence packet: enterprise admins requested SSO; rollout is behind a tenant feature flag; p95 auth latency is the watch metric; audit-log signoff is not complete; support has a setup draft but no rollback macro.",
     "Risk posture: be concise, specific, and explicit about missing evidence.",
-    "Use only facts from the user request, operating context, or adapter tool results. Do not invent dates, owners, metrics, or policy claims.",
+    "Use only facts from the user request, operating context, or tool results from the selected runner. Do not invent dates, owners, metrics, or policy claims.",
 ]
 
 classifier = configured_agent(

@@ -1,5 +1,5 @@
-(ns karcarthy.adapter.claude
-  "Adapter that drives the Claude CLI in
+(ns karcarthy.runner.claude
+  "Runner that drives the Claude CLI in
   headless (`-p`) mode. Each agent run is one `claude -p` invocation:
 
     claude -p <prompt> --output-format json
@@ -83,7 +83,7 @@
   {:events [...] :exit n :result <terminal \"result\" event map, or nil>}.
   stderr is merged into stdout; non-JSON lines are ignored. `opts`: :on-event
   :dir :timeout-ms (a watchdog force-kills the process after :timeout-ms).
-  Exposed (and adapter-agnostic) so it can be tested with any line-emitting
+  Exposed (and runner-agnostic) so it can be tested with any line-emitting
   command."
   [argv {:keys [on-event dir timeout-ms]}]
   (let [pb (doto (ProcessBuilder. ^java.util.List (vec argv))
@@ -163,14 +163,14 @@
     (stream agent prompt opts)
     (buffer agent prompt opts)))
 
-(defn claude-cli
-  "Adapter for live execution through the Claude CLI. `default-opts` are merged
+(defn claude-cli-runner
+  "Runner for live execution through the Claude CLI. `default-opts` are merged
   beneath per-run opts (per-run wins). See `command` for command-building
   option keys; additionally `:dir` sets the agent's working directory,
   `:timeout-ms` force-kills a hung run, and `:on-event` (a fn of each stream
   event) streams via --output-format stream-json."
-  ([] (claude-cli {}))
+  ([] (claude-cli-runner {}))
   ([default-opts]
-   (reify k/Adapter
+   (reify k/Runner
      (-run [_ agent prompt opts]
        (invoke! agent prompt (merge default-opts opts))))))

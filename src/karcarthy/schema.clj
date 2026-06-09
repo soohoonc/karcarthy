@@ -16,7 +16,7 @@
                       :instructions :string}
     :optional        {:model :string
                       :tools [:vector :string]
-                      :adapter :keyword}}
+                      :runner :keyword}}
 
    :result
    {:karcarthy/type :result
@@ -87,7 +87,7 @@
   "JSON Schema for CLI workflow objects.
 
   The CLI JSON shape mirrors workflow EDN but uses a `type` string instead of
-  `:karcarthy/type`, and string values for adapter ids."
+  `:karcarthy/type`, and string values for runner ids."
   {"$schema" "https://json-schema.org/draft/2020-12/schema"
    "$id" "https://karcarthy.dev/schema/workflow.json"
    "title" "karcarthy workflow"
@@ -114,7 +114,7 @@
                    "instructions" {"type" "string"}
                    "model" {"type" "string"}
                    "tools" {"type" "array" "items" {"type" "string"}}
-                   "adapter" {"type" "string"}}}
+                   "runner" {"type" "string"}}}
 
     "pipe"
     {"type" "object"

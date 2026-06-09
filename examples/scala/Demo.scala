@@ -14,7 +14,7 @@ object Demo {
     require.invoke(Clojure.read("karcarthy.orchestrate"))
 
     val agent       = Clojure.`var`("karcarthy.core", "agent")
-    val mockAdapter = Clojure.`var`("karcarthy.core", "mock-adapter")
+    val mockRunner = Clojure.`var`("karcarthy.core", "mock-runner")
     val pipe        = Clojure.`var`("karcarthy.orchestrate", "pipe")
     val run         = Clojure.`var`("karcarthy.orchestrate", "run")
     val get         = Clojure.`var`("clojure.core", "get")
@@ -23,7 +23,7 @@ object Demo {
     val summarizer = agent.invoke("summarizer", "Summarize in one line.")
     val workflow   = pipe.invoke(researcher, summarizer)
 
-    val result = run.invoke(mockAdapter.invoke(), workflow, "what is a monad?")
+    val result = run.invoke(mockRunner.invoke(), workflow, "what is a monad?")
     println("ok?  " + get.invoke(result, Clojure.read(":ok?")))
     println("text " + get.invoke(result, Clojure.read(":text")))
   }

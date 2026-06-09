@@ -8,9 +8,9 @@
     karcarthy.core-test
     karcarthy.cli-test
     karcarthy.proc-test
-    karcarthy.adapter.claude-test
-    karcarthy.adapter.command-test
-    karcarthy.adapter.openai-test
+    karcarthy.runner.claude-test
+    karcarthy.runner.process-test
+    karcarthy.runner.openai-test
     karcarthy.orchestrate-test
     karcarthy.dynamic-test
     karcarthy.schema-test

@@ -4,7 +4,7 @@
 ;;   clojure -M -e '(load-file "examples/clojure/launch.clj")'
 ;;
 ;; The workflow is data, but the agent UX is not a one-line prompt. Each agent is
-;; configured from role, mission, context, adapter tool allowlists, boundaries,
+;; configured from role, mission, context, tool allowlists for the selected runner, boundaries,
 ;; tone, output contract, and self-checks before it becomes a plain karcarthy
 ;; agent map.
 
@@ -25,10 +25,10 @@
         (str "Mission: " mission)
         (section "Operating context" (bullets context))
         (if (seq tools)
-          (str "Adapter tool allowlist:\n" (bullets tools)
+          (str "Tool allowlist:\n" (bullets tools)
                "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
-               "\nkarcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools.")
-          "Adapter tool allowlist: none. The offline mock adapter ignores tool calls.")
+               "\nkarcarthy passes the allowlist; it does not create tool servers. The mock runner ignores tools.")
+          "Tool allowlist: none. The offline mock runner ignores tool calls.")
         (section "Responsibilities" (bullets responsibilities))
         (str "Output contract:\n" output)
         (str "Interaction style:\n" tone)
@@ -46,7 +46,7 @@
    "Artifact: a launch-readiness brief that can drive a go/no-go meeting."
    "Evidence packet: enterprise admins requested SSO; rollout is behind a tenant feature flag; p95 auth latency is the watch metric; audit-log signoff is not complete; support has a setup draft but no rollback macro."
    "Risk posture: be concise, specific, and explicit about missing evidence."
-   "Use only facts from the user request, operating context, or adapter tool results. Do not invent dates, owners, metrics, or policy claims."])
+   "Use only facts from the user request, operating context, or tool results from the selected runner. Do not invent dates, owners, metrics, or policy claims."])
 
 (def classifier
   (configured-agent
@@ -181,8 +181,8 @@
             :incident incident-responder}
            :default launch-brief))
 
-(def adapter
-  (k/mock-adapter
+(def runner
+  (k/mock-runner
    (fn [{:keys [agent prompt]}]
      (case (:name agent)
        "classifier" (if (str/includes? (str/lower-case prompt) "incident")
@@ -222,7 +222,7 @@
 (println "route(classifier, {launch: revise(pipe(branch(reviewers), brief-writer), critic), incident})")
 
 (println "\nresult:")
-(let [r (k/run adapter workflow
+(let [r (k/run runner workflow
                "Prepare the launch brief for a new enterprise SSO feature.")]
   (println (:text r))
   (println "\nrounds:" (:rounds r) "accepted?" (:accepted? r)))

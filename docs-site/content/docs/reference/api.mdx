@@ -14,7 +14,7 @@ Use the facade namespace for normal application code:
 ### `agent`
 
 ```clojure
-(k/agent name instructions & {:keys [model tools adapter]})
+(k/agent name instructions & {:keys [model tools runner]})
 ```
 
 Builds an agent map.
@@ -22,10 +22,10 @@ Builds an agent map.
 | Parameter | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `name` | string | yes | Stable agent name used in results, logs, and mock responses. |
-| `instructions` | string | yes | Role/system instructions passed to the adapter. |
-| `:model` | string | no | Adapter-specific model selector. |
-| `:tools` | vector of strings | no | Adapter tool allowlist. Tools must already exist in the selected adapter environment. |
-| `:adapter` | keyword | no | Adapter registry key used by `run`. |
+| `instructions` | string | yes | Role/system instructions passed to the runner. |
+| `:model` | string | no | Runner-specific model selector. |
+| `:tools` | vector of strings | no | Tool allowlist. Tools must already exist in the selected runner environment. |
+| `:runner` | keyword | no | Runner registry key used by `run`. |
 
 Returns:
 
@@ -35,7 +35,7 @@ Returns:
  :instructions "Find launch risks."
  :model "sonnet"
  :tools ["mcp__feedback__search"]
- :adapter :claude}
+ :runner :claude}
 ```
 
 Example:
@@ -183,7 +183,7 @@ Builds a workflow whose agent emits EDN ops while the run is in progress.
 Run it with the same `run` function as any other workflow:
 
 ```clojure
-(k/run adapter
+(k/run runner
        (k/dynamic workflow-agent :max-steps 25)
        "audit this migration")
 ```
@@ -244,7 +244,7 @@ for the CLI JSON bridge.
 
 ## Rewrites
 
-Workflow rewrites operate on EDN before execution. They never call adapters and
+Workflow rewrites operate on EDN before execution. They never call runners and
 never use `eval`.
 
 ### `agents`
@@ -280,14 +280,14 @@ Applies common agent configuration in one pass. Supported keys:
 
 | Key | Meaning |
 | --- | --- |
-| `:adapter` | Adapter registry key. |
+| `:runner` | Runner registry key. |
 | `:model` | Model selector string. |
 | `:instructions/suffix` | Text appended to every agent instruction. |
 
 ```clojure
 (def production-workflow
   (->> workflow
-       (k/configure {:adapter :claude
+       (k/configure {:runner :claude
                      :model "claude-sonnet-4"
                      :instructions/suffix "State assumptions before final answer."})))
 ```
@@ -297,14 +297,14 @@ Applies common agent configuration in one pass. Supported keys:
 ### `run`
 
 ```clojure
-(k/run adapter workflow input)
-(k/run adapter workflow input opts)
+(k/run runner workflow input)
+(k/run runner workflow input opts)
 ```
 
-Interprets workflow data through an adapter or adapter registry.
+Interprets workflow data through a runner or runner registry.
 
 ```clojure
-(k/run (k/mock-adapter)
+(k/run (k/mock-runner)
        (k/pipe researcher summarizer)
        "map the agent framework space")
 ```
@@ -326,7 +326,7 @@ exceptions into not-ok result maps.
 Pass `:observe` to receive OpenTelemetry-compatible span events as plain data:
 
 ```clojure
-(k/run (k/mock-adapter)
+(k/run (k/mock-runner)
        (k/pipe researcher summarizer)
        "map the agent framework space"
        {:observe (fn [event] ...)})
@@ -353,51 +353,67 @@ For OpenTelemetry, start a span on `:start`, end it on `:finish` or `:error`,
 use `:name` as the span name, and attach `:attributes`. karcarthy does not take
 an OpenTelemetry dependency.
 
-## Adapters
+## Runners
 
-### `mock-adapter`
+### `mock-runner`
 
 ```clojure
-(k/mock-adapter)
-(k/mock-adapter respond-fn)
+(k/mock-runner)
+(k/mock-runner respond-fn)
 ```
 
-Offline deterministic adapter for tests and examples.
+Offline deterministic runner for tests and examples.
 
 ```clojure
-(k/mock-adapter
+(k/mock-runner
  (fn [{:keys [agent prompt]}]
    (str "[" (:name agent) "] " prompt)))
 ```
 
-### `claude-cli`
+### `fn-runner`
 
 ```clojure
-(k/claude-cli)
-(k/claude-cli default-opts)
+(k/fn-runner f)
+```
+
+Wraps a Clojure function as a runner. The function receives
+`{:agent agent :prompt prompt :opts opts}` and may return text, a partial result
+map, or a full result map.
+
+```clojure
+(k/fn-runner
+ (fn [{:keys [prompt]}]
+   (clojure.string/upper-case prompt)))
+```
+
+### `claude-cli-runner`
+
+```clojure
+(k/claude-cli-runner)
+(k/claude-cli-runner default-opts)
 ```
 
 Runs agent calls through the Claude CLI. Common options include model, working
 directory, turn limits, and extra Claude CLI args.
 
 ```clojure
-(k/claude-cli {:model "haiku"
+(k/claude-cli-runner {:model "haiku"
                :max-turns 4})
 ```
 
-### `command-adapter`
+### `process-runner`
 
 ```clojure
-(k/command-adapter argv-or-fn)
-(k/command-adapter argv-or-fn opts)
+(k/process-runner argv-or-fn)
+(k/process-runner argv-or-fn opts)
 ```
 
 Wraps a local command. The command receives the prompt on stdin and stdout
 becomes result text.
 
 ```clojure
-(k/command-adapter ["tr" "a-z" "A-Z"])
-(k/command-adapter (fn [agent] ["ollama" "run" (:model agent)])
+(k/process-runner ["tr" "a-z" "A-Z"])
+(k/process-runner (fn [agent] ["ollama" "run" (:model agent)])
                    {:timeout-ms 120000})
 ```
 
@@ -410,31 +426,51 @@ Options:
 | `:dir` | Working directory. |
 | `:timeout-ms` | Kill the command after this many milliseconds. |
 
-### `openai-agents-sdk`
+### `shell-runner`
 
 ```clojure
-(k/openai-agents-sdk)
-(k/openai-agents-sdk default-opts)
+(k/shell-runner command-or-fn)
+(k/shell-runner command-or-fn opts)
+```
+
+Wraps a shell command string. The command receives the prompt on stdin and
+stdout becomes result text.
+
+```clojure
+(k/shell-runner "tr a-z A-Z")
+```
+
+Options match `process-runner`, with one addition:
+
+| Option | Meaning |
+| --- | --- |
+| `:shell` | argv prefix used to launch the shell; defaults to `["sh" "-lc"]`. |
+
+### `openai-agents-runner`
+
+```clojure
+(k/openai-agents-runner)
+(k/openai-agents-runner default-opts)
 ```
 
 Delegates single-agent calls to the OpenAI Agents SDK bridge.
 
 ```clojure
-(k/openai-agents-sdk {:python-bin "python3"
+(k/openai-agents-runner {:python-bin "python3"
                       :timeout-ms 120000})
 ```
 
-### Adapter registries
+### Runner registries
 
 ```clojure
-(def adapters
-  {:default (k/mock-adapter)
-   :claude  (k/claude-cli {})})
+(def runners
+  {:default (k/mock-runner)
+   :claude  (k/claude-cli-runner {})})
 
-(k/run adapters
+(k/run runners
        (k/pipe
-        (k/agent "planner" "Plan." :adapter :claude)
-        (k/agent "checker" "Check." :adapter :default))
+        (k/agent "planner" "Plan." :runner :claude)
+        (k/agent "checker" "Check." :runner :default))
        "ship the docs")
 ```
 

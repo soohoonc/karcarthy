@@ -41,10 +41,10 @@ map with an instruction string.
         (str "Mission: " mission)
         (section "Operating context" (bullets context))
         (if (seq tools)
-          (str "Adapter tool allowlist:\n" (bullets tools)
+          (str "Tool allowlist:\n" (bullets tools)
                "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
-               "\nkarcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools.")
-          "Adapter tool allowlist: none. The offline mock adapter ignores tool calls.")
+               "\nkarcarthy passes the allowlist; it does not create tool servers. The mock runner ignores tools.")
+          "Tool allowlist: none. The offline mock runner ignores tool calls.")
         (section "Responsibilities" (bullets responsibilities))
         (str "Output contract:\n" output)
         (str "Interaction style:\n" tone)
@@ -102,8 +102,8 @@ the brief writer receives the combined branch text in the next `pipe` step:
            :default launch-brief))
 ```
 
-## Swap adapters
+## Swap runners
 
-The offline adapter returns deterministic specialist notes and a final launch
-brief. Swap the adapter for `claude-cli`, `command-adapter`, or another adapter
+The offline runner returns deterministic specialist notes and a final launch
+brief. Swap the runner for `claude-cli-runner`, `process-runner`, or another runner
 when you want the same configured workflow to call a live agent system.

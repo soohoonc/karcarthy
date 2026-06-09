@@ -5,9 +5,9 @@
             [karcarthy.core :as k]
             [karcarthy.orchestrate :as o]))
 
-;; The default mock adapter replies "[<agent-name>] <input>", which makes
+;; The default mock runner replies "[<agent-name>] <input>", which makes
 ;; threading and routing deterministic to assert.
-(def ^:private h (k/mock-adapter))
+(def ^:private h (k/mock-runner))
 
 (def ^:private a (k/agent "a" "i"))
 (def ^:private b (k/agent "b" "i"))
@@ -17,10 +17,10 @@
 (def ^:private router (k/agent "router" "reply with {:route ...}"))
 (def ^:private reducer (k/agent "reducer" "reduce source EDN results"))
 
-(defn- scripted-adapter
-  "Mock adapter whose response map may contain strings or prompt fns by agent name."
+(defn- scripted-runner
+  "Mock runner whose response map may contain strings or prompt fns by agent name."
   [responses]
-  (k/mock-adapter
+  (k/mock-runner
    (fn [{:keys [agent prompt]}]
      (if (contains? responses (:name agent))
        (let [response (get responses (:name agent))]
@@ -29,17 +29,17 @@
            response))
        (str "[" (:name agent) "] " prompt)))))
 
-;; An adapter whose named agents fail, to exercise short-circuiting.
-(defn- failing-adapter [fail-names]
-  (reify k/Adapter
+;; A runner whose named agents fail, to exercise short-circuiting.
+(defn- failing-runner [fail-names]
+  (reify k/Runner
     (-run [_ agent prompt _]
       (k/result {:agent (:name agent)
                  :ok?   (not (contains? fail-names (:name agent)))
                  :text  (str "[" (:name agent) "] " prompt)}))))
 
-;; An adapter that throws for named agents, to exercise fault isolation.
-(defn- throwing-adapter [throw-names]
-  (reify k/Adapter
+;; A runner that throws for named agents, to exercise fault isolation.
+(defn- throwing-runner [throw-names]
+  (reify k/Runner
     (-run [_ agent prompt _]
       (if (contains? throw-names (:name agent))
         (throw (ex-info "boom" {:agent (:name agent)}))
@@ -69,7 +69,7 @@
 
 (deftest pipe-short-circuits-on-failure
   (testing "a failing step stops the pipe and is returned"
-    (let [r (o/run (failing-adapter #{"b"}) (o/pipe a b c) "hi")]
+    (let [r (o/run (failing-runner #{"b"}) (o/pipe a b c) "hi")]
       (is (not (k/ok? r)))
       (is (= "b" (:agent r)))
       (is (not (str/includes? (:text r) "[c]"))))))
@@ -84,19 +84,19 @@
 
 (deftest branch-ok-requires-all-results
   (testing "one failing branch makes the whole node not-ok"
-    (let [r (o/run (failing-adapter #{"b"}) (o/branch [a b c]) "hi")]
+    (let [r (o/run (failing-runner #{"b"}) (o/branch [a b c]) "hi")]
       (is (not (k/ok? r)))
       (is (= 3 (count (:results r)))))))
 
 (deftest reduce-runs-a-reducer-workflow
   (testing "reduce is a workflow node, not a host function stored in data"
-    (let [adapter (scripted-adapter
+    (let [runner (scripted-runner
                    {"reducer" (fn [prompt]
                                 (->> (:results (edn/read-string prompt))
                                      (map :text)
                                      (str/join "|")))})
           flow    (o/reduce (o/branch [a b c]) reducer)
-          r       (o/run adapter flow "hi")]
+          r       (o/run runner flow "hi")]
       (is (k/ok? r))
       (is (= "[a] hi|[b] hi|[c] hi" (:text r)))
       (is (= :result (:karcarthy/type (:source r))))
@@ -105,48 +105,48 @@
 
 (deftest delegate-reads-structured-edn-subtasks
   (testing "a planner's reply is EDN data, not a scraped bullet list"
-    (let [adapter (scripted-adapter
+    (let [runner (scripted-runner
                    {"planner" "{:subtasks [\"alpha\" \"beta\" \"gamma\"]}"})
           flow    (o/delegate planner a)
-          r       (o/run adapter flow "do stuff")]
+          r       (o/run runner flow "do stuff")]
       (is (k/ok? r))
       (is (= ["alpha" "beta" "gamma"] (:subtasks r)))
       (is (= ["[a] alpha" "[a] beta" "[a] gamma"] (map :text (:results r)))))))
 
 (deftest delegate-rejects-unstructured-subtasks
   (testing "planner prose is a failed EDN reply"
-    (let [adapter (scripted-adapter {"planner" "- alpha\n- beta"})
-          r       (o/run adapter (o/delegate planner a) "do stuff")]
+    (let [runner (scripted-runner {"planner" "- alpha\n- beta"})
+          r       (o/run runner (o/delegate planner a) "do stuff")]
       (is (not (k/ok? r)))
       (is (= :invalid-subtasks (:error r))))))
 
 (deftest delegate-bounded-concurrency
   (testing "all subtasks run correctly even with a small concurrency bound"
-    (let [adapter (scripted-adapter
+    (let [runner (scripted-runner
                    {"planner" "{:subtasks [\"0\" \"1\" \"2\" \"3\" \"4\"]}"})
           flow    (o/delegate planner a :max-concurrency 2)
-          r       (o/run adapter flow "in")]
+          r       (o/run runner flow "in")]
       (is (= 5 (count (:results r))))
       (is (= (mapv #(str "[a] " %) (range 5)) (mapv :text (:results r)))))))
 
 (deftest delegate-reduce
   (testing "a reducer workflow combines planned worker results"
-    (let [adapter (scripted-adapter
+    (let [runner (scripted-runner
                    {"planner" "{:subtasks [\"p\" \"q\"]}"
                     "reducer" (fn [prompt]
                                 (->> (:results (edn/read-string prompt))
                                      (map :text)
                                      (str/join "+")))})
           flow    (o/reduce (o/delegate planner a) reducer)
-          r       (o/run adapter flow "in")]
+          r       (o/run runner flow "in")]
       (is (= "[a] p+[a] q" (:text r)))
       (is (= ["p" "q"] (get-in r [:source :subtasks]))))))
 
 (deftest revise-accepts-immediately
   (testing "an evaluator accepts by returning EDN {:accept? true}"
-    (let [adapter (scripted-adapter {"judge" "{:accept? true}"})
+    (let [runner (scripted-runner {"judge" "{:accept? true}"})
           flow    (o/revise a judge)
-          r       (o/run adapter flow "topic")]
+          r       (o/run runner flow "topic")]
       (is (k/ok? r))
       (is (true? (:accepted? r)))
       (is (= 1 (:rounds r)))
@@ -154,9 +154,9 @@
 
 (deftest revise-loops-to-max-rounds
   (testing "EDN feedback drives revision until :max-rounds"
-    (let [adapter (scripted-adapter {"judge" "{:accept? false :feedback \"more\"}"})
+    (let [runner (scripted-runner {"judge" "{:accept? false :feedback \"more\"}"})
           flow    (o/revise a judge :max-rounds 3)
-          r       (o/run adapter flow "topic")]
+          r       (o/run runner flow "topic")]
       (is (false? (:accepted? r)))
       (is (= 3 (:rounds r)))
       (is (str/includes? (:text r) "topic")))))
@@ -164,58 +164,58 @@
 (deftest revise-accepts-on-later-round
   (testing "the loop revises until the evaluator accepts"
     (let [calls   (atom 0)
-          adapter (scripted-adapter
+          runner (scripted-runner
                    {"judge" (fn [_]
                               (if (>= (swap! calls inc) 2)
                                 "{:accept? true}"
                                 "{:accept? false :feedback \"f\"}"))})
           flow    (o/revise a judge :max-rounds 5)
-          r       (o/run adapter flow "x")]
+          r       (o/run runner flow "x")]
       (is (true? (:accepted? r)))
       (is (= 2 (:rounds r))))))
 
 (deftest revise-bails-on-worker-failure
   (testing "a failing worker short-circuits the revision loop"
-    (let [r (o/run (failing-adapter #{"a"}) (o/revise a judge) "x")]
+    (let [r (o/run (failing-runner #{"a"}) (o/revise a judge) "x")]
       (is (not (k/ok? r)))
       (is (= "a" (:agent r))))))
 
 (deftest route-with-agent-source
   (testing "a router source selects a branch with EDN {:route ...}"
-    (let [adapter (scripted-adapter {"router" "{:route :billing}"})
+    (let [runner (scripted-runner {"router" "{:route :billing}"})
           flow    (o/route router {:billing a :support b})]
-      (is (= "[a] refund please" (:text (o/run adapter flow "refund please")))))))
+      (is (= "[a] refund please" (:text (o/run runner flow "refund please")))))))
 
 (deftest route-no-match
   (testing "an unmatched route yields a not-ok :no-route result"
-    (let [adapter (scripted-adapter {"router" "{:route :nope}"})
+    (let [runner (scripted-runner {"router" "{:route :nope}"})
           flow    (o/route router {:yes a})
-          r       (o/run adapter flow "hi")]
+          r       (o/run runner flow "hi")]
       (is (not (k/ok? r)))
       (is (= :no-route (:error r)))
       (is (= :nope (:label r))))))
 
 (deftest route-default
   (testing ":default is used when no route matches"
-    (let [adapter (scripted-adapter {"router" "{:route :nope}"})
+    (let [runner (scripted-runner {"router" "{:route :nope}"})
           flow    (o/route router {:yes a} :default b)
-          r       (o/run adapter flow "hi")]
+          r       (o/run runner flow "hi")]
       (is (k/ok? r))
       (is (= "[b] hi" (:text r))))))
 
 (deftest route-rejects-prose
   (testing "router prose is a failed EDN reply"
-    (let [adapter (scripted-adapter {"router" "billing"})
+    (let [runner (scripted-runner {"router" "billing"})
           flow    (o/route router {:billing a})
-          r       (o/run adapter flow "hi")]
+          r       (o/run runner flow "hi")]
       (is (not (k/ok? r)))
       (is (= :invalid-route (:error r))))))
 
 (deftest route-is-exact
   (testing "substring and case-insensitive routing are not part of the language"
-    (let [adapter (scripted-adapter {"router" "{:route \"BILLING\"}"})
+    (let [runner (scripted-runner {"router" "{:route \"BILLING\"}"})
           flow    (o/route router {"billing" a})
-          r       (o/run adapter flow "refund")]
+          r       (o/run runner flow "refund")]
       (is (not (k/ok? r)))
       (is (= :no-route (:error r))))))
 
@@ -227,8 +227,8 @@
 
 ;; Records each call's :resume opt and returns a per-agent session id, so we can
 ;; assert that continuation threads the session forward.
-(defn- session-recording-adapter [log]
-  (reify k/Adapter
+(defn- session-recording-runner [log]
+  (reify k/Runner
     (-run [_ agent prompt opts]
       (swap! log conj {:agent (:name agent) :prompt prompt :resume (:resume opts)})
       (k/result {:agent      (:name agent)
@@ -238,7 +238,7 @@
 (deftest continuation-threads-session
   (testing "to inherits source text as input and source session as :resume"
     (let [log (atom [])
-          r   (o/run (session-recording-adapter log) (o/continue a b) "hi")]
+          r   (o/run (session-recording-runner log) (o/continue a b) "hi")]
       (is (k/ok? r))
       (is (= "[b] [a] hi" (:text r)))
       (is (= [{:agent "a" :prompt "hi"     :resume nil}
@@ -248,20 +248,20 @@
 (deftest continuation-prompt-override
   (testing ":prompt overrides the handed-off input"
     (let [log (atom [])
-          r   (o/run (session-recording-adapter log)
+          r   (o/run (session-recording-runner log)
                      (o/continue a b :prompt "explicit") "hi")]
       (is (= "[b] explicit" (:text r)))
       (is (= "explicit" (:prompt (second @log)))))))
 
 (deftest continuation-bails-on-source-failure
   (testing "if the source agent fails, continue returns that failure"
-    (let [r (o/run (failing-adapter #{"a"}) (o/continue a b) "hi")]
+    (let [r (o/run (failing-runner #{"a"}) (o/continue a b) "hi")]
       (is (not (k/ok? r)))
       (is (= "a" (:agent r))))))
 
 (deftest branch-isolates-throwing-workflow
   (testing "a branch that throws becomes a not-ok result; siblings are unaffected"
-    (let [r (o/run (throwing-adapter #{"b"}) (o/branch [a b c]) "hi")]
+    (let [r (o/run (throwing-runner #{"b"}) (o/branch [a b c]) "hi")]
       (is (not (k/ok? r)))
       (is (= 3 (count (:results r))))
       (is (= [true false true] (mapv k/ok? (:results r))))
@@ -302,11 +302,11 @@
       (is (some? ex))
       (is (str/includes? msgs "not a runnable workflow")))))
 
-(deftest workflow-over-adapter-registry
-  (testing "a registry threads through orchestration; each agent uses its adapter"
-    (let [reg  {:up      (k/mock-adapter (fn [{:keys [prompt]}] (str/upper-case prompt)))
-                :default (k/mock-adapter (fn [{:keys [prompt]}] prompt))}
-          flow (o/pipe (k/agent "shout" "i" :adapter :up) (k/agent "echo" "i"))]
+(deftest workflow-over-runner-registry
+  (testing "a registry threads through orchestration; each agent uses its runner"
+    (let [reg  {:up      (k/mock-runner (fn [{:keys [prompt]}] (str/upper-case prompt)))
+                :default (k/mock-runner (fn [{:keys [prompt]}] prompt))}
+          flow (o/pipe (k/agent "shout" "i" :runner :up) (k/agent "echo" "i"))]
       (is (= "HI" (:text (o/run reg flow "hi")))))))
 
 (deftest observe-emits-span-compatible-events

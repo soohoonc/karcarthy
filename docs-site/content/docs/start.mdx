@@ -4,7 +4,7 @@ description: Build the CLI, run one agent, run one workflow file, then use the C
 ---
 
 This page gets you to a successful local run first. The examples use the mock
-adapter, so they do not call a model or require API keys.
+runner, so they do not call a model or require API keys.
 
 ## Requirements
 
@@ -96,12 +96,12 @@ Then build and run a workflow:
 (k/defagent summarizer
   "Summarize the findings in one sentence.")
 
-(k/run (k/mock-adapter)
+(k/run (k/mock-runner)
        (k/pipe researcher summarizer)
        "what is a monad?")
 ```
 
-The result shape is stable across adapters:
+The result shape is stable across runners:
 
 ```clojure
 {:karcarthy/type :result
@@ -113,6 +113,6 @@ The result shape is stable across adapters:
 ## 5. Next steps
 
 - Learn how data flows through [workflows](/docs/workflows).
-- Swap the mock for Claude CLI or command-backed systems in [adapters](/docs/adapters).
+- Swap the mock for Claude CLI, process, shell, or SDK-backed systems in [runners](/docs/runners).
 - Build a realistic launch-readiness workflow in [tutorials](/docs/tutorials).
 - Look up exact function signatures in [reference](/docs/reference).

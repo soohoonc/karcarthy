@@ -32,13 +32,13 @@ def render_instructions(profile):
         sections.append("Operating context:\n" + bullet_list(profile["context"]))
     if profile.get("tools"):
         sections.append(
-            "Adapter tool allowlist:\n"
+            "Tool allowlist:\n"
             + bullet_list(profile["tools"])
             + "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
-            + "\nkarcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools."
+            + "\nkarcarthy passes the allowlist; it does not create tool servers. The mock runner ignores tools."
         )
     else:
-        sections.append("Adapter tool allowlist: none. The offline mock adapter ignores tool calls.")
+        sections.append("Tool allowlist: none. The offline mock runner ignores tool calls.")
     sections.extend(
         [
             "Responsibilities:\n" + bullet_list(profile["responsibilities"]),
@@ -113,9 +113,9 @@ workflow = {
 }
 ```
 
-## Swap adapters
+## Swap runners
 
-With a live adapter, the same configured agents and workflow delegate each
+With a live runner, the same configured agents and workflow delegate each
 single-agent call to the selected Agent SDK or CLI.
 
 ## Why replies are EDN

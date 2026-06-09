@@ -4,8 +4,8 @@ description: Data-first agent orchestration for Clojure and command-line workflo
 ---
 
 karcarthy coordinates multi-agent workflows while keeping the plan as ordinary
-data. The model/tool loop belongs to an adapter such as Claude CLI, the OpenAI
-Agents SDK bridge, a command process, or the local mock adapter. karcarthy owns
+data. The model/tool loop belongs to a runner such as Claude CLI, the OpenAI
+Agents SDK bridge, a process or shell command, or the local mock runner. karcarthy owns
 the orchestration value above those systems.
 
 ```clojure
@@ -14,7 +14,7 @@ the orchestration value above those systems.
 (k/defagent researcher "Research the question and cite sources.")
 (k/defagent summarizer "Summarize the findings in one sentence.")
 
-(k/run (k/mock-adapter)
+(k/run (k/mock-runner)
        (k/pipe researcher summarizer)
        "what is a monad?")
 ```
@@ -39,12 +39,12 @@ and parsed without `eval`. Clojure code can also rewrite it before execution:
 
 ```clojure
 (->> workflow
-     (k/configure {:adapter :claude
+     (k/configure {:runner :claude
                    :model "claude-sonnet-4"
                    :instructions/suffix "State assumptions before final answer."}))
 ```
 
-The adapter still owns model calls and tools. karcarthy owns the visible
+The runner still owns model calls and tools. karcarthy owns the visible
 coordination value and the small interpreter for that value.
 
 ## What you can build
@@ -53,7 +53,7 @@ coordination value and the small interpreter for that value.
 | --- | --- |
 | Run one agent or workflow file from the command line | [Quickstart](/docs/start) |
 | Understand how data moves through `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic` | [Build Workflows](/docs/workflows) |
-| Swap mock execution for Claude CLI, OpenAI Agents SDK, or a command process | [Use Adapters](/docs/adapters) |
+| Swap mock execution for Claude CLI, OpenAI Agents SDK, a process, or a shell command | [Use Runners](/docs/runners) |
 | Build a realistic launch-readiness workflow | [Tutorials](/docs/tutorials) |
 | Look up signatures and JSON shapes | [Reference](/docs/reference) |
 
@@ -64,7 +64,7 @@ coordination value and the small interpreter for that value.
 | Agents | Plain maps tagged with `:karcarthy/type :agent`. |
 | Workflows | `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic`. |
 | Rewrites | `agents`, `over`, and `configure`. |
-| Adapters | Mock, Claude CLI, command processes, and OpenAI Agents SDK bridge. |
+| Runners | Mock, Clojure function, process, shell, Claude CLI, and OpenAI Agents SDK bridge. |
 | CLI | `bin/karcarthy agent`, `run`, `demo`, and `json`. |
 
 ## Current status
@@ -76,6 +76,6 @@ internals out of the main path.
 <Cards>
   <Card title="Quickstart" href="/docs/start" />
   <Card title="Build Workflows" href="/docs/workflows" />
-  <Card title="Use Adapters" href="/docs/adapters" />
+  <Card title="Use Runners" href="/docs/runners" />
   <Card title="Reference" href="/docs/reference" />
 </Cards>

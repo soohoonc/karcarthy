@@ -12,7 +12,7 @@ Run from the repo root:
 from karcarthy import run
 
 
-# 1) A workflow is data: a pipe of two agents, run on the offline mock adapter.
+# 1) A workflow is data: a pipe of two agents, run on the offline mock runner.
 workflow = {"type": "pipe", "steps": [
     {"type": "agent", "name": "researcher", "instructions": "Research the question."},
     {"type": "agent", "name": "summarizer", "instructions": "Summarize in one line."},

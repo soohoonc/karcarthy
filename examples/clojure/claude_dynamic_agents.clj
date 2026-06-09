@@ -157,8 +157,8 @@
        "- Treat unknown owner/date/metric fields as explicit gaps, not assumptions.\n"
        "- Return a mission frame that downstream agents can use as their only context."))
 
-(def offline-adapter
-  (k/mock-adapter
+(def offline-runner
+  (k/mock-runner
    (fn [{:keys [agent prompt]}]
      (case (:name agent)
        "adaptive-lead"
@@ -210,9 +210,9 @@
        "critic" "{:accept? true}"
        (str "[" (:name agent) "] " prompt)))))
 
-(defn live-claude-adapter []
+(defn live-claude-runner []
   (let [model (System/getenv "KARCARTHY_CLAUDE_MODEL")]
-    (k/claude-cli
+    (k/claude-cli-runner
      (cond-> {:system-prompt-mode :replace
               :max-turns 6
               :timeout-ms (* 10 60 1000)
@@ -234,9 +234,9 @@
 (defn -main [& _]
   (let [events (atom [])
         live? (boolean (System/getenv "KARCARTHY_CLAUDE_LIVE"))
-        adapter (if live? (live-claude-adapter) offline-adapter)
+        runner (if live? (live-claude-runner) offline-runner)
         runnable-workflow (if live? (strip-agent-tools workflow) workflow)
-        result (k/run adapter runnable-workflow
+        result (k/run runner runnable-workflow
                       "Prepare a migration-readiness memo for the card-token vault migration."
                       {:observe #(swap! events conj %)})]
     (println "=== Claude dynamic-agent workflow ===")

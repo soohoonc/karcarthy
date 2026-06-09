@@ -21,7 +21,7 @@
     evaluator {:accept? true} or {:accept? false :feedback \"...\"}
     router    {:route :some-route}
 
-  `run` interprets a workflow through an adapter.
+  `run` interprets a workflow through a runner.
 
   Every workflow run returns a `karcarthy.core` result map, so workflows compose: the
   output of one is valid input to another. Composite nodes are fault-isolated,
@@ -116,7 +116,7 @@
 
 (defn continue
   "Run `source`, then send its result text to `to`, preserving session ids when
-  the adapter supports them. Options:
+  the runner supports them. Options:
     :prompt  override the prompt sent to `to`."
   [source to & {:keys [prompt] :as opts}]
   (if (contains? opts :prompt)
@@ -149,9 +149,9 @@
 (defmulti run-node
   "Execute one workflow node, dispatching on (:karcarthy/type node). This is the
   interpreter's extension point: teach it a new node by adding a constructor and
-  a `(defmethod run-node :your-type [adapter node input opts] ...)` returning a
+  a `(defmethod run-node :your-type [runner node input opts] ...)` returning a
   `karcarthy.core` result. See `karcarthy.self` for examples (`:evolve`)."
-  (fn [_adapter node _input _opts] (:karcarthy/type node)))
+  (fn [_runner node _input _opts] (:karcarthy/type node)))
 
 (defmulti node?
   "Validate a non-core workflow node for `workflow?`.
@@ -210,9 +210,9 @@
   "Run a child workflow, converting a thrown exception into a not-ok result so one
   bad branch can't crash a whole multi-agent run. Composite nodes run their
   children through this; top-level `run` stays transparent (fail fast)."
-  [adapter workflow input opts]
+  [runner workflow input opts]
   (try
-    (run adapter workflow input opts)
+    (run runner workflow input opts)
     (catch Throwable t
       (k/result {:ok?       false
                  :text      nil
@@ -269,31 +269,31 @@
 ;; --- canonical nodes --------------------------------------------------------
 
 (defmethod run-node :agent
-  [adapter agent input opts]
-  (k/run-agent adapter agent input opts))
+  [runner agent input opts]
+  (k/run-agent runner agent input opts))
 
 (defmethod run-node :pipe
-  [adapter {:keys [steps]} input opts]
+  [runner {:keys [steps]} input opts]
   (loop [input input, indexed-steps (map-indexed vector steps), last-result nil]
     (if (empty? indexed-steps)
       (or last-result (k/result {:ok? true :text input :empty-pipe? true}))
       (let [[idx step] (first indexed-steps)
-            r          (safe-run adapter step input (descend opts :steps idx))]
+            r          (safe-run runner step input (descend opts :steps idx))]
         (if (k/ok? r)
           (recur (:text r) (rest indexed-steps) r)
           r)))))                                    ; short-circuit on failure
 
-(defn- branch! [adapter {:keys [branches max-concurrency]} input opts]
+(defn- branch! [runner {:keys [branches max-concurrency]} input opts]
   (let [results  (dispatch max-concurrency
                            (fn [[idx branch]]
-                             (safe-run adapter branch input (descend opts :branches idx)))
+                             (safe-run runner branch input (descend opts :branches idx)))
                            (map-indexed vector branches))]
     (k/result {:ok?      (every? k/ok? results)
                :results  results
                :text     (str/join "\n\n" (keep :text results))})))
 
-(defn- route! [adapter source routes default input opts]
-  (let [r (safe-run adapter source input (descend opts :source))]
+(defn- route! [runner source routes default input opts]
+  (let [r (safe-run runner source input (descend opts :source))]
     (if-not (k/ok? r)
       r
       (try
@@ -308,8 +308,8 @@
 
             workflow
             (if (contains? routes label)
-              (safe-run adapter workflow input (descend opts :routes label))
-              (safe-run adapter workflow input (descend opts :default)))
+              (safe-run runner workflow input (descend opts :routes label))
+              (safe-run runner workflow input (descend opts :default)))
 
             :else
             (k/result {:ok? false :error :no-route :label label
@@ -319,13 +319,13 @@
 
 (defn- judge!
   "Run `evaluator` against a draft, returning {:accept? :feedback :evaluation}."
-  [adapter evaluator draft input opts]
+  [runner evaluator draft input opts]
   (let [prompt (str "INPUT:\n" input "\n\nDRAFT:\n" (:text draft)
                     "\n\nReply with EDN only, either:"
                     "\n{:accept? true}"
                     "\nor"
                     "\n{:accept? false :feedback \"specific, actionable feedback\"}")
-        r      (safe-run adapter evaluator prompt opts)]
+        r      (safe-run runner evaluator prompt opts)]
     (if-not (k/ok? r)
       {:accept? false :feedback (:text r) :evaluation r}
       (try
@@ -348,12 +348,12 @@
         (catch Throwable t
           {:accept? false :feedback (.getMessage t) :evaluation r})))))
 
-(defn- revise! [adapter {:keys [worker evaluator max-rounds]} input opts]
+(defn- revise! [runner {:keys [worker evaluator max-rounds]} input opts]
   (loop [round 1, worker-input input]
-    (let [draft (safe-run adapter worker worker-input (descend opts :worker round))]
+    (let [draft (safe-run runner worker worker-input (descend opts :worker round))]
       (if-not (k/ok? draft)
         draft                                       ; worker failed; bail out
-        (let [{:keys [accept? feedback]} (judge! adapter evaluator draft input
+        (let [{:keys [accept? feedback]} (judge! runner evaluator draft input
                                                  (descend opts :evaluator round))]
           (if (or accept? (>= round max-rounds))
             (k/result (assoc draft :rounds round :accepted? (boolean accept?)))
@@ -367,8 +367,8 @@
   "Turn the input into a vector of subtask strings via `planner`.
 
   The planner must reply with EDN `{:subtasks [\"...\"]}`."
-  [adapter planner input opts]
-  (let [r (safe-run adapter planner input (descend opts :planner))]
+  [runner planner input opts]
+  (let [r (safe-run runner planner input (descend opts :planner))]
     (if-not (k/ok? r)
       r
       (try
@@ -381,44 +381,44 @@
         (catch Throwable t
           (reject :invalid-subtasks (.getMessage t) {:result r}))))))
 
-(defn- delegate! [adapter {:keys [planner worker max-concurrency]} input opts]
-  (let [subtasks (plan! adapter planner input opts)]
+(defn- delegate! [runner {:keys [planner worker max-concurrency]} input opts]
+  (let [subtasks (plan! runner planner input opts)]
     (if (map? subtasks)
       subtasks
       (let [results (dispatch max-concurrency
                               (fn [[idx subtask]]
-                                (safe-run adapter worker subtask (descend opts :worker idx)))
+                                (safe-run runner worker subtask (descend opts :worker idx)))
                               (map-indexed vector subtasks))]
         (k/result {:ok?      (every? k/ok? results)
                    :subtasks subtasks
                    :results  results
                    :text     (str/join "\n\n" (keep :text results))})))))
 
-(defn- continue! [adapter source to prompt input opts]
-  (let [r1 (safe-run adapter source input (descend opts :source))]
+(defn- continue! [runner source to prompt input opts]
+  (let [r1 (safe-run runner source input (descend opts :source))]
     (if-not (k/ok? r1)
       r1                                              ; bail if the first agent failed
       (let [opts' (cond-> opts
                     (:session-id r1) (assoc :resume (:session-id r1)))]
-        (safe-run adapter to (or prompt (:text r1)) (descend opts' :to))))))
+        (safe-run runner to (or prompt (:text r1)) (descend opts' :to))))))
 
 (defmethod run-node :branch
-  [adapter node input opts]
-  (branch! adapter node input opts))
+  [runner node input opts]
+  (branch! runner node input opts))
 
 (defmethod run-node :delegate
-  [adapter node input opts]
-  (delegate! adapter node input opts))
+  [runner node input opts]
+  (delegate! runner node input opts))
 
 (defmethod run-node :revise
-  [adapter node input opts]
-  (revise! adapter node input opts))
+  [runner node input opts]
+  (revise! runner node input opts))
 
 (defmethod run-node :reduce
-  [adapter {:keys [source reducer] :as node} input opts]
+  [runner {:keys [source reducer] :as node} input opts]
   (if (and source reducer)
-    (let [source-result  (safe-run adapter source input (descend opts :source))
-          reducer-result (safe-run adapter reducer (collect input source-result)
+    (let [source-result  (safe-run runner source input (descend opts :source))
+          reducer-result (safe-run runner reducer (collect input source-result)
                                    (descend opts :reducer))]
       (k/result (assoc reducer-result
                        :ok? (and (k/ok? source-result) (k/ok? reducer-result))
@@ -427,12 +427,12 @@
     (throw (ex-info "reduce workflow requires :source and :reducer" {:node node}))))
 
 (defmethod run-node :route
-  [adapter {:keys [source routes default]} input opts]
-  (route! adapter source routes default input opts))
+  [runner {:keys [source routes default]} input opts]
+  (route! runner source routes default input opts))
 
 (defmethod run-node :continue
-  [adapter {:keys [source to prompt]} input opts]
-  (continue! adapter source to prompt input opts))
+  [runner {:keys [source to prompt]} input opts]
+  (continue! runner source to prompt input opts))
 
 (defmethod run-node :default
   [_ node _ _]
@@ -440,20 +440,20 @@
                   {:node node})))
 
 (defn run
-  "Interpret `workflow` through `adapter`, starting from `input` (a string).
+  "Interpret `workflow` through `runner`, starting from `input` (a string).
   Returns a `karcarthy.core` result map. `workflow` may be an agent or any
   composite node."
-  ([adapter workflow input] (run adapter workflow input {}))
-  ([adapter workflow input opts]
+  ([runner workflow input] (run runner workflow input {}))
+  ([runner workflow input opts]
    (if-not (:observe opts)
-     (run-node adapter workflow input opts)
+     (run-node runner workflow input opts)
      (let [span-id        (span-id)
            parent-span-id (:karcarthy/parent-span-id opts)
            started-ns     (System/nanoTime)
            opts'          (assoc opts :karcarthy/parent-span-id span-id)]
        (observe! opts (event :start span-id parent-span-id workflow opts))
        (try
-         (let [result (run-node adapter workflow input opts')]
+         (let [result (run-node runner workflow input opts')]
            (observe! opts (event :finish span-id parent-span-id workflow
                                  (assoc opts
                                         :duration-ms (duration-ms started-ns)
@@ -725,7 +725,7 @@
                   :instructions   (:instructions source)}
            (:model source)   (assoc :model (:model source))
            (:tools source)   (assoc :tools (vec (:tools source)))
-           (:adapter source) (assoc :adapter (:adapter source))))))))
+           (:runner source) (assoc :runner (:runner source))))))))
 
 (defn- define! [state op]
   (cond
@@ -789,27 +789,27 @@
     :else
     (throw (ex-info "remove requires :agent or :workflow target" {:op op}))))
 
-(defn- call-once [adapter state op input opts]
+(defn- call-once [runner state op input opts]
   (cond
     (contains? op :agent)
     (let [target (:agent op)
           agent  (if (k/agent? target)
                    target
                    (lookup-agent state (op-target-name op :agent)))]
-      (k/run-agent adapter agent input opts))
+      (k/run-agent runner agent input opts))
 
     (contains? op :workflow)
     (let [target   (:workflow op)
           workflow (if (or (string? target) (keyword? target))
                      (lookup-workflow state target)
                      target)]
-      (run adapter (refs->workflow state workflow) input opts))
+      (run runner (refs->workflow state workflow) input opts))
 
     :else
     (throw (ex-info "call requires :agent or :workflow target" {:op op}))))
 
-(defn- call! [adapter state op opts]
-  (call-once adapter state op (op-input op) opts))
+(defn- call! [runner state op opts]
+  (call-once runner state op (op-input op) opts))
 
 (defn- op-workflow [state op]
   (let [target (:workflow op)]
@@ -831,7 +831,7 @@
     :else
     (throw (ex-info "spawn requires :agent or :workflow target" {:op op}))))
 
-(defn- spawn! [adapter state op opts]
+(defn- spawn! [runner state op opts]
   (let [inputs (:inputs op)]
     (when-not (sequential? inputs)
       (throw (ex-info "spawn requires :inputs" {:op op})))
@@ -839,7 +839,7 @@
           indexed  (map-indexed vector inputs)
           results  (dispatch (:max-concurrency op)
                              (fn [[idx input]]
-                               (safe-run adapter workflow (str input)
+                               (safe-run runner workflow (str input)
                                          (descend opts :spawn idx)))
                              indexed)]
       (k/result {:agent   "dynamic"
@@ -849,15 +849,15 @@
 
 (defn step!
   "Apply one dynamic workflow op to state."
-  ([adapter state op] (step! adapter state op {}))
-  ([adapter state op opts]
+  ([runner state op] (step! runner state op {}))
+  ([runner state op opts]
    (let [op     (normalize-op op)
          result (case (:op op)
                   :define   (define! state op)
                   :patch    (patch! state op)
                   :remove   (remove! state op)
-                  :call     (call! adapter state op opts)
-                  :spawn    (spawn! adapter state op opts)
+                  :call     (call! runner state op opts)
+                  :spawn    (spawn! runner state op opts)
                   :complete (k/result {:agent "dynamic"
                                        :text  (str (or (:text op)
                                                        (:content op)
@@ -896,7 +896,7 @@
                           (fn [[n agent]]
                             [n (select-keys agent [:karcarthy/type :name
                                                     :instructions :model
-                                                    :tools :adapter])])
+                                                    :tools :runner])])
                           agents))
      :workflows workflows
      :history   history}))
@@ -916,7 +916,7 @@
            (and (integer? max-steps) (pos? max-steps)))))
 
 (defmethod run-node :dynamic
-  [adapter {:keys [agent max-steps]} input opts]
+  [runner {:keys [agent max-steps]} input opts]
   (let [st (or (:state opts) (state))]
     (loop [step 1, last-result nil]
       (if (and max-steps (> step max-steps))
@@ -925,14 +925,14 @@
                    :error :max-steps
                    :text  (str "dynamic workflow exceeded max steps: " max-steps)
                    :state (snapshot st)})
-        (let [agent-result (k/run-agent adapter agent
+        (let [agent-result (k/run-agent runner agent
                                         (dynamic-prompt input st last-result step)
                                         opts)]
           (if-not (k/ok? agent-result)
             (k/result (assoc agent-result :state (snapshot st)))
             (let [outcome (try
                             (let [op     (text->op (:text agent-result))
-                                  result (step! adapter st op opts)]
+                                  result (step! runner st op opts)]
                               {:op op :result (assoc result
                                                      :state (snapshot st)
                                                      :steps step)})

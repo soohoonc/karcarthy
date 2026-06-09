@@ -161,9 +161,9 @@
        "OR your final answer as plain text (no EDN).\n\nTASK:\n" input))
 
 (defmethod o/run-node :evolve
-  [adapter {:keys [agent max-rounds] :or {max-rounds 5}} input opts]
+  [runner {:keys [agent max-rounds] :or {max-rounds 5}} input opts]
   (loop [round 1, agent agent, patches []]
-    (let [r (k/run-agent adapter agent (evolve-prompt input) opts)]
+    (let [r (k/run-agent runner agent (evolve-prompt input) opts)]
       (if-not (k/ok? r)
         r
         (let [p (try
@@ -187,7 +187,7 @@
             ;; out of rounds but still patching -> apply once and force a final answer
             (not= no-patch p)
             (let [final-agent (merge agent p)
-                  fr          (k/run-agent adapter final-agent input opts)]
+                  fr          (k/run-agent runner final-agent input opts)]
               (k/result (assoc fr :agent (:name final-agent) :rounds round
                                :patches (conj patches p) :evolved final-agent)))
 

@@ -6,11 +6,17 @@
   (testing "core + orchestrate functions are reachable under one alias"
     (let [a (kc/agent "x" "i")]
       (is (kc/agent? a)))
-    (let [r (kc/run (kc/mock-adapter)
+    (let [r (kc/run (kc/mock-runner)
                     (kc/pipe (kc/agent "a" "i") (kc/agent "b" "i"))
                     "hi")]
       (is (kc/ok? r))
       (is (= "[b] [a] hi" (:text r))))
+    (is (kc/ok? (kc/run (kc/fn-runner (fn [{:keys [prompt]}] prompt))
+                         (kc/agent "fn" "i")
+                         "hi")))
+    (is (kc/ok? (kc/run (kc/shell-runner "cat")
+                         (kc/agent "shell" "i")
+                         "hi")))
     (let [a (kc/agent "a" "i")
           b (kc/agent "b" "i")]
       (is (kc/workflow? (kc/branch [a b])))
@@ -29,10 +35,10 @@
 (deftest facade-reexports-rewrites
   (testing "workflow rewrites are reachable under the facade"
     (let [workflow  (kc/pipe (kc/agent "a" "i") (kc/agent "b" "j"))
-          rewritten (kc/configure {:adapter :mock :model "m"} workflow)]
+          rewritten (kc/configure {:runner :mock :model "m"} workflow)]
       (is (kc/workflow? rewritten))
       (is (= ["a" "b"] (map :name (kc/agents rewritten))))
-      (is (= [:mock :mock] (map :adapter (kc/agents rewritten))))
+      (is (= [:mock :mock] (map :runner (kc/agents rewritten))))
       (is (= ["m" "m"] (map :model (kc/agents rewritten))))
       (is (= ["x" "x"]
              (map :instructions
@@ -61,8 +67,8 @@
 (deftest facade-hides-low-level-execution-apis
   (testing "normal users get one execution entrypoint: run"
     (is (nil? (ns-resolve 'karcarthy 'run-agent)))
-    (is (nil? (ns-resolve 'karcarthy 'Adapter)))
-    (is (nil? (ns-resolve 'karcarthy 'resolve-adapter)))
+    (is (nil? (ns-resolve 'karcarthy 'Runner)))
+    (is (nil? (ns-resolve 'karcarthy 'resolve-runner)))
     (is (nil? (ns-resolve 'karcarthy 'evolve)))
     (is (nil? (ns-resolve 'karcarthy 'map)))
     (is (nil? (ns-resolve 'karcarthy 'bind)))

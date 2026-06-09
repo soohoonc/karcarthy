@@ -50,9 +50,9 @@
 (def deep-researcher
   (k/agent
    "openai-deep-researcher"
-   (str "Run the given prompt as a Deep Research task. The adapter owns tool use, "
+   (str "Run the given prompt as a Deep Research task. The runner owns tool use, "
         "background polling, and result extraction.")
-   :adapter :openai-deep-research
+   :runner :openai-deep-research
    :model (or (getenv "KARCARTHY_DEEP_RESEARCH_MODEL") "o4-mini-deep-research")))
 
 (def workflow
@@ -78,14 +78,14 @@
        "Do not make uncited claims. Mark regional differences and unknowns explicitly."))
 
 (def offline-default
-  (k/mock-adapter
+  (k/mock-runner
    (fn [{:keys [agent prompt]}]
      (case (:name agent)
        "research-prompt-rewriter" rewritten-prompt
        (str "[" (:name agent) "] " prompt)))))
 
 (def offline-deep-research
-  (k/mock-adapter
+  (k/mock-runner
    (fn [{:keys [agent prompt]}]
      (str "## Offline Deep Research preview\n\n"
           "This would call `/v1/responses` with model `" (:model agent) "`, "
@@ -176,7 +176,7 @@
           (recur (inc i) (http-json! :get (str "/responses/" (:id r)) nil)))))))
 
 (defn live-openai-deep-research []
-  (reify core/Adapter
+  (reify core/Runner
     (-run [_ agent prompt _opts]
       (try
         (let [started (http-json! :post "/responses" (deep-research-request agent prompt))
@@ -196,14 +196,14 @@
                      :text nil
                      :error (.getMessage t)}))))))
 
-(defn adapter-registry []
+(defn runner-registry []
   {:default offline-default
    :openai-deep-research (if (getenv "KARCARTHY_OPENAI_LIVE")
                            (live-openai-deep-research)
                            offline-deep-research)})
 
 (defn -main [& _]
-  (let [result (k/run (adapter-registry) workflow research-task)]
+  (let [result (k/run (runner-registry) workflow research-task)]
     (println "=== OpenAI Deep Research request shape ===")
     (pp/pprint (select-keys (deep-research-request deep-researcher rewritten-prompt)
                             ["model" "background" "store" "reasoning" "max_tool_calls" "include" "tools"]))

@@ -1,0 +1,179 @@
+---
+title: Use Runners
+description: Connect workflow data to mock, function, process, shell, and SDK-backed agent systems.
+---
+
+karcarthy coordinates workflows. A runner runs one agent to completion. That
+boundary is the core design: workflows stay portable data, while model calls,
+tool calls, sessions, streaming, and provider details stay inside the selected
+agent system.
+
+## Runner model
+
+```clojure
+(k/run runner workflow input)
+```
+
+`runner` can be one runner for every agent:
+
+```clojure
+(k/run (k/mock-runner)
+       (k/pipe researcher summarizer)
+       "map the agent framework space")
+```
+
+or a registry selected per agent:
+
+```clojure
+(def runners
+  {:default (k/mock-runner)
+   :claude  (k/claude-cli-runner {})})
+
+(k/run runners
+       (k/pipe
+        (k/agent "planner" "Plan the rollout." :runner :claude)
+        (k/agent "checker" "Check for missing owners." :runner :default))
+       "enterprise SSO beta")
+```
+
+Agent-level `:runner` is a registry key. It does not change the workflow
+shape.
+
+## Mock runner
+
+Use the mock runner for tests, docs, and local workflow design:
+
+```clojure
+(k/run (k/mock-runner)
+       (k/agent "echo" "Echo the input.")
+       "hi")
+```
+
+Output:
+
+```clojure
+{:karcarthy/type :result
+ :ok? true
+ :agent "echo"
+ :text "[echo] hi"
+ :raw {:runner :mock}}
+```
+
+Pass a response function when tests need deterministic named behavior:
+
+```clojure
+(k/mock-runner
+ (fn [{:keys [agent prompt]}]
+   (case (:name agent)
+     "classifier" "launch"
+     (str "[" (:name agent) "] " prompt))))
+```
+
+## Function runner
+
+Use `fn-runner` when a plain Clojure function is the execution boundary:
+
+```clojure
+(def uppercase
+  (k/fn-runner
+   (fn [{:keys [prompt]}]
+     (clojure.string/upper-case prompt))))
+
+(k/run uppercase
+       (k/agent "shout" "Uppercase the input.")
+       "quiet please")
+```
+
+The function receives `{:agent agent :prompt prompt :opts opts}`. It may return
+text, a partial result map, or a full result map.
+
+## Claude CLI runner
+
+Use Claude CLI when each agent call should run through `claude`:
+
+```clojure
+(k/run (k/claude-cli-runner {:model "haiku"
+                      :max-turns 4})
+       (k/agent "reviewer"
+         "Find one launch risk and one mitigation."
+         :tools ["mcp__feedback__search"])
+       "enterprise SSO beta")
+```
+
+`tools` is an allowlist passed to runners that support tool selection. The
+tool server, MCP config, and credentials must already exist in the selected
+agent system.
+
+## Process runner
+
+Use `process-runner` to wrap a local model, script, or coding-agent CLI with an
+argv vector:
+
+```clojure
+(def local-model
+  (k/process-runner
+   ["./bin/local-agent"]
+   {:timeout-ms 120000}))
+
+(k/run local-model
+       (k/agent "writer" "Write the final answer.")
+       "Summarize the rollout risk.")
+```
+
+The command receives the prompt and returns text. That makes it useful for
+prototyping new runners before writing a direct integration.
+
+## Shell runner
+
+Use `shell-runner` when you really want shell parsing, pipes, redirects, or
+inline scripts:
+
+```clojure
+(k/run (k/shell-runner "tr a-z A-Z")
+       (k/agent "shout" "Uppercase the input.")
+       "quiet please")
+```
+
+Prefer `process-runner` for fixed commands and `shell-runner` for shell syntax.
+
+## OpenAI Agents SDK bridge
+
+`openai-agents-runner` delegates single-agent calls to the OpenAI Agents SDK
+bridge. Keep karcarthy responsible for orchestration and keep SDK-specific
+agent-loop behavior in that bridge.
+
+```clojure
+(k/run (k/openai-agents-runner {})
+       (k/agent "triage" "Route to refund, sales, or support.")
+       "I was charged twice.")
+```
+
+## Tools
+
+Tools are not provisioned by karcarthy. They are names the selected runner may
+use to restrict what an agent system can call.
+
+| Field | Meaning |
+| --- | --- |
+| `:tools ["mcp__feedback__search"]` | Allow this agent to use a tool already configured in the runner's environment. |
+| No `:tools` | Let the runner default decide, or use no tools for mock/offline runs. |
+| Unknown tool name | Runner-specific failure or ignored by runners that do not use tools. |
+
+This keeps orchestration portable. The same workflow can run offline with
+`mock-runner`, through Claude CLI with MCP tools, or through a process runner
+without changing the graph.
+
+## Failure behavior
+
+Top-level `run` fails fast for malformed workflows. Composite workflow nodes
+isolate child failures by returning not-ok result maps, so one failed branch
+does not crash an entire `branch`.
+
+```clojure
+{:karcarthy/type :result
+ :ok? false
+ :error "..."
+ :exception "..."}
+```
+
+Use this result shape for retries, audit logs, and UI status displays.

@@ -2,7 +2,7 @@
 
 karcarthy is a Clojure library that runs on the JVM, so any JVM language can
 drive it. The Java, Kotlin, and Scala examples each build two agents, compose
-them with `pipe`, and run the workflow through the offline mock adapter - identical work in three
+them with `pipe`, and run the workflow through the offline mock runner - identical work in three
 languages, to show the library is reachable from each.
 
 ## Clojure
@@ -14,14 +14,14 @@ languages, to show the library is reachable from each.
   a lead agent can patch its own instructions, a planner creates parallel
   workstreams, workers verify each stream, and a critic accepts the memo.
 - `clojure/openai_deep_research.clj` - wraps the OpenAI Responses API Deep
-  Research shape as a karcarthy leaf adapter. Offline by default; live calls are
+  Research shape as a karcarthy leaf runner. Offline by default; live calls are
   gated by `KARCARTHY_OPENAI_LIVE=1` and `OPENAI_API_KEY`.
 - `clojure/deep_research.clj` - a Deep Research-shaped workflow:
   plan research tracks, investigate them in parallel, filter evidence, write a
   cited report, and critique/revise. Runs offline with canned evidence and
-  includes an opt-in live Codex CLI `command-adapter` path.
+  includes an opt-in live Codex CLI `process-runner` path.
 - `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
-  adapter/model/instruction configuration, then run the rewritten value.
+  runner/model/instruction configuration, then run the rewritten value.
 - `clojure/live.clj` - a live delegate/reduce run (paid `claude -p`).
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
@@ -35,7 +35,7 @@ language builds and can transform it before execution.
 - `typescript/launch.ts`
 
 ```bash
-python3 examples/python/demo.py            # offline (mock adapter)
+python3 examples/python/demo.py            # offline (mock runner)
 python3 examples/python/launch.py
 
 bun run examples/typescript/demo.ts        # or: npx tsx … / ts-node …
@@ -43,16 +43,16 @@ npx tsx examples/typescript/launch.ts
 ```
 
 Both build workflows as plain dicts/objects and run them through the offline
-mock adapter. Tool names in the launch examples are adapter allowlists: they
+mock runner. Tool names in the launch examples are runner allowlists: they
 must already exist in the selected Agent SDK, CLI, or MCP configuration. The
-mock adapter ignores tools.
+mock runner ignores tools.
 
 ## JavaScript
 
 - `javascript/claude_dynamic_agents.mjs` - builds a dynamic Claude-style
   delegate/reduce/critic workflow as JSON and sends it through
   `bin/karcarthy json`. Offline by default; set `KARCARTHY_CLAUDE_LIVE=1` for
-  the Claude CLI adapter.
+  the Claude CLI runner.
 - `javascript/openai_deep_research.mjs` - calls the OpenAI Responses API Deep
   Research shape directly with `background`, web search, code interpreter, and
   optional vector-store or MCP data sources. Offline by default; set

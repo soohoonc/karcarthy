@@ -3,11 +3,11 @@ title: Build Workflows
 description: Understand how pipe, branch, delegate, reduce, revise, route, continue, and dynamic move data through agents.
 ---
 
-A workflow is a value. `run` interprets that value through an adapter and
+A workflow is a value. `run` interprets that value through a runner and
 returns a result map.
 
 ```clojure
-(k/run adapter workflow "input text")
+(k/run runner workflow "input text")
 ;=> {:karcarthy/type :result
 ;    :ok? true
 ;    :text "..."}
@@ -37,10 +37,10 @@ Use `pipe` for sequential work:
 (def workflow
   (k/pipe researcher summarizer))
 
-(k/run (k/mock-adapter) workflow "what is a monad?")
+(k/run (k/mock-runner) workflow "what is a monad?")
 ```
 
-Trace with the mock adapter:
+Trace with the mock runner:
 
 ```text
 input:      what is a monad?
@@ -190,7 +190,7 @@ Use `dynamic` when the workflow should shape itself during the run:
 (def workflow
   (k/dynamic workflow-agent :max-steps 25))
 
-(k/run adapter workflow "audit this migration")
+(k/run runner workflow "audit this migration")
 ```
 
 The dynamic workflow agent replies with one EDN op at a time:
@@ -218,18 +218,18 @@ before `run` interprets them:
 ```clojure
 (def production-workflow
   (->> (k/pipe researcher summarizer)
-       (k/configure {:adapter :claude
+       (k/configure {:runner :claude
                      :model "claude-sonnet-4"
                      :instructions/suffix "State assumptions before final answer."})))
 
-(map #(select-keys % [:name :adapter :model])
+(map #(select-keys % [:name :runner :model])
      (k/agents production-workflow))
-;=> ({:name "researcher", :adapter :claude, :model "claude-sonnet-4"}
-;    {:name "summarizer", :adapter :claude, :model "claude-sonnet-4"})
+;=> ({:name "researcher", :runner :claude, :model "claude-sonnet-4"}
+;    {:name "summarizer", :runner :claude, :model "claude-sonnet-4"})
 
-(k/run adapter production-workflow "summarize the prior work")
+(k/run runner production-workflow "summarize the prior work")
 ```
 
 That is the point of karcarthy: keep the coordination graph visible and
-serializable while adapters own model calls, tools, and provider-specific agent
+serializable while runners own model calls, tools, and provider-specific agent
 loops. It is EDN plus an explicit interpreter, not raw `eval`.

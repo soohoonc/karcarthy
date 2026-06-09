@@ -1,12 +1,12 @@
-(ns karcarthy.adapter.openai
-  "Adapter for the OpenAI Agents SDK
+(ns karcarthy.runner.openai
+  "Runner for the OpenAI Agents SDK
   (https://github.com/openai/openai-agents-python).
 
   The Agents SDK is Python, so this shells out to a small Python script
   (`resources/karcarthy/openai_runner.py`) that builds an `agents.Agent` and
   calls the SDK runtime. karcarthy sends a JSON request on stdin and reads a
   JSON result on stdout, so the orchestration layer is identical whether a
-  workflow runs over Claude or OpenAI - just swap the adapter.
+  workflow runs over Claude or OpenAI - just swap the runner.
 
   Requirements: a `python3` with `openai-agents` installed and OPENAI_API_KEY in
   the environment."
@@ -45,17 +45,17 @@
         (io/copy in tmp))
       (.getPath tmp))))
 
-(defn openai-agents-sdk
-  "Adapter that drives the OpenAI Agents SDK via the Python script.
+(defn openai-agents-runner
+  "Runner that drives the OpenAI Agents SDK via the Python script.
   `default-opts` are merged beneath per-run opts. Options:
     :python-bin  python executable (default \"python3\")
     :script      path to the Python script (default: the bundled resource)
     :model       default model for agents that don't set one
     :dir / :env  working directory / extra environment for the process
     :timeout-ms  kill the subprocess if it runs longer than this (milliseconds)"
-  ([] (openai-agents-sdk {}))
+  ([] (openai-agents-runner {}))
   ([default-opts]
-   (reify k/Adapter
+   (reify k/Runner
      (-run [_ agent prompt opts]
        (let [opts   (merge default-opts opts)
              python (get opts :python-bin "python3")
@@ -69,7 +69,7 @@
          (cond
            timed-out?
            (k/result {:agent (:name agent) :ok? false :text nil
-                      :error "openai adapter timed out"
+                      :error "openai runner timed out"
                       :raw   {:timed-out? true :err err}})
 
            (seq (str/trim (or out "")))
@@ -78,11 +78,11 @@
              (catch Exception e
                (k/result {:agent (:name agent) :ok? false
                           :text  (or (not-empty err) out)
-                          :error (str "could not parse adapter JSON: " (.getMessage e))
+                          :error (str "could not parse runner JSON: " (.getMessage e))
                           :raw   {:exit exit :out out :err err}})))
 
            :else
            (k/result {:agent (:name agent) :ok? false
                       :text  (or (not-empty err) out)
-                      :error (str "adapter exited with status " exit)
+                      :error (str "runner exited with status " exit)
                       :raw   {:exit exit :out out :err err}})))))))

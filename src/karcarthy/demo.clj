@@ -45,8 +45,8 @@
     (println "before:" (mapv :model (k/agents support-desk)))
     (println "after: " (mapv :model (k/agents opusified))))
 
-  (println "\n=== Run the support desk on the offline mock adapter ===")
-  (let [r (o/run (k/mock-adapter canned) support-desk
+  (println "\n=== Run the support desk on the offline mock runner ===")
+  (let [r (o/run (k/mock-runner canned) support-desk
                  "my deploy 500s intermittently")]
     (println "ok?  " (k/ok? r))
     (println "text:" (:text r)))
@@ -55,19 +55,19 @@
   ;; The planner emits EDN data, each worker is `tr a-z A-Z` (uppercase via a
   ;; real subprocess), and the reducer receives the source result summary as EDN.
   (let [workflow (o/reduce
-                  (o/delegate (k/agent "split" "Return EDN subtasks." :adapter :plan)
-                              (k/agent "shout" "uppercase" :adapter :shell))
-                  (k/agent "join" "Join source result text." :adapter :join))
-        adapter  {:plan  (k/mock-adapter
+                  (o/delegate (k/agent "split" "Return EDN subtasks." :runner :plan)
+                              (k/agent "shout" "uppercase" :runner :shell))
+                  (k/agent "join" "Join source result text." :runner :join))
+        runner  {:plan  (k/mock-runner
                           (fn [{:keys [prompt]}]
                             (pr-str {:subtasks (str/split (str/trim prompt) #"\s+")})))
-                  :shell (k/command-adapter ["tr" "a-z" "A-Z"])
-                  :join  (k/mock-adapter
+                  :shell (k/process-runner ["tr" "a-z" "A-Z"])
+                  :join  (k/mock-runner
                           (fn [{:keys [prompt]}]
                             (->> (:results (edn/read-string prompt))
                                  (map :text)
                                  (str/join " "))))}
-        r        (o/run adapter workflow "homoiconic agents are data")]
+        r        (o/run runner workflow "homoiconic agents are data")]
     (println "subtasks:" (get-in r [:source :subtasks]))
     (println "result:  " (:text r)))
 

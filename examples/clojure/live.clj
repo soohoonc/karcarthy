@@ -1,4 +1,4 @@
-;; A LIVE delegate/reduce run against the Claude CLI adapter (`claude -p`).
+;; A LIVE delegate/reduce run against the Claude CLI runner (`claude -p`).
 ;;
 ;; Unlike the offline `karcarthy.demo`, this makes real, paid API calls, so run
 ;; it intentionally. It needs a working `claude` CLI with valid auth on PATH.
@@ -22,8 +22,8 @@
   ["--disallowedTools"
    "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite,NotebookEdit,MultiEdit"])
 
-(def adapter
-  (k/claude-cli {:system-prompt-mode :replace
+(def runner
+  (k/claude-cli-runner {:system-prompt-mode :replace
                  :max-turns          4
                  :model              "haiku"
                  :dir                "/tmp/karc"
@@ -44,7 +44,7 @@
 (def research
   (o/reduce (o/delegate planner writer) reducer))
 
-(let [r (o/run adapter research
+(let [r (o/run runner research
                "Why is homoiconicity useful for agent orchestration?")]
   (println "SUBTASKS:" (pr-str (get-in r [:source :subtasks])))
   (println "OK?      " (k/ok? r))

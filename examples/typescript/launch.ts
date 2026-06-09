@@ -1,7 +1,7 @@
 // Launch-readiness tutorial through the karcarthy executable.
 // The important part is not the workflow alone; it is the agent UX around it:
-// each agent is configured from a profile with context, adapter tool
-// allowlists, boundaries, tone, output contract, and self-checks.
+// each agent is configured from a profile with context, tool allowlists for the
+// selected runner, boundaries, tone, output contract, and self-checks.
 
 import { run, type Workflow } from "./karcarthy";
 
@@ -29,11 +29,11 @@ function renderInstructions(profile: AgentProfile): string {
     profile.context?.length ? `Operating context:\n${bulletList(profile.context)}` : "",
     profile.tools?.length
       ? [
-          `Adapter tool allowlist:\n${bulletList(profile.tools)}`,
+          `Tool allowlist:\n${bulletList(profile.tools)}`,
           "These names must already be bound in the selected Agent SDK, CLI, or MCP configuration.",
-          "karcarthy passes the allowlist; it does not create tool servers. The mock adapter ignores tools.",
+          "karcarthy passes the allowlist; it does not create tool servers. The mock runner ignores tools.",
         ].join("\n")
-      : "Adapter tool allowlist: none. The offline mock adapter ignores tool calls.",
+      : "Tool allowlist: none. The offline mock runner ignores tool calls.",
     `Responsibilities:\n${bulletList(profile.responsibilities)}`,
     `Output contract:\n${profile.output}`,
     `Interaction style:\n${profile.tone}`,
@@ -58,7 +58,7 @@ const launchContext = [
   "Artifact: a launch-readiness brief that can drive a go/no-go meeting.",
   "Evidence packet: enterprise admins requested SSO; rollout is behind a tenant feature flag; p95 auth latency is the watch metric; audit-log signoff is not complete; support has a setup draft but no rollback macro.",
   "Risk posture: be concise, specific, and explicit about missing evidence.",
-  "Use only facts from the user request, operating context, or adapter tool results. Do not invent dates, owners, metrics, or policy claims.",
+  "Use only facts from the user request, operating context, or tool results from the selected runner. Do not invent dates, owners, metrics, or policy claims.",
 ];
 
 const classifier = configuredAgent({

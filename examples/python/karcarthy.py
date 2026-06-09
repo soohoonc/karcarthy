@@ -26,10 +26,10 @@ def command() -> list[str]:
 def run(
     workflow: dict[str, Any],
     input_text: str,
-    adapter: str = "mock",
+    runner: str = "mock",
     mock_responses: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    request: dict[str, Any] = {"workflow": workflow, "input": input_text, "adapter": adapter}
+    request: dict[str, Any] = {"workflow": workflow, "input": input_text, "runner": runner}
     if mock_responses is not None:
         request["mock-responses"] = mock_responses
 

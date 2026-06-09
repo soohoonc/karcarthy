@@ -29,14 +29,14 @@ function command(): Command {
 export function run(
   workflow: Workflow,
   input: string,
-  adapter = "mock",
+  runner = "mock",
   mockResponses?: Record<string, string>,
 ): any {
   const { file, args } = command();
   const request = JSON.stringify({
     workflow,
     input,
-    adapter,
+    runner,
     ...(mockResponses ? { "mock-responses": mockResponses } : {}),
   });
   const out = execFileSync(file, args, {

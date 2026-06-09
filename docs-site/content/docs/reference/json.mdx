@@ -43,7 +43,7 @@ needs the full result object:
 
 Useful options:
 
-- `--adapter mock|claude`
+- `--runner mock|claude`
 - `--model NAME`
 - `--tool NAME`
 - `--mock-response AGENT=TEXT`
@@ -61,7 +61,7 @@ Run a workflow JSON file. The file can be either a raw workflow object:
 }
 ```
 
-or a full request object with `workflow`, `input`, and adapter fields.
+or a full request object with `workflow`, `input`, and runner fields.
 
 ```bash
 ./bin/karcarthy run examples/workflows/echo.json hi
@@ -83,24 +83,24 @@ Top-level request shape:
 {
   "workflow": { "type": "agent", "name": "echo", "instructions": "Echo." },
   "input": "hello",
-  "adapter": "mock",
+  "runner": "mock",
   "mock-responses": {
     "echo": "hello back"
   }
 }
 ```
 
-`adapter` is `mock` by default. `claude` uses the Claude CLI adapter with
+`runner` is `mock` by default. `claude` uses the Claude CLI runner with
 sub-agent defaults.
 
-`mock-responses` is optional. When present with the mock adapter, it maps agent
+`mock-responses` is optional. When present with the mock runner, it maps agent
 names to deterministic response text. It is useful for examples and tests that
 should show realistic output without calling a live model. Agents not listed
 fall back to the default echo-style mock response.
 
-`tools` is an adapter allowlist. karcarthy passes these names to adapters that
+`tools` is a runner allowlist. karcarthy passes these names to runners that
 support tool selection; it does not create tool servers or bind MCP
-configuration. The mock adapter ignores tools.
+configuration. The mock runner ignores tools.
 
 ## JSON workflow shapes
 
@@ -121,7 +121,7 @@ k/json-schema
   "instructions": "Find launch risks.",
   "model": "sonnet",
   "tools": ["mcp__feedback__search"],
-  "adapter": "claude"
+  "runner": "claude"
 }
 ```
 

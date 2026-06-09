@@ -12,7 +12,7 @@
 
 import { run, type Workflow } from "./karcarthy";
 
-// 1) A workflow is data: a pipe of two agents, run on the offline mock adapter.
+// 1) A workflow is data: a pipe of two agents, run on the offline mock runner.
 const workflow: Workflow = {
   type: "pipe",
   steps: [

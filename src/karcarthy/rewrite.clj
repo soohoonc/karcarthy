@@ -3,7 +3,7 @@
 
   This is the Clojure-native payoff: a workflow is plain EDN, so host code can
   inspect it, stamp configuration onto it, and mechanically rewrite it before
-  `karcarthy.orchestrate/run` interprets it. Rewrites do not call adapters and
+  `karcarthy.orchestrate/run` interprets it. Rewrites do not call runners and
   do not use `clojure.core/eval`."
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
@@ -63,7 +63,7 @@
     workflow'))
 
 (def ^:private configure-keys
-  #{:adapter :model :instructions/suffix})
+  #{:runner :model :instructions/suffix})
 
 (defn- configure! [opts]
   (let [unknown (seq (remove configure-keys (keys opts)))]
@@ -77,14 +77,14 @@
   "Apply agent configuration to a workflow in one pass.
 
   Supported keys:
-    :adapter               adapter registry key
+    :runner               runner registry key
     :model                 model selector string
     :instructions/suffix   text appended to every agent instruction"
   [opts workflow]
   (let [opts (configure! (map! "configure" opts))
-        {:keys [adapter model instructions/suffix]} opts]
-    (when (contains? opts :adapter)
-      (keyword! "configure :adapter" adapter))
+        {:keys [runner model instructions/suffix]} opts]
+    (when (contains? opts :runner)
+      (keyword! "configure :runner" runner))
     (when (contains? opts :model)
       (string! "configure :model" model))
     (when (contains? opts :instructions/suffix)
@@ -92,7 +92,7 @@
     (over k/agent?
           (fn [agent]
             (cond-> agent
-              (contains? opts :adapter) (assoc :adapter adapter)
+              (contains? opts :runner) (assoc :runner runner)
               (contains? opts :model) (assoc :model model)
               (contains? opts :instructions/suffix)
               (update :instructions str "\n\n" (str/trim suffix))))

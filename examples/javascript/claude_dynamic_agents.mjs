@@ -36,11 +36,11 @@ function instructions(profile) {
     `Operating context:\n${bullets(context)}`,
     profile.tools?.length
       ? [
-          `Adapter tool allowlist:\n${bullets(profile.tools)}`,
+          `Tool allowlist:\n${bullets(profile.tools)}`,
           "These names must already exist in the selected CLI, SDK, or MCP setup.",
-          "The mock adapter ignores tool names.",
+          "The mock runner ignores tool names.",
         ].join("\n")
-      : "Adapter tool allowlist: none.",
+      : "Tool allowlist: none.",
     `Responsibilities:\n${bullets(profile.responsibilities)}`,
     `Output contract:\n${profile.output}`,
     profile.boundaries?.length ? `Boundaries:\n${bullets(profile.boundaries)}` : "",
@@ -204,7 +204,7 @@ if (process.argv.includes("--print")) {
   let result;
   try {
     result = runKarcarthy(runnableWorkflow, prompt, {
-      adapter: live ? "claude" : "mock",
+      runner: live ? "claude" : "mock",
       mockResponses: live ? undefined : mockResponses,
     });
   } catch (error) {

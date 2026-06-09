@@ -20,8 +20,8 @@
   ["--disallowedTools"
    "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"])
 
-(def adapter
-  (k/claude-cli {:system-prompt-mode :replace
+(def runner
+  (k/claude-cli-runner {:system-prompt-mode :replace
                  :max-turns          3
                  :model              "haiku"
                  :dir                "/tmp/karc"
@@ -30,7 +30,7 @@
 
 (println "=== evolve: an agent edits its own instructions at runtime ===")
 (let [poet (k/agent "poet" "You are a mediocre poet who writes one bland line.")
-      r    (o/run adapter (self/evolve poet :max-rounds 3)
+      r    (o/run runner (self/evolve poet :max-rounds 3)
                   "Patch yourself into an expert minimalist poet, then write ONE line about Lisp.")]
   (println "ROUNDS:" (:rounds r) "| PATCHES:" (count (:patches r)))
   (println "EVOLVED INSTRUCTIONS:" (:instructions (:evolved r)))

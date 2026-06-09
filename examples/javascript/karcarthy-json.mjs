@@ -19,12 +19,12 @@ function command() {
 }
 
 export function runKarcarthy(workflow, input, options = {}) {
-  const { adapter = "mock", mockResponses } = options;
+  const { runner = "mock", mockResponses } = options;
   const { file, args } = command();
   const request = {
     workflow,
     input,
-    adapter,
+    runner,
     ...(mockResponses ? { "mock-responses": mockResponses } : {}),
   };
 
@@ -44,7 +44,7 @@ export function agent(profile) {
     instructions: profile.instructions,
     ...(profile.model ? { model: profile.model } : {}),
     ...(profile.tools?.length ? { tools: profile.tools } : {}),
-    ...(profile.adapter ? { adapter: profile.adapter } : {}),
+    ...(profile.runner ? { runner: profile.runner } : {}),
   };
 }
 

@@ -18,9 +18,9 @@
 ;; - The Deep Research API exposes web search, code interpreter, and MCP calls
 ;;   in response output metadata.
 ;; - Codex CLI supports non-interactive `codex exec` and stdin, making it a
-;;   natural command-adapter target. Codex can also run as an MCP server for
+;;   natural process-runner target. Codex can also run as an MCP server for
 ;;   OpenAI Agents SDK workflows; this example uses `exec` because it is the
-;;   thinnest leaf-agent adapter shape.
+;;   thinnest leaf-agent runner shape.
 ;; - Anthropic describes Dynamic Workflows as Claude planning work, running many
 ;;   parallel subagents, verifying work, and combining results. In karcarthy,
 ;;   the analogous orchestration artifact is EDN workflow data.
@@ -45,19 +45,19 @@
   (->> [(str "Role: " role)
         (str "Mission: " mission)
         (if (seq tools)
-          (str "Adapter tool allowlist:\n" (bullets tools)
-               "\nThe adapter must already provide these tools. karcarthy only passes names.")
-          "Adapter tool allowlist: none.")
+          (str "Tool allowlist:\n" (bullets tools)
+               "\nThe runner must already provide these tools. karcarthy only passes names.")
+          "Tool allowlist: none.")
         (section "Responsibilities" (bullets responsibilities))
         (str "Output contract:\n" output)
         (section "Boundaries" (bullets boundaries))]
        (remove str/blank?)
        (str/join "\n\n")))
 
-(defn research-agent [{:keys [name tools adapter] :as profile}]
+(defn research-agent [{:keys [name tools runner] :as profile}]
   (cond-> (k/agent name (research-instructions profile))
     (seq tools) (assoc :tools (vec tools))
-    adapter (assoc :adapter adapter)))
+    runner (assoc :runner runner)))
 
 (def research-planner
   (research-agent
@@ -145,17 +145,17 @@
        "Return only the output requested by the instructions. "
        "The current input will be appended on stdin."))
 
-(defn codex-adapter
-  "Live/paid Codex CLI adapter.
+(defn codex-runner
+  "Live/paid Codex CLI runner.
 
   Codex CLI docs describe `codex exec` as the non-interactive mode and allow the
   prompt to be passed on stdin. Exact flags vary by installed version; verify
   with `codex exec --help` before using this in production."
-  ([] (codex-adapter {}))
+  ([] (codex-runner {}))
   ([{:keys [dir timeout-ms] :or {dir "/tmp/karc-deep-research"
                                  timeout-ms (* 20 60 1000)}}]
    (.mkdirs (java.io.File. dir))
-   (k/command-adapter
+   (k/process-runner
     (fn [agent]
       (cond-> ["codex" "exec"
                "--ephemeral"
@@ -173,7 +173,7 @@
    (pr-str
     {:subtasks ["How OpenAI describes Deep Research"
                 "What the Deep Research API exposes"
-                "How Codex CLI can act as a headless adapter"
+                "How Codex CLI can act as a headless runner"
                 "How karcarthy differs from full agent runtimes"]})
 
    "source-scout"
@@ -189,7 +189,7 @@
          :why "API documentation describing tool-call metadata for deep research models."}
         {:title "Codex exec mode"
          :url "https://developers.openai.com/codex/noninteractive"
-         :why "Codex CLI non-interactive mode for command-adapter execution."}
+         :why "Codex CLI non-interactive mode for process-runner execution."}
         {:title "Introducing dynamic workflows in Claude Code"
          :url "https://claude.com/blog/introducing-dynamic-workflows-in-claude-code"
          :why "Primary announcement for the plan, parallel subagent, verification, and synthesis pattern."}]}))
@@ -237,10 +237,10 @@
             "## Evidence map\n"
             (str/join "\n" (map (fn [{:keys [claim url]}] (str "- " claim " (" url ")")) accepted))
             "\n\n## Caveats\n"
-            "- This example is offline and deterministic; live browsing belongs inside the selected adapter.\n"
+            "- This example is offline and deterministic; live browsing belongs inside the selected runner.\n"
             "- karcarthy coordinates the workflow data, but Codex/OpenAI/Claude/Pydantic-style systems still own tool execution.\n\n"
             "## Open questions\n"
-            "- Add real adapter conformance tests for Codex exec, Claude CLI, and OpenAI Agents SDK.\n"
+            "- Add real runner conformance tests for Codex exec, Claude CLI, and OpenAI Agents SDK.\n"
             "- Add stricter schema validation for the EDN control messages.\n\n"
             "## Source list\n"
             "- https://openai.com/index/introducing-deep-research/\n"
@@ -250,8 +250,8 @@
 
    "report-critic" "{:accept? true}"})
 
-(def offline-adapter
-  (k/mock-adapter
+(def offline-runner
+  (k/mock-runner
    (fn [{:keys [agent prompt]}]
      (let [response (get offline-responses (:name agent))]
        (cond
@@ -269,7 +269,7 @@
   (pp/pprint deep-research-workflow)
   (println "\n=== Offline run ===")
   (let [events (atom [])
-        result (k/run offline-adapter
+        result (k/run offline-runner
                       deep-research-workflow
                       "Can karcarthy express an OpenAI Deep Research-style workflow?"
                       {:observe #(swap! events conj %)})]
@@ -282,7 +282,7 @@
   (println "=== Live Codex Deep Research-shaped run ===")
   (println "This invokes Codex once per leaf agent call and may take several minutes.")
   (let [events (atom [])
-        result (k/run (codex-adapter)
+        result (k/run (codex-runner)
                       deep-research-workflow
                       "Can karcarthy express an OpenAI Deep Research-style workflow?"
                       {:observe #(swap! events conj %)})]

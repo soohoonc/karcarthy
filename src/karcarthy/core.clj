@@ -6,9 +6,9 @@
   Clojure.
 
   karcarthy does not implement the inner agent loop (model calls and tool
-  execution). It delegates that to an Agent SDK, coding-agent CLI, command
-  process, or test adapter, and concentrates on coordinating many agents over
-  it."
+  execution). It delegates that to an Agent SDK, coding-agent CLI, Clojure
+  function, subprocess, shell command, or test runner, and concentrates on
+  coordinating many agents over it."
   ;; `agent` deliberately shadows clojure.core/agent (the STM primitive); this
   ;; is an agent library. Use `clojure.core/agent` if you need the original.
   (:refer-clojure :exclude [agent])
@@ -27,11 +27,11 @@
 (s/def ::instructions string?)
 (s/def ::model       (s/nilable string?))
 (s/def ::tools       (s/coll-of string? :kind vector?))
-(s/def ::adapter     keyword?)   ; id into an adapter registry (optional)
+(s/def ::runner      keyword?)   ; id into a runner registry (optional)
 
 (s/def ::agent
   (s/keys :req-un [::name ::instructions]
-          :opt-un [::model ::tools ::adapter]))
+          :opt-un [::model ::tools ::runner]))
 
 (defn agent
   "Build an agent value. `name` and `instructions` are required; the rest are
@@ -45,13 +45,13 @@
     ;    :instructions \"Research questions thoroughly.\"
     ;    :model \"sonnet\"
     ;    :tools [\"WebSearch\" \"WebFetch\"]}"
-  [name instructions & {:keys [model tools adapter]}]
+  [name instructions & {:keys [model tools runner]}]
   (cond-> {:karcarthy/type :agent
            :name           name
            :instructions   instructions}
     model    (assoc :model model)
     tools    (assoc :tools (vec tools))
-    adapter  (assoc :adapter adapter)))
+    runner  (assoc :runner runner)))
 
 (defn agent?
   "True if `x` is a karcarthy agent value (well-formed)."
@@ -88,7 +88,7 @@
 ;; Results
 ;;
 ;; Running an agent yields a *result map*. Keeping a single, well-known shape
-;; lets orchestration combinators treat every adapter uniformly.
+;; lets orchestration combinators treat every runner uniformly.
 ;; ===========================================================================
 
 (defn result
@@ -98,7 +98,7 @@
      :ok?   true
      :agent \"researcher\"      ; name of the agent that produced it
      :text  \"...final reply...\"
-     :raw   <adapter-specific payload>}"
+     :raw   <runner-specific payload>}"
   [m]
   (merge {:karcarthy/type :result :ok? true} m))
 
@@ -108,39 +108,39 @@
   (boolean (:ok? result)))
 
 ;; ===========================================================================
-;; Adapter implementation protocol
+;; Runner implementation protocol
 ;;
-;; An adapter runs a *single* agent's model<->tool loop to completion. The
-;; concrete implementations can be Agent SDKs, coding-agent CLIs, command
-;; processes, or mocks.
+;; A runner runs a *single* agent's model<->tool loop to completion. The
+;; concrete implementations can be Agent SDKs, coding-agent CLIs, Clojure
+;; functions, subprocesses, shell commands, or mocks.
 ;; ===========================================================================
 
-(defprotocol Adapter
-  "Implementation protocol for adapters that run one agent to completion.
+(defprotocol Runner
+  "Implementation protocol for runners that run one agent to completion.
 
   `-run` receives a validated agent map, a prompt string, and an options map,
   and returns a result map (see `result`). Prefer calling `run-agent`, which
   validates first."
-  (-run [adapter agent prompt opts]))
+  (-run [runner agent prompt opts]))
 
-(defn- adapter-key [agent]
-  (or (:adapter agent) :default))
+(defn- runner-key [agent]
+  (or (:runner agent) :default))
 
-(defn resolve-adapter
-  "Pick the adapter to run `agent` with. `adapter` is either a single adapter or
-  a registry map {id -> adapter}; the agent's `:adapter` id selects from the
+(defn resolve-runner
+  "Pick the runner to run `agent` with. `runner` is either a single runner or
+  a registry map {id -> runner}; the agent's `:runner` id selects from the
   registry."
-  [adapter agent]
+  [runner agent]
   (cond
-    (satisfies? Adapter adapter) adapter
-    (map? adapter) (let [id (adapter-key agent)]
-                    (or (get adapter id)
-                        (get adapter :default)
-                        (throw (ex-info (str "no adapter registered for " (pr-str id))
-                                        {:adapter-key id
-                                         :registered (vec (keys adapter))}))))
-    :else (throw (ex-info "adapter must be a single adapter or a registry map {id -> adapter}"
-                          {:got adapter}))))
+    (satisfies? Runner runner) runner
+    (map? runner) (let [id (runner-key agent)]
+                    (or (get runner id)
+                        (get runner :default)
+                        (throw (ex-info (str "no runner registered for " (pr-str id))
+                                        {:runner-key id
+                                         :registered (vec (keys runner))}))))
+    :else (throw (ex-info "runner must be a single runner or a registry map {id -> runner}"
+                          {:got runner}))))
 
 (defn- span-id [] (str (UUID/randomUUID)))
 
@@ -168,7 +168,7 @@
            :path           (:karcarthy/path attrs)
            :attributes     (cond-> {"karcarthy.kind"       "agent"
                                     "karcarthy.agent.name" (:name agent)
-                                    "karcarthy.adapter.id" (name (adapter-key agent))}
+                                    "karcarthy.runner.id" (name (runner-key agent))}
                              (:karcarthy/path attrs)
                              (assoc "karcarthy.path" (pr-str (:karcarthy/path attrs)))
                              (:model agent) (assoc "karcarthy.agent.model" (:model agent))
@@ -179,22 +179,22 @@
     (:error attrs) (assoc :error (:error attrs))))
 
 (defn run-agent
-  "Validate `agent`, then run it on `prompt`. `adapter` is either a single
-  adapter or a registry map {id -> adapter} (see `resolve-adapter`). Returns a result map;
+  "Validate `agent`, then run it on `prompt`. `runner` is either a single
+  runner or a registry map {id -> runner} (see `resolve-runner`). Returns a result map;
   throws `ExceptionInfo` if the agent is malformed."
-  ([adapter agent prompt] (run-agent adapter agent prompt {}))
-  ([adapter agent prompt opts]
+  ([runner agent prompt] (run-agent runner agent prompt {}))
+  ([runner agent prompt opts]
    (when-let [msg (explain-agent agent)]
      (throw (ex-info (str "Invalid agent: " msg)
                      {:agent agent :problems (s/explain-data ::agent agent)})))
    (if-not (:observe opts)
-     (-run (resolve-adapter adapter agent) agent prompt opts)
+     (-run (resolve-runner runner agent) agent prompt opts)
      (let [span-id        (span-id)
            parent-span-id (:karcarthy/parent-span-id opts)
            started-ns     (System/nanoTime)]
        (observe! opts (agent-event :start span-id parent-span-id agent opts))
        (try
-         (let [result (-run (resolve-adapter adapter agent) agent prompt opts)]
+         (let [result (-run (resolve-runner runner agent) agent prompt opts)]
            (observe! opts (agent-event :finish span-id parent-span-id agent
                                        (assoc opts
                                               :duration-ms (duration-ms started-ns)
@@ -209,24 +209,47 @@
            (throw t)))))))
 
 ;; ===========================================================================
-;; Mock adapter
+;; Mock runner
 ;;
-;; A fully offline adapter for tests, demos, and developing orchestration logic
+;; A fully offline runner for tests, demos, and developing orchestration logic
 ;; without burning tokens or needing network access.
 ;; ===========================================================================
 
-(defn mock-adapter
-  "An offline adapter. `respond` is a fn of {:agent :prompt :opts} -> String
+(defn mock-runner
+  "An offline runner. `respond` is a fn of {:agent :prompt :opts} -> String
   (the agent's final reply). With no args it echoes the prompt, tagged with the
   agent name, which is handy for asserting how orchestration routes work.
 
-    (run-agent (mock-adapter) (agent \"echo\" \"e\") \"hi\")
+    (run-agent (mock-runner) (agent \"echo\" \"e\") \"hi\")
     ;=> {:karcarthy/type :result :ok? true :agent \"echo\" :text \"[echo] hi\" ...}"
-  ([] (mock-adapter (fn [{:keys [agent prompt]}]
+  ([] (mock-runner (fn [{:keys [agent prompt]}]
                       (str "[" (:name agent) "] " prompt))))
   ([respond]
-   (reify Adapter
+   (reify Runner
      (-run [_ agent prompt opts]
        (result {:agent (:name agent)
                 :text  (respond {:agent agent :prompt prompt :opts opts})
-                :raw   {:adapter :mock}})))))
+                :raw   {:runner :mock}})))))
+
+(defn fn-runner
+  "Build a runner from a Clojure function.
+
+  `f` receives `{:agent agent :prompt prompt :opts opts}`. It may return a
+  plain string, a partial result map, or a full result map."
+  [f]
+  (reify Runner
+    (-run [_ agent prompt opts]
+      (let [reply (f {:agent agent :prompt prompt :opts opts})]
+        (cond
+          (and (map? reply) (= :result (:karcarthy/type reply)))
+          reply
+
+          (map? reply)
+          (result (cond-> reply
+                    (not (contains? reply :agent)) (assoc :agent (:name agent))
+                    (not (contains? reply :raw)) (assoc :raw {:runner :fn})))
+
+          :else
+          (result {:agent (:name agent)
+                   :text  (str reply)
+                   :raw   {:runner :fn}}))))))
