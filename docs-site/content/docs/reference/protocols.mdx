@@ -1,6 +1,9 @@
-# References
+---
+title: Protocol References
+description: Protocol and SDK surfaces that informed Karcarthy's adapter boundary and workflow vocabulary.
+---
 
-These are the protocol and SDK surfaces that informed the proposed karcarthy
+These are the protocol and SDK surfaces that informed the proposed Karcarthy
 runtime vocabulary.
 
 ## Agent Client Protocol
@@ -17,15 +20,15 @@ runtime vocabulary.
   supersedes older session modes and exposes session-level selectors such as
   model, mode, and reasoning level.
 - [Session modes](https://agentclientprotocol.com/protocol/v1/session-modes) is the
-  older mode API; it is useful historical context, not a karcarthy surface.
+  older mode API; it is useful historical context, not a Karcarthy surface.
 
-Takeaways for karcarthy:
+Takeaways for Karcarthy:
 
 - `context` should be session/message state, not a broad resource kind.
 - `:mode` should not be a core resource. It belongs in session config or
   SDK/CLI adapter options.
-- tool calls are runtime events, not resource definitions.
-- permission requests are protocol adapter behavior, not graph IR.
+- Tool calls are runtime events, not resource definitions.
+- Permission requests are protocol adapter behavior, not graph IR.
 
 ## OpenAI Agents SDK and Responses API
 
@@ -43,13 +46,13 @@ Takeaways for karcarthy:
 - [Integrations and observability](https://developers.openai.com/api/docs/guides/agents/integrations-observability)
   covers MCP wiring and traces for model calls, tools, handoffs, and guardrails.
 
-Takeaways for karcarthy:
+Takeaways for Karcarthy:
 
 - MCP, hosted tools, and function tools should stay in SDK/provider config
-  until karcarthy has a concrete reason to interpret them directly.
+  until Karcarthy has a concrete reason to interpret them directly.
 - `branch` and `delegate` can target agents-as-tools, multiple SDK runs, or graph branches.
-- final output, emitted updates, and resumable state should stay separate.
-- mutable runtime state should preserve enough result data for replay and
+- Final output, emitted updates, and resumable state should stay separate.
+- Mutable runtime state should preserve enough result data for replay and
   continuation.
 
 ## Claude Agent SDK and Claude Code
@@ -67,13 +70,13 @@ Takeaways for karcarthy:
   frames MCP around tools, resources, prompts, local/remote servers, and security
   hints.
 
-Takeaways for karcarthy:
+Takeaways for Karcarthy:
 
-- subagents provide context isolation and return only final messages to parents;
+- Subagents provide context isolation and return only final messages to parents;
   this supports explicit `context` passing and branch/delegate/reduce synthesis.
 - MCP servers should be scoping boundaries so tool definitions do not bloat the
   parent context unnecessarily.
-- permission modes are part of the host/runtime adapter, not first-class graph
+- Permission modes are part of the host/runtime adapter, not first-class graph
   operations.
 
 ## DSPy
@@ -81,9 +84,9 @@ Takeaways for karcarthy:
 - [DSPy](https://dspy.ai/) emphasizes typed signatures, modules, metrics, and
   optimizers.
 
-Takeaways for karcarthy:
+Takeaways for Karcarthy:
 
-- prompts should not be the only contract; agents and graphs should grow typed
+- Prompts should not be the only contract; agents and graphs should grow typed
   input/output signatures once validation needs them.
-- metrics and optimization can help the agent patch itself, but they should not
+- Metrics and optimization can help the agent patch itself, but they should not
   expand the runtime surface before they have interpreter behavior.

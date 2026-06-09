@@ -4,6 +4,7 @@
     "index",
     "api",
     "schema",
-    "json"
+    "json",
+    "protocols"
   ]
 }

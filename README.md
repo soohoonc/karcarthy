@@ -77,15 +77,13 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
 - Examples in Clojure, JavaScript, Java, Kotlin, Scala, Python, and TypeScript:
   [`examples/`](examples/). Non-JVM languages drive it through `bin/karcarthy`
   over JSON, since a workflow is just data.
-- Fumadocs-powered web docs for Vercel hosting:
+- Fumadocs-powered web docs and protocol references:
   [`docs-site/`](docs-site/) and
   [`karcarthy-docs.vercel.app/docs`](https://karcarthy-docs.vercel.app/docs).
 - How it compares to PydanticAI, DSPy, Agno, and the Vercel AI SDK:
   [`COMPARISON.md`](COMPARISON.md).
 - What is missing for a sharper core:
   [`ROADMAP.md`](ROADMAP.md).
-- Protocol references behind the adapter/runtime boundary:
-  [`docs/`](docs/).
 - `clojure -M:test` runs the offline tests; `clojure -M -m karcarthy.demo` runs a demo.
 - `clojure -T:build uber` builds `target/karcarthy-0.0.2-standalone.jar`;
   `./bin/karcarthy agent echo --instructions "Echo the input." hi` runs it as a CLI.
