@@ -49,6 +49,8 @@
 (deftest constructors-build-data
   (testing "workflows are plain tagged data"
     (is (= {:karcarthy/type :pipe :steps [a b]} (o/pipe a b)))
+    (is (= :step (:karcarthy/type (o/step str/trim))))
+    (is (= "trim" (:name (o/step str/trim :name "trim"))))
     (is (= {:karcarthy/type :branch :branches [a b]} (o/branch [a b])))
     (is (= {:karcarthy/type :delegate :planner planner :worker a}
            (o/delegate planner a)))
@@ -66,6 +68,23 @@
     (let [r (o/run h (o/pipe a b c) "hi")]
       (is (k/ok? r))
       (is (= "[c] [b] [a] hi" (:text r))))))
+
+(deftest step-runs-host-function
+  (testing "a host Clojure step receives the flowing input directly"
+    (let [r (o/run h (o/pipe (o/step str/upper-case :name "up") a) "hi")]
+      (is (k/ok? r))
+      (is (= "[a] HI" (:text r)))))
+  (testing "a host Clojure step can opt into context"
+    (let [flow (o/pipe (o/step (fn [{:keys [input node]}]
+                                  (str (:name node) ":" input))
+                                :name "tag"
+                                :context? true)
+                       a)
+          r    (o/run h flow "hi")]
+      (is (= "[a] tag:hi" (:text r)))))
+  (testing "a host Clojure step may return a result map"
+    (let [r (o/run h (o/step (fn [_] (k/result {:text "done"}))) "hi")]
+      (is (= "done" (:text r))))))
 
 (deftest pipe-short-circuits-on-failure
   (testing "a failing step stops the pipe and is returned"
@@ -270,9 +289,11 @@
       (is (= "boom" (:error (second (:results r))))))))
 
 (deftest workflow-predicate
-  (testing "workflow? recognizes pure data workflows and rejects host functions"
+  (testing "workflow? recognizes workflows and only permits host functions in step nodes"
     (is (o/workflow? a))
+    (is (o/workflow? (o/step str/trim)))
     (is (o/workflow? (o/pipe a b)))
+    (is (o/workflow? (o/pipe a (o/step str/trim) b)))
     (is (o/workflow? (o/delegate planner a)))
     (is (o/workflow? (o/reduce (o/branch [a b]) reducer)))
     (is (not (o/workflow? (assoc a :host/fn (fn [] :x)))))
@@ -280,6 +301,8 @@
     (is (not (o/workflow? (o/delegate (fn [_] []) a))))
     (is (not (o/workflow? (o/revise a (fn [_] {:accept? true})))))
     (is (not (o/workflow? (o/route (fn [_] :x) {:x a}))))
+    (is (not (o/workflow? {:karcarthy/type :step :f "not-a-fn"})))
+    (is (not (o/workflow? {:karcarthy/type :step :f str/trim :name :trim})))
     (is (not (o/workflow? {:karcarthy/type :pipe
                             :steps [{:karcarthy/type :chain :steps [a]}]})))
     (is (not (o/workflow? {:karcarthy/type :nonsense})))

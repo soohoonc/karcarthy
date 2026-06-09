@@ -25,13 +25,38 @@
 
 (s/def ::name        (s/and string? seq))
 (s/def ::instructions string?)
+(s/def ::description string?)
 (s/def ::model       (s/nilable string?))
 (s/def ::tools       (s/coll-of string? :kind vector?))
+(s/def ::disallowed-tools (s/coll-of string? :kind vector?))
 (s/def ::runner      keyword?)   ; id into a runner registry (optional)
+(s/def ::permission-mode any?)
+(s/def ::sandbox-mode any?)
+(s/def ::mcp-servers any?)
+(s/def ::max-turns pos-int?)
+(s/def ::skills (s/coll-of string? :kind vector?))
+(s/def ::initial-prompt string?)
+(s/def ::memory any?)
+(s/def ::effort any?)
+(s/def ::reasoning-effort any?)
+(s/def ::background? boolean?)
+(s/def ::isolation any?)
+(s/def ::color any?)
+(s/def ::nicknames (s/coll-of string? :kind vector?))
+(s/def ::hooks any?)
+(s/def ::config map?)
 
 (s/def ::agent
   (s/keys :req-un [::name ::instructions]
           :opt-un [::model ::tools ::runner]))
+
+(s/def ::subagent
+  (s/keys :req-un [::name ::description ::instructions]
+          :opt-un [::model ::tools ::disallowed-tools
+                   ::permission-mode ::sandbox-mode ::mcp-servers
+                   ::max-turns ::skills ::initial-prompt ::memory
+                   ::effort ::reasoning-effort ::background? ::isolation
+                   ::color ::nicknames ::hooks ::config]))
 
 (defn agent
   "Build an agent value. `name` and `instructions` are required; the rest are
@@ -58,11 +83,75 @@
   [x]
   (and (map? x) (= :agent (:karcarthy/type x)) (s/valid? ::agent x)))
 
+(defn subagent
+  "Build a runner-native subagent definition.
+
+  A subagent is not a workflow node. It is configuration passed to runners that
+  support native delegation, such as Claude Code subagents or OpenAI Agents SDK
+  handoffs.
+
+    (subagent \"security-reviewer\"
+              \"Use for auth, secrets, and permission review.\"
+              \"Review like a security owner and return concrete findings.\"
+              :tools [\"Read\" \"Grep\" \"Glob\"]
+              :model \"sonnet\")"
+  [name description instructions & {:keys [model tools disallowed-tools
+                                           permission-mode sandbox-mode
+                                           mcp-servers max-turns skills
+                                           initial-prompt memory effort
+                                           reasoning-effort background?
+                                           isolation color nicknames hooks
+                                           config]
+                                    :as opts}]
+  (when-let [unknown (seq (remove #{:model :tools :disallowed-tools
+                                    :permission-mode :sandbox-mode
+                                    :mcp-servers :max-turns :skills
+                                    :initial-prompt :memory :effort
+                                    :reasoning-effort :background?
+                                    :isolation :color :nicknames :hooks
+                                    :config}
+                                  (keys opts)))]
+    (throw (ex-info "subagent contains unknown options"
+                    {:unknown (vec unknown)})))
+  (cond-> {:karcarthy/type :subagent
+           :name name
+           :description description
+           :instructions instructions}
+    model (assoc :model model)
+    tools (assoc :tools (vec tools))
+    disallowed-tools (assoc :disallowed-tools (vec disallowed-tools))
+    permission-mode (assoc :permission-mode permission-mode)
+    sandbox-mode (assoc :sandbox-mode sandbox-mode)
+    mcp-servers (assoc :mcp-servers mcp-servers)
+    max-turns (assoc :max-turns max-turns)
+    skills (assoc :skills (vec skills))
+    initial-prompt (assoc :initial-prompt initial-prompt)
+    memory (assoc :memory memory)
+    effort (assoc :effort effort)
+    reasoning-effort (assoc :reasoning-effort reasoning-effort)
+    (contains? opts :background?) (assoc :background? (boolean background?))
+    isolation (assoc :isolation isolation)
+    color (assoc :color color)
+    nicknames (assoc :nicknames (vec nicknames))
+    hooks (assoc :hooks hooks)
+    config (assoc :config config)))
+
+(defn subagent?
+  "True if `x` is a karcarthy subagent value (well-formed)."
+  [x]
+  (and (map? x) (= :subagent (:karcarthy/type x)) (s/valid? ::subagent x)))
+
 (defn explain-agent
   "Return a human-readable validation message for `x`, or nil if it is valid."
   [x]
   (when-not (s/valid? ::agent x)
     (s/explain-str ::agent x)))
+
+(defn explain-subagent
+  "Return a human-readable validation message for `x`, or nil if it is valid."
+  [x]
+  (when-not (s/valid? ::subagent x)
+    (s/explain-str ::subagent x)))
 
 (defmacro defagent
   "Define a var holding an agent map. The symbol's name becomes the agent's
@@ -83,6 +172,20 @@
                     {:sym sym :instructions instructions})))
   `(def ~(vary-meta sym assoc :doc instructions)
      (agent ~(name sym) ~instructions ~@opts)))
+
+(defmacro defsubagent
+  "Define a var holding a subagent map. The symbol's name becomes the
+  subagent's :name, `description` guides delegation, and `instructions` becomes
+  the runner-native prompt/instructions."
+  [sym description instructions & opts]
+  (when-not (string? description)
+    (throw (ex-info "defsubagent: description must be a string literal"
+                    {:sym sym :description description})))
+  (when-not (string? instructions)
+    (throw (ex-info "defsubagent: instructions must be a string literal"
+                    {:sym sym :instructions instructions})))
+  `(def ~(vary-meta sym assoc :doc instructions)
+     (subagent ~(name sym) ~description ~instructions ~@opts)))
 
 ;; ===========================================================================
 ;; Results
@@ -234,22 +337,31 @@
 (defn fn-runner
   "Build a runner from a Clojure function.
 
-  `f` receives `{:agent agent :prompt prompt :opts opts}`. It may return a
-  plain string, a partial result map, or a full result map."
-  [f]
-  (reify Runner
-    (-run [_ agent prompt opts]
-      (let [reply (f {:agent agent :prompt prompt :opts opts})]
-        (cond
-          (and (map? reply) (= :result (:karcarthy/type reply)))
-          reply
+  By default, `f` receives only the flowing input string. With `{:context? true}`,
+  `f` receives `{:agent agent :input input :opts opts}`. It may return a plain
+  string, a partial result map, or a full result map."
+  ([f] (fn-runner f {}))
+  ([f {:keys [context? context] :as config}]
+   (when-let [unknown (seq (remove #{:context? :context} (keys config)))]
+     (throw (ex-info "fn-runner contains unknown options"
+                     {:unknown (vec unknown)
+                      :supported [:context?]})))
+   (let [context? (boolean (or context? context))]
+     (reify Runner
+       (-run [_ agent input opts]
+         (let [reply (if context?
+                       (f {:agent agent :input input :opts opts})
+                       (f input))]
+           (cond
+             (and (map? reply) (= :result (:karcarthy/type reply)))
+             reply
 
-          (map? reply)
-          (result (cond-> reply
-                    (not (contains? reply :agent)) (assoc :agent (:name agent))
-                    (not (contains? reply :raw)) (assoc :raw {:runner :fn})))
+             (map? reply)
+             (result (cond-> reply
+                       (not (contains? reply :agent)) (assoc :agent (:name agent))
+                       (not (contains? reply :raw)) (assoc :raw {:runner :fn})))
 
-          :else
-          (result {:agent (:name agent)
-                   :text  (str reply)
-                   :raw   {:runner :fn}}))))))
+             :else
+             (result {:agent (:name agent)
+                      :text  (str reply)
+                      :raw   {:runner :fn}}))))))))

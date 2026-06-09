@@ -12,10 +12,13 @@
     revise    draft, critique, and retry until accepted or a round limit is reached.
     route     choose the next workflow from a previous result.
     continue  send the previous result to the next workflow, preserving session ids.
+    step      run a host Clojure function on the flowing input.
     dynamic   let an agent define, patch, call, and spawn work during a run.
 
   Because a workflow is data, you build, generate and serialize it with ordinary
-  Clojure. Model-facing replies are EDN maps:
+  Clojure. Pure workflow nodes are EDN/JSON portable; `step` is deliberately
+  host-local because it contains a Clojure function. Model-facing replies are
+  EDN maps:
 
     planner   {:subtasks [\"...\"]}
     evaluator {:accept? true} or {:accept? false :feedback \"...\"}
@@ -48,6 +51,22 @@
   "Run `steps` in sequence, threading each result's :text into the next step."
   [& steps]
   {:karcarthy/type :pipe :steps (vec steps)})
+
+(defn step
+  "Run a host Clojure function in a workflow.
+
+  By default, `f` receives the flowing input string. With `:context? true`, `f`
+  receives `{:input input :opts opts :node node}`. A step may return text, a
+  partial result map, or a full result map. Step nodes are Clojure-local and are
+  not EDN/JSON portable."
+  [f & {:keys [name context? context] :as opts}]
+  (when-let [unknown (seq (remove #{:name :context? :context} (keys opts)))]
+    (throw (ex-info "step contains unknown options"
+                    {:unknown (vec unknown)
+                     :supported [:name :context?]})))
+  (cond-> {:karcarthy/type :step :f f}
+    name (assoc :name (name-key name))
+    (or context? context) (assoc :context? true)))
 
 (defn branch
   "Run each workflow in `branches` on the same input. Options:
@@ -272,6 +291,30 @@
   [runner agent input opts]
   (k/run-agent runner agent input opts))
 
+(defn- step-result
+  [name reply]
+  (cond
+    (and (map? reply) (= :result (:karcarthy/type reply)))
+    reply
+
+    (map? reply)
+    (k/result (cond-> reply
+                (not (contains? reply :step)) (assoc :step name)
+                (not (contains? reply :raw)) (assoc :raw {:step name})))
+
+    :else
+    (k/result {:step name
+               :text (str reply)
+               :raw  {:step name}})))
+
+(defmethod run-node :step
+  [_runner {:keys [f name context?] :as node} input opts]
+  (let [name  (or name "step")
+        reply (if context?
+                (f {:input input :opts opts :node (dissoc node :f)})
+                (f input))]
+    (step-result name reply)))
+
 (defmethod run-node :pipe
   [runner {:keys [steps]} input opts]
   (loop [input input, indexed-steps (map-indexed vector steps), last-result nil]
@@ -475,7 +518,12 @@
 
 (defn- portable?
   [x]
-  (not-any? fn? (tree-seq coll? seq x)))
+  (not-any? fn?
+            (tree-seq (fn [x]
+                        (and (coll? x)
+                             (not= :step (:karcarthy/type x))))
+                      seq
+                      x)))
 
 (defn- extension? [x]
   (contains? (disj (set (keys (methods run-node))) :default
@@ -498,6 +546,13 @@
             :pipe
             (and (sequential? (:steps x))
                  (every? workflow? (:steps x)))
+
+            :step
+            (and (fn? (:f x))
+                 (or (not (contains? x :name))
+                     (string? (:name x)))
+                 (or (not (contains? x :context?))
+                     (boolean? (:context? x))))
 
             :branch
             (and (sequential? (:branches x))

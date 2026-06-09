@@ -18,9 +18,9 @@
 ;; - The Deep Research API exposes web search, code interpreter, and MCP calls
 ;;   in response output metadata.
 ;; - Codex CLI supports non-interactive `codex exec` and stdin, making it a
-;;   natural process-runner target. Codex can also run as an MCP server for
-;;   OpenAI Agents SDK workflows; this example uses `exec` because it is the
-;;   thinnest leaf-agent runner shape.
+;;   natural process-backed runner target. Codex can also run as an MCP server
+;;   for OpenAI Agents SDK workflows; this example uses `exec` because it is
+;;   the thinnest leaf-agent runner shape.
 ;; - Anthropic describes Dynamic Workflows as Claude planning work, running many
 ;;   parallel subagents, verifying work, and combining results. In karcarthy,
 ;;   the analogous orchestration artifact is EDN workflow data.
@@ -31,7 +31,9 @@
 (require '[clojure.edn :as edn]
          '[clojure.pprint :as pp]
          '[clojure.string :as str]
-         '[karcarthy :as k])
+         '[karcarthy :as k]
+         '[karcarthy.core :as core]
+         '[karcarthy.proc :as proc])
 
 (defn bullets [xs]
   (str/join "\n" (map #(str "- " %) xs)))
@@ -155,18 +157,29 @@
   ([{:keys [dir timeout-ms] :or {dir "/tmp/karc-deep-research"
                                  timeout-ms (* 20 60 1000)}}]
    (.mkdirs (java.io.File. dir))
-   (k/process-runner
-    (fn [agent]
-      (cond-> ["codex" "exec"
-               "--ephemeral"
-               "--color" "never"
-               "--sandbox" "read-only"
-               "--skip-git-repo-check"
-               "--cd" dir]
-        (:model agent) (into ["--model" (:model agent)])
-        true           (conj (codex-prompt agent))))
-    {:dir dir
-     :timeout-ms timeout-ms})))
+   (reify core/Runner
+     (-run [_ agent input _opts]
+       (let [argv (cond-> ["codex" "exec"
+                           "--ephemeral"
+                           "--color" "never"
+                           "--sandbox" "read-only"
+                           "--skip-git-repo-check"
+                           "--cd" dir]
+                    (:model agent) (into ["--model" (:model agent)])
+                    true           (conj (codex-prompt agent)))
+             {:keys [exit out err timed-out?]}
+             (proc/run argv {:in input :dir dir :timeout-ms timeout-ms})]
+         (core/result {:agent (:name agent)
+                       :ok? (and (not timed-out?) (= 0 exit))
+                       :text (str/trim (or out ""))
+                       :error (cond timed-out? "codex timed out"
+                                    (not= 0 exit) (str "codex exited with status " exit))
+                       :raw {:runner :codex
+                             :exit exit
+                             :out out
+                             :err err
+                             :timed-out? timed-out?
+                             :argv argv}}))))))
 
 (def offline-responses
   {"research-planner"

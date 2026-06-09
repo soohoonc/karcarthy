@@ -11,7 +11,7 @@ single-agent execution to systems that already run model calls and tools.
 
 | Need | Use karcarthy when | Prefer another system when |
 | --- | --- | --- |
-| Agent loop | You already have an SDK, CLI, Clojure function, process, or shell command that can run one agent. | You need a batteries-included agent runtime first. |
+| Agent loop | You already have an SDK, CLI, Clojure function, or process command that can run one agent. | You need a batteries-included agent runtime first. |
 | Workflow shape | You want the graph to be EDN/JSON data that can be stored, generated, diffed, and rewritten. | You want workflows only as Python/TypeScript objects. |
 | Tools | Tool execution belongs to Claude CLI, OpenAI Agents SDK, MCP config, or your process runner. | You want karcarthy itself to define and host tool schemas. |
 | Multi-agent patterns | You want `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, and `continue` as portable values. | You want a mature framework-native graph runtime and UI. |
@@ -35,7 +35,7 @@ runner:   model calls, tool calls, sessions, provider-specific runtime
 ```
 
 That split lets the same workflow run offline, through Claude CLI, through the
-OpenAI Agents SDK bridge, a process runner, or a shell runner.
+OpenAI Agents SDK bridge, or through a process runner.
 
 ## Related guides
 

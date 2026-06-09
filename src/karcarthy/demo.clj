@@ -56,12 +56,12 @@
   ;; real subprocess), and the reducer receives the source result summary as EDN.
   (let [workflow (o/reduce
                   (o/delegate (k/agent "split" "Return EDN subtasks." :runner :plan)
-                              (k/agent "shout" "uppercase" :runner :shell))
+                              (k/agent "shout" "uppercase" :runner :upper))
                   (k/agent "join" "Join source result text." :runner :join))
         runner  {:plan  (k/mock-runner
                           (fn [{:keys [prompt]}]
                             (pr-str {:subtasks (str/split (str/trim prompt) #"\s+")})))
-                  :shell (k/process-runner ["tr" "a-z" "A-Z"])
+                  :upper (k/process-runner ["tr" "a-z" "A-Z"])
                   :join  (k/mock-runner
                           (fn [{:keys [prompt]}]
                             (->> (:results (edn/read-string prompt))

@@ -53,12 +53,17 @@ Swap the mock runner for `(k/claude-cli-runner {})` to run it against `claude`.
 ## Highlights
 
 - **Runners** behind one protocol: `mock-runner`, `fn-runner`,
-  `process-runner`, `shell-runner`, `claude-cli-runner`, and
+  `process-runner`, `claude-cli-runner`, and
   `openai-agents-runner`. Pass one runner, or pass a map and let each agent
   choose with `:runner`.
 - **Workflows as data**: compose agents with `pipe`, `branch`, `delegate`,
   `reduce`, `revise`, `route`, `continue`, and `dynamic`; inspect and rewrite
   those workflow values before running them.
+- **Host Clojure steps**: use `step` for local functions inside workflows; use
+  `process-runner` for fixed argv or shell commands selected by the runner registry.
+- **Runner-native subagents**: define `subagent` maps for Claude Code
+  subagents or OpenAI Agents SDK handoffs while keeping workflow branches as
+  explicit karcarthy orchestration.
 - **Structural rewrites**: stamp configuration onto every agent without changing the
   original workflow:
   ```clojure

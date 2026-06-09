@@ -41,6 +41,10 @@
 (export karcarthy.core/agent?)
 (export karcarthy.core/explain-agent)
 (export karcarthy.core/defagent)
+(export karcarthy.core/subagent)
+(export karcarthy.core/subagent?)
+(export karcarthy.core/explain-subagent)
+(export karcarthy.core/defsubagent)
 (export karcarthy.core/mock-runner)
 (export karcarthy.core/fn-runner)
 (export karcarthy.core/result)
@@ -48,6 +52,7 @@
 
 ;; orchestration
 (export karcarthy.orchestrate/pipe)
+(export karcarthy.orchestrate/step)
 (export karcarthy.orchestrate/branch)
 (export karcarthy.orchestrate/delegate)
 (export karcarthy.orchestrate/reduce)
@@ -78,5 +83,4 @@
 ;; Agent SDK/CLI runners
 (export karcarthy.runner.claude/claude-cli-runner)
 (export karcarthy.runner.process/process-runner)
-(export karcarthy.runner.process/shell-runner)
 (export karcarthy.runner.openai/openai-agents-runner)

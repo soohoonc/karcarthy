@@ -1,6 +1,6 @@
 ---
 title: Use Runners
-description: Connect workflow data to mock, function, process, shell, and SDK-backed agent systems.
+description: Connect workflow data to mock, function, process, CLI, and SDK-backed agent systems.
 ---
 
 karcarthy coordinates workflows. A runner runs one agent to completion. That
@@ -39,6 +39,63 @@ or a registry selected per agent:
 Agent-level `:runner` is a registry key. It does not change the workflow
 shape.
 
+This follows the Agent Client Protocol split: a client starts or resumes a
+session, sends prompt turns, receives updates, and provides filesystem,
+terminal, permission, and MCP surfaces. karcarthy owns the workflow value above
+that boundary. The selected runner owns the provider-native agent session.
+
+## Subagents
+
+Use `subagent` when the selected runner supports native delegation inside one
+agent session:
+
+```clojure
+(def security-reviewer
+  (k/subagent "security-reviewer"
+    "Use for auth, secrets, injection, permission, and data exposure review."
+    "Review like a security owner. Return concrete findings with file refs."
+    :tools ["Read" "Grep" "Glob"]
+    :model "sonnet"
+    :effort :high))
+
+(def runner
+  (k/claude-cli-runner
+   {:subagents [security-reviewer]}))
+
+(k/run runner
+       (k/agent "review-coordinator"
+         "Review this branch. Use the security-reviewer subagent where useful."
+         :tools ["Agent" "Read" "Grep" "Glob"])
+       "Review current changes.")
+```
+
+Subagents are runner config, not workflow nodes. A workflow branch is visible
+karcarthy orchestration; a subagent is provider-native delegation used by a
+single runner call.
+
+| karcarthy field | Claude Code | Codex | OpenAI Agents SDK |
+| --- | --- | --- | --- |
+| `:name` | subagent name | custom agent name | handoff agent name |
+| `:description` | delegation description | custom agent description | handoff description |
+| `:instructions` | `prompt` | `developer_instructions` | `instructions` |
+| `:tools` | tool allowlist | inherited/configured tools | bridge-specific, not yet exposed |
+| `:mcp-servers` | subagent MCP servers | `mcp_servers` config | bridge-specific, not yet exposed |
+| `:model` | subagent model | custom agent model | handoff agent model |
+| `:effort` / `:reasoning-effort` | effort | `model_reasoning_effort` | bridge-specific |
+| `:background?` / `:isolation` | background/worktree controls | sandbox/worktree config | not applicable |
+
+`claude-cli-runner` lowers subagents to Claude Code `--agents` JSON. The main
+agent still needs access to the `Agent` tool, usually through its `:tools`
+allowlist.
+
+`openai-agents-runner` lowers subagents to Agents SDK handoffs. The current
+bridge supports names, instructions, handoff descriptions, and models.
+
+Codex custom agents are file-backed TOML definitions under `.codex/agents/` or
+`~/.codex/agents/`, so they belong in a dedicated Codex runner rather than
+`process-runner`. The `karcarthy.runner.codex/subagent->config` helper lowers a
+`subagent` to Codex custom-agent config keys without writing files.
+
 ## Mock runner
 
 Use the mock runner for tests, docs, and local workflow design:
@@ -71,21 +128,29 @@ Pass a response function when tests need deterministic named behavior:
 
 ## Function runner
 
-Use `fn-runner` when a plain Clojure function is the execution boundary:
+Use `fn-runner` when a Clojure function is the runner for agent specs:
 
 ```clojure
 (def uppercase
-  (k/fn-runner
-   (fn [{:keys [prompt]}]
-     (clojure.string/upper-case prompt))))
+  (k/fn-runner clojure.string/upper-case))
 
 (k/run uppercase
        (k/agent "shout" "Uppercase the input.")
        "quiet please")
 ```
 
-The function receives `{:agent agent :prompt prompt :opts opts}`. It may return
-text, a partial result map, or a full result map.
+By default, the function receives only the input string. If it needs the agent
+spec or run options, opt into context:
+
+```clojure
+(k/fn-runner
+ (fn [{:keys [agent input opts]}]
+   (str (:name agent) ": " input))
+ {:context? true})
+```
+
+Use `fn-runner` for a Clojure implementation of the runner boundary. Use
+`step` when the function is just a local transform inside a workflow.
 
 ## Claude CLI runner
 
@@ -106,8 +171,8 @@ agent system.
 
 ## Process runner
 
-Use `process-runner` to wrap a local model, script, or coding-agent CLI with an
-argv vector:
+Use `process-runner` to wrap a fixed local command. An argv vector is executed
+directly:
 
 ```clojure
 (def local-model
@@ -120,21 +185,28 @@ argv vector:
        "Summarize the rollout risk.")
 ```
 
-The command receives the prompt and returns text. That makes it useful for
-prototyping new runners before writing a direct integration.
-
-## Shell runner
-
-Use `shell-runner` when you really want shell parsing, pipes, redirects, or
-inline scripts:
+The command receives the input on stdin and returns text on stdout. Use a string
+when you want shell parsing, pipes, redirects, or inline scripts:
 
 ```clojure
-(k/run (k/shell-runner "tr a-z A-Z")
+(k/run (k/process-runner "tr a-z A-Z")
        (k/agent "shout" "Uppercase the input.")
        "quiet please")
 ```
 
-Prefer `process-runner` for fixed commands and `shell-runner` for shell syntax.
+`process-runner` does not derive commands from `k/agent`. Select different
+commands with the runner registry:
+
+```clojure
+(k/run {:default (k/process-runner ["cat"])
+        :upper   (k/process-runner ["tr" "a-z" "A-Z"])}
+       (k/agent "shout" "Uppercase input." :runner :upper)
+       "quiet please")
+```
+
+This keeps process execution as runner configuration. Dedicated CLI bridges
+such as `claude-cli-runner` may still be agent-aware because they translate an
+agent spec into that CLI's prompt, flags, tools, and session behavior.
 
 ## OpenAI Agents SDK bridge
 

@@ -1,21 +1,28 @@
 (ns karcarthy-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [karcarthy :as kc]))
 
 (deftest facade-reexports-fns
   (testing "core + orchestrate functions are reachable under one alias"
     (let [a (kc/agent "x" "i")]
       (is (kc/agent? a)))
+    (let [s (kc/subagent "reviewer" "Use for review." "Review carefully.")]
+      (is (kc/subagent? s)))
     (let [r (kc/run (kc/mock-runner)
                     (kc/pipe (kc/agent "a" "i") (kc/agent "b" "i"))
                     "hi")]
       (is (kc/ok? r))
       (is (= "[b] [a] hi" (:text r))))
-    (is (kc/ok? (kc/run (kc/fn-runner (fn [{:keys [prompt]}] prompt))
+    (is (kc/ok? (kc/run (kc/fn-runner identity)
                          (kc/agent "fn" "i")
                          "hi")))
-    (is (kc/ok? (kc/run (kc/shell-runner "cat")
-                         (kc/agent "shell" "i")
+    (is (= "[a] HI" (:text (kc/run (kc/mock-runner)
+                                    (kc/pipe (kc/step str/upper-case)
+                                             (kc/agent "a" "i"))
+                                    "hi"))))
+    (is (kc/ok? (kc/run (kc/process-runner "cat")
+                         (kc/agent "process" "i")
                          "hi")))
     (let [a (kc/agent "a" "i")
           b (kc/agent "b" "i")]
@@ -29,6 +36,8 @@
     (kc/defagent facade-agent "instr" :model "m")
     (is (= "facade-agent" (:name facade-agent)))
     (is (= "m" (:model facade-agent)))
+    (kc/defsubagent facade-subagent "Use for review." "Review carefully.")
+    (is (= "facade-subagent" (:name facade-subagent)))
     (kc/defworkflow facade-workflow (kc/pipe facade-agent))
     (is (kc/workflow? facade-workflow))))
 
@@ -50,6 +59,7 @@
 (deftest facade-reexports-values
   (is (string? kc/dsl-reference))
   (is (string? (kc/explain-agent {:karcarthy/type :agent})))
+  (is (string? (kc/explain-subagent {:karcarthy/type :subagent})))
   (is (map? kc/edn-schema))
   (is (map? kc/json-schema))
   (is (kc/agent? (kc/read-agent "{:karcarthy/type :agent :name \"x\" :instructions \"i\"}"))))
@@ -74,4 +84,5 @@
     (is (nil? (ns-resolve 'karcarthy 'bind)))
     (is (nil? (ns-resolve 'karcarthy 'iterate)))
     (is (nil? (ns-resolve 'karcarthy 'config)))
+    (is (nil? (ns-resolve 'karcarthy 'shell-runner)))
     (is (nil? (ns-resolve 'karcarthy '-run)))))

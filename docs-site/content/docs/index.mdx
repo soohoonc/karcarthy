@@ -5,7 +5,7 @@ description: Data-first agent orchestration for Clojure and command-line workflo
 
 karcarthy coordinates multi-agent workflows while keeping the plan as ordinary
 data. The model/tool loop belongs to a runner such as Claude CLI, the OpenAI
-Agents SDK bridge, a process or shell command, or the local mock runner. karcarthy owns
+Agents SDK bridge, a process command, or the local mock runner. karcarthy owns
 the orchestration value above those systems.
 
 ```clojure
@@ -53,7 +53,7 @@ coordination value and the small interpreter for that value.
 | --- | --- |
 | Run one agent or workflow file from the command line | [Quickstart](/docs/start) |
 | Understand how data moves through `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic` | [Build Workflows](/docs/workflows) |
-| Swap mock execution for Claude CLI, OpenAI Agents SDK, a process, or a shell command | [Use Runners](/docs/runners) |
+| Swap mock execution for Claude CLI, OpenAI Agents SDK, or a process command | [Use Runners](/docs/runners) |
 | Build a realistic launch-readiness workflow | [Tutorials](/docs/tutorials) |
 | Look up signatures and JSON shapes | [Reference](/docs/reference) |
 
@@ -64,7 +64,7 @@ coordination value and the small interpreter for that value.
 | Agents | Plain maps tagged with `:karcarthy/type :agent`. |
 | Workflows | `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic`. |
 | Rewrites | `agents`, `over`, and `configure`. |
-| Runners | Mock, Clojure function, process, shell, Claude CLI, and OpenAI Agents SDK bridge. |
+| Runners | Mock, Clojure function, process command, Claude CLI, and OpenAI Agents SDK bridge. |
 | CLI | `bin/karcarthy agent`, `run`, `demo`, and `json`. |
 
 ## Current status

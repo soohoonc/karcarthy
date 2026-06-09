@@ -61,6 +61,10 @@ Run a workflow JSON file. The file can be either a raw workflow object:
 }
 ```
 
+The JSON workflow schema covers portable workflow nodes. Runner configuration
+such as `subagent` definitions is supplied by Clojure runner construction or a
+runner-specific config file, not embedded as workflow nodes.
+
 or a full request object with `workflow`, `input`, and runner fields.
 
 ```bash
@@ -111,6 +115,10 @@ The same shapes are available as a JSON Schema value from Clojure:
 
 k/json-schema
 ```
+
+JSON workflows include portable workflow nodes only. Clojure-local `step` nodes
+store function values, so they are available from Clojure code but not from the
+JSON bridge.
 
 ### agent
 

@@ -1,6 +1,6 @@
 ---
 title: Build Workflows
-description: Understand how pipe, branch, delegate, reduce, revise, route, continue, and dynamic move data through agents.
+description: Understand how pipe, step, branch, delegate, reduce, revise, route, continue, and dynamic move data through agents.
 ---
 
 A workflow is a value. `run` interprets that value through a runner and
@@ -21,6 +21,7 @@ how child result text is routed to the next node.
 | Node | Use it when | Input behavior | Output behavior |
 | --- | --- | --- | --- |
 | `pipe` | Steps must happen in order. | First step receives the original input; each later step receives previous `:text`. | Last successful step's result. |
+| `step` | Host Clojure code should transform workflow text. | Receives the flowing input string, or an explicit context map. | A normal result map. |
 | `branch` | Several reviewers should inspect the same input independently. | Each branch receives the same input. | A result with `:results` and combined `:text`. |
 | `delegate` | A planner should create subtasks for a worker. | Planner receives the original input; worker receives one subtask at a time. | A result with `:subtasks`, `:results`, and combined `:text`. |
 | `reduce` | Branch or delegate outputs need synthesis by another workflow. | Runs the source workflow, then sends an EDN result summary to the reducer workflow. | Reducer result plus `:source` and `:reduced`. |
@@ -50,6 +51,33 @@ summarizer: [summarizer] [researcher] what is a monad?
 
 The next step receives only the previous result text. If a step fails, the pipe
 returns that not-ok result and stops.
+
+## step
+
+Use `step` for local Clojure transforms inside a workflow:
+
+```clojure
+(def workflow
+  (k/pipe
+   writer
+   (k/step clojure.string/trim :name "trim")
+   reviewer))
+```
+
+By default the function receives only the flowing input string. If it needs run
+metadata, opt into context:
+
+```clojure
+(k/step
+ (fn [{:keys [input node]}]
+   (str (:name node) ": " input))
+ :name "tag"
+ :context? true)
+```
+
+`step` is deliberately Clojure-local because it stores a function. It is not
+EDN/JSON portable. Use `process-runner` when the execution boundary is a fixed
+external process selected by the runner registry.
 
 ## branch
 
@@ -116,7 +144,7 @@ The reducer receives a prompt containing EDN data:
 ```
 
 Because reducers are workflows, not host functions, the workflow stays
-serializable.
+serializable unless you deliberately add Clojure-local `step` nodes.
 
 ## revise
 
@@ -231,5 +259,6 @@ before `run` interprets them:
 ```
 
 That is the point of karcarthy: keep the coordination graph visible and
-serializable while runners own model calls, tools, and provider-specific agent
-loops. It is EDN plus an explicit interpreter, not raw `eval`.
+serializable when it uses portable nodes, while runners own model calls, tools,
+and provider-specific agent loops. It is EDN plus an explicit interpreter, not
+raw `eval`.

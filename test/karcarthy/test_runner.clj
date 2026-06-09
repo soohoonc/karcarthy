@@ -9,6 +9,7 @@
     karcarthy.cli-test
     karcarthy.proc-test
     karcarthy.runner.claude-test
+    karcarthy.runner.codex-test
     karcarthy.runner.process-test
     karcarthy.runner.openai-test
     karcarthy.orchestrate-test

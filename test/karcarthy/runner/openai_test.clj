@@ -15,6 +15,21 @@
   (testing "no model key when neither opts nor agent set one"
     (is (not (contains? (oa/request (k/agent "w" "i") "p" {}) :model)))))
 
+(deftest request-builder-subagents
+  (testing "subagents map to OpenAI handoff agents"
+    (let [reviewer (k/subagent "security-reviewer"
+                               "Use for security review."
+                               "Find concrete security risks."
+                               :model "gpt-5.4-mini")]
+      (is (= [{:name "security-reviewer"
+               :instructions "Find concrete security risks."
+               :handoff_description "Use for security review."
+               :model "gpt-5.4-mini"}]
+             (:subagents
+              (oa/request (k/agent "lead" "Coordinate.")
+                          "review"
+                          {:subagents [reviewer]})))))))
+
 (deftest stdout->result-ok
   (let [r (oa/stdout->result "writer" "{\"ok\":true,\"text\":\"hi there\"}")]
     (is (k/ok? r))

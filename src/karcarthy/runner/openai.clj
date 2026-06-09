@@ -16,6 +16,16 @@
             [karcarthy.core :as k]
             [karcarthy.proc :as proc]))
 
+(defn subagent-request
+  "Lower a karcarthy subagent to the JSON shape consumed by the Python bridge."
+  [subagent]
+  (when-not (k/subagent? subagent)
+    (throw (ex-info "invalid OpenAI subagent" {:subagent subagent})))
+  (cond-> {:name                (:name subagent)
+           :instructions        (:instructions subagent)
+           :handoff_description (:description subagent)}
+    (:model subagent) (assoc :model (:model subagent))))
+
 (defn request
   "Pure: build the JSON request map sent to the Python bridge. `opts` :model
   overrides the agent's :model."
@@ -23,7 +33,8 @@
   (cond-> {:name         (:name agent)
            :instructions (:instructions agent)
            :input        prompt}
-    (or (:model opts) (:model agent)) (assoc :model (or (:model opts) (:model agent)))))
+    (or (:model opts) (:model agent)) (assoc :model (or (:model opts) (:model agent)))
+    (seq (:subagents opts)) (assoc :subagents (mapv subagent-request (:subagents opts)))))
 
 (defn stdout->result
   "Parse the Python script's JSON stdout into a karcarthy result map."

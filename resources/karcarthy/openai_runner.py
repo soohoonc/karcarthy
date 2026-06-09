@@ -35,9 +35,24 @@ def main():
               "type": type(e).__name__})
         return
 
+    def build_agent(spec):
+        agent_kwargs = {
+            "name": spec.get("name", "agent"),
+            "instructions": spec.get("instructions", ""),
+        }
+        if spec.get("model"):
+            agent_kwargs["model"] = spec["model"]
+        if spec.get("handoff_description"):
+            agent_kwargs["handoff_description"] = spec["handoff_description"]
+        return Agent(**agent_kwargs)
+
     kwargs = {"name": name, "instructions": req.get("instructions", "")}
     if req.get("model"):
         kwargs["model"] = req["model"]
+
+    handoffs = [build_agent(spec) for spec in req.get("subagents", [])]
+    if handoffs:
+        kwargs["handoffs"] = handoffs
 
     try:
         agent = Agent(**kwargs)

@@ -14,9 +14,35 @@
    {:karcarthy/type :agent
     :required        {:name :string
                       :instructions :string}
+   :optional        {:model :string
+                     :tools [:vector :string]
+                     :runner :keyword}}
+
+   :subagent
+   {:karcarthy/type :subagent
+    :required        {:name :string
+                      :description :string
+                      :instructions :string}
     :optional        {:model :string
                       :tools [:vector :string]
-                      :runner :keyword}}
+                      :disallowed-tools [:vector :string]
+                      :permission-mode :keyword-or-string
+                      :sandbox-mode :keyword-or-string
+                      :mcp-servers :any
+                      :max-turns :integer
+                      :skills [:vector :string]
+                      :initial-prompt :string
+                      :memory :keyword-or-string
+                      :effort :keyword-or-string
+                      :reasoning-effort :keyword-or-string
+                      :background? :boolean
+                      :isolation :keyword-or-string
+                      :color :keyword-or-string
+                      :nicknames [:vector :string]
+                      :hooks :any
+                      :config :map}
+    :runner-config?  true
+    :workflow-node?  false}
 
    :result
    {:karcarthy/type :result
@@ -27,12 +53,20 @@
                       :raw :any}}
 
    :workflow
-   {:one-of [:agent :pipe :branch :delegate
+   {:one-of [:agent :step :pipe :branch :delegate
              :reduce :revise :route :continue :dynamic]}
 
    :pipe
    {:karcarthy/type :pipe
     :required        {:steps [:vector :workflow]}}
+
+   :step
+   {:karcarthy/type :step
+    :required        {:f :fn}
+    :optional        {:name :string
+                      :context? :boolean}
+    :clojure-only?   true
+    :serializable?   false}
 
    :branch
    {:karcarthy/type :branch

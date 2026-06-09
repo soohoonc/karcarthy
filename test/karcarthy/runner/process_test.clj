@@ -17,12 +17,12 @@
           r (k/run-agent h (k/agent "shout" "i") "quiet please")]
       (is (= "QUIET PLEASE" (:text r))))))
 
-(deftest per-agent-command-selection
-  (testing "a fn picks the argv per agent"
-    (let [h (proc-runner/process-runner
-             (fn [a] (if (= "up" (:name a)) ["tr" "a-z" "A-Z"] ["cat"])))]
-      (is (= "HI" (:text (k/run-agent h (k/agent "up" "i") "hi"))))
-      (is (= "hi" (:text (k/run-agent h (k/agent "plain" "i") "hi")))))))
+(deftest command-selection-uses-runner-registry
+  (testing "agent :runner keys select fixed process runners"
+    (let [runners {:up      (proc-runner/process-runner ["tr" "a-z" "A-Z"])
+                   :default (proc-runner/process-runner ["cat"])}]
+      (is (= "HI" (:text (k/run-agent runners (k/agent "up" "i" :runner :up) "hi"))))
+      (is (= "hi" (:text (k/run-agent runners (k/agent "plain" "i") "hi")))))))
 
 (deftest nonzero-exit-is-not-ok
   (testing "a failing command yields a not-ok result"
@@ -45,17 +45,19 @@
       (is (= "process timed out" (:error r)))
       (is (true? (get-in r [:raw :timed-out?]))))))
 
-(deftest shell-runner-runs-command-string
+(deftest process-runner-runs-shell-command-string
   (testing "a shell command string reads the prompt from stdin"
-    (let [h (proc-runner/shell-runner "tr a-z A-Z")
+    (let [h (proc-runner/process-runner "tr a-z A-Z")
           r (k/run-agent h (k/agent "shell" "i") "hello")]
       (is (k/ok? r))
       (is (= "HELLO" (:text r)))
-      (is (= :shell (get-in r [:raw :runner]))))))
+      (is (= :process (get-in r [:raw :runner])))
+      (is (= :shell (get-in r [:raw :mode]))))))
 
-(deftest per-agent-shell-selection
-  (testing "a fn picks the shell command per agent"
-    (let [h (proc-runner/shell-runner
-             (fn [a] (if (= "up" (:name a)) "tr a-z A-Z" "cat")))]
-      (is (= "HI" (:text (k/run-agent h (k/agent "up" "i") "hi"))))
-      (is (= "hi" (:text (k/run-agent h (k/agent "plain" "i") "hi")))))))
+(deftest process-runner-rejects-agent-aware-command-builders
+  (testing "command construction is runner config, not a function of k/agent"
+    (is
+     (thrown-with-msg?
+      clojure.lang.ExceptionInfo
+      #"argv vector or shell command string"
+      (proc-runner/process-runner (fn [_] ["cat"]))))))

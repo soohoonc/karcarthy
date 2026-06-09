@@ -1,5 +1,6 @@
 (ns karcarthy.runner.claude-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.data.json :as json]
+            [clojure.test :refer [deftest is testing]]
             [karcarthy.core :as k]
             [karcarthy.runner.claude :as cc]))
 
@@ -35,6 +36,48 @@
       (is (= "3" (after argv "--max-turns")))
       (is (= "bypassPermissions" (after argv "--permission-mode")))
       (is (= "/tmp" (after argv "--add-dir"))))))
+
+(deftest command-building-subagents
+  (testing "subagents lower to Claude --agents JSON"
+    (let [reviewer (k/subagent "security-reviewer"
+                               "Use for security review."
+                               "Find concrete security risks."
+                               :tools ["Read" "Grep"]
+                               :disallowed-tools ["Write"]
+                               :model "sonnet"
+                               :permission-mode :plan
+                               :mcp-servers ["github"]
+                               :max-turns 4
+                               :skills ["review"]
+                               :background? true
+                               :effort :high
+                               :isolation :worktree
+                               :color :purple)
+          argv     (cc/command (k/agent "lead" "coordinate" :tools ["Agent"])
+                               "review"
+                               {:subagents [reviewer]})
+          agents   (json/read-str (after argv "--agents") :key-fn keyword)]
+      (is (= "Use for security review."
+             (get-in agents [:security-reviewer :description])))
+      (is (= "Find concrete security risks."
+             (get-in agents [:security-reviewer :prompt])))
+      (is (= ["Read" "Grep"] (get-in agents [:security-reviewer :tools])))
+      (is (= ["Write"] (get-in agents [:security-reviewer :disallowedTools])))
+      (is (= "plan" (get-in agents [:security-reviewer :permissionMode])))
+      (is (= ["github"] (get-in agents [:security-reviewer :mcpServers])))
+      (is (= 4 (get-in agents [:security-reviewer :maxTurns])))
+      (is (= true (get-in agents [:security-reviewer :background])))
+      (is (= "worktree" (get-in agents [:security-reviewer :isolation]))))))
+
+(deftest command-rejects-duplicate-subagent-names
+  (testing "Claude --agents JSON cannot represent duplicate names safely"
+    (let [reviewer (k/subagent "reviewer" "Use for review." "Review.")]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"duplicate Claude subagent names"
+           (cc/command (k/agent "lead" "coordinate")
+                       "review"
+                       {:subagents [reviewer reviewer]}))))))
 
 (deftest command-omits-absent-options
   (testing "optional flags are absent when the agent/opts don't supply them"

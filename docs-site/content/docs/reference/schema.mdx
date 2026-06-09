@@ -28,6 +28,29 @@ Validate EDN workflows with `workflow?`.
 
 Required keys: `:name`, `:instructions`.
 
+## Subagent
+
+Subagents are runner configuration, not workflow nodes:
+
+```clojure
+{:karcarthy/type :subagent
+ :name "security-reviewer"
+ :description "Use for auth, secrets, injection, permission, and data exposure review."
+ :instructions "Review like a security owner. Return concrete findings with file refs."
+ :model "sonnet"
+ :tools ["Read" "Grep" "Glob"]
+ :disallowed-tools ["Write" "Edit"]
+ :mcp-servers ["github"]
+ :permission-mode :plan
+ :max-turns 4
+ :skills ["review"]
+ :effort :high
+ :background? true
+ :isolation :worktree}
+```
+
+Required keys: `:name`, `:description`, `:instructions`.
+
 ## pipe
 
 Runs each step in order. The `:text` from one result becomes the input for the
@@ -37,6 +60,20 @@ next step.
 {:karcarthy/type :pipe
  :steps [WORKFLOW ...]}
 ```
+
+## step
+
+Runs a host Clojure function inside a workflow:
+
+```clojure
+{:karcarthy/type :step
+ :f clojure.string/trim
+ :name "trim"
+ :context? false}
+```
+
+`step` is Clojure-only because `:f` is a function value. It is not represented
+in the JSON schema.
 
 ## branch
 

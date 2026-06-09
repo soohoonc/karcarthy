@@ -15,6 +15,48 @@
             [karcarthy.core :as k]
             [karcarthy.proc :as proc]))
 
+(defn- option-name [x]
+  (cond
+    (keyword? x) (name x)
+    (symbol? x) (name x)
+    :else x))
+
+(defn subagent-spec
+  "Lower a karcarthy subagent to Claude Code's `--agents` JSON shape."
+  [subagent]
+  (when-not (k/subagent? subagent)
+    (throw (ex-info "invalid Claude subagent" {:subagent subagent})))
+  (cond-> {:description (:description subagent)
+           :prompt      (:instructions subagent)}
+    (:tools subagent) (assoc :tools (:tools subagent))
+    (:disallowed-tools subagent) (assoc :disallowedTools (:disallowed-tools subagent))
+    (:model subagent) (assoc :model (:model subagent))
+    (:permission-mode subagent) (assoc :permissionMode (option-name (:permission-mode subagent)))
+    (:mcp-servers subagent) (assoc :mcpServers (:mcp-servers subagent))
+    (:hooks subagent) (assoc :hooks (:hooks subagent))
+    (:max-turns subagent) (assoc :maxTurns (:max-turns subagent))
+    (:skills subagent) (assoc :skills (:skills subagent))
+    (:initial-prompt subagent) (assoc :initialPrompt (:initial-prompt subagent))
+    (:memory subagent) (assoc :memory (option-name (:memory subagent)))
+    (:effort subagent) (assoc :effort (option-name (:effort subagent)))
+    (contains? subagent :background?) (assoc :background (:background? subagent))
+    (:isolation subagent) (assoc :isolation (option-name (:isolation subagent)))
+    (:color subagent) (assoc :color (option-name (:color subagent)))))
+
+(defn subagents-json
+  "Return the JSON object accepted by Claude Code's `--agents` flag."
+  [subagents]
+  (let [names      (map :name subagents)
+        duplicates (->> names frequencies (filter (fn [[_ n]] (> n 1))) (map first) vec)]
+    (when (seq duplicates)
+      (throw (ex-info "duplicate Claude subagent names"
+                      {:duplicates duplicates})))
+    (json/write-str
+     (into {}
+           (map (fn [subagent]
+                  [(:name subagent) (subagent-spec subagent)]))
+           subagents))))
+
 (defn command
   "Pure: build the argv (vector of strings) to run `agent` on `prompt`.
 
@@ -30,13 +72,14 @@
     :continue?           resume the most recent session (-> --continue)
     :partial-messages?   stream token-level chunks (-> --include-partial-messages,
                          only meaningful with :output-format \"stream-json\")
+    :subagents           vector of k/subagent values for Claude --agents
     :extra-args          vector of strings appended verbatim (escape hatch for
                          --add-dir, --mcp-config, --disallowedTools, ...)
 
   Agent fields used: :instructions, :model, :tools (-> --allowedTools)."
   [agent prompt {:keys [claude-bin output-format system-prompt-mode
                         max-turns permission-mode resume continue?
-                        partial-messages? extra-args]
+                        partial-messages? subagents extra-args]
                  :or   {claude-bin "claude"
                         output-format "json"
                         system-prompt-mode :append}}]
@@ -55,6 +98,7 @@
       resume            (into ["--resume" (str resume)])
       continue?         (conj "--continue")
       partial-messages? (conj "--include-partial-messages")
+      (seq subagents)   (into ["--agents" (subagents-json subagents)])
       (seq extra-args)  (into (vec extra-args)))))
 
 (defn payload->result
