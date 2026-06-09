@@ -84,7 +84,7 @@ Swap the mock runner for `(k/claude-cli-runner {})` to run it against `claude`.
   [`examples/`](examples/). Non-JVM languages drive it through `bin/karcarthy`
   over JSON, since a workflow is just data.
 - Fumadocs-powered web docs:
-  [`docs-site/`](docs-site/) and
+  [`docs/`](docs/) and
   [`karcarthy.vercel.app/docs`](https://karcarthy.vercel.app/docs).
 - How it compares to PydanticAI, DSPy, Agno, and the Vercel AI SDK:
   [`COMPARISON.md`](COMPARISON.md).

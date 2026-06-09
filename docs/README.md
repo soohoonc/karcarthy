@@ -1,14 +1,14 @@
-# karcarthy docs site
+# karcarthy docs
 
 This is the Fumadocs-powered documentation site for karcarthy. It is a Next.js
-app intended to run as a Vercel project with `docs-site` as the project root.
+app intended to run as a Vercel project with `docs` as the project root.
 
 Production URL: https://karcarthy.vercel.app/docs
 
 ## Develop
 
 ```bash
-cd docs-site
+cd docs
 npm ci
 npm run dev
 ```
@@ -37,7 +37,7 @@ Useful app files:
 
 ## Deploy
 
-Set the Vercel project root directory to `docs-site`.
+Set the Vercel project root directory to `docs`.
 
 Recommended Vercel settings:
 
@@ -51,8 +51,8 @@ Recommended Vercel settings:
 CLI deployment also works:
 
 ```bash
-vercel --cwd docs-site
-vercel --cwd docs-site --prod
+vercel --cwd docs
+vercel --cwd docs --prod
 ```
 
 The current Vercel alias is `karcarthy.vercel.app`.
