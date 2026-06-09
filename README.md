@@ -79,7 +79,7 @@ Swap the mock adapter for `(k/claude-cli {})` to run it against `claude`.
   over JSON, since a workflow is just data.
 - Fumadocs-powered web docs and protocol references:
   [`docs-site/`](docs-site/) and
-  [`karcarthy-docs.vercel.app/docs`](https://karcarthy-docs.vercel.app/docs).
+  [`karcarthy.vercel.app/docs`](https://karcarthy.vercel.app/docs).
 - How it compares to PydanticAI, DSPy, Agno, and the Vercel AI SDK:
   [`COMPARISON.md`](COMPARISON.md).
 - What is missing for a sharper core:

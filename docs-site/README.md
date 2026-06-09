@@ -3,7 +3,7 @@
 This is the Fumadocs-powered documentation site for karcarthy. It is a Next.js
 app intended to run as a Vercel project with `docs-site` as the project root.
 
-Production URL: https://karcarthy-docs.vercel.app/docs
+Production URL: https://karcarthy.vercel.app/docs
 
 ## Develop
 
@@ -55,4 +55,4 @@ vercel --cwd docs-site
 vercel --cwd docs-site --prod
 ```
 
-The current Vercel alias is `karcarthy-docs.vercel.app`.
+The current Vercel alias is `karcarthy.vercel.app`.
