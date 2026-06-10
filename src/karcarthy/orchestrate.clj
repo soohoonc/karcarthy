@@ -163,7 +163,7 @@
 ;; Interpreter
 ;; ---------------------------------------------------------------------------
 
-(declare run)
+(declare run*)
 
 (defmulti run-node
   "Execute one workflow node, dispatching on (:karcarthy/type node). This is the
@@ -231,7 +231,7 @@
   children through this; top-level `run` stays transparent (fail fast)."
   [runner workflow input opts]
   (try
-    (run runner workflow input opts)
+    (run* runner workflow input opts)
     (catch Throwable t
       (k/result {:ok?       false
                  :text      nil
@@ -513,10 +513,33 @@
    (input->text (:input request))
    (or (:opts request) {})])
 
+(defn- run*
+  [runner workflow input opts]
+  (let [input (input->text input)]
+    (if-not (:observe opts)
+      (run-node runner workflow input opts)
+      (let [span-id        (span-id)
+            parent-span-id (:karcarthy/parent-span-id opts)
+            started-ns     (System/nanoTime)
+            opts'          (assoc opts :karcarthy/parent-span-id span-id)]
+        (observe! opts (event :start span-id parent-span-id workflow opts))
+        (try
+          (let [result (run-node runner workflow input opts')]
+            (observe! opts (event :finish span-id parent-span-id workflow
+                                  (assoc opts
+                                         :duration-ms (duration-ms started-ns)
+                                         :ok? (k/ok? result))))
+            result)
+          (catch Throwable t
+            (observe! opts (event :error span-id parent-span-id workflow
+                                  (assoc opts
+                                         :duration-ms (duration-ms started-ns)
+                                         :ok? false
+                                         :error (or (.getMessage t) (str t)))))
+            (throw t)))))))
+
 (defn run
   "Interpret workflow data through a runner and return a result map.
-
-  Preferred form:
 
     (run {:runner runner
           :workflow workflow
@@ -524,38 +547,10 @@
           :opts {:observe observe-fn}})
 
   `:input` may be a string or EDN value. Non-string input is rendered with
-  `pr-str` before entering the text-threaded workflow interpreter.
-
-  Positional form is still used internally by the interpreter:
-
-    (run runner workflow input opts)"
-  ([request]
-   (let [[runner workflow input opts] (run-request->args request)]
-     (run runner workflow input opts)))
-  ([runner workflow input] (run runner workflow input {}))
-  ([runner workflow input opts]
-   (let [input (input->text input)]
-     (if-not (:observe opts)
-       (run-node runner workflow input opts)
-       (let [span-id        (span-id)
-             parent-span-id (:karcarthy/parent-span-id opts)
-             started-ns     (System/nanoTime)
-             opts'          (assoc opts :karcarthy/parent-span-id span-id)]
-         (observe! opts (event :start span-id parent-span-id workflow opts))
-         (try
-           (let [result (run-node runner workflow input opts')]
-             (observe! opts (event :finish span-id parent-span-id workflow
-                                   (assoc opts
-                                          :duration-ms (duration-ms started-ns)
-                                          :ok? (k/ok? result))))
-             result)
-           (catch Throwable t
-             (observe! opts (event :error span-id parent-span-id workflow
-                                   (assoc opts
-                                          :duration-ms (duration-ms started-ns)
-                                          :ok? false
-                                          :error (or (.getMessage t) (str t)))))
-             (throw t))))))))
+  `pr-str` before entering the text-threaded workflow interpreter."
+  [request]
+  (let [[runner workflow input opts] (run-request->args request)]
+    (run* runner workflow input opts)))
 
 ;; ---------------------------------------------------------------------------
 ;; DSL sugar
@@ -906,7 +901,7 @@
           workflow (if (or (string? target) (keyword? target))
                      (lookup-workflow state target)
                      target)]
-      (run runner (refs->workflow state workflow) input opts))
+      (run* runner (refs->workflow state workflow) input opts))
 
     :else
     (throw (ex-info "call requires :agent or :workflow target" {:op op}))))

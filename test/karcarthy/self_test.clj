@@ -5,6 +5,10 @@
             [karcarthy.orchestrate :as o]
             [karcarthy.self :as self]))
 
+(defn- run
+  [runner workflow input]
+  (o/run {:runner runner :workflow workflow :input input}))
+
 ;; --- extract-edn -----------------------------------------------------------
 
 (deftest extract-edn-plain
@@ -73,10 +77,10 @@
                                              :instructions "EVOLVED instructions"
                                              :config {:temperature 0.2}}
                           :reason "better"}))))
-          r (o/run h
-                   (self/evolve (k/agent {:name "self"
-                                          :instructions "original instructions"}))
-                   "do X")]
+          r (run h
+                 (self/evolve (k/agent {:name "self"
+                                        :instructions "original instructions"}))
+                 "do X")]
       (is (k/ok? r))
       (is (= "final answer" (:text r)))
       (is (= 2 (:rounds r)))
@@ -93,10 +97,10 @@
                (swap! calls inc)
                ;; always returns a patch -> should hit max-rounds and force-finish
                "{:karcarthy/patch {:instructions \"again\"} :reason \"loop\"}"))
-          r (o/run h
-                   (self/evolve (k/agent {:name "loop" :instructions "i"})
-                                :max-rounds 3)
-                   "x")]
+          r (run h
+                 (self/evolve (k/agent {:name "loop" :instructions "i"})
+                              :max-rounds 3)
+                 "x")]
       (is (= 3 (:rounds r)))
       ;; 3 evolve rounds + 1 forced final plain run
       (is (= 4 @calls)))))
@@ -104,7 +108,7 @@
 (deftest evolve-no-change-passes-through
   (testing "if the agent answers immediately, no patches are applied"
     (let [h (k/mock-runner (fn [_] "immediate answer"))
-          r (o/run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
+          r (run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
       (is (= "immediate answer" (:text r)))
       (is (= 1 (:rounds r)))
       (is (empty? (:patches r))))))
@@ -113,7 +117,7 @@
   (testing "self-modification cannot smuggle arbitrary agent fields"
     (let [h (k/mock-runner
              (fn [_] "{:karcarthy/patch {:name \"renamed\"} :reason \"bad\"}"))
-          r (o/run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
+          r (run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
       (is (not (k/ok? r)))
       (is (= :invalid-patch (:error r)))
       (is (str/includes? (:text r) "unknown keys")))))
@@ -122,7 +126,7 @@
   (testing "a patch must still produce a valid agent"
     (let [h (k/mock-runner
              (fn [_] "{:karcarthy/patch {:tools [42]} :reason \"bad\"}"))
-          r (o/run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
+          r (run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
       (is (not (k/ok? r)))
       (is (= :invalid-patch (:error r)))
       (is (str/includes? (:text r) ":tools must be a vector of strings")))))

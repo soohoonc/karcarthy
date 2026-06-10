@@ -106,7 +106,9 @@
                        (:instructions agent))))
           workflow-agent (k/agent {:name "workflow"
                                    :instructions "Drive the workflow with EDN ops."})
-          r (o/run runner (o/dynamic workflow-agent :max-steps 10) "build a worker")]
+          r (o/run {:runner runner
+                    :workflow (o/dynamic workflow-agent :max-steps 10)
+                    :input "build a worker"})]
       (is (k/ok? r))
       (is (= "done" (:text r)))
       (is (= 6 (:steps r)))
@@ -116,7 +118,9 @@
 (deftest dynamic-workflow-reports-bad-op
   (let [runner        (k/mock-runner (fn [_] "{:op :bogus}"))
         workflow-agent (k/agent {:name "workflow" :instructions "bad op"})
-        r              (o/run runner (o/dynamic workflow-agent :max-steps 1) "x")]
+        r              (o/run {:runner runner
+                               :workflow (o/dynamic workflow-agent :max-steps 1)
+                               :input "x"})]
     (is (not (k/ok? r)))
     (is (str/includes? (:error r) "unknown dynamic workflow op"))
     (is (map? (:state r)))))

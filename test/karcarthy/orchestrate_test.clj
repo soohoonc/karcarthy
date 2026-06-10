@@ -21,6 +21,14 @@
 (def ^:private reducer
   (k/agent {:name "reducer" :instructions "reduce source EDN results"}))
 
+(defn- run
+  ([request]
+   (o/run request))
+  ([runner workflow input]
+   (o/run {:runner runner :workflow workflow :input input}))
+  ([runner workflow input opts]
+   (o/run {:runner runner :workflow workflow :input input :opts opts})))
+
 (defn- scripted-runner
   "Mock runner whose response map may contain strings or prompt fns by agent name."
   [responses]
@@ -69,25 +77,25 @@
 
 (deftest pipe-threads-text
   (testing "each result's text feeds the next step"
-    (let [r (o/run h (o/pipe a b c) "hi")]
+    (let [r (run h (o/pipe a b c) "hi")]
       (is (k/ok? r))
       (is (= "[c] [b] [a] hi" (:text r))))))
 
 (deftest run-accepts-request-map
   (testing "public runs can be described as one EDN request"
-    (let [r (o/run {:runner h
+    (let [r (run {:runner h
                     :workflow a
                     :input "hi"})]
       (is (k/ok? r))
       (is (= "[a] hi" (:text r)))))
   (testing "structured input is rendered as EDN at the runner boundary"
-    (let [r (o/run {:runner h
+    (let [r (run {:runner h
                     :workflow a
                     :input {:ticket 42 :risk :high}})]
       (is (= "[a] {:ticket 42, :risk :high}" (:text r)))))
   (testing "request opts feed the interpreter"
     (let [events (atom [])
-          r      (o/run {:runner h
+          r      (run {:runner h
                          :workflow a
                          :input "hi"
                          :opts {:observe #(swap! events conj %)}})]
@@ -97,7 +105,7 @@
 
 (deftest step-runs-host-function
   (testing "a host Clojure step receives the flowing input directly"
-    (let [r (o/run h (o/pipe (o/step str/upper-case :name "up") a) "hi")]
+    (let [r (run h (o/pipe (o/step str/upper-case :name "up") a) "hi")]
       (is (k/ok? r))
       (is (= "[a] HI" (:text r)))))
   (testing "a host Clojure step can opt into context"
@@ -106,22 +114,22 @@
                                 :name "tag"
                                 :context? true)
                        a)
-          r    (o/run h flow "hi")]
+          r    (run h flow "hi")]
       (is (= "[a] tag:hi" (:text r)))))
   (testing "a host Clojure step may return a result map"
-    (let [r (o/run h (o/step (fn [_] (k/result {:text "done"}))) "hi")]
+    (let [r (run h (o/step (fn [_] (k/result {:text "done"}))) "hi")]
       (is (= "done" (:text r))))))
 
 (deftest pipe-short-circuits-on-failure
   (testing "a failing step stops the pipe and is returned"
-    (let [r (o/run (failing-runner #{"b"}) (o/pipe a b c) "hi")]
+    (let [r (run (failing-runner #{"b"}) (o/pipe a b c) "hi")]
       (is (not (k/ok? r)))
       (is (= "b" (:agent r)))
       (is (not (str/includes? (:text r) "[c]"))))))
 
 (deftest branch-runs-workflows
   (testing "branches run on the same input; results are returned in order"
-    (let [r (o/run h (o/branch [a b c]) "hi")]
+    (let [r (run h (o/branch [a b c]) "hi")]
       (is (k/ok? r))
       (is (= 3 (count (:results r))))
       (is (= ["[a] hi" "[b] hi" "[c] hi"] (map :text (:results r))))
@@ -129,7 +137,7 @@
 
 (deftest branch-ok-requires-all-results
   (testing "one failing branch makes the whole node not-ok"
-    (let [r (o/run (failing-runner #{"b"}) (o/branch [a b c]) "hi")]
+    (let [r (run (failing-runner #{"b"}) (o/branch [a b c]) "hi")]
       (is (not (k/ok? r)))
       (is (= 3 (count (:results r)))))))
 
@@ -141,7 +149,7 @@
                                      (map :text)
                                      (str/join "|")))})
           flow    (o/reduce (o/branch [a b c]) reducer)
-          r       (o/run runner flow "hi")]
+          r       (run runner flow "hi")]
       (is (k/ok? r))
       (is (= "[a] hi|[b] hi|[c] hi" (:text r)))
       (is (= :result (:karcarthy/type (:source r))))
@@ -153,7 +161,7 @@
     (let [runner (scripted-runner
                    {"planner" "{:subtasks [\"alpha\" \"beta\" \"gamma\"]}"})
           flow    (o/delegate planner a)
-          r       (o/run runner flow "do stuff")]
+          r       (run runner flow "do stuff")]
       (is (k/ok? r))
       (is (= ["alpha" "beta" "gamma"] (:subtasks r)))
       (is (= ["[a] alpha" "[a] beta" "[a] gamma"] (map :text (:results r)))))))
@@ -161,7 +169,7 @@
 (deftest delegate-rejects-unstructured-subtasks
   (testing "planner prose is a failed EDN reply"
     (let [runner (scripted-runner {"planner" "- alpha\n- beta"})
-          r       (o/run runner (o/delegate planner a) "do stuff")]
+          r       (run runner (o/delegate planner a) "do stuff")]
       (is (not (k/ok? r)))
       (is (= :invalid-subtasks (:error r))))))
 
@@ -170,7 +178,7 @@
     (let [runner (scripted-runner
                    {"planner" "{:subtasks [\"0\" \"1\" \"2\" \"3\" \"4\"]}"})
           flow    (o/delegate planner a :max-concurrency 2)
-          r       (o/run runner flow "in")]
+          r       (run runner flow "in")]
       (is (= 5 (count (:results r))))
       (is (= (mapv #(str "[a] " %) (range 5)) (mapv :text (:results r)))))))
 
@@ -183,7 +191,7 @@
                                      (map :text)
                                      (str/join "+")))})
           flow    (o/reduce (o/delegate planner a) reducer)
-          r       (o/run runner flow "in")]
+          r       (run runner flow "in")]
       (is (= "[a] p+[a] q" (:text r)))
       (is (= ["p" "q"] (get-in r [:source :subtasks]))))))
 
@@ -191,7 +199,7 @@
   (testing "an evaluator accepts by returning EDN {:accept? true}"
     (let [runner (scripted-runner {"judge" "{:accept? true}"})
           flow    (o/revise a judge)
-          r       (o/run runner flow "topic")]
+          r       (run runner flow "topic")]
       (is (k/ok? r))
       (is (true? (:accepted? r)))
       (is (= 1 (:rounds r)))
@@ -201,7 +209,7 @@
   (testing "EDN feedback drives revision until :max-rounds"
     (let [runner (scripted-runner {"judge" "{:accept? false :feedback \"more\"}"})
           flow    (o/revise a judge :max-rounds 3)
-          r       (o/run runner flow "topic")]
+          r       (run runner flow "topic")]
       (is (false? (:accepted? r)))
       (is (= 3 (:rounds r)))
       (is (str/includes? (:text r) "topic")))))
@@ -215,13 +223,13 @@
                                 "{:accept? true}"
                                 "{:accept? false :feedback \"f\"}"))})
           flow    (o/revise a judge :max-rounds 5)
-          r       (o/run runner flow "x")]
+          r       (run runner flow "x")]
       (is (true? (:accepted? r)))
       (is (= 2 (:rounds r))))))
 
 (deftest revise-bails-on-worker-failure
   (testing "a failing worker short-circuits the revision loop"
-    (let [r (o/run (failing-runner #{"a"}) (o/revise a judge) "x")]
+    (let [r (run (failing-runner #{"a"}) (o/revise a judge) "x")]
       (is (not (k/ok? r)))
       (is (= "a" (:agent r))))))
 
@@ -229,13 +237,13 @@
   (testing "a router source selects a branch with EDN {:route ...}"
     (let [runner (scripted-runner {"router" "{:route :billing}"})
           flow    (o/route router {:billing a :support b})]
-      (is (= "[a] refund please" (:text (o/run runner flow "refund please")))))))
+      (is (= "[a] refund please" (:text (run runner flow "refund please")))))))
 
 (deftest route-no-match
   (testing "an unmatched route yields a not-ok :no-route result"
     (let [runner (scripted-runner {"router" "{:route :nope}"})
           flow    (o/route router {:yes a})
-          r       (o/run runner flow "hi")]
+          r       (run runner flow "hi")]
       (is (not (k/ok? r)))
       (is (= :no-route (:error r)))
       (is (= :nope (:label r))))))
@@ -244,7 +252,7 @@
   (testing ":default is used when no route matches"
     (let [runner (scripted-runner {"router" "{:route :nope}"})
           flow    (o/route router {:yes a} :default b)
-          r       (o/run runner flow "hi")]
+          r       (run runner flow "hi")]
       (is (k/ok? r))
       (is (= "[b] hi" (:text r))))))
 
@@ -252,7 +260,7 @@
   (testing "router prose is a failed EDN reply"
     (let [runner (scripted-runner {"router" "billing"})
           flow    (o/route router {:billing a})
-          r       (o/run runner flow "hi")]
+          r       (run runner flow "hi")]
       (is (not (k/ok? r)))
       (is (= :invalid-route (:error r))))))
 
@@ -260,14 +268,14 @@
   (testing "substring and case-insensitive routing are not part of the language"
     (let [runner (scripted-runner {"router" "{:route \"BILLING\"}"})
           flow    (o/route router {"billing" a})
-          r       (o/run runner flow "refund")]
+          r       (run runner flow "refund")]
       (is (not (k/ok? r)))
       (is (= :no-route (:error r))))))
 
 (deftest nested-composition
   (testing "workflows nest: a pipe whose step is a branch"
     (let [flow (o/pipe a (o/branch [b c]))
-          r    (o/run h flow "hi")]
+          r    (run h flow "hi")]
       (is (= ["[b] [a] hi" "[c] [a] hi"] (map :text (:results r)))))))
 
 ;; Records each call's :resume opt and returns a per-agent session id, so we can
@@ -283,7 +291,7 @@
 (deftest continuation-threads-session
   (testing "to inherits source text as input and source session as :resume"
     (let [log (atom [])
-          r   (o/run (session-recording-runner log) (o/continue a b) "hi")]
+          r   (run (session-recording-runner log) (o/continue a b) "hi")]
       (is (k/ok? r))
       (is (= "[b] [a] hi" (:text r)))
       (is (= [{:agent "a" :prompt "hi"     :resume nil}
@@ -293,20 +301,20 @@
 (deftest continuation-prompt-override
   (testing ":prompt overrides the handed-off input"
     (let [log (atom [])
-          r   (o/run (session-recording-runner log)
+          r   (run (session-recording-runner log)
                      (o/continue a b :prompt "explicit") "hi")]
       (is (= "[b] explicit" (:text r)))
       (is (= "explicit" (:prompt (second @log)))))))
 
 (deftest continuation-bails-on-source-failure
   (testing "if the source agent fails, continue returns that failure"
-    (let [r (o/run (failing-runner #{"a"}) (o/continue a b) "hi")]
+    (let [r (run (failing-runner #{"a"}) (o/continue a b) "hi")]
       (is (not (k/ok? r)))
       (is (= "a" (:agent r))))))
 
 (deftest branch-isolates-throwing-workflow
   (testing "a branch that throws becomes a not-ok result; siblings are unaffected"
-    (let [r (o/run (throwing-runner #{"b"}) (o/branch [a b c]) "hi")]
+    (let [r (run (throwing-runner #{"b"}) (o/branch [a b c]) "hi")]
       (is (not (k/ok? r)))
       (is (= 3 (count (:results r))))
       (is (= [true false true] (mapv k/ok? (:results r))))
@@ -356,7 +364,7 @@
     (let [events   (atom [])
           observer #(swap! events conj %)
           flow     (o/pipe a b)
-          r        (o/run h flow "hi" {:observe observer})
+          r        (run h flow "hi" {:observe observer})
           starts   (filter #(= :start (:event %)) @events)
           finishes (filter #(= :finish (:event %)) @events)
           top      (first starts)
@@ -379,4 +387,4 @@
 
 (deftest unknown-node-throws
   (is (thrown? clojure.lang.ExceptionInfo
-               (o/run h {:karcarthy/type :nonsense} "hi"))))
+               (run h {:karcarthy/type :nonsense} "hi"))))

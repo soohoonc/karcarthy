@@ -12,7 +12,10 @@
                                                  {"type" "agent" "name" "b" "instructions" "i"}]})]
       (is (= :pipe (:karcarthy/type workflow)))
       (is (k/agent? (first (:steps workflow))))
-      (is (= "[b] [a] hi" (:text (o/run (k/mock-runner) workflow "hi")))))))
+      (is (= "[b] [a] hi"
+             (:text (o/run {:runner (k/mock-runner)
+                            :workflow workflow
+                            :input "hi"})))))))
 
 (deftest json->workflow-accepts-branch-and-route
   (testing "JSON branch, reduce, and route nodes compile to runnable workflow data"

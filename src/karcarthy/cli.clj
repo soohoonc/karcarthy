@@ -143,7 +143,9 @@
   (let [workflow (json->workflow (get req "workflow"))
         input    (get req "input" "")
         h        (runner req)]
-    (o/run h workflow input)))
+    (o/run {:runner h
+            :workflow workflow
+            :input input})))
 
 (defn- render [result opts]
   (cond
