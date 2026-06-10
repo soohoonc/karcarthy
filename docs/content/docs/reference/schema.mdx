@@ -71,7 +71,7 @@ Runs a host Clojure function inside a workflow:
 {:karcarthy/type :step
  :f clojure.string/trim
  :name "trim"
- :context? false}
+ :call? false}
 ```
 
 `step` is Clojure-only because `:f` is a function value. It is not represented

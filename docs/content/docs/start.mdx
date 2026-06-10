@@ -9,14 +9,19 @@ The whole API starts here:
 (k/run {:runner runner
         :workflow workflow
         :input input
-        :context context
-        :opts opts})
+        :options options})
 ```
 
 `workflow` can be a single agent. `runner` is the value that actually runs each
-agent call. `input` is the task/user message/state for the workflow. `context`
-is host data for runners and local steps. `opts` is interpreter/runtime
-configuration such as observation callbacks.
+agent call. `input` is the initial value given to the workflow. `options` is
+runtime configuration such as observation callbacks.
+
+| Key | Meaning |
+| --- | --- |
+| `:runner` | The backend used for each agent call, such as mock, ACP, Claude CLI, OpenAI, or a local function. |
+| `:workflow` | The agent or workflow data to run. |
+| `:input` | The initial workflow value. A string is a prompt; EDN is rendered before the first agent call. |
+| `:options` | Runtime controls for this run, such as `:observe`, `:state`, timeouts, or runner-specific overrides. |
 
 ## Input Shape
 
@@ -48,8 +53,8 @@ INPUT EDN:
 ```
 
 A map without `:prompt` is passed as EDN text. Put execution configuration in
-`:opts`, runner construction, or agent fields such as `:model` and `:tools`, not
-inside `:input`.
+`:options`, runner construction, or agent fields such as `:model` and `:tools`,
+not inside `:input`.
 
 ## Requirements
 

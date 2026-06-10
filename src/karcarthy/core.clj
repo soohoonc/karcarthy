@@ -226,8 +226,8 @@
                 `(agent ~(name sym) ~spec ~@opts)
                 (do
                   (when (seq opts)
-                    (throw (ex-info "defagent map form does not accept trailing opts"
-                                    {:sym sym :opts opts})))
+                    (throw (ex-info "defagent map form does not accept trailing options"
+                                    {:sym sym :options opts})))
                   `(let [spec# ~spec]
                      (agent (cond-> spec#
                               (not (contains? spec# :name))
@@ -288,7 +288,7 @@
   `-run` receives a validated agent map, a prompt string, and an options map,
   and returns a result map (see `result`). Prefer calling `run-agent`, which
   validates first."
-  (-run [runner agent prompt opts]))
+  (-run [runner agent prompt options]))
 
 (defn- runner!
   [runner]
@@ -370,7 +370,7 @@
 ;; ===========================================================================
 
 (defn mock-runner
-  "An offline runner. `respond` is a fn of {:agent :prompt :opts} -> String
+  "An offline runner. `respond` is a fn of {:agent :prompt :options} -> String
   (the agent's final reply). With no args it echoes the prompt, tagged with the
   agent name, which is handy for asserting how orchestration routes work.
 
@@ -382,26 +382,26 @@
    (reify Runner
      (-run [_ agent prompt opts]
        (result {:agent (:name agent)
-                :text  (respond {:agent agent :prompt prompt :opts opts})
+                :text  (respond {:agent agent :prompt prompt :options opts})
                 :raw   {:runner :mock}})))))
 
 (defn fn-runner
   "Build a runner from a Clojure function.
 
-  By default, `f` receives only the flowing input string. With `{:context? true}`,
-  `f` receives `{:agent agent :input input :opts opts}`. It may return a plain
+  By default, `f` receives only the flowing input string. With `{:call? true}`,
+  `f` receives `{:agent agent :input input :options options}`. It may return a plain
   string, a partial result map, or a full result map."
   ([f] (fn-runner f {}))
-  ([f {:keys [context? context] :as config}]
-   (when-let [unknown (seq (remove #{:context? :context} (keys config)))]
+  ([f {:keys [call?] :as config}]
+   (when-let [unknown (seq (remove #{:call?} (keys config)))]
      (throw (ex-info "fn-runner contains unknown options"
                      {:unknown (vec unknown)
-                      :supported [:context?]})))
-   (let [context? (boolean (or context? context))]
+                      :supported [:call?]})))
+   (let [call? (boolean call?)]
      (reify Runner
        (-run [_ agent input opts]
-         (let [reply (if context?
-                       (f {:agent agent :input input :opts opts})
+         (let [reply (if call?
+                       (f {:agent agent :input input :options opts})
                        (f input))]
            (cond
              (and (map? reply) (= :result (:karcarthy/type reply)))

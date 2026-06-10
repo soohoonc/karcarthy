@@ -65,7 +65,7 @@
    {:karcarthy/type :step
     :required        {:f :fn}
     :optional        {:name :string
-                      :context? :boolean}
+                      :call? :boolean}
     :clojure-only?   true
     :serializable?   false}
 

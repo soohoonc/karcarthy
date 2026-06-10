@@ -55,18 +55,18 @@
 (defn step
   "Run a host Clojure function in a workflow.
 
-  By default, `f` receives the flowing input string. With `:context? true`, `f`
-  receives `{:input input :opts opts :node node}`. A step may return text, a
+  By default, `f` receives the flowing input string. With `:call? true`, `f`
+  receives `{:input input :options options :node node}`. A step may return text, a
   partial result map, or a full result map. Step nodes are Clojure-local and are
   not EDN/JSON portable."
-  [f & {:keys [name context? context] :as opts}]
-  (when-let [unknown (seq (remove #{:name :context? :context} (keys opts)))]
+  [f & {:keys [name call?] :as opts}]
+  (when-let [unknown (seq (remove #{:name :call?} (keys opts)))]
     (throw (ex-info "step contains unknown options"
                     {:unknown (vec unknown)
-                     :supported [:name :context?]})))
+                     :supported [:name :call?]})))
   (cond-> {:karcarthy/type :step :f f}
     name (assoc :name (name-key name))
-    (or context? context) (assoc :context? true)))
+    call? (assoc :call? true)))
 
 (defn branch
   "Run each workflow in `branches` on the same input. Options:
@@ -168,7 +168,7 @@
 (defmulti run-node
   "Execute one workflow node, dispatching on (:karcarthy/type node). This is the
   interpreter's extension point: teach it a new node by adding a constructor and
-  a `(defmethod run-node :your-type [runner node input opts] ...)` returning a
+  a `(defmethod run-node :your-type [runner node input options] ...)` returning a
   `karcarthy.core` result. See `karcarthy.self` for examples (`:evolve`)."
   (fn [_runner node _input _opts] (:karcarthy/type node)))
 
@@ -308,10 +308,10 @@
                :raw  {:step name}})))
 
 (defmethod run-node :step
-  [_runner {:keys [f name context?] :as node} input opts]
+  [_runner {:keys [f name call?] :as node} input opts]
   (let [name  (or name "step")
-        reply (if context?
-                (f {:input input :opts opts :node (dissoc node :f)})
+        reply (if call?
+                (f {:input input :options opts :node (dissoc node :f)})
                 (f input))]
     (step-result name reply)))
 
@@ -483,7 +483,7 @@
                   {:node node})))
 
 (def ^:private run-request-keys
-  #{:runner :workflow :input :context :opts})
+  #{:runner :workflow :input :options})
 
 (defn- input->text
   [input]
@@ -515,17 +515,13 @@
   (doseq [k [:runner :workflow]]
     (when-not (contains? request k)
       (throw (ex-info (str "run request requires " k) {:request request}))))
-  (when (and (contains? request :opts) (not (map? (:opts request))))
-    (throw (ex-info "run request :opts must be a map"
-                    {:opts (:opts request)})))
-  (when (and (contains? request :context) (not (map? (:context request))))
-    (throw (ex-info "run request :context must be a map"
-                    {:context (:context request)})))
+  (when (and (contains? request :options) (not (map? (:options request))))
+    (throw (ex-info "run request :options must be a map"
+                    {:options (:options request)})))
   [(:runner request)
    (:workflow request)
    (input->text (:input request))
-   (cond-> (or (:opts request) {})
-     (contains? request :context) (assoc :context (:context request)))])
+   (or (:options request) {})])
 
 (defn- run*
   [runner workflow input opts]
@@ -558,15 +554,12 @@
     (run {:runner runner
           :workflow workflow
           :input {:question \"...\"}
-          :context {:tenant \"...\"}
-          :opts {:observe observe-fn}})
+          :options {:observe observe-fn}})
 
   `:input` is the initial task/user message/state. A string is passed as the
   prompt. A map with `:prompt` uses that string as the prompt and appends the
   remaining keys as EDN. Other EDN input is rendered with `pr-str` before
-  entering the text-threaded workflow interpreter. `:context` is host/runtime
-  context passed to runners and context-aware steps; it is not automatically
-  included in the prompt."
+  entering the text-threaded workflow interpreter."
   [request]
   (let [[runner workflow input opts] (run-request->args request)]
     (run* runner workflow input opts)))
@@ -612,8 +605,8 @@
             (and (fn? (:f x))
                  (or (not (contains? x :name))
                      (string? (:name x)))
-                 (or (not (contains? x :context?))
-                     (boolean? (:context? x))))
+                 (or (not (contains? x :call?))
+                     (boolean? (:call? x))))
 
             :branch
             (and (sequential? (:branches x))

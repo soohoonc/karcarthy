@@ -27,7 +27,7 @@
   ([runner workflow input]
    (o/run {:runner runner :workflow workflow :input input}))
   ([runner workflow input opts]
-   (o/run {:runner runner :workflow workflow :input input :opts opts})))
+   (o/run {:runner runner :workflow workflow :input input :options opts})))
 
 (defn- scripted-runner
   "Mock runner whose response map may contain strings or prompt fns by agent name."
@@ -108,22 +108,22 @@
          (run {:runner h
                :workflow a
                :input {:prompt {:text "bad"}}}))))
-  (testing "request context is passed through opts, not rendered into input"
+  (testing "request options are passed to runners"
     (let [runner (k/fn-runner
-                  (fn [{:keys [input opts]}]
-                    (pr-str {:input input :context (:context opts)}))
-                  {:context? true})
+                  (fn [{:keys [input options]}]
+                    (pr-str {:input input :tenant (:tenant options)}))
+                  {:call? true})
           r      (run {:runner runner
                        :workflow a
                        :input "hi"
-                       :context {:tenant "acme"}})]
-      (is (= "{:input \"hi\", :context {:tenant \"acme\"}}" (:text r)))))
-  (testing "request opts feed the interpreter"
+                       :options {:tenant "acme"}})]
+      (is (= "{:input \"hi\", :tenant \"acme\"}" (:text r)))))
+  (testing "request options feed the interpreter"
     (let [events (atom [])
           r      (run {:runner h
                        :workflow a
                        :input "hi"
-                       :opts {:observe #(swap! events conj %)}})]
+                       :options {:observe #(swap! events conj %)}})]
       (is (k/ok? r))
       (is (seq @events))
       (is (= #{:workflow :agent} (set (map :kind @events)))))))
@@ -133,11 +133,11 @@
     (let [r (run h (o/pipe (o/step str/upper-case :name "up") a) "hi")]
       (is (k/ok? r))
       (is (= "[a] HI" (:text r)))))
-  (testing "a host Clojure step can opt into context"
+  (testing "a host Clojure step can opt into the full call map"
     (let [flow (o/pipe (o/step (fn [{:keys [input node]}]
                                   (str (:name node) ":" input))
                                 :name "tag"
-                                :context? true)
+                                :call? true)
                        a)
           r    (run h flow "hi")]
       (is (= "[a] tag:hi" (:text r)))))

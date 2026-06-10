@@ -40,7 +40,7 @@ The caller chooses the runner:
 Agents do not carry a backend. If the backend changes at runtime, pass a
 different runner value.
 
-Runner configuration belongs in the runner value, agent fields, or run `:opts`.
+Runner configuration belongs in the runner value, agent fields, or run `:options`.
 Do not hide execution configuration inside `:input`; `:input` is the task or
 state being worked on.
 
@@ -110,15 +110,15 @@ Use `fn-runner` when a Clojure function is the backend for agent calls:
         :input "quiet please"})
 ```
 
-By default the function receives the input string. Use `:context? true` when it
-needs the agent spec or options:
+By default the function receives the input string. Use `:call? true` when it
+needs the full agent call map, `{:agent agent :input input :options options}`:
 
 ```clojure
 (def local-runner
   (k/fn-runner
    (fn [{:keys [agent input]}]
      (str (:name agent) ": " input))
-   {:context? true}))
+   {:call? true}))
 ```
 
 Use `fn-runner` when the function is the backend. Use `step` when the function
@@ -217,10 +217,10 @@ backends, make that dispatch visible in a custom runner:
   (let [mock (k/mock-runner)
         acp  (k/acp-runner {:command ["my-acp-agent"]})]
     (reify core/Runner
-      (-run [_ agent input opts]
+      (-run [_ agent input options]
         (if (= "external-reviewer" (:name agent))
-          (core/run-agent acp agent input opts)
-          (core/run-agent mock agent input opts))))))
+          (core/run-agent acp agent input options)
+          (core/run-agent mock agent input options))))))
 
 (k/run {:runner hybrid
         :workflow workflow

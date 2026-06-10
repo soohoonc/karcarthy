@@ -66,15 +66,15 @@ Use `step` for a local Clojure transform inside a workflow:
    reviewer))
 ```
 
-By default the function receives the flowing input string. Use `:context? true`
-when it needs metadata:
+By default the function receives the flowing input string. Use `:call? true`
+when it needs the full step call map, `{:input input :options options :node node}`:
 
 ```clojure
 (k/step
  (fn [{:keys [input node]}]
    (str (:name node) ": " input))
  :name "tag"
- :context? true)
+ :call? true)
 ```
 
 `step` stores a Clojure function, so it is not EDN/JSON portable.

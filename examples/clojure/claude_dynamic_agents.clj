@@ -241,7 +241,7 @@
         result (k/run {:runner runner
                        :workflow runnable-workflow
                        :input "Prepare a migration-readiness memo for the card-token vault migration."
-                       :opts {:observe #(swap! events conj %)}})]
+                       :options {:observe #(swap! events conj %)}})]
     (println "=== Claude dynamic-agent workflow ===")
     (pp/pprint {:shape "evolve lead -> plan workstreams -> parallel worker pipeline -> synthesize -> critique"
                 :valid? (k/workflow? runnable-workflow)

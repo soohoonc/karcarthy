@@ -163,11 +163,11 @@
           r      (k/run-agent runner (k/agent {:name "f" :instructions "i"}) "hi")]
       (is (k/ok? r))
       (is (= "fn:hi" (:text r)))))
-  (testing "a Clojure function can opt into runner context"
+  (testing "a Clojure function can opt into the full call map"
     (let [runner (k/fn-runner
-                  (fn [{:keys [agent input opts]}]
-                    (str (:name agent) ":" input ":" (:suffix opts)))
-                  {:context? true})
+                  (fn [{:keys [agent input options]}]
+                    (str (:name agent) ":" input ":" (:suffix options)))
+                  {:call? true})
           r      (k/run-agent runner
                               (k/agent {:name "f" :instructions "i"})
                               "hi"

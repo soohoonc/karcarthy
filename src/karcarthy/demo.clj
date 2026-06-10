@@ -93,7 +93,7 @@
                           (str/join " "))
 
                      (str "[" (:name agent) "] " input)))
-                 {:context? true})
+                 {:call? true})
         r        (k/run {:runner runner
                          :workflow workflow
                          :input "homoiconic agents are data"})]

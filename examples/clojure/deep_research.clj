@@ -286,7 +286,7 @@
         result (k/run {:runner offline-runner
                        :workflow deep-research-workflow
                        :input "Can karcarthy express an OpenAI Deep Research-style workflow?"
-                       :opts {:observe #(swap! events conj %)}})]
+                       :options {:observe #(swap! events conj %)}})]
     (println (:text result))
     (println "\naccepted?" (:accepted? result) "rounds" (:rounds result))
     (println "\n=== Observable execution shape ===")
@@ -299,7 +299,7 @@
         result (k/run {:runner (codex-runner)
                        :workflow deep-research-workflow
                        :input "Can karcarthy express an OpenAI Deep Research-style workflow?"
-                       :opts {:observe #(swap! events conj %)}})]
+                       :options {:observe #(swap! events conj %)}})]
     (println (:text result))
     (println "\naccepted?" (:accepted? result) "rounds" (:rounds result))
     (println "\n=== Observable execution shape ===")
