@@ -33,9 +33,9 @@
   (:refer-clojure :exclude [iterate map reduce])
   (:require [clojure.string :as str]
             [karcarthy.core :as k]
-            [karcarthy.edn :as kedn])
-  (:import [java.util UUID]
-           [java.util.concurrent Executors Callable Future]))
+            [karcarthy.edn :as kedn]
+            [karcarthy.observe :as obs])
+  (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
 ;; Constructors - build workflow data
@@ -184,20 +184,6 @@
 
 ;; --- shared helpers --------------------------------------------------------
 
-(defn- span-id [] (str (UUID/randomUUID)))
-
-(defn- now-ms [] (System/currentTimeMillis))
-
-(defn- duration-ms [started-ns]
-  (/ (double (- (System/nanoTime) started-ns)) 1000000.0))
-
-(defn- observe!
-  [opts event]
-  (when-let [observe (:observe opts)]
-    (try
-      (observe event)
-      (catch Throwable _ nil))))
-
 (defn- descend
   [opts & path-segments]
   (if (:observe opts)
@@ -208,22 +194,12 @@
   [phase span-id parent-span-id workflow attrs]
   (let [type      (:karcarthy/type workflow)
         type-name (if type (name type) "unknown")]
-    (cond-> {:karcarthy/type :event
-             :event          phase
-             :kind           :workflow
-             :name           (str "karcarthy.workflow." type-name)
-             :span/kind      :internal
-             :span/id        span-id
-             :time-ms        (now-ms)
-             :path           (:karcarthy/path attrs)
-             :attributes     {"karcarthy.kind"          "workflow"
-                              "karcarthy.workflow.type" type-name}}
-      parent-span-id (assoc :parent/span-id parent-span-id)
-      (:karcarthy/path attrs)
-      (assoc-in [:attributes "karcarthy.path"] (pr-str (:karcarthy/path attrs)))
-      (:duration-ms attrs) (assoc :duration-ms (:duration-ms attrs))
-      (contains? attrs :ok?) (assoc :ok? (:ok? attrs))
-      (:error attrs) (assoc :error (:error attrs)))))
+    (obs/event phase span-id parent-span-id
+               {:kind :workflow
+                :name (str "karcarthy.workflow." type-name)
+                :attributes {"karcarthy.kind"          "workflow"
+                             "karcarthy.workflow.type" type-name}}
+               attrs)))
 
 (defn safe-run
   "Run a child workflow, converting a thrown exception into a not-ok result so one
@@ -293,19 +269,8 @@
 
 (defn- step-result
   [name reply]
-  (cond
-    (and (map? reply) (= :result (:karcarthy/type reply)))
-    reply
-
-    (map? reply)
-    (k/result (cond-> reply
-                (not (contains? reply :step)) (assoc :step name)
-                (not (contains? reply :raw)) (assoc :raw {:step name})))
-
-    :else
-    (k/result {:step name
-               :text (str reply)
-               :raw  {:step name}})))
+  (k/coerce-result reply {:step name
+                          :raw  {:step name}}))
 
 (defmethod run-node :step
   [_runner {:keys [f name call?] :as node} input opts]
@@ -528,24 +493,24 @@
   (let [input (input->text input)]
     (if-not (:observe opts)
       (run-node runner workflow input opts)
-      (let [span-id        (span-id)
+      (let [span-id        (obs/span-id)
             parent-span-id (:karcarthy/parent-span-id opts)
             started-ns     (System/nanoTime)
             opts'          (assoc opts :karcarthy/parent-span-id span-id)]
-        (observe! opts (event :start span-id parent-span-id workflow opts))
+        (obs/observe! opts (event :start span-id parent-span-id workflow opts))
         (try
           (let [result (run-node runner workflow input opts')]
-            (observe! opts (event :finish span-id parent-span-id workflow
-                                  (assoc opts
-                                         :duration-ms (duration-ms started-ns)
-                                         :ok? (k/ok? result))))
+            (obs/observe! opts (event :finish span-id parent-span-id workflow
+                                      (assoc opts
+                                             :duration-ms (obs/duration-ms started-ns)
+                                             :ok? (k/ok? result))))
             result)
           (catch Throwable t
-            (observe! opts (event :error span-id parent-span-id workflow
-                                  (assoc opts
-                                         :duration-ms (duration-ms started-ns)
-                                         :ok? false
-                                         :error (or (.getMessage t) (str t)))))
+            (obs/observe! opts (event :error span-id parent-span-id workflow
+                                      (assoc opts
+                                             :duration-ms (obs/duration-ms started-ns)
+                                             :ok? false
+                                             :error (or (.getMessage t) (str t)))))
             (throw t)))))))
 
 (defn run

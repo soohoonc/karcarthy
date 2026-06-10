@@ -12,8 +12,8 @@
   ;; `agent` deliberately shadows clojure.core/agent (the STM primitive); this
   ;; is an agent library. Use `clojure.core/agent` if you need the original.
   (:refer-clojure :exclude [agent])
-  (:require [clojure.spec.alpha :as s])
-  (:import [java.util UUID]))
+  (:require [clojure.spec.alpha :as s]
+            [karcarthy.observe :as obs]))
 
 ;; ===========================================================================
 ;; Data model
@@ -274,6 +274,21 @@
   [result]
   (boolean (:ok? result)))
 
+(defn coerce-result
+  "Coerce `reply` - a string, a partial result map, or a full result map -
+  into a result map, filling absent keys from `defaults`. Internal glue shared
+  by `fn-runner` and `karcarthy.orchestrate`'s `step` node."
+  [reply defaults]
+  (cond
+    (and (map? reply) (= :result (:karcarthy/type reply)))
+    reply
+
+    (map? reply)
+    (result (merge defaults reply))
+
+    :else
+    (result (assoc defaults :text (str reply)))))
+
 ;; ===========================================================================
 ;; Runner implementation protocol
 ;;
@@ -297,40 +312,16 @@
     (throw (ex-info "runner must implement karcarthy.core/Runner"
                     {:got runner}))))
 
-(defn- span-id [] (str (UUID/randomUUID)))
-
-(defn- now-ms [] (System/currentTimeMillis))
-
-(defn- duration-ms [started-ns]
-  (/ (double (- (System/nanoTime) started-ns)) 1000000.0))
-
-(defn- observe!
-  [opts event]
-  (when-let [observe (:observe opts)]
-    (try
-      (observe event)
-      (catch Throwable _ nil))))
-
 (defn- agent-event
   [phase span-id parent-span-id agent attrs]
-  (cond-> {:karcarthy/type :event
-           :event          phase
-           :kind           :agent
-           :name           "karcarthy.agent"
-           :span/kind      :internal
-           :span/id        span-id
-           :time-ms        (now-ms)
-           :path           (:karcarthy/path attrs)
-           :attributes     (cond-> {"karcarthy.kind"       "agent"
-                                    "karcarthy.agent.name" (:name agent)}
-                             (:karcarthy/path attrs)
-                             (assoc "karcarthy.path" (pr-str (:karcarthy/path attrs)))
-                             (:model agent) (assoc "karcarthy.agent.model" (:model agent))
-                             (:tools agent) (assoc "karcarthy.agent.tools.count" (count (:tools agent))))}
-    parent-span-id (assoc :parent/span-id parent-span-id)
-    (:duration-ms attrs) (assoc :duration-ms (:duration-ms attrs))
-    (contains? attrs :ok?) (assoc :ok? (:ok? attrs))
-    (:error attrs) (assoc :error (:error attrs))))
+  (obs/event phase span-id parent-span-id
+             {:kind :agent
+              :name "karcarthy.agent"
+              :attributes (cond-> {"karcarthy.kind"       "agent"
+                                   "karcarthy.agent.name" (:name agent)}
+                            (:model agent) (assoc "karcarthy.agent.model" (:model agent))
+                            (:tools agent) (assoc "karcarthy.agent.tools.count" (count (:tools agent))))}
+             attrs))
 
 (defn run-agent
   "Validate `agent`, then run it on `prompt` with `runner`. Returns a result map;
@@ -343,23 +334,23 @@
    (let [runner (runner! runner)]
      (if-not (:observe opts)
        (-run runner agent prompt opts)
-     (let [span-id        (span-id)
+     (let [span-id        (obs/span-id)
            parent-span-id (:karcarthy/parent-span-id opts)
            started-ns     (System/nanoTime)]
-       (observe! opts (agent-event :start span-id parent-span-id agent opts))
+       (obs/observe! opts (agent-event :start span-id parent-span-id agent opts))
        (try
          (let [result (-run runner agent prompt opts)]
-           (observe! opts (agent-event :finish span-id parent-span-id agent
-                                       (assoc opts
-                                              :duration-ms (duration-ms started-ns)
-                                              :ok? (ok? result))))
+           (obs/observe! opts (agent-event :finish span-id parent-span-id agent
+                                           (assoc opts
+                                                  :duration-ms (obs/duration-ms started-ns)
+                                                  :ok? (ok? result))))
            result)
          (catch Throwable t
-           (observe! opts (agent-event :error span-id parent-span-id agent
-                                       (assoc opts
-                                              :duration-ms (duration-ms started-ns)
-                                              :ok? false
-                                              :error (or (.getMessage t) (str t)))))
+           (obs/observe! opts (agent-event :error span-id parent-span-id agent
+                                           (assoc opts
+                                                  :duration-ms (obs/duration-ms started-ns)
+                                                  :ok? false
+                                                  :error (or (.getMessage t) (str t)))))
            (throw t))))))))
 
 ;; ===========================================================================
@@ -403,16 +394,5 @@
          (let [reply (if call?
                        (f {:agent agent :input input :options opts})
                        (f input))]
-           (cond
-             (and (map? reply) (= :result (:karcarthy/type reply)))
-             reply
-
-             (map? reply)
-             (result (cond-> reply
-                       (not (contains? reply :agent)) (assoc :agent (:name agent))
-                       (not (contains? reply :raw)) (assoc :raw {:runner :fn})))
-
-             :else
-             (result {:agent (:name agent)
-                      :text  (str reply)
-                      :raw   {:runner :fn}}))))))))
+           (coerce-result reply {:agent (:name agent)
+                                 :raw   {:runner :fn}})))))))

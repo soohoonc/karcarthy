@@ -23,6 +23,7 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 | `src/karcarthy/rewrite.clj` | structural workflow rewrites: `agents`, `over`, and `configure` |
 | `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node |
 | `src/karcarthy/edn.clj` | internal helper extracting the first EDN map from model output (`clojure.edn`, never `eval`) |
+| `src/karcarthy/observe.clj` | internal observation-event helpers shared by `core` and `orchestrate` (`:observe` callback) |
 | `src/karcarthy/proc.clj` | subprocess execution with timeout, shared by the subprocess-backed runners |
 | `src/karcarthy/cli.clj` | CLI entry point and language-agnostic JSON bridge behind `bin/karcarthy` |
 | `src/karcarthy/demo.clj` | offline demo (`clojure -M -m karcarthy.demo`) |
