@@ -50,15 +50,16 @@
 
 (deftest evolve-workflow-predicate-validates-extension-data
   (testing "extension nodes must validate their own workflow data"
-    (is (o/workflow? (self/evolve (k/agent "self" "i"))))
-    (is (not (o/workflow? (assoc (self/evolve (k/agent "self" "i"))
+    (is (o/workflow? (self/evolve (k/agent {:name "self" :instructions "i"}))))
+    (is (not (o/workflow? (assoc (self/evolve (k/agent {:name "self"
+                                                        :instructions "i"}))
                                   :host/fn
                                   (fn [] :x)))))
     (is (not (o/workflow? {:karcarthy/type :evolve
                            :agent (fn [_] :x)
                            :max-rounds 5})))
     (is (not (o/workflow? {:karcarthy/type :evolve
-                           :agent (k/agent "self" "i")
+                           :agent (k/agent {:name "self" :instructions "i"})
                            :max-rounds 0})))))
 
 (deftest evolve-self-modifies-then-answers
@@ -68,13 +69,23 @@
                ;; until it has 'EVOLVED' instructions, it asks to patch itself
                (if (str/includes? (:instructions agent) "EVOLVED")
                  "final answer"
-                 "{:karcarthy/patch {:instructions \"EVOLVED instructions\"} :reason \"better\"}")))
-          r (o/run h (self/evolve (k/agent "self" "original instructions")) "do X")]
+                 (pr-str {:karcarthy/patch {:description "Updated self"
+                                             :instructions "EVOLVED instructions"
+                                             :runner :specialist
+                                             :config {:temperature 0.2}}
+                          :reason "better"}))))
+          r (o/run h
+                   (self/evolve (k/agent {:name "self"
+                                          :instructions "original instructions"}))
+                   "do X")]
       (is (k/ok? r))
       (is (= "final answer" (:text r)))
       (is (= 2 (:rounds r)))
       (is (= 1 (count (:patches r))))
-      (is (str/includes? (:instructions (:evolved r)) "EVOLVED")))))
+      (is (str/includes? (:instructions (:evolved r)) "EVOLVED"))
+      (is (= "Updated self" (:description (:evolved r))))
+      (is (= :specialist (:runner (:evolved r))))
+      (is (= {:temperature 0.2} (:config (:evolved r)))))))
 
 (deftest evolve-stops-at-max-rounds
   (testing "an agent that always patches is capped, then forced to a final run"
@@ -84,7 +95,10 @@
                (swap! calls inc)
                ;; always returns a patch -> should hit max-rounds and force-finish
                "{:karcarthy/patch {:instructions \"again\"} :reason \"loop\"}"))
-          r (o/run h (self/evolve (k/agent "loop" "i") :max-rounds 3) "x")]
+          r (o/run h
+                   (self/evolve (k/agent {:name "loop" :instructions "i"})
+                                :max-rounds 3)
+                   "x")]
       (is (= 3 (:rounds r)))
       ;; 3 evolve rounds + 1 forced final plain run
       (is (= 4 @calls)))))
@@ -92,7 +106,7 @@
 (deftest evolve-no-change-passes-through
   (testing "if the agent answers immediately, no patches are applied"
     (let [h (k/mock-runner (fn [_] "immediate answer"))
-          r (o/run h (self/evolve (k/agent "a" "i")) "x")]
+          r (o/run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
       (is (= "immediate answer" (:text r)))
       (is (= 1 (:rounds r)))
       (is (empty? (:patches r))))))
@@ -101,7 +115,7 @@
   (testing "self-modification cannot smuggle arbitrary agent fields"
     (let [h (k/mock-runner
              (fn [_] "{:karcarthy/patch {:name \"renamed\"} :reason \"bad\"}"))
-          r (o/run h (self/evolve (k/agent "a" "i")) "x")]
+          r (o/run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
       (is (not (k/ok? r)))
       (is (= :invalid-patch (:error r)))
       (is (str/includes? (:text r) "unknown keys")))))
@@ -110,7 +124,7 @@
   (testing "a patch must still produce a valid agent"
     (let [h (k/mock-runner
              (fn [_] "{:karcarthy/patch {:tools [42]} :reason \"bad\"}"))
-          r (o/run h (self/evolve (k/agent "a" "i")) "x")]
+          r (o/run h (self/evolve (k/agent {:name "a" :instructions "i"})) "x")]
       (is (not (k/ok? r)))
       (is (= :invalid-patch (:error r)))
       (is (str/includes? (:text r) ":tools must be a vector of strings")))))

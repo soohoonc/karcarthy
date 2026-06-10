@@ -224,7 +224,13 @@ Use `dynamic` when the workflow should shape itself during the run:
 The dynamic workflow agent replies with one EDN op at a time:
 
 ```clojure
-{:op :define :agent {:name "reader" :instructions "Inspect one file."}}
+{:op :define
+ :agent {:name "reader"
+         :instructions "Inspect one file."
+         :runner :claude
+         :model "sonnet"
+         :tools ["Read"]
+         :config {}}}
 {:op :define :name "review"
  :workflow {:karcarthy/type :pipe
             :steps [{:karcarthy/type :agent-ref :name "reader"}]}}

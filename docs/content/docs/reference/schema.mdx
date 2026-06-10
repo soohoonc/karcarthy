@@ -20,13 +20,16 @@ Validate EDN workflows with `workflow?`.
 ```clojure
 {:karcarthy/type :agent
  :name "researcher"
+ :description "Use for research tasks."
  :instructions "Research the question and cite sources."
  :model "sonnet"
  :tools ["mcp__feedback__search"]
- :runner :claude}
+ :runner :claude
+ :config {:temperature 0.2}}
 ```
 
-Required keys: `:name`, `:instructions`.
+Required keys: `:name`, `:instructions`. `:runner` is a registry key; `:model`,
+`:tools`, and `:config` are interpreted by the selected runner.
 
 ## Subagent
 
@@ -179,7 +182,13 @@ is in progress:
 The agent emits EDN ops:
 
 ```clojure
-{:op :define :agent {:name "reader" :instructions "..."}}
+{:op :define
+ :agent {:name "reader"
+         :instructions "..."
+         :runner :claude
+         :model "sonnet"
+         :tools ["Read"]
+         :config {}}}
 {:op :define :name "review" :workflow WORKFLOW}
 {:op :patch :agent "reader" :merge {:instructions "..."}}
 {:op :call :workflow "review" :input "..."}

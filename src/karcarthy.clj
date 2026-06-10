@@ -14,6 +14,7 @@
             [karcarthy.rewrite]
             [karcarthy.schema]
             [karcarthy.self]
+            [karcarthy.runner.acp]
             [karcarthy.runner.claude]
             [karcarthy.runner.process]
             [karcarthy.runner.openai]))
@@ -81,6 +82,7 @@
 (export karcarthy.self/dsl-reference)
 
 ;; Agent SDK/CLI runners
+(export karcarthy.runner.acp/acp-runner)
 (export karcarthy.runner.claude/claude-cli-runner)
 (export karcarthy.runner.process/process-runner)
 (export karcarthy.runner.openai/openai-agents-runner)

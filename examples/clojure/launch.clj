@@ -38,8 +38,10 @@
        (str/join "\n\n")))
 
 (defn configured-agent [{:keys [name tools] :as profile}]
-  (cond-> (k/agent name (agent-instructions profile))
-    (seq tools) (assoc :tools (vec tools))))
+  (k/agent
+   {:name name
+    :instructions (agent-instructions profile)
+    :tools (vec tools)}))
 
 (def launch-context
   ["Audience: product, engineering, security, support, and launch leadership."

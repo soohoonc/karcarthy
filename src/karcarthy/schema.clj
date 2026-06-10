@@ -14,9 +14,11 @@
    {:karcarthy/type :agent
     :required        {:name :string
                       :instructions :string}
-   :optional        {:model :string
-                     :tools [:vector :string]
-                     :runner :keyword}}
+    :optional        {:description :string
+                      :model :string
+                      :tools [:vector :string]
+                      :runner :keyword
+                      :config :map}}
 
    :subagent
    {:karcarthy/type :subagent
@@ -144,11 +146,13 @@
      "required" ["type" "name" "instructions"]
      "additionalProperties" false
      "properties" {"type" {"const" "agent"}
-                   "name" {"type" "string" "minLength" 1}
-                   "instructions" {"type" "string"}
-                   "model" {"type" "string"}
-                   "tools" {"type" "array" "items" {"type" "string"}}
-                   "runner" {"type" "string"}}}
+	                   "name" {"type" "string" "minLength" 1}
+	                   "description" {"type" "string"}
+	                   "instructions" {"type" "string"}
+	                   "model" {"type" "string"}
+	                   "tools" {"type" "array" "items" {"type" "string"}}
+	                   "runner" {"type" "string"}
+	                   "config" {"type" "object"}}}
 
     "pipe"
     {"type" "object"

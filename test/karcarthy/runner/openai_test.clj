@@ -6,14 +6,22 @@
 (deftest request-builder
   (testing "agent fields map into the runner request"
     (is (= {:name "writer" :instructions "Write well." :input "hello" :model "gpt-4o-mini"}
-           (oa/request (k/agent "writer" "Write well." :model "gpt-4o-mini")
+           (oa/request (k/agent {:name "writer"
+                                 :instructions "Write well."
+                                 :model "gpt-4o-mini"})
                        "hello" {}))))
   (testing "opts :model overrides the agent model"
     (is (= "gpt-4o-mini"
-           (:model (oa/request (k/agent "w" "i" :model "gpt-4o") "p"
+           (:model (oa/request (k/agent {:name "w"
+                                         :instructions "i"
+                                         :model "gpt-4o"})
+                               "p"
                                {:model "gpt-4o-mini"})))))
   (testing "no model key when neither opts nor agent set one"
-    (is (not (contains? (oa/request (k/agent "w" "i") "p" {}) :model)))))
+    (is (not (contains? (oa/request (k/agent {:name "w" :instructions "i"})
+                                    "p"
+                                    {})
+                        :model)))))
 
 (deftest request-builder-subagents
   (testing "subagents map to OpenAI handoff agents"
@@ -26,7 +34,7 @@
                :handoff_description "Use for security review."
                :model "gpt-5.4-mini"}]
              (:subagents
-              (oa/request (k/agent "lead" "Coordinate.")
+              (oa/request (k/agent {:name "lead" :instructions "Coordinate."})
                           "review"
                           {:subagents [reviewer]})))))))
 

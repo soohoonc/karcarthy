@@ -13,11 +13,25 @@
             [karcarthy.orchestrate :as o]))
 
 ;; --- Agents via defagent: the var name becomes the agent name --------------
-(k/defagent triage    "Classify the request. Reply with EDN only: {:route :billing}, {:route :technical}, or {:route :general}." :model "haiku")
-(k/defagent billing   "Resolve billing questions concisely."            :model "haiku")
-(k/defagent technical "Diagnose the technical issue and propose a fix." :model "sonnet")
-(k/defagent general   "Answer general questions helpfully."             :model "haiku")
-(k/defagent reviewer  "Critique the draft answer for accuracy."         :model "sonnet")
+(k/defagent triage
+  {:instructions "Classify the request. Reply with EDN only: {:route :billing}, {:route :technical}, or {:route :general}."
+   :model "haiku"})
+
+(k/defagent billing
+  {:instructions "Resolve billing questions concisely."
+   :model "haiku"})
+
+(k/defagent technical
+  {:instructions "Diagnose the technical issue and propose a fix."
+   :model "sonnet"})
+
+(k/defagent general
+  {:instructions "Answer general questions helpfully."
+   :model "haiku"})
+
+(k/defagent reviewer
+  {:instructions "Critique the draft answer for accuracy."
+   :model "sonnet"})
 
 ;; --- A workflow via defworkflow: validated at load time --------------------
 (o/defworkflow support-desk
@@ -55,9 +69,15 @@
   ;; The planner emits EDN data, each worker is `tr a-z A-Z` (uppercase via a
   ;; real subprocess), and the reducer receives the source result summary as EDN.
   (let [workflow (o/reduce
-                  (o/delegate (k/agent "split" "Return EDN subtasks." :runner :plan)
-                              (k/agent "shout" "uppercase" :runner :upper))
-                  (k/agent "join" "Join source result text." :runner :join))
+                  (o/delegate (k/agent {:name "split"
+                                        :instructions "Return EDN subtasks."
+                                        :runner :plan})
+                              (k/agent {:name "shout"
+                                        :instructions "uppercase"
+                                        :runner :upper}))
+                  (k/agent {:name "join"
+                            :instructions "Join source result text."
+                            :runner :join}))
         runner  {:plan  (k/mock-runner
                           (fn [{:keys [prompt]}]
                             (pr-str {:subtasks (str/split (str/trim prompt) #"\s+")})))

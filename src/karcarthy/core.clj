@@ -48,7 +48,7 @@
 
 (s/def ::agent
   (s/keys :req-un [::name ::instructions]
-          :opt-un [::model ::tools ::runner]))
+          :opt-un [::description ::model ::tools ::runner ::config]))
 
 (s/def ::subagent
   (s/keys :req-un [::name ::description ::instructions]
@@ -58,25 +58,79 @@
                    ::effort ::reasoning-effort ::background? ::isolation
                    ::color ::nicknames ::hooks ::config]))
 
-(defn agent
-  "Build an agent value. `name` and `instructions` are required; the rest are
-  optional kwargs merged in when present.
+(declare agent?)
 
-    (agent \"researcher\" \"Research questions thoroughly.\"
-           :model \"sonnet\"
-           :tools [\"WebSearch\" \"WebFetch\"])
-    ;=> {:karcarthy/type :agent
-    ;    :name \"researcher\"
-    ;    :instructions \"Research questions thoroughly.\"
-    ;    :model \"sonnet\"
-    ;    :tools [\"WebSearch\" \"WebFetch\"]}"
-  [name instructions & {:keys [model tools runner]}]
-  (cond-> {:karcarthy/type :agent
-           :name           name
-           :instructions   instructions}
-    model    (assoc :model model)
-    tools    (assoc :tools (vec tools))
-    runner  (assoc :runner runner)))
+(def ^:private agent-keys
+  #{:name :description :instructions :model :tools :runner :config})
+
+(def ^:private legacy-agent-keys
+  #{:description :model :tools :runner :config})
+
+(defn- reject-unknown!
+  [label supported m]
+  (when-let [unknown (seq (remove supported (keys m)))]
+    (throw (ex-info (str label " contains unknown options")
+                    {:unknown (vec unknown)
+                     :supported (vec supported)})))
+  m)
+
+(defn- normalize-agent
+  [spec]
+  (when-not (map? spec)
+    (throw (ex-info "agent expects a map"
+                    {:value spec
+                     :supported '(agent {:name ... :instructions ...})})))
+  (let [base (:from spec)]
+    (when (and base (not (agent? base)))
+      (throw (ex-info "agent :from expects an agent value"
+                      {:from base})))
+    (reject-unknown! "agent" (conj agent-keys :from) spec)
+    (let [spec'  (cond-> spec
+                   (and (contains? spec :tools) (some? (:tools spec)))
+                   (update :tools vec)
+
+                   (and (contains? spec :tools) (nil? (:tools spec)))
+                   (dissoc :tools))
+          merged (merge (or base {})
+                        (dissoc spec' :from))
+          agent' (cond-> merged
+                   (not= :agent (:karcarthy/type merged))
+                   (assoc :karcarthy/type :agent))]
+      (when-not (agent? agent')
+        (throw (ex-info "agent spec is invalid"
+                        {:agent agent'
+                         :problems (s/explain-str ::agent agent')})))
+      agent')))
+
+(defn agent
+  "Build an agent spec as plain EDN data.
+
+  Preferred form:
+
+    (agent {:name \"researcher\"
+            :instructions \"Research questions thoroughly.\"
+            :model \"sonnet\"
+            :tools [\"WebSearch\" \"WebFetch\"]
+            :runner :claude})
+
+  `:runner` is a registry key, not a live runner object. `:model`, `:tools`,
+  and `:config` are interpreted by the selected runner.
+
+  To derive a variant from an existing agent:
+
+    (agent {:from reviewer :runner :openai :model \"gpt-5.2\"})
+
+  Deprecated compatibility form:
+
+    (agent \"researcher\" \"Research questions thoroughly.\" :model \"sonnet\")"
+  ([spec]
+   (normalize-agent spec))
+  ([name instructions & opts]
+   (let [opts-map (apply hash-map opts)]
+     (reject-unknown! "agent" legacy-agent-keys opts-map)
+     (normalize-agent (assoc opts-map
+                             :name name
+                             :instructions instructions)))))
 
 (defn agent?
   "True if `x` is a karcarthy agent value (well-formed)."
@@ -154,24 +208,37 @@
     (s/explain-str ::subagent x)))
 
 (defmacro defagent
-  "Define a var holding an agent map. The symbol's name becomes the agent's
-  :name, and `instructions` (a string literal) becomes both the agent's
-  instructions and the var's docstring. Remaining args are the optional kwargs
-  of `agent`.
+  "Define a var holding an agent spec. The symbol's name becomes `:name` unless
+  the spec explicitly provides one.
 
     (defagent researcher
-      \"Research questions thoroughly and cite sources.\"
-      :model \"sonnet\"
-      :tools [\"WebSearch\" \"WebFetch\"])
+      {:instructions \"Research questions thoroughly and cite sources.\"
+       :model \"sonnet\"
+       :tools [\"WebSearch\" \"WebFetch\"]})
 
-    researcher        ;=> {:karcarthy/type :agent :name \"researcher\" ...}
-    (:doc (meta #'researcher))  ;=> \"Research questions thoroughly...\""
-  [sym instructions & opts]
-  (when-not (string? instructions)
-    (throw (ex-info "defagent: instructions must be a string literal"
-                    {:sym sym :instructions instructions})))
-  `(def ~(vary-meta sym assoc :doc instructions)
-     (agent ~(name sym) ~instructions ~@opts)))
+    (defagent claude-researcher
+      {:from researcher
+       :runner :claude
+       :model \"sonnet\"})
+
+  Deprecated compatibility form:
+
+    (defagent researcher \"Research questions thoroughly.\" :model \"sonnet\")"
+  [sym spec & opts]
+  (let [value (if (string? spec)
+                `(agent ~(name sym) ~spec ~@opts)
+                (do
+                  (when (seq opts)
+                    (throw (ex-info "defagent map form does not accept trailing opts"
+                                    {:sym sym :opts opts})))
+                  `(let [spec# ~spec]
+                     (agent (cond-> spec#
+                              (not (contains? spec# :name))
+                              (assoc :name ~(name sym)))))))]
+    `(do
+       (def ~sym ~value)
+       (alter-meta! (var ~sym) assoc :doc (:instructions ~sym))
+       (var ~sym))))
 
 (defmacro defsubagent
   "Define a var holding a subagent map. The symbol's name becomes the

@@ -4,9 +4,14 @@
             [karcarthy.orchestrate :as o]
             [karcarthy.rewrite :as rw]))
 
-(def ^:private researcher (k/agent "researcher" "Research carefully."))
-(def ^:private writer (k/agent "writer" "Write plainly."))
-(def ^:private reviewer (k/agent "reviewer" "Check the answer."))
+(def ^:private researcher
+  (k/agent {:name "researcher" :instructions "Research carefully."}))
+
+(def ^:private writer
+  (k/agent {:name "writer" :instructions "Write plainly."}))
+
+(def ^:private reviewer
+  (k/agent {:name "reviewer" :instructions "Check the answer."}))
 
 (deftest agents-finds-leaf-agents
   (testing "agents returns valid agent leaves in traversal order"

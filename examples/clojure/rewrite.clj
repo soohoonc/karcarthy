@@ -11,10 +11,12 @@
          '[karcarthy :as k])
 
 (def researcher
-  (k/agent "researcher" "Find the core technical facts."))
+  (k/agent {:name "researcher"
+            :instructions "Find the core technical facts."}))
 
 (def writer
-  (k/agent "writer" "Explain the facts in plain language."))
+  (k/agent {:name "writer"
+            :instructions "Explain the facts in plain language."}))
 
 (def workflow
   (k/pipe researcher writer))

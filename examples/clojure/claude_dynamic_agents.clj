@@ -45,9 +45,11 @@
             (section "Before finalizing, verify" self-check)])))
 
 (defn configured-agent [{:keys [name tools model] :as profile}]
-  (cond-> (k/agent name (instructions profile))
-    (seq tools) (assoc :tools (vec tools))
-    model (assoc :model model)))
+  (k/agent
+   (cond-> {:name name
+            :instructions (instructions profile)
+            :tools (vec tools)}
+     model (assoc :model model))))
 
 (def adaptive-lead
   (configured-agent

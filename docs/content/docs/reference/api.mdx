@@ -14,52 +14,74 @@ Use the facade namespace for normal application code:
 ### `agent`
 
 ```clojure
-(k/agent name instructions & {:keys [model tools runner]})
+(k/agent spec)
 ```
 
-Builds an agent map.
+Builds an agent spec map. The map form is the primary API.
 
-| Parameter | Type | Required | Meaning |
+| Key | Type | Required | Meaning |
 | --- | --- | --- | --- |
-| `name` | string | yes | Stable agent name used in results, logs, and mock responses. |
-| `instructions` | string | yes | Role/system instructions passed to the runner. |
+| `:name` | string | yes | Stable agent name used in results, logs, and mock responses. |
+| `:instructions` | string | yes | Developer instructions for this agent spec. |
+| `:description` | string | no | Short human-facing description. |
 | `:model` | string | no | Runner-specific model selector. |
 | `:tools` | vector of strings | no | Tool allowlist. Tools must already exist in the selected runner environment. |
 | `:runner` | keyword | no | Runner registry key used by `run`. |
+| `:config` | map | no | Runner-specific configuration. |
 
 Returns:
 
 ```clojure
 {:karcarthy/type :agent
  :name "reviewer"
+ :description "Use for launch-risk review."
  :instructions "Find launch risks."
  :model "sonnet"
  :tools ["mcp__feedback__search"]
- :runner :claude}
+ :runner :claude
+ :config {:temperature 0.2}}
 ```
 
 Example:
 
 ```clojure
-(k/agent "reviewer"
-  "Find launch risks and propose mitigations."
+(k/agent
+ {:name "reviewer"
+  :instructions "Find launch risks and propose mitigations."
   :model "sonnet"
-  :tools ["mcp__feedback__search"])
+  :tools ["mcp__feedback__search"]})
 ```
+
+To derive a variant from existing agent data:
+
+```clojure
+(k/agent {:from reviewer
+          :runner :openai
+          :model "gpt-5.2"})
+```
+
+The old positional form `(k/agent name instructions & opts)` is deprecated.
 
 ### `defagent`
 
 ```clojure
-(k/defagent symbol instructions & opts)
+(k/defagent symbol spec)
 ```
 
 Defines a var containing an agent. The symbol name becomes the agent `:name`.
 
 ```clojure
 (k/defagent researcher
-  "Research the question and cite sources."
-  :model "sonnet")
+  {:instructions "Research the question and cite sources."
+   :model "sonnet"})
+
+(k/defagent claude-researcher
+  {:from researcher
+   :runner :claude})
 ```
+
+The old positional form `(k/defagent symbol instructions & opts)` is
+deprecated.
 
 ### `agent?` and `explain-agent`
 
@@ -272,7 +294,13 @@ Run it with the same `run` function as any other workflow:
 Supported ops are:
 
 ```clojure
-{:op :define :agent {:name "reader" :instructions "..."}}
+{:op :define
+ :agent {:name "reader"
+         :instructions "..."
+         :runner :claude
+         :model "sonnet"
+         :tools ["Read"]
+         :config {}}}
 {:op :define :name "review" :workflow WORKFLOW}
 {:op :patch :agent "reader" :merge {:instructions "..."}}
 {:op :patch :workflow "review" :merge MAP}
@@ -490,6 +518,46 @@ directory, turn limits, subagents, and extra Claude CLI args.
 `:subagents` is a vector of `k/subagent` values lowered to Claude Code
 `--agents` JSON.
 
+### `acp-runner`
+
+```clojure
+(k/acp-runner {:command ["some-acp-agent"]})
+(k/acp-runner command opts)
+```
+
+Runs one Karcarthy agent call through an Agent Client Protocol subprocess over
+stdio JSON-RPC. The ACP agent is the external process; Karcarthy folds the
+agent spec's instructions into the prompt turn.
+
+```clojure
+(def acp
+  (k/acp-runner {:command ["my-acp-agent"]
+                 :cwd "."
+                 :permission-policy :reject}))
+
+(k/run acp
+       (k/agent {:name "reviewer"
+                 :instructions "Review this diff."
+                 :model "sonnet"})
+       "Check the current branch.")
+```
+
+Common options:
+
+| Option | Meaning |
+| --- | --- |
+| `:command` | argv vector for the ACP agent process. |
+| `:cwd` / `:dir` | working directory for `session/new`. |
+| `:mcp-servers` | ACP MCP server specs passed during session setup. |
+| `:client-capabilities` | ACP client capabilities to advertise. Defaults to none. |
+| `:config-options` | session config option id/category to value map. |
+| `:strict-config?` | throw if a requested config option is unavailable. |
+| `:permission-policy` | `:reject` default, `:allow`, or `:cancel`. |
+| `:permission-handler` | fn for ACP `session/request_permission`. |
+| `:request-handler` | fn for custom agent-to-client JSON-RPC requests. |
+| `:on-event` | fn called with each ACP message received. |
+| `:timeout-ms` | max wait per ACP message. |
+
 ### `process-runner`
 
 ```clojure
@@ -542,12 +610,17 @@ vector of `k/subagent` values lowered to Agents SDK handoffs.
 ```clojure
 (def runners
   {:default (k/mock-runner)
-   :claude  (k/claude-cli-runner {})})
+   :claude  (k/claude-cli-runner {})
+   :acp     (k/acp-runner {:command ["my-acp-agent"]})})
 
 (k/run runners
        (k/pipe
-        (k/agent "planner" "Plan." :runner :claude)
-        (k/agent "checker" "Check." :runner :default))
+        (k/agent {:name "planner"
+                  :instructions "Plan."
+                  :runner :claude})
+        (k/agent {:name "checker"
+                  :instructions "Check."
+                  :runner :acp}))
        "ship the docs")
 ```
 

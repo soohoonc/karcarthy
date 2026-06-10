@@ -9,9 +9,8 @@
     * `dsl-reference`: a prompt fragment teaching an agent the EDN DSL.
     * `read-workflow` / `read-agent`: parse an agent's output into validated
       karcarthy data (no code eval).
-    * `evolve` (a `:evolve` node): an agent edits its own definition
-      (instructions, model, tools) at runtime by emitting an EDN patch, then
-      retrying with the new behavior.
+    * `evolve` (a `:evolve` node): an agent edits its own definition at runtime
+      by emitting an EDN patch, then retrying with the new behavior.
 
   Requiring this namespace registers the `:evolve` node with the interpreter."
   (:require [clojure.string :as str]
@@ -64,8 +63,12 @@
     "AGENT (a leaf that does one unit of work):"
     "  {:karcarthy/type :agent"
     "   :name \"researcher\""
+    "   :description \"Use for research tasks.\" ; optional"
     "   :instructions \"Research the question and cite sources.\""
-    "   :model \"sonnet\"}            ; :model optional"
+    "   :runner :claude              ; optional runner registry key"
+    "   :model \"sonnet\"             ; optional runner config"
+    "   :tools [\"WebSearch\"]        ; optional runner config"
+    "   :config {}}                  ; optional runner-specific config"
     ""
     "NODES (compose workflows):"
     "  pipe     {:karcarthy/type :pipe :steps [WORKFLOW ...]}"
@@ -94,7 +97,8 @@
   "A workflow node: run `agent`, letting it edit its own definition at runtime. Each
   round the agent may reply with an EDN patch
   `{:karcarthy/patch {<fields to merge>} :reason \"...\"}` to change itself (its
-  :instructions, :model or :tools) and retry, or with a plain final answer.
+  :description, :instructions, :model, :tools, :runner or :config) and retry,
+  or with a plain final answer.
   Stops at the final answer or `:max-rounds` (default 5)."
   [agent & {:keys [max-rounds] :or {max-rounds 5}}]
   {:karcarthy/type :evolve :agent agent :max-rounds max-rounds})
@@ -108,7 +112,7 @@
 (def ^:private no-patch ::no-patch)
 
 (def ^:private patch-keys
-  #{:instructions :model :tools})
+  #{:description :instructions :model :tools :runner :config})
 
 (defn- patch!
   [agent patch]
@@ -122,6 +126,10 @@
              (not (string? (:instructions patch))))
     (throw (ex-info ":karcarthy/patch :instructions must be a string"
                     {:patch patch})))
+  (when (and (contains? patch :description)
+             (not (string? (:description patch))))
+    (throw (ex-info ":karcarthy/patch :description must be a string"
+                    {:patch patch})))
   (when (and (contains? patch :model)
              (some? (:model patch))
              (not (string? (:model patch))))
@@ -131,6 +139,14 @@
              (not (and (vector? (:tools patch))
                        (every? string? (:tools patch)))))
     (throw (ex-info ":karcarthy/patch :tools must be a vector of strings"
+                    {:patch patch})))
+  (when (and (contains? patch :runner)
+             (not (keyword? (:runner patch))))
+    (throw (ex-info ":karcarthy/patch :runner must be a keyword"
+                    {:patch patch})))
+  (when (and (contains? patch :config)
+             (not (map? (:config patch))))
+    (throw (ex-info ":karcarthy/patch :config must be a map"
                     {:patch patch})))
   (let [agent' (merge agent patch)]
     (when-not (k/agent? agent')
@@ -157,7 +173,7 @@
   (str "You may improve yourself before answering. Reply with EITHER:\n"
        "  an EDN patch to your own definition -\n"
        "  {:karcarthy/patch {:instructions \"<better instructions>\"} :reason \"<why>\"}\n"
-       "  (you may patch :instructions, :model and/or :tools) to change and retry,\n"
+       "  (you may patch :description, :instructions, :model, :tools, :runner and/or :config) to change and retry,\n"
        "OR your final answer as plain text (no EDN).\n\nTASK:\n" input))
 
 (defmethod o/run-node :evolve

@@ -30,16 +30,16 @@
                  :extra-args         no-tools}))
 
 (def planner
-  (k/agent "planner"
-           "Reply with EDN only: {:subtasks [\"subtopic one\" \"subtopic two\"]}. Use exactly two short noun-phrase subtasks."))
+  (k/agent {:name "planner"
+            :instructions "Reply with EDN only: {:subtasks [\"subtopic one\" \"subtopic two\"]}. Use exactly two short noun-phrase subtasks."}))
 
 (def writer
-  (k/agent "writer"
-           "Write ONE concise sentence about the given subtopic. Output only the sentence."))
+  (k/agent {:name "writer"
+            :instructions "Write ONE concise sentence about the given subtopic. Output only the sentence."}))
 
 (def reducer
-  (k/agent "reducer"
-           "You receive EDN with :input, :subtasks, and :results. Write a concise bullet list using only the :text from successful results."))
+  (k/agent {:name "reducer"
+            :instructions "You receive EDN with :input, :subtasks, and :results. Write a concise bullet list using only the :text from successful results."}))
 
 (def research
   (o/reduce (o/delegate planner writer) reducer))

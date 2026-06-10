@@ -6,7 +6,7 @@
 (deftest fixed-command-echoes-stdin
   (testing "`cat` returns the prompt as the result text (trimmed)"
     (let [h (proc-runner/process-runner ["cat"])
-          r (k/run-agent h (k/agent "echoer" "i") "hello world")]
+          r (k/run-agent h (k/agent {:name "echoer" :instructions "i"}) "hello world")]
       (is (k/ok? r))
       (is (= "echoer" (:agent r)))
       (is (= "hello world" (:text r))))))
@@ -14,33 +14,39 @@
 (deftest command-transforms-input
   (testing "`tr` uppercases the piped prompt"
     (let [h (proc-runner/process-runner ["tr" "a-z" "A-Z"])
-          r (k/run-agent h (k/agent "shout" "i") "quiet please")]
+          r (k/run-agent h (k/agent {:name "shout" :instructions "i"}) "quiet please")]
       (is (= "QUIET PLEASE" (:text r))))))
 
 (deftest command-selection-uses-runner-registry
   (testing "agent :runner keys select fixed process runners"
     (let [runners {:up      (proc-runner/process-runner ["tr" "a-z" "A-Z"])
                    :default (proc-runner/process-runner ["cat"])}]
-      (is (= "HI" (:text (k/run-agent runners (k/agent "up" "i" :runner :up) "hi"))))
-      (is (= "hi" (:text (k/run-agent runners (k/agent "plain" "i") "hi")))))))
+      (is (= "HI" (:text (k/run-agent runners
+                                      (k/agent {:name "up"
+                                                :instructions "i"
+                                                :runner :up})
+                                      "hi"))))
+      (is (= "hi" (:text (k/run-agent runners
+                                      (k/agent {:name "plain" :instructions "i"})
+                                      "hi")))))))
 
 (deftest nonzero-exit-is-not-ok
   (testing "a failing command yields a not-ok result"
     (let [h (proc-runner/process-runner ["false"])
-          r (k/run-agent h (k/agent "x" "i") "p")]
+          r (k/run-agent h (k/agent {:name "x" :instructions "i"}) "p")]
       (is (not (k/ok? r)))
       (is (= 1 (get-in r [:raw :exit]))))))
 
 (deftest no-trim-option
   (testing ":trim? false preserves stdout whitespace"
     (let [h (proc-runner/process-runner ["cat"] {:trim? false})
-          r (k/run-agent h (k/agent "raw" "i") "x\n")]
+          r (k/run-agent h (k/agent {:name "raw" :instructions "i"}) "x\n")]
       (is (= "x\n" (:text r))))))
 
 (deftest process-timeout
   (testing "a slow process is reported as a not-ok timeout"
     (let [h (proc-runner/process-runner ["sleep" "10"] {:timeout-ms 300})
-          r (k/run-agent h (k/agent "slow" "i") "x")]
+          r (k/run-agent h (k/agent {:name "slow" :instructions "i"}) "x")]
       (is (not (k/ok? r)))
       (is (= "process timed out" (:error r)))
       (is (true? (get-in r [:raw :timed-out?]))))))
@@ -48,7 +54,7 @@
 (deftest process-runner-runs-shell-command-string
   (testing "a shell command string reads the prompt from stdin"
     (let [h (proc-runner/process-runner "tr a-z A-Z")
-          r (k/run-agent h (k/agent "shell" "i") "hello")]
+          r (k/run-agent h (k/agent {:name "shell" :instructions "i"}) "hello")]
       (is (k/ok? r))
       (is (= "HELLO" (:text r)))
       (is (= :process (get-in r [:raw :runner])))

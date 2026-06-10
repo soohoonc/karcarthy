@@ -39,21 +39,23 @@
 
 (def prompt-rewriter
   (k/agent
-   "research-prompt-rewriter"
-   (str "Rewrite the user's request into a complete OpenAI Deep Research prompt. "
-        "Do not answer the research question. Preserve uncertainty. Ask the "
-        "researcher to prefer primary sources, official policy pages, vendor "
-        "technical docs, utility or government data, and skeptical sources. "
-        "Require inline citations, a comparison table, caveats, and a final "
-        "decision framework.")))
+   {:name "research-prompt-rewriter"
+    :instructions
+    (str "Rewrite the user's request into a complete OpenAI Deep Research prompt. "
+         "Do not answer the research question. Preserve uncertainty. Ask the "
+         "researcher to prefer primary sources, official policy pages, vendor "
+         "technical docs, utility or government data, and skeptical sources. "
+         "Require inline citations, a comparison table, caveats, and a final "
+         "decision framework.")}))
 
 (def deep-researcher
   (k/agent
-   "openai-deep-researcher"
-   (str "Run the given prompt as a Deep Research task. The runner owns tool use, "
-        "background polling, and result extraction.")
-   :runner :openai-deep-research
-   :model (or (getenv "KARCARTHY_DEEP_RESEARCH_MODEL") "o4-mini-deep-research")))
+   {:name "openai-deep-researcher"
+    :instructions
+    (str "Run the given prompt as a Deep Research task. The runner owns tool use, "
+         "background polling, and result extraction.")
+    :runner :openai-deep-research
+    :model (or (getenv "KARCARTHY_DEEP_RESEARCH_MODEL") "o4-mini-deep-research")}))
 
 (def workflow
   (k/pipe prompt-rewriter deep-researcher))

@@ -91,10 +91,10 @@ Then build and run a workflow:
 (require '[karcarthy :as k])
 
 (k/defagent researcher
-  "Research the question and cite sources.")
+  {:instructions "Research the question and cite sources."})
 
 (k/defagent summarizer
-  "Summarize the findings in one sentence.")
+  {:instructions "Summarize the findings in one sentence."})
 
 (k/run (k/mock-runner)
        (k/pipe researcher summarizer)
@@ -113,6 +113,6 @@ The result shape is stable across runners:
 ## 5. Next steps
 
 - Learn how data flows through [workflows](/docs/workflows).
-- Swap the mock for Claude CLI, process, shell, or SDK-backed systems in [runners](/docs/runners).
+- Swap the mock for ACP, Claude CLI, process, shell, or SDK-backed systems in [runners](/docs/runners).
 - Build a realistic launch-readiness workflow in [tutorials](/docs/tutorials).
 - Look up exact function signatures in [reference](/docs/reference).

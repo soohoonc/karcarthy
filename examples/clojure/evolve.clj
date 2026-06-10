@@ -29,7 +29,8 @@
                  :extra-args         no-tools}))
 
 (println "=== evolve: an agent edits its own instructions at runtime ===")
-(let [poet (k/agent "poet" "You are a mediocre poet who writes one bland line.")
+(let [poet (k/agent {:name "poet"
+                     :instructions "You are a mediocre poet who writes one bland line."})
       r    (o/run runner (self/evolve poet :max-rounds 3)
                   "Patch yourself into an expert minimalist poet, then write ONE line about Lisp.")]
   (println "ROUNDS:" (:rounds r) "| PATCHES:" (count (:patches r)))

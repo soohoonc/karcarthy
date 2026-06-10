@@ -5,13 +5,14 @@
 
 (def test-namespaces
  '[karcarthy-test
-    karcarthy.core-test
-    karcarthy.cli-test
-    karcarthy.proc-test
-    karcarthy.runner.claude-test
-    karcarthy.runner.codex-test
-    karcarthy.runner.process-test
-    karcarthy.runner.openai-test
+   karcarthy.core-test
+   karcarthy.cli-test
+   karcarthy.proc-test
+   karcarthy.runner.acp-test
+   karcarthy.runner.claude-test
+   karcarthy.runner.codex-test
+   karcarthy.runner.process-test
+   karcarthy.runner.openai-test
     karcarthy.orchestrate-test
     karcarthy.dynamic-test
     karcarthy.schema-test

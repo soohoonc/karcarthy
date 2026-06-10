@@ -9,13 +9,17 @@
 ;; threading and routing deterministic to assert.
 (def ^:private h (k/mock-runner))
 
-(def ^:private a (k/agent "a" "i"))
-(def ^:private b (k/agent "b" "i"))
-(def ^:private c (k/agent "c" "i"))
-(def ^:private planner (k/agent "planner" "reply with {:subtasks [...] }"))
-(def ^:private judge (k/agent "judge" "reply with {:accept? ...}"))
-(def ^:private router (k/agent "router" "reply with {:route ...}"))
-(def ^:private reducer (k/agent "reducer" "reduce source EDN results"))
+(def ^:private a (k/agent {:name "a" :instructions "i"}))
+(def ^:private b (k/agent {:name "b" :instructions "i"}))
+(def ^:private c (k/agent {:name "c" :instructions "i"}))
+(def ^:private planner
+  (k/agent {:name "planner" :instructions "reply with {:subtasks [...] }"}))
+(def ^:private judge
+  (k/agent {:name "judge" :instructions "reply with {:accept? ...}"}))
+(def ^:private router
+  (k/agent {:name "router" :instructions "reply with {:route ...}"}))
+(def ^:private reducer
+  (k/agent {:name "reducer" :instructions "reduce source EDN results"}))
 
 (defn- scripted-runner
   "Mock runner whose response map may contain strings or prompt fns by agent name."
@@ -329,7 +333,10 @@
   (testing "a registry threads through orchestration; each agent uses its runner"
     (let [reg  {:up      (k/mock-runner (fn [{:keys [prompt]}] (str/upper-case prompt)))
                 :default (k/mock-runner (fn [{:keys [prompt]}] prompt))}
-          flow (o/pipe (k/agent "shout" "i" :runner :up) (k/agent "echo" "i"))]
+          flow (o/pipe (k/agent {:name "shout"
+                                 :instructions "i"
+                                 :runner :up})
+                       (k/agent {:name "echo" :instructions "i"}))]
       (is (= "HI" (:text (o/run reg flow "hi")))))))
 
 (deftest observe-emits-span-compatible-events

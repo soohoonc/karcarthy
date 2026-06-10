@@ -11,8 +11,10 @@
 
 (deftest command-building-defaults
   (testing "agent fields map to the expected flags"
-    (let [a    (k/agent "researcher" "Research well."
-                        :model "sonnet" :tools ["WebSearch" "WebFetch"])
+    (let [a    (k/agent {:name "researcher"
+                         :instructions "Research well."
+                         :model "sonnet"
+                         :tools ["WebSearch" "WebFetch"]})
           argv (cc/command a "find X" {})]
       (is (= ["claude" "-p" "find X"] (subvec argv 0 3)))
       (is (= "json" (after argv "--output-format")))
@@ -24,7 +26,7 @@
 (deftest command-building-options
   (testing "opts control bin, system-prompt mode, turns, permissions, extras"
     (let [argv (cc/command
-                (k/agent "a" "i") "p"
+                (k/agent {:name "a" :instructions "i"}) "p"
                 {:claude-bin         "/opt/node22/bin/claude"
                  :system-prompt-mode :replace
                  :max-turns          3
@@ -53,7 +55,9 @@
                                :effort :high
                                :isolation :worktree
                                :color :purple)
-          argv     (cc/command (k/agent "lead" "coordinate" :tools ["Agent"])
+          argv     (cc/command (k/agent {:name "lead"
+                                         :instructions "coordinate"
+                                         :tools ["Agent"]})
                                "review"
                                {:subagents [reviewer]})
           agents   (json/read-str (after argv "--agents") :key-fn keyword)]
@@ -75,13 +79,13 @@
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"duplicate Claude subagent names"
-           (cc/command (k/agent "lead" "coordinate")
+           (cc/command (k/agent {:name "lead" :instructions "coordinate"})
                        "review"
                        {:subagents [reviewer reviewer]}))))))
 
 (deftest command-omits-absent-options
   (testing "optional flags are absent when the agent/opts don't supply them"
-    (let [argv (cc/command (k/agent "a" "i") "p" {})]
+    (let [argv (cc/command (k/agent {:name "a" :instructions "i"}) "p" {})]
       (is (nil? (after argv "--model")))
       (is (nil? (after argv "--allowedTools")))
       (is (nil? (after argv "--max-turns")))
@@ -110,11 +114,11 @@
 
 (deftest command-streaming-and-session-flags
   (testing "stream-json, resume, continue and partial-messages flags"
-    (let [argv (cc/command (k/agent "a" "i") "p"
-                                  {:output-format    "stream-json"
-                                   :resume           "S123"
-                                   :continue?        true
-                                   :partial-messages? true})]
+    (let [argv (cc/command (k/agent {:name "a" :instructions "i"}) "p"
+                           {:output-format     "stream-json"
+                            :resume            "S123"
+                            :continue?         true
+                            :partial-messages? true})]
       (is (= "stream-json" (after argv "--output-format")))
       (is (some #{"--verbose"} argv))   ; required for stream-json under --print
       (is (= "S123" (after argv "--resume")))
@@ -171,10 +175,10 @@
                                  :max-turns          6
                                  :dir                tmp})
             r   (k/run-agent h
-                             (k/agent "ponger"
-                                      (str "You are an echo bot. Do not use any "
-                                           "tools. Reply with exactly one word: pong.")
-                                      :model "sonnet")
+                             (k/agent {:name "ponger"
+                                       :instructions (str "You are an echo bot. Do not use any "
+                                                          "tools. Reply with exactly one word: pong.")
+                                       :model "sonnet"})
                              "ping")]
         (is (= :result (:karcarthy/type r)))
         (is (string? (:session-id r)) "captures a session id")

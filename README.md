@@ -40,20 +40,24 @@ io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
 ```clojure
 (require '[karcarthy :as k])   ; one alias re-exports the common API
 
-(k/defagent researcher "Research the question and cite sources.")
-(k/defagent summarizer "Summarize the findings in one sentence.")
+(k/defagent researcher
+  {:instructions "Research the question and cite sources."})
+
+(k/defagent summarizer
+  {:instructions "Summarize the findings in one sentence."})
 
 ;; a workflow is data; run it through any runner (mock is offline and deterministic)
 (k/run (k/mock-runner) (k/pipe researcher summarizer) "what is a monad?")
 ;=> {:karcarthy/type :result, :ok? true, :text "...", ...}
 ```
 
-Swap the mock runner for `(k/claude-cli-runner {})` to run it against `claude`.
+Swap the mock runner for `(k/claude-cli-runner {})`, `(k/acp-runner
+{:command [...]})`, or another runner to use a live agent system.
 
 ## Highlights
 
 - **Runners** behind one protocol: `mock-runner`, `fn-runner`,
-  `process-runner`, `claude-cli-runner`, and
+  `process-runner`, `acp-runner`, `claude-cli-runner`, and
   `openai-agents-runner`. Pass one runner, or pass a map and let each agent
   choose with `:runner`.
 - **Workflows as data**: compose agents with `pipe`, `branch`, `delegate`,

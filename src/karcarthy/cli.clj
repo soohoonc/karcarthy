@@ -67,10 +67,13 @@
         with-concurrency #(cond-> %
                             (g "max-concurrency") (assoc :max-concurrency (g "max-concurrency")))]
     (case (g "type")
-      "agent"       (k/agent (g "name") (g "instructions")
-                             :model   (g "model")
-                             :tools   (g "tools")
-                             :runner (some-> (g "runner") keyword))
+      "agent"       (k/agent (cond-> {:name         (g "name")
+                                      :instructions (g "instructions")}
+                       (g "description") (assoc :description (g "description"))
+                       (g "model")       (assoc :model (g "model"))
+                       (g "tools")       (assoc :tools (g "tools"))
+                       (g "runner")      (assoc :runner (keyword (g "runner")))
+                       (g "config")      (assoc :config (g "config"))))
       "pipe"        (apply o/pipe (map json->workflow (g "steps")))
       "branch"      (with-concurrency
                       (o/branch (map json->workflow (g "branches"))))

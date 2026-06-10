@@ -27,22 +27,28 @@ or a registry selected per agent:
 ```clojure
 (def runners
   {:default (k/mock-runner)
-   :claude  (k/claude-cli-runner {})})
+   :claude  (k/claude-cli-runner {})
+   :acp     (k/acp-runner {:command ["my-acp-agent"]})})
 
 (k/run runners
        (k/pipe
-        (k/agent "planner" "Plan the rollout." :runner :claude)
-        (k/agent "checker" "Check for missing owners." :runner :default))
+        (k/agent {:name "planner"
+                  :instructions "Plan the rollout."
+                  :runner :claude})
+        (k/agent {:name "checker"
+                  :instructions "Check for missing owners."
+                  :runner :acp}))
        "enterprise SSO beta")
 ```
 
 Agent-level `:runner` is a registry key. It does not change the workflow
 shape.
 
-This follows the Agent Client Protocol split: a client starts or resumes a
-session, sends prompt turns, receives updates, and provides filesystem,
-terminal, permission, and MCP surfaces. karcarthy owns the workflow value above
-that boundary. The selected runner owns the provider-native agent session.
+This mirrors the Agent Client Protocol split: a client starts or resumes a
+session, sends prompt turns, receives updates, and may provide filesystem,
+terminal, permission, and MCP surfaces. Karcarthy owns the workflow value above
+that boundary. A selected runner owns the provider-native or protocol-native
+agent session.
 
 ## Subagents
 
@@ -63,9 +69,9 @@ agent session:
    {:subagents [security-reviewer]}))
 
 (k/run runner
-       (k/agent "review-coordinator"
-         "Review this branch. Use the security-reviewer subagent where useful."
-         :tools ["Agent" "Read" "Grep" "Glob"])
+       (k/agent {:name "review-coordinator"
+                 :instructions "Review this branch. Use the security-reviewer subagent where useful."
+                 :tools ["Agent" "Read" "Grep" "Glob"]})
        "Review current changes.")
 ```
 
@@ -102,7 +108,7 @@ Use the mock runner for tests, docs, and local workflow design:
 
 ```clojure
 (k/run (k/mock-runner)
-       (k/agent "echo" "Echo the input.")
+       (k/agent {:name "echo" :instructions "Echo the input."})
        "hi")
 ```
 
@@ -135,7 +141,7 @@ Use `fn-runner` when a Clojure function is the runner for agent specs:
   (k/fn-runner clojure.string/upper-case))
 
 (k/run uppercase
-       (k/agent "shout" "Uppercase the input.")
+       (k/agent {:name "shout" :instructions "Uppercase the input."})
        "quiet please")
 ```
 
@@ -159,9 +165,9 @@ Use Claude CLI when each agent call should run through `claude`:
 ```clojure
 (k/run (k/claude-cli-runner {:model "haiku"
                       :max-turns 4})
-       (k/agent "reviewer"
-         "Find one launch risk and one mitigation."
-         :tools ["mcp__feedback__search"])
+       (k/agent {:name "reviewer"
+                 :instructions "Find one launch risk and one mitigation."
+                 :tools ["mcp__feedback__search"]})
        "enterprise SSO beta")
 ```
 
@@ -181,7 +187,7 @@ directly:
    {:timeout-ms 120000}))
 
 (k/run local-model
-       (k/agent "writer" "Write the final answer.")
+       (k/agent {:name "writer" :instructions "Write the final answer."})
        "Summarize the rollout risk.")
 ```
 
@@ -190,7 +196,7 @@ when you want shell parsing, pipes, redirects, or inline scripts:
 
 ```clojure
 (k/run (k/process-runner "tr a-z A-Z")
-       (k/agent "shout" "Uppercase the input.")
+       (k/agent {:name "shout" :instructions "Uppercase the input."})
        "quiet please")
 ```
 
@@ -200,13 +206,41 @@ commands with the runner registry:
 ```clojure
 (k/run {:default (k/process-runner ["cat"])
         :upper   (k/process-runner ["tr" "a-z" "A-Z"])}
-       (k/agent "shout" "Uppercase input." :runner :upper)
+       (k/agent {:name "shout"
+                 :instructions "Uppercase input."
+                 :runner :upper})
        "quiet please")
 ```
 
 This keeps process execution as runner configuration. Dedicated CLI bridges
 such as `claude-cli-runner` may still be agent-aware because they translate an
 agent spec into that CLI's prompt, flags, tools, and session behavior.
+
+## ACP runner
+
+Use `acp-runner` for any Agent Client Protocol agent process that speaks stdio
+JSON-RPC:
+
+```clojure
+(def acp
+  (k/acp-runner
+   {:command ["my-acp-agent"]
+    :cwd "."
+    :mcp-servers []
+    :permission-policy :reject}))
+
+(k/run acp
+       (k/agent {:name "reviewer"
+                 :instructions "Review the current branch."
+                 :model "sonnet"})
+       "Check for correctness and missing tests.")
+```
+
+The ACP agent is the subprocess. Karcarthy folds the agent spec's
+`:instructions` into the `session/prompt` text and sends `:model` through ACP
+session config options when the agent advertises a `model` option. Other
+runner-specific controls can go through `:config-options` or a custom
+`:request-handler`.
 
 ## OpenAI Agents SDK bridge
 
@@ -216,7 +250,8 @@ agent-loop behavior in that bridge.
 
 ```clojure
 (k/run (k/openai-agents-runner {})
-       (k/agent "triage" "Route to refund, sales, or support.")
+       (k/agent {:name "triage"
+                 :instructions "Route to refund, sales, or support."})
        "I was charged twice.")
 ```
 
