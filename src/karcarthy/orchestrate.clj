@@ -483,13 +483,23 @@
                   {:node node})))
 
 (def ^:private run-request-keys
-  #{:runner :workflow :input :opts})
+  #{:runner :workflow :input :context :opts})
 
 (defn- input->text
   [input]
   (cond
     (nil? input) ""
     (string? input) input
+    (and (map? input) (contains? input :prompt))
+    (let [prompt (:prompt input)
+          data   (not-empty (dissoc input :prompt))]
+      (when-not (string? prompt)
+        (throw (ex-info "input :prompt must be a string"
+                        {:input input
+                         :prompt prompt})))
+      (if data
+        (str prompt "\n\nINPUT EDN:\n" (pr-str data))
+        prompt))
     :else (pr-str input)))
 
 (defn- run-request->args
@@ -508,10 +518,14 @@
   (when (and (contains? request :opts) (not (map? (:opts request))))
     (throw (ex-info "run request :opts must be a map"
                     {:opts (:opts request)})))
+  (when (and (contains? request :context) (not (map? (:context request))))
+    (throw (ex-info "run request :context must be a map"
+                    {:context (:context request)})))
   [(:runner request)
    (:workflow request)
    (input->text (:input request))
-   (or (:opts request) {})])
+   (cond-> (or (:opts request) {})
+     (contains? request :context) (assoc :context (:context request)))])
 
 (defn- run*
   [runner workflow input opts]
@@ -544,10 +558,15 @@
     (run {:runner runner
           :workflow workflow
           :input {:question \"...\"}
+          :context {:tenant \"...\"}
           :opts {:observe observe-fn}})
 
-  `:input` may be a string or EDN value. Non-string input is rendered with
-  `pr-str` before entering the text-threaded workflow interpreter."
+  `:input` is the initial task/user message/state. A string is passed as the
+  prompt. A map with `:prompt` uses that string as the prompt and appends the
+  remaining keys as EDN. Other EDN input is rendered with `pr-str` before
+  entering the text-threaded workflow interpreter. `:context` is host/runtime
+  context passed to runners and context-aware steps; it is not automatically
+  included in the prompt."
   [request]
   (let [[runner workflow input opts] (run-request->args request)]
     (run* runner workflow input opts)))
@@ -894,7 +913,7 @@
           agent  (if (k/agent? target)
                    target
                    (lookup-agent state (op-target-name op :agent)))]
-      (k/run-agent runner agent input opts))
+      (k/run-agent runner agent (input->text input) opts))
 
     (contains? op :workflow)
     (let [target   (:workflow op)
@@ -937,7 +956,7 @@
           indexed  (map-indexed vector inputs)
           results  (dispatch (:max-concurrency op)
                              (fn [[idx input]]
-                               (safe-run runner workflow (str input)
+                               (safe-run runner workflow (input->text input)
                                          (descend opts :spawn idx)))
                              indexed)]
       (k/result {:agent   "dynamic"

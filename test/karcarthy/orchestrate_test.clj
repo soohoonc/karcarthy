@@ -84,21 +84,46 @@
 (deftest run-accepts-request-map
   (testing "public runs can be described as one EDN request"
     (let [r (run {:runner h
-                    :workflow a
-                    :input "hi"})]
+                  :workflow a
+                  :input "hi"})]
       (is (k/ok? r))
       (is (= "[a] hi" (:text r)))))
   (testing "structured input is rendered as EDN at the runner boundary"
     (let [r (run {:runner h
-                    :workflow a
-                    :input {:ticket 42 :risk :high}})]
+                  :workflow a
+                  :input {:ticket 42 :risk :high}})]
       (is (= "[a] {:ticket 42, :risk :high}" (:text r)))))
+  (testing "a prompt input map keeps the prompt primary and appends EDN data"
+    (let [r (run {:runner h
+                  :workflow a
+                  :input {:prompt "review this"
+                          :ticket 42
+                          :risk :high}})]
+      (is (= "[a] review this\n\nINPUT EDN:\n{:ticket 42, :risk :high}"
+             (:text r)))))
+  (testing "prompt input maps require string prompts"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"input :prompt must be a string"
+         (run {:runner h
+               :workflow a
+               :input {:prompt {:text "bad"}}}))))
+  (testing "request context is passed through opts, not rendered into input"
+    (let [runner (k/fn-runner
+                  (fn [{:keys [input opts]}]
+                    (pr-str {:input input :context (:context opts)}))
+                  {:context? true})
+          r      (run {:runner runner
+                       :workflow a
+                       :input "hi"
+                       :context {:tenant "acme"}})]
+      (is (= "{:input \"hi\", :context {:tenant \"acme\"}}" (:text r)))))
   (testing "request opts feed the interpreter"
     (let [events (atom [])
           r      (run {:runner h
-                         :workflow a
-                         :input "hi"
-                         :opts {:observe #(swap! events conj %)}})]
+                       :workflow a
+                       :input "hi"
+                       :opts {:observe #(swap! events conj %)}})]
       (is (k/ok? r))
       (is (seq @events))
       (is (= #{:workflow :agent} (set (map :kind @events)))))))

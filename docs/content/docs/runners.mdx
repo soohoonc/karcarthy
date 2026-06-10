@@ -40,6 +40,10 @@ The caller chooses the runner:
 Agents do not carry a backend. If the backend changes at runtime, pass a
 different runner value.
 
+Runner configuration belongs in the runner value, agent fields, or run `:opts`.
+Do not hide execution configuration inside `:input`; `:input` is the task or
+state being worked on.
+
 ## Runtime Selection
 
 Keep runner choice in application code:

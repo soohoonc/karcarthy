@@ -8,12 +8,48 @@ The whole API starts here:
 ```clojure
 (k/run {:runner runner
         :workflow workflow
-        :input input})
+        :input input
+        :context context
+        :opts opts})
 ```
 
 `workflow` can be a single agent. `runner` is the value that actually runs each
-agent call. `input` can be a string or structured EDN; non-string input is
-rendered as EDN text before it reaches an agent runner.
+agent call. `input` is the task/user message/state for the workflow. `context`
+is host data for runners and local steps. `opts` is interpreter/runtime
+configuration such as observation callbacks.
+
+## Input Shape
+
+The common case is a string prompt:
+
+```clojure
+(k/run {:runner runner
+        :workflow workflow
+        :input "review this change"})
+```
+
+Use a map when the initial task has structure:
+
+```clojure
+(k/run {:runner runner
+        :workflow workflow
+        :input {:prompt "review this change"
+                :ticket 42
+                :risk :high}})
+```
+
+That starts the first agent with:
+
+```text
+review this change
+
+INPUT EDN:
+{:ticket 42, :risk :high}
+```
+
+A map without `:prompt` is passed as EDN text. Put execution configuration in
+`:opts`, runner construction, or agent fields such as `:model` and `:tools`, not
+inside `:input`.
 
 ## Requirements
 

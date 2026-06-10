@@ -79,6 +79,19 @@
     (is (= ["got a" "got b" "got c"] (mapv :text (:results r))))
     (is (= "got a\n\ngot b\n\ngot c" (:text r)))))
 
+(deftest spawn-renders-structured-inputs
+  (let [st      (o/state :agents [(k/agent {:name "echo" :instructions "say"})])
+        runner (k/mock-runner (fn [{:keys [prompt]}] prompt))
+        r       (o/step! runner st {:op :spawn
+                                     :agent "echo"
+                                     :inputs [{:prompt "review"
+                                               :ticket 42}
+                                              {:topic "billing"}]})]
+    (is (k/ok? r))
+    (is (= ["review\n\nINPUT EDN:\n{:ticket 42}"
+            "{:topic \"billing\"}"]
+           (mapv :text (:results r))))))
+
 (deftest dynamic-workflow-runs-until-complete
   (testing "the dynamic workflow agent can define, call, patch, call again, and finish"
     (let [calls  (atom 0)

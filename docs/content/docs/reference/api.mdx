@@ -403,12 +403,27 @@ Applies common agent configuration in one pass. Supported keys:
 (k/run {:runner runner
         :workflow workflow
         :input input
+        :context context
         :opts opts})
 ```
 
-Interprets workflow data through the runner passed to `run`. `:input` can be a
-string or an EDN value; non-string input is rendered with `pr-str` before
-entering the text-threaded workflow interpreter.
+Interprets workflow data through the runner passed to `run`.
+
+| Key | Meaning |
+| --- | --- |
+| `:runner` | A value implementing the runner protocol. |
+| `:workflow` | An agent or workflow node. |
+| `:input` | The initial task/user message/state. |
+| `:context` | Optional host context passed to runners and context-aware steps. It is not added to the prompt automatically. |
+| `:opts` | Optional interpreter/runtime options such as `:observe`. |
+
+Input rendering:
+
+| Input | Runner prompt |
+| --- | --- |
+| `"review this"` | `"review this"` |
+| `{:prompt "review this" :ticket 42}` | `"review this\n\nINPUT EDN:\n{:ticket 42}"` |
+| `{:ticket 42}` | `"{:ticket 42}"` |
 
 ```clojure
 (k/run {:runner (k/mock-runner)
