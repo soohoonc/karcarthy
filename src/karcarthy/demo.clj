@@ -10,7 +10,8 @@
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [karcarthy :as k]
-            [karcarthy.orchestrate :as o]))
+            [karcarthy.orchestrate :as o]
+            [karcarthy.proc :as proc]))
 
 ;; --- Agents via defagent: the var name becomes the agent name --------------
 (k/defagent triage
@@ -70,23 +71,28 @@
   ;; real subprocess), and the reducer receives the source result summary as EDN.
   (let [workflow (o/reduce
                   (o/delegate (k/agent {:name "split"
-                                        :instructions "Return EDN subtasks."
-                                        :runner :plan})
+                                        :instructions "Return EDN subtasks."})
                               (k/agent {:name "shout"
-                                        :instructions "uppercase"
-                                        :runner :upper}))
+                                        :instructions "uppercase"}))
                   (k/agent {:name "join"
-                            :instructions "Join source result text."
-                            :runner :join}))
-        runner  {:plan  (k/mock-runner
-                          (fn [{:keys [prompt]}]
-                            (pr-str {:subtasks (str/split (str/trim prompt) #"\s+")})))
-                  :upper (k/process-runner ["tr" "a-z" "A-Z"])
-                  :join  (k/mock-runner
-                          (fn [{:keys [prompt]}]
-                            (->> (:results (edn/read-string prompt))
-                                 (map :text)
-                                 (str/join " "))))}
+                            :instructions "Join source result text."}))
+        runner  (k/fn-runner
+                 (fn [{:keys [agent input]}]
+                   (case (:name agent)
+                     "split"
+                     (pr-str {:subtasks (str/split (str/trim input) #"\s+")})
+
+                     "shout"
+                     (let [{:keys [out]} (proc/run ["tr" "a-z" "A-Z"] {:in input})]
+                       out)
+
+                     "join"
+                     (->> (:results (edn/read-string input))
+                          (map :text)
+                          (str/join " "))
+
+                     (str "[" (:name agent) "] " input)))
+                 {:context? true})
         r        (o/run runner workflow "homoiconic agents are data")]
     (println "subtasks:" (get-in r [:source :subtasks]))
     (println "result:  " (:text r)))

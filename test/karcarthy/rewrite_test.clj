@@ -30,13 +30,10 @@
 (deftest configure-stamps-agent-runtime-configuration
   (testing "configure applies common runtime settings in one pass"
     (let [workflow  (o/pipe researcher (o/branch [writer reviewer]))
-          rewritten (rw/configure {:runner :claude
-                                   :model "claude-sonnet-4"
+          rewritten (rw/configure {:model "claude-sonnet-4"
                                    :instructions/suffix "State assumptions before final answer."}
                                   workflow)]
       (is (o/workflow? rewritten))
-      (is (= [:claude :claude :claude]
-             (map :runner (rw/agents rewritten))))
       (is (= ["claude-sonnet-4" "claude-sonnet-4" "claude-sonnet-4"]
              (map :model (rw/agents rewritten))))
       (is (= ["Research carefully.\n\nState assumptions before final answer."
@@ -59,12 +56,8 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"expects workflow data"
-         (rw/configure {:runner :claude} {:not :a-workflow}))))
+         (rw/configure {:model "sonnet"} {:not :a-workflow}))))
   (testing "configure rejects invalid values clearly"
-    (is (thrown-with-msg?
-         clojure.lang.ExceptionInfo
-         #"configure :runner expects a keyword"
-         (rw/configure {:runner "claude"} researcher)))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"configure :model expects a string"

@@ -1,10 +1,16 @@
 ---
 title: Quickstart
-description: Build the CLI, run one agent, run one workflow file, then use the Clojure API.
+description: Run one agent, compose a tiny workflow, and choose a runner at call time.
 ---
 
-This page gets you to a successful local run first. The examples use the mock
-runner, so they do not call a model or require API keys.
+The whole API starts here:
+
+```clojure
+(k/run runner workflow input)
+```
+
+`workflow` can be a single agent. `runner` is the thing that actually runs that
+agent. The workflow does not choose its own backend.
 
 ## Requirements
 
@@ -12,19 +18,81 @@ runner, so they do not call a model or require API keys.
 - Clojure CLI
 - A checkout of `soohoonc/karcarthy`
 
-## 1. Build the CLI
+## Run One Agent
 
-From the repository root:
+```clojure
+(require '[karcarthy :as k])
+
+(k/defagent echo
+  {:instructions "Echo the input."})
+
+(k/run (k/mock-runner) echo "hi")
+```
+
+Result:
+
+```clojure
+{:karcarthy/type :result
+ :ok? true
+ :agent "echo"
+ :text "[echo] hi"
+ :raw {:runner :mock}}
+```
+
+That is the smallest workflow: one agent node, one runner, one input.
+
+## Compose Two Agents
+
+```clojure
+(k/defagent researcher
+  {:instructions "Research the question and list the important facts."})
+
+(k/defagent summarizer
+  {:instructions "Summarize the previous answer in one sentence."})
+
+(def workflow
+  (k/pipe researcher summarizer))
+
+(k/run (k/mock-runner)
+       workflow
+       "why does Lisp use code as data?")
+```
+
+`pipe` feeds the first result's `:text` into the second agent.
+
+## Choose The Runner At Runtime
+
+Keep agents runner-agnostic:
+
+```clojure
+(k/defagent reviewer
+  {:instructions "Review the input and return concrete issues."
+   :model "sonnet"})
+```
+
+Pick the runner before calling `run`:
+
+```clojure
+(defn review [runner input]
+  (k/run runner reviewer input))
+
+(review (k/mock-runner) "check this design")
+(review (k/claude-cli-runner {}) "check this design")
+(review (k/acp-runner {:command ["my-acp-agent"]}) "check this design")
+```
+
+Agents do not carry a backend selector. If the runner changes at runtime, pass
+a different runner value.
+
+## CLI
+
+Build the CLI jar:
 
 ```bash
 clojure -T:build uber
 ```
 
-That writes `target/karcarthy-0.0.2-standalone.jar`. The repo-local
-`bin/karcarthy` launcher uses that jar when it exists and falls back to source
-while developing.
-
-## 2. Run one agent
+Run one mock agent:
 
 ```bash
 ./bin/karcarthy agent echo --instructions "Echo the input." hi
@@ -36,83 +104,17 @@ Expected output:
 [echo] hi
 ```
 
-By default, command output is plain text. Ask for the full result object when
-you need it:
+Choose the CLI runner for the whole invocation with `--runner`:
 
 ```bash
-./bin/karcarthy agent echo --instructions "Echo the input." hi --json
+./bin/karcarthy agent reviewer \
+  --runner claude \
+  --instructions "Review the input and return concrete issues." \
+  "check this design"
 ```
 
-## 3. Run a workflow file
+## Next
 
-`examples/workflows/echo.json` is a workflow value:
-
-```json
-{
-  "type": "agent",
-  "name": "echo",
-  "instructions": "Echo the input."
-}
-```
-
-Run it:
-
-```bash
-./bin/karcarthy run examples/workflows/echo.json hi
-```
-
-Expected output:
-
-```text
-[echo] hi
-```
-
-The same CLI also has a machine protocol:
-
-```bash
-./bin/karcarthy json < request.json
-```
-
-Use `json` from Python, TypeScript, CI jobs, and other non-JVM callers.
-
-## 4. Use the Clojure API
-
-Add karcarthy from git until a stable release is published:
-
-```clojure title="deps.edn"
-{:deps {io.github.soohoonc/karcarthy
-        {:git/url "https://github.com/soohoonc/karcarthy"
-         :git/sha "<commit sha>"}}}
-```
-
-Then build and run a workflow:
-
-```clojure
-(require '[karcarthy :as k])
-
-(k/defagent researcher
-  {:instructions "Research the question and cite sources."})
-
-(k/defagent summarizer
-  {:instructions "Summarize the findings in one sentence."})
-
-(k/run (k/mock-runner)
-       (k/pipe researcher summarizer)
-       "what is a monad?")
-```
-
-The result shape is stable across runners:
-
-```clojure
-{:karcarthy/type :result
- :ok? true
- :agent "summarizer"
- :text "..."}
-```
-
-## 5. Next steps
-
-- Learn how data flows through [workflows](/docs/workflows).
-- Swap the mock for ACP, Claude CLI, process, shell, or SDK-backed systems in [runners](/docs/runners).
-- Build a realistic launch-readiness workflow in [tutorials](/docs/tutorials).
-- Look up exact function signatures in [reference](/docs/reference).
+- [Build Workflows](/docs/workflows) explains the workflow nodes.
+- [Use Runners](/docs/runners) explains mock, function, process, Claude, ACP, and OpenAI runners.
+- [Tutorials](/docs/tutorials) walks through a realistic launch-review workflow.

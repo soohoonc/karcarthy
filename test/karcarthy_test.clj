@@ -44,10 +44,9 @@
 (deftest facade-reexports-rewrites
   (testing "workflow rewrites are reachable under the facade"
     (let [workflow  (kc/pipe (kc/agent "a" "i") (kc/agent "b" "j"))
-          rewritten (kc/configure {:runner :mock :model "m"} workflow)]
+          rewritten (kc/configure {:model "m"} workflow)]
       (is (kc/workflow? rewritten))
       (is (= ["a" "b"] (map :name (kc/agents rewritten))))
-      (is (= [:mock :mock] (map :runner (kc/agents rewritten))))
       (is (= ["m" "m"] (map :model (kc/agents rewritten))))
       (is (= ["x" "x"]
              (map :instructions
@@ -78,7 +77,6 @@
   (testing "normal users get one execution entrypoint: run"
     (is (nil? (ns-resolve 'karcarthy 'run-agent)))
     (is (nil? (ns-resolve 'karcarthy 'Runner)))
-    (is (nil? (ns-resolve 'karcarthy 'resolve-runner)))
     (is (nil? (ns-resolve 'karcarthy 'evolve)))
     (is (nil? (ns-resolve 'karcarthy 'map)))
     (is (nil? (ns-resolve 'karcarthy 'bind)))

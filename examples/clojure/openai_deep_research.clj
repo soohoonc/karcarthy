@@ -54,7 +54,6 @@
     :instructions
     (str "Run the given prompt as a Deep Research task. The runner owns tool use, "
          "background polling, and result extraction.")
-    :runner :openai-deep-research
     :model (or (getenv "KARCARTHY_DEEP_RESEARCH_MODEL") "o4-mini-deep-research")}))
 
 (def workflow
@@ -198,14 +197,18 @@
                      :text nil
                      :error (.getMessage t)}))))))
 
-(defn runner-registry []
-  {:default offline-default
-   :openai-deep-research (if (getenv "KARCARTHY_OPENAI_LIVE")
-                           (live-openai-deep-research)
-                           offline-deep-research)})
+(defn research-runner []
+  (let [deep-research (if (getenv "KARCARTHY_OPENAI_LIVE")
+                        (live-openai-deep-research)
+                        offline-deep-research)]
+    (reify core/Runner
+      (-run [_ agent input opts]
+        (if (= "openai-deep-researcher" (:name agent))
+          (core/run-agent deep-research agent input opts)
+          (core/run-agent offline-default agent input opts))))))
 
 (defn -main [& _]
-  (let [result (k/run (runner-registry) workflow research-task)]
+  (let [result (k/run (research-runner) workflow research-task)]
     (println "=== OpenAI Deep Research request shape ===")
     (pp/pprint (select-keys (deep-research-request deep-researcher rewritten-prompt)
                             ["model" "background" "store" "reasoning" "max_tool_calls" "include" "tools"]))

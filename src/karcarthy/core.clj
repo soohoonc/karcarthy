@@ -29,7 +29,6 @@
 (s/def ::model       (s/nilable string?))
 (s/def ::tools       (s/coll-of string? :kind vector?))
 (s/def ::disallowed-tools (s/coll-of string? :kind vector?))
-(s/def ::runner      keyword?)   ; id into a runner registry (optional)
 (s/def ::permission-mode any?)
 (s/def ::sandbox-mode any?)
 (s/def ::mcp-servers any?)
@@ -48,7 +47,7 @@
 
 (s/def ::agent
   (s/keys :req-un [::name ::instructions]
-          :opt-un [::description ::model ::tools ::runner ::config]))
+          :opt-un [::description ::model ::tools ::config]))
 
 (s/def ::subagent
   (s/keys :req-un [::name ::description ::instructions]
@@ -61,10 +60,10 @@
 (declare agent?)
 
 (def ^:private agent-keys
-  #{:name :description :instructions :model :tools :runner :config})
+  #{:name :description :instructions :model :tools :config})
 
 (def ^:private legacy-agent-keys
-  #{:description :model :tools :runner :config})
+  #{:description :model :tools :config})
 
 (defn- reject-unknown!
   [label supported m]
@@ -110,15 +109,14 @@
     (agent {:name \"researcher\"
             :instructions \"Research questions thoroughly.\"
             :model \"sonnet\"
-            :tools [\"WebSearch\" \"WebFetch\"]
-            :runner :claude})
+            :tools [\"WebSearch\" \"WebFetch\"]})
 
-  `:runner` is a registry key, not a live runner object. `:model`, `:tools`,
-  and `:config` are interpreted by the selected runner.
+  `:model`, `:tools`, and `:config` are interpreted by the runner passed to
+  `run` or `run-agent`.
 
   To derive a variant from an existing agent:
 
-    (agent {:from reviewer :runner :openai :model \"gpt-5.2\"})
+    (agent {:from reviewer :model \"gpt-5.2\"})
 
   Deprecated compatibility form:
 
@@ -218,7 +216,6 @@
 
     (defagent claude-researcher
       {:from researcher
-       :runner :claude
        :model \"sonnet\"})
 
   Deprecated compatibility form:
@@ -293,24 +290,12 @@
   validates first."
   (-run [runner agent prompt opts]))
 
-(defn- runner-key [agent]
-  (or (:runner agent) :default))
-
-(defn resolve-runner
-  "Pick the runner to run `agent` with. `runner` is either a single runner or
-  a registry map {id -> runner}; the agent's `:runner` id selects from the
-  registry."
-  [runner agent]
-  (cond
-    (satisfies? Runner runner) runner
-    (map? runner) (let [id (runner-key agent)]
-                    (or (get runner id)
-                        (get runner :default)
-                        (throw (ex-info (str "no runner registered for " (pr-str id))
-                                        {:runner-key id
-                                         :registered (vec (keys runner))}))))
-    :else (throw (ex-info "runner must be a single runner or a registry map {id -> runner}"
-                          {:got runner}))))
+(defn- runner!
+  [runner]
+  (if (satisfies? Runner runner)
+    runner
+    (throw (ex-info "runner must implement karcarthy.core/Runner"
+                    {:got runner}))))
 
 (defn- span-id [] (str (UUID/randomUUID)))
 
@@ -337,8 +322,7 @@
            :time-ms        (now-ms)
            :path           (:karcarthy/path attrs)
            :attributes     (cond-> {"karcarthy.kind"       "agent"
-                                    "karcarthy.agent.name" (:name agent)
-                                    "karcarthy.runner.id" (name (runner-key agent))}
+                                    "karcarthy.agent.name" (:name agent)}
                              (:karcarthy/path attrs)
                              (assoc "karcarthy.path" (pr-str (:karcarthy/path attrs)))
                              (:model agent) (assoc "karcarthy.agent.model" (:model agent))
@@ -349,22 +333,22 @@
     (:error attrs) (assoc :error (:error attrs))))
 
 (defn run-agent
-  "Validate `agent`, then run it on `prompt`. `runner` is either a single
-  runner or a registry map {id -> runner} (see `resolve-runner`). Returns a result map;
+  "Validate `agent`, then run it on `prompt` with `runner`. Returns a result map;
   throws `ExceptionInfo` if the agent is malformed."
   ([runner agent prompt] (run-agent runner agent prompt {}))
   ([runner agent prompt opts]
    (when-let [msg (explain-agent agent)]
      (throw (ex-info (str "Invalid agent: " msg)
                      {:agent agent :problems (s/explain-data ::agent agent)})))
-   (if-not (:observe opts)
-     (-run (resolve-runner runner agent) agent prompt opts)
+   (let [runner (runner! runner)]
+     (if-not (:observe opts)
+       (-run runner agent prompt opts)
      (let [span-id        (span-id)
            parent-span-id (:karcarthy/parent-span-id opts)
            started-ns     (System/nanoTime)]
        (observe! opts (agent-event :start span-id parent-span-id agent opts))
        (try
-         (let [result (-run (resolve-runner runner agent) agent prompt opts)]
+         (let [result (-run runner agent prompt opts)]
            (observe! opts (agent-event :finish span-id parent-span-id agent
                                        (assoc opts
                                               :duration-ms (duration-ms started-ns)
@@ -376,7 +360,7 @@
                                               :duration-ms (duration-ms started-ns)
                                               :ok? false
                                               :error (or (.getMessage t) (str t)))))
-           (throw t)))))))
+           (throw t))))))))
 
 ;; ===========================================================================
 ;; Mock runner

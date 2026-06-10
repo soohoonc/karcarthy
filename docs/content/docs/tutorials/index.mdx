@@ -1,20 +1,55 @@
 ---
 title: Tutorials
-description: Build the same non-trivial launch-readiness workflow in Clojure, Python, and TypeScript.
+description: Build a launch-readiness workflow in Clojure, Python, and TypeScript.
 ---
 
-These tutorials build a launch-readiness assistant. Given a product-change
-prompt, the workflow:
+The tutorials build one realistic workflow: a launch-readiness assistant.
+
+Given a product-change prompt, it:
 
 1. classifies the request as launch or incident,
 2. runs product, engineering, security, and support reviewers,
-3. synthesizes their notes into a go/no-go brief,
-4. loops through critique before returning the final brief.
+3. synthesizes their notes into a launch brief,
+4. asks a critic to accept or request revisions.
 
-The examples are offline by default. They use deterministic mock responses so
-you can inspect orchestration behavior before paying for model calls.
+The examples run offline by default with deterministic mock responses.
 
-## Run the finished examples
+## Core Shape
+
+The Clojure workflow is small:
+
+```clojure
+(def reviewers
+  [product-reviewer engineering-reviewer security-reviewer support-reviewer])
+
+(def review-packet
+  (k/branch reviewers :max-concurrency 4))
+
+(def launch-brief
+  (k/revise
+   (k/pipe review-packet brief-writer)
+   critic
+   :max-rounds 2))
+
+(def workflow
+  (k/route classifier
+           {:launch launch-brief
+            :incident incident-responder}
+           :default launch-brief))
+```
+
+Then the caller chooses a runner:
+
+```clojure
+(k/run (k/mock-runner responses)
+       workflow
+       "Prepare an enterprise SSO beta launch review.")
+```
+
+The workflow data does not contain a runner selector. Use a mock, Claude, ACP,
+OpenAI, or process runner by passing a different runner to `run`.
+
+## Run The Examples
 
 ```bash
 clojure -M -e '(load-file "examples/clojure/launch.clj")'
@@ -30,45 +65,14 @@ Top risks: SSO latency, unverified audit logs, and missing rollback messaging.
 Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.
 ```
 
-## What the tutorials teach
-
-| Page | Teaches |
-| --- | --- |
-| [Clojure](/docs/tutorials/clojure) | Direct API use, EDN replies, and workflow data rewrites. |
-| [Python](/docs/tutorials/python) | Building workflow JSON from application dictionaries. |
-| [TypeScript](/docs/tutorials/typescript) | Building the same workflow shape from typed application objects. |
-
-## Agent configuration model
-
-Each language builds agents from profile data before turning them into ordinary
-karcarthy agent maps. The profile fields are application UI, not new workflow
-resource types:
-
-- role and mission define identity.
-- operating context acts like a compact workspace bootstrap.
-- tools are a runner allowlist, not provisioned infrastructure.
-- responsibilities describe the job to do.
-- output contract makes downstream composition predictable.
-- tone controls the user-facing experience.
-- boundaries and self-checks keep the agent honest.
-
-The product owns the configuration screen and templates. karcarthy only needs
-the final agent instructions and workflow data.
-
-## Workflow shape
-
-The launch workflow uses the small functional vocabulary:
-
-- `route` chooses the launch path from a classifier result.
-- `branch` runs independent reviewers.
-- `pipe` turns review notes into a final draft.
-- `revise` gives the draft one or more critique rounds.
-
-Planner, evaluator, and router replies are EDN maps, so the workflow
-shape stays portable across the Clojure API and the JSON bridge.
+## What To Read
 
 <Cards>
   <Card title="Clojure" href="/docs/tutorials/clojure" />
   <Card title="Python" href="/docs/tutorials/python" />
   <Card title="TypeScript" href="/docs/tutorials/typescript" />
 </Cards>
+
+The Clojure tutorial shows direct API use and EDN replies. The Python and
+TypeScript tutorials build the same workflow shape as JSON, which is useful
+when a non-JVM app owns the UI and configuration.

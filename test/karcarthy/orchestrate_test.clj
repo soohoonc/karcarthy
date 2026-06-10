@@ -329,16 +329,6 @@
       (is (some? ex))
       (is (str/includes? msgs "not a runnable workflow")))))
 
-(deftest workflow-over-runner-registry
-  (testing "a registry threads through orchestration; each agent uses its runner"
-    (let [reg  {:up      (k/mock-runner (fn [{:keys [prompt]}] (str/upper-case prompt)))
-                :default (k/mock-runner (fn [{:keys [prompt]}] prompt))}
-          flow (o/pipe (k/agent {:name "shout"
-                                 :instructions "i"
-                                 :runner :up})
-                       (k/agent {:name "echo" :instructions "i"}))]
-      (is (= "HI" (:text (o/run reg flow "hi")))))))
-
 (deftest observe-emits-span-compatible-events
   (testing "workflow and agent events include span ids, parent ids, paths, and attributes"
     (let [events   (atom [])

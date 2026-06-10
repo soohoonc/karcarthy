@@ -57,10 +57,9 @@
 
 (deftest json->agent-workflow-fields
   (let [a (cli/json->workflow {"type" "agent" "name" "x" "instructions" "do"
-                               "model" "haiku" "runner" "claude"})]
+                               "model" "haiku"})]
     (is (= "x" (:name a)))
-    (is (= "haiku" (:model a)))
-    (is (= :claude (:runner a)))))
+    (is (= "haiku" (:model a)))))
 
 (deftest json->workflow-accepts-dynamic
   (let [workflow (cli/json->workflow {"type" "dynamic"

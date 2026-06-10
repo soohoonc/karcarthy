@@ -40,9 +40,9 @@
     [\"cmd\" \"arg\"]  an argv vector executed directly
     \"cmd arg\"       a shell command string executed with `:shell`
 
-  The command is fixed runner configuration. Select different process commands
-  with the runner registry and agent `:runner` keys, not with agent-aware command
-  builder functions. Options:
+  The command is fixed runner configuration. If different parts of an
+  application need different commands, choose the process runner before calling
+  `run`. Options:
 
     :trim?       trim surrounding whitespace from stdout (default true)
     :env         extra environment variables (merged over the current env)

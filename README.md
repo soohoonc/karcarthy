@@ -58,13 +58,13 @@ Swap the mock runner for `(k/claude-cli-runner {})`, `(k/acp-runner
 
 - **Runners** behind one protocol: `mock-runner`, `fn-runner`,
   `process-runner`, `acp-runner`, `claude-cli-runner`, and
-  `openai-agents-runner`. Pass one runner, or pass a map and let each agent
-  choose with `:runner`.
+  `openai-agents-runner`. Pass the runner you want to `run`.
 - **Workflows as data**: compose agents with `pipe`, `branch`, `delegate`,
   `reduce`, `revise`, `route`, `continue`, and `dynamic`; inspect and rewrite
   those workflow values before running them.
 - **Host Clojure steps**: use `step` for local functions inside workflows; use
-  `process-runner` for fixed argv or shell commands selected by the runner registry.
+  `process-runner` when the whole run should execute agent calls through a
+  fixed argv or shell command.
 - **Runner-native subagents**: define `subagent` maps for Claude Code
   subagents or OpenAI Agents SDK handoffs while keeping workflow branches as
   explicit karcarthy orchestration.
@@ -72,8 +72,7 @@ Swap the mock runner for `(k/claude-cli-runner {})`, `(k/acp-runner
   original workflow:
   ```clojure
   (->> workflow
-       (k/configure {:runner :claude
-                     :model "claude-sonnet-4"
+       (k/configure {:model "claude-sonnet-4"
                      :instructions/suffix "State assumptions before final answer."}))
   ```
 - **Agents speak karcarthy**: advanced workflows parse EDN via `clojure.edn`,

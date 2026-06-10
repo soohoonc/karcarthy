@@ -63,7 +63,7 @@
     workflow'))
 
 (def ^:private configure-keys
-  #{:runner :model :instructions/suffix})
+  #{:model :instructions/suffix})
 
 (defn- configure! [opts]
   (let [unknown (seq (remove configure-keys (keys opts)))]
@@ -77,14 +77,11 @@
   "Apply agent configuration to a workflow in one pass.
 
   Supported keys:
-    :runner               runner registry key
     :model                 model selector string
     :instructions/suffix   text appended to every agent instruction"
   [opts workflow]
   (let [opts (configure! (map! "configure" opts))
-        {:keys [runner model instructions/suffix]} opts]
-    (when (contains? opts :runner)
-      (keyword! "configure :runner" runner))
+        {:keys [model instructions/suffix]} opts]
     (when (contains? opts :model)
       (string! "configure :model" model))
     (when (contains? opts :instructions/suffix)
@@ -92,7 +89,6 @@
     (over k/agent?
           (fn [agent]
             (cond-> agent
-              (contains? opts :runner) (assoc :runner runner)
               (contains? opts :model) (assoc :model model)
               (contains? opts :instructions/suffix)
               (update :instructions str "\n\n" (str/trim suffix))))

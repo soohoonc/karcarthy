@@ -65,7 +65,6 @@
     "   :name \"researcher\""
     "   :description \"Use for research tasks.\" ; optional"
     "   :instructions \"Research the question and cite sources.\""
-    "   :runner :claude              ; optional runner registry key"
     "   :model \"sonnet\"             ; optional runner config"
     "   :tools [\"WebSearch\"]        ; optional runner config"
     "   :config {}}                  ; optional runner-specific config"
@@ -97,7 +96,7 @@
   "A workflow node: run `agent`, letting it edit its own definition at runtime. Each
   round the agent may reply with an EDN patch
   `{:karcarthy/patch {<fields to merge>} :reason \"...\"}` to change itself (its
-  :description, :instructions, :model, :tools, :runner or :config) and retry,
+  :description, :instructions, :model, :tools or :config) and retry,
   or with a plain final answer.
   Stops at the final answer or `:max-rounds` (default 5)."
   [agent & {:keys [max-rounds] :or {max-rounds 5}}]
@@ -112,7 +111,7 @@
 (def ^:private no-patch ::no-patch)
 
 (def ^:private patch-keys
-  #{:description :instructions :model :tools :runner :config})
+  #{:description :instructions :model :tools :config})
 
 (defn- patch!
   [agent patch]
@@ -139,10 +138,6 @@
              (not (and (vector? (:tools patch))
                        (every? string? (:tools patch)))))
     (throw (ex-info ":karcarthy/patch :tools must be a vector of strings"
-                    {:patch patch})))
-  (when (and (contains? patch :runner)
-             (not (keyword? (:runner patch))))
-    (throw (ex-info ":karcarthy/patch :runner must be a keyword"
                     {:patch patch})))
   (when (and (contains? patch :config)
              (not (map? (:config patch))))
@@ -173,7 +168,7 @@
   (str "You may improve yourself before answering. Reply with EITHER:\n"
        "  an EDN patch to your own definition -\n"
        "  {:karcarthy/patch {:instructions \"<better instructions>\"} :reason \"<why>\"}\n"
-       "  (you may patch :description, :instructions, :model, :tools, :runner and/or :config) to change and retry,\n"
+       "  (you may patch :description, :instructions, :model, :tools and/or :config) to change and retry,\n"
        "OR your final answer as plain text (no EDN).\n\nTASK:\n" input))
 
 (defmethod o/run-node :evolve

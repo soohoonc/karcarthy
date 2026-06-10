@@ -22,15 +22,13 @@
                                  :instructions "version one"
                                  :model "sonnet"
                                  :tools ["Read"]
-                                 :runner :primary
                                  :config {:temperature 0.2}}})
     (is (= {:description "Draft writer"
             :model "sonnet"
             :tools ["Read"]
-            :runner :primary
             :config {:temperature 0.2}}
            (select-keys (get-in (o/snapshot st) [:agents "writer"])
-                        [:description :model :tools :runner :config])))
+                        [:description :model :tools :config])))
     (is (= "version one :: topic"
            (:text (o/step! runner st {:op :call
                                        :agent "writer"

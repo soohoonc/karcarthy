@@ -23,25 +23,23 @@
 
 (def production-workflow
   (->> workflow
-       (k/configure {:runner :primary
-                     :model "claude-sonnet-4"
+       (k/configure {:model "claude-sonnet-4"
                      :instructions/suffix "State assumptions before final answer."})))
 
 (def runner
-  {:primary
-   (k/mock-runner
-    (fn [{:keys [agent prompt]}]
-      (let [last-instruction (last (str/split-lines (:instructions agent)))]
-        (str "[" (:name agent) " via " (:model agent) "] "
-             last-instruction
-             "\n" prompt))))})
+  (k/mock-runner
+   (fn [{:keys [agent prompt]}]
+     (let [last-instruction (last (str/split-lines (:instructions agent)))]
+       (str "[" (:name agent) " via " (:model agent) "] "
+            last-instruction
+            "\n" prompt)))))
 
 (println "=== original workflow ===")
 (pp/pprint workflow)
 
 (println "\n=== rewritten agents ===")
 (pp/pprint
- (map #(select-keys % [:name :runner :model :instructions])
+ (map #(select-keys % [:name :model :instructions])
       (k/agents production-workflow)))
 
 (println "\n=== run rewritten workflow ===")

@@ -1,60 +1,56 @@
 ---
 title: Build Workflows
-description: Understand how pipe, step, branch, delegate, reduce, revise, route, continue, and dynamic move data through agents.
+description: Compose agents with pipe, branch, delegate, reduce, revise, route, continue, and dynamic.
 ---
 
-A workflow is a value. `run` interprets that value through a runner and
-returns a result map.
+A workflow is data that describes work. `run` interprets that data through the
+runner you pass in:
 
 ```clojure
 (k/run runner workflow "input text")
-;=> {:karcarthy/type :result
-;    :ok? true
-;    :text "..."}
 ```
 
-Every workflow node consumes text and returns a result. Composite nodes decide
-how child result text is routed to the next node.
+An agent is already a workflow:
 
-## Mental model
+```clojure
+(k/defagent reviewer
+  {:instructions "Review the input and return concrete issues."})
 
-| Node | Use it when | Input behavior | Output behavior |
-| --- | --- | --- | --- |
-| `pipe` | Steps must happen in order. | First step receives the original input; each later step receives previous `:text`. | Last successful step's result. |
-| `step` | Host Clojure code should transform workflow text. | Receives the flowing input string, or an explicit context map. | A normal result map. |
-| `branch` | Several reviewers should inspect the same input independently. | Each branch receives the same input. | A result with `:results` and combined `:text`. |
-| `delegate` | A planner should create subtasks for a worker. | Planner receives the original input; worker receives one subtask at a time. | A result with `:subtasks`, `:results`, and combined `:text`. |
-| `reduce` | Branch or delegate outputs need synthesis by another workflow. | Runs the source workflow, then sends an EDN result summary to the reducer workflow. | Reducer result plus `:source` and `:reduced`. |
-| `revise` | A draft needs critique and revision. | Worker receives the input, then revision prompts. | Final draft plus `:rounds` and `:accepted?`. |
-| `route` | A classifier should choose the next path. | Source receives original input. | Selected workflow result, or `:error :no-route`. |
-| `continue` | One step should hand off to another. | Second workflow receives source result text. | Continued workflow result. |
-| `dynamic` | The workflow should decide its next step while it runs. | An agent emits one EDN op at a time. | Final `:complete` result plus the run `:state`. |
+(k/run (k/mock-runner) reviewer "check this design")
+```
+
+Use the composition nodes only when there is actual composition.
 
 ## pipe
 
-Use `pipe` for sequential work:
+Use `pipe` when steps happen in order:
 
 ```clojure
+(k/defagent researcher
+  {:instructions "List the important facts."})
+
+(k/defagent summarizer
+  {:instructions "Summarize the previous answer in one sentence."})
+
 (def workflow
   (k/pipe researcher summarizer))
 
-(k/run (k/mock-runner) workflow "what is a monad?")
+(k/run (k/mock-runner) workflow "why does Lisp use code as data?")
 ```
 
-Trace with the mock runner:
+The first agent receives the original input. The second agent receives the
+first result's `:text`.
 
 ```text
-input:      what is a monad?
-researcher: [researcher] what is a monad?
-summarizer: [summarizer] [researcher] what is a monad?
+researcher input: why does Lisp use code as data?
+summarizer input: [researcher] why does Lisp use code as data?
 ```
 
-The next step receives only the previous result text. If a step fails, the pipe
-returns that not-ok result and stops.
+If a step returns `:ok? false`, the pipe stops and returns that result.
 
 ## step
 
-Use `step` for local Clojure transforms inside a workflow:
+Use `step` for a local Clojure transform inside a workflow:
 
 ```clojure
 (def workflow
@@ -64,8 +60,8 @@ Use `step` for local Clojure transforms inside a workflow:
    reviewer))
 ```
 
-By default the function receives only the flowing input string. If it needs run
-metadata, opt into context:
+By default the function receives the flowing input string. Use `:context? true`
+when it needs metadata:
 
 ```clojure
 (k/step
@@ -75,29 +71,20 @@ metadata, opt into context:
  :context? true)
 ```
 
-`step` is deliberately Clojure-local because it stores a function. It is not
-EDN/JSON portable. Use `process-runner` when the execution boundary is a fixed
-external process selected by the runner registry.
+`step` stores a Clojure function, so it is not EDN/JSON portable.
 
 ## branch
 
-Use `branch` when independent agents should inspect the same input:
+Use `branch` when several workflows should inspect the same input:
 
 ```clojure
 (def reviewers
   (k/branch [product-reviewer engineering-reviewer security-reviewer]))
+
+(k/run runner reviewers "enterprise SSO beta")
 ```
 
-Trace:
-
-```text
-input: enterprise SSO beta
-product-reviewer:     reviews the same input
-engineering-reviewer: reviews the same input
-security-reviewer:    reviews the same input
-```
-
-The result contains ordered child results:
+The result keeps each child result and joins their text:
 
 ```clojure
 {:karcarthy/type :result
@@ -110,32 +97,33 @@ The result contains ordered child results:
 
 ## delegate
 
-Use `delegate` when a planner should create subtasks:
+Use `delegate` when a planner should create subtasks for a worker:
 
 ```clojure
-(k/delegate planner worker :max-concurrency 8)
+(def workflow
+  (k/delegate planner worker :max-concurrency 4))
 ```
 
-The planner replies with EDN:
+The planner must reply with EDN:
 
 ```clojure
-{:subtasks ["audit logs" "rollback messaging" "support docs"]}
+{:subtasks ["audit logs" "rollback plan" "support docs"]}
 ```
 
 The worker runs once per subtask.
 
 ## reduce
 
-Use `reduce` when branch or delegate outputs need synthesis by another workflow:
+Use `reduce` when branch or delegate output needs synthesis:
 
 ```clojure
 (def review-packet
   (k/reduce
-    (k/branch [product-reviewer engineering-reviewer security-reviewer])
-    brief-writer))
+   (k/branch [product-reviewer engineering-reviewer security-reviewer])
+   brief-writer))
 ```
 
-The reducer receives a prompt containing EDN data:
+The reducer receives an EDN summary:
 
 ```clojure
 {:input "original input"
@@ -143,8 +131,8 @@ The reducer receives a prompt containing EDN data:
            {:agent "engineering-reviewer" :ok? true :text "..."}]}
 ```
 
-Because reducers are workflows, not host functions, the workflow stays
-serializable unless you deliberately add Clojure-local `step` nodes.
+The reducer is a workflow, not a host function, so this remains portable data
+unless you add local `step` nodes.
 
 ## revise
 
@@ -155,12 +143,11 @@ Use `revise` for draft, critique, revise loops:
   (k/revise brief-writer critic :max-rounds 2))
 ```
 
-Trace:
+The evaluator replies with EDN:
 
-```text
-round 1 worker:    writes a draft
-round 1 evaluator: replies {:accept? true} or {:accept? false :feedback "..."}
-round 2 worker:    receives input, previous draft, and feedback
+```clojure
+{:accept? true}
+{:accept? false :feedback "name the missing rollback owner"}
 ```
 
 The result includes loop metadata:
@@ -173,32 +160,25 @@ The result includes loop metadata:
  :accepted? true}
 ```
 
-Evaluator workflows reply with EDN verdict maps:
-
-```clojure
-{:accept? true}
-{:accept? false :feedback "name the missing rollback owner"}
-```
-
 ## route
 
-Use `route` when one workflow chooses the next path:
+Use `route` when one workflow chooses the next workflow:
 
 ```clojure
-(k/route classifier
-         {:launch launch-brief
-          :incident incident-plan}
-         :default launch-brief)
+(def workflow
+  (k/route classifier
+           {:launch launch-brief
+            :incident incident-plan}
+           :default launch-brief))
 ```
 
-Trace:
+The classifier replies with EDN:
 
-```text
-input:     Prepare a launch review.
-classifier result text: {:route :launch}
-selected workflow:      launch-brief
-launch-brief input:     Prepare a launch review.
+```clojure
+{:route :launch}
 ```
+
+The selected workflow receives the original input, not the classifier's output.
 
 ## continue
 
@@ -208,11 +188,12 @@ Use `continue` for a direct handoff:
 (k/continue triage-agent specialist-agent)
 ```
 
-The second workflow receives the source result text.
+The second workflow receives the first result's `:text`.
 
 ## dynamic
 
-Use `dynamic` when the workflow should shape itself during the run:
+Use `dynamic` when an agent should define, patch, call, spawn, and complete
+work while the run is in progress:
 
 ```clojure
 (def workflow
@@ -221,13 +202,12 @@ Use `dynamic` when the workflow should shape itself during the run:
 (k/run runner workflow "audit this migration")
 ```
 
-The dynamic workflow agent replies with one EDN op at a time:
+The dynamic agent emits one EDN op at a time:
 
 ```clojure
 {:op :define
  :agent {:name "reader"
          :instructions "Inspect one file."
-         :runner :claude
          :model "sonnet"
          :tools ["Read"]
          :config {}}}
@@ -240,31 +220,26 @@ The dynamic workflow agent replies with one EDN op at a time:
 {:op :complete :text "done"}
 ```
 
-`agent-ref` and `workflow-ref` are late-bound. If the agent patches `"reader"`,
-later calls to workflows containing `(k/agent-ref "reader")` use the patched
-agent. The run state is local to that one workflow run.
+`agent-ref` and `workflow-ref` are late-bound within that dynamic run. If the
+agent patches `"reader"`, later calls to workflows containing
+`(k/agent-ref "reader")` use the patched agent.
 
-## Transform before running
+## Rewrite Before Running
 
 Because workflows are data, application code can inspect and rewrite them
-before `run` interprets them:
+before `run`:
 
 ```clojure
 (def production-workflow
   (->> (k/pipe researcher summarizer)
-       (k/configure {:runner :claude
-                     :model "claude-sonnet-4"
+       (k/configure {:model "claude-sonnet-4"
                      :instructions/suffix "State assumptions before final answer."})))
 
-(map #(select-keys % [:name :runner :model])
+(map #(select-keys % [:name :model])
      (k/agents production-workflow))
-;=> ({:name "researcher", :runner :claude, :model "claude-sonnet-4"}
-;    {:name "summarizer", :runner :claude, :model "claude-sonnet-4"})
-
-(k/run runner production-workflow "summarize the prior work")
+;=> ({:name "researcher", :model "claude-sonnet-4"}
+;    {:name "summarizer", :model "claude-sonnet-4"})
 ```
 
-That is the point of karcarthy: keep the coordination graph visible and
-serializable when it uses portable nodes, while runners own model calls, tools,
-and provider-specific agent loops. It is EDN plus an explicit interpreter, not
-raw `eval`.
+Rewrites change workflow data. They do not choose the runner. Choose the runner
+when you call `run`.

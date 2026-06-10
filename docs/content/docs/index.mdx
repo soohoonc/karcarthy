@@ -42,13 +42,12 @@ and parsed without `eval`. Clojure code can also rewrite it before execution:
 
 ```clojure
 (->> workflow
-     (k/configure {:runner :claude
-                   :model "claude-sonnet-4"
+     (k/configure {:model "claude-sonnet-4"
                    :instructions/suffix "State assumptions before final answer."}))
 ```
 
-The runner still owns model calls and tools. karcarthy owns the visible
-coordination value and the small interpreter for that value.
+The runner passed to `run` still owns model calls and tools. karcarthy owns the
+visible coordination value and the small interpreter for that value.
 
 ## What you can build
 

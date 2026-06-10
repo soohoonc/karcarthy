@@ -6,7 +6,7 @@
       ./bin/karcarthy json < request.json
 
   A <workflow> is JSON mirroring the EDN workflow:
-    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?  \"runner\":?}
+    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?}
     {\"type\":\"pipe\" \"steps\":[<workflow> ...]}
     {\"type\":\"branch\" \"branches\":[<workflow> ...] \"max-concurrency\":?}
     {\"type\":\"delegate\" \"planner\":<workflow> \"worker\":<workflow> \"max-concurrency\":?}
@@ -61,7 +61,7 @@
 
 (defn json->workflow
   "Translate a JSON-parsed workflow map (string keys) into karcarthy workflow data.
-  Route labels stay strings; `type`/`runner` become keywords."
+  Route labels stay strings."
   [m]
   (let [g                #(get m %)
         with-concurrency #(cond-> %
@@ -72,7 +72,6 @@
                        (g "description") (assoc :description (g "description"))
                        (g "model")       (assoc :model (g "model"))
                        (g "tools")       (assoc :tools (g "tools"))
-                       (g "runner")      (assoc :runner (keyword (g "runner")))
                        (g "config")      (assoc :config (g "config"))))
       "pipe"        (apply o/pipe (map json->workflow (g "steps")))
       "branch"      (with-concurrency

@@ -56,12 +56,11 @@
        (remove str/blank?)
        (str/join "\n\n")))
 
-(defn research-agent [{:keys [name tools runner] :as profile}]
+(defn research-agent [{:keys [name tools] :as profile}]
   (k/agent
-   (cond-> {:name name
-            :instructions (research-instructions profile)
-            :tools (vec tools)}
-     runner (assoc :runner runner))))
+   {:name name
+    :instructions (research-instructions profile)
+    :tools (vec tools)}))
 
 (def research-planner
   (research-agent

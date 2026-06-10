@@ -9,14 +9,12 @@
                       :instructions "Research thoroughly."
                       :model "sonnet"
                       :tools ["WebSearch" "WebFetch"]
-                      :runner :claude
                       :config {:temperature 0.2}})]
       (is (= :agent (:karcarthy/type a)))
       (is (= "researcher" (:name a)))
       (is (= "Use for research." (:description a)))
       (is (= "sonnet" (:model a)))
       (is (= ["WebSearch" "WebFetch"] (:tools a)))
-      (is (= :claude (:runner a)))
       (is (= {:temperature 0.2} (:config a)))
       (is (k/agent? a))))
   (testing "optional fields are omitted when not supplied"
@@ -29,10 +27,9 @@
       (is (= "m" (:model a)))))
   (testing "agent variants can derive from existing agent data"
     (let [base    (k/agent {:name "reviewer" :instructions "Review." :model "sonnet"})
-          variant (k/agent {:from base :runner :openai :model "gpt-5.2"})]
+          variant (k/agent {:from base :model "gpt-5.2"})]
       (is (= "reviewer" (:name variant)))
       (is (= "Review." (:instructions variant)))
-      (is (= :openai (:runner variant)))
       (is (= "gpt-5.2" (:model variant)))))
   (testing "unknown keys are rejected"
     (is (thrown? clojure.lang.ExceptionInfo
@@ -113,7 +110,7 @@
 
 (k/defagent test-claude-researcher
   {:from test-researcher
-   :runner :claude})
+   :model "opus"})
 
 (k/defsubagent test-reviewer
   "Use for focused review."
@@ -130,11 +127,11 @@
   (testing "instructions become the var's docstring"
     (is (= "Research questions thoroughly."
            (:doc (meta #'test-researcher)))))
-  (testing "defagent can derive runner-specific variants"
+  (testing "defagent can derive configured variants"
     (is (k/agent? test-claude-researcher))
     (is (= "test-claude-researcher" (:name test-claude-researcher)))
     (is (= "Research questions thoroughly." (:instructions test-claude-researcher)))
-    (is (= :claude (:runner test-claude-researcher)))))
+    (is (= "opus" (:model test-claude-researcher)))))
 
 (deftest defsubagent-macro
   (testing "defsubagent defs a valid subagent named after the symbol"
@@ -146,36 +143,13 @@
     (is (= "Review code and report concrete findings."
            (:doc (meta #'test-reviewer))))))
 
-(deftest runner-registry-resolution
-  (testing "an agent's :runner id selects from a registry; :default is fallback"
-    (let [reg {:a       (k/mock-runner (fn [{:keys [prompt]}] (str "A:" prompt)))
-               :b       (k/mock-runner (fn [{:keys [prompt]}] (str "B:" prompt)))
-               :default (k/mock-runner (fn [{:keys [prompt]}] (str "D:" prompt)))}]
-      (is (= "A:hi" (:text (k/run-agent reg
-                                         (k/agent {:name "x"
-                                                   :instructions "i"
-                                                   :runner :a})
-                                         "hi"))))
-      (is (= "B:hi" (:text (k/run-agent reg
-                                         (k/agent {:name "y"
-                                                   :instructions "i"
-                                                   :runner :b})
-                                         "hi"))))
-      (is (= "D:hi" (:text (k/run-agent reg
-                                         (k/agent {:name "z" :instructions "i"})
-                                         "hi"))))   ; no :runner
-      (is (= :a (:runner (k/agent {:name "x"
-                                   :instructions "i"
-                                   :runner :a})))))))
-
-(deftest runner-registry-missing-id
-  (testing "a missing id with no :default throws"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (k/run-agent {:a (k/mock-runner)}
-                              (k/agent {:name "x"
-                                        :instructions "i"
-                                        :runner :nope})
-                              "hi")))))
+(deftest runner-must-be-a-runner
+  (testing "run-agent receives the runner value directly"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"runner must implement"
+                          (k/run-agent {:not :a-runner}
+                                       (k/agent {:name "x" :instructions "i"})
+                                       "hi")))))
 
 (deftest single-runner
   (testing "passing one runner directly works"

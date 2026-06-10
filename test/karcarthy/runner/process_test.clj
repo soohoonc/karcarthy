@@ -17,19 +17,6 @@
           r (k/run-agent h (k/agent {:name "shout" :instructions "i"}) "quiet please")]
       (is (= "QUIET PLEASE" (:text r))))))
 
-(deftest command-selection-uses-runner-registry
-  (testing "agent :runner keys select fixed process runners"
-    (let [runners {:up      (proc-runner/process-runner ["tr" "a-z" "A-Z"])
-                   :default (proc-runner/process-runner ["cat"])}]
-      (is (= "HI" (:text (k/run-agent runners
-                                      (k/agent {:name "up"
-                                                :instructions "i"
-                                                :runner :up})
-                                      "hi"))))
-      (is (= "hi" (:text (k/run-agent runners
-                                      (k/agent {:name "plain" :instructions "i"})
-                                      "hi")))))))
-
 (deftest nonzero-exit-is-not-ok
   (testing "a failing command yields a not-ok result"
     (let [h (proc-runner/process-runner ["false"])

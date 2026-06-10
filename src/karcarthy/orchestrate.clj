@@ -781,7 +781,6 @@
            (:description source) (assoc :description (:description source))
            (:model source)       (assoc :model (:model source))
            (:tools source)       (assoc :tools (vec (:tools source)))
-           (:runner source)      (assoc :runner (:runner source))
            (:config source)      (assoc :config (:config source))))))))
 
 (defn- define! [state op]
@@ -931,7 +930,7 @@
     "Output exactly one EDN op map. Do not output prose."
     ""
     "Ops:"
-    "{:op :define :agent {:name \"writer\" :instructions \"...\" :runner :claude :model \"sonnet\"}}"
+    "{:op :define :agent {:name \"writer\" :instructions \"...\" :model \"sonnet\"}}"
     "{:op :define :name \"draft\" :workflow WORKFLOW}"
     "{:op :patch :agent \"writer\" :merge {:instructions \"...\"}}"
     "{:op :patch :workflow \"draft\" :merge MAP}"
@@ -953,7 +952,7 @@
                           (fn [[n agent]]
                             [n (select-keys agent [:karcarthy/type :name
                                                     :description :instructions
-                                                    :model :tools :runner
+                                                    :model :tools
                                                     :config])])
                           agents))
      :workflows workflows

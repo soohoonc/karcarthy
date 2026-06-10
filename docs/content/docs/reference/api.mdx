@@ -26,7 +26,6 @@ Builds an agent spec map. The map form is the primary API.
 | `:description` | string | no | Short human-facing description. |
 | `:model` | string | no | Runner-specific model selector. |
 | `:tools` | vector of strings | no | Tool allowlist. Tools must already exist in the selected runner environment. |
-| `:runner` | keyword | no | Runner registry key used by `run`. |
 | `:config` | map | no | Runner-specific configuration. |
 
 Returns:
@@ -38,7 +37,6 @@ Returns:
  :instructions "Find launch risks."
  :model "sonnet"
  :tools ["mcp__feedback__search"]
- :runner :claude
  :config {:temperature 0.2}}
 ```
 
@@ -56,7 +54,6 @@ To derive a variant from existing agent data:
 
 ```clojure
 (k/agent {:from reviewer
-          :runner :openai
           :model "gpt-5.2"})
 ```
 
@@ -77,7 +74,7 @@ Defines a var containing an agent. The symbol name becomes the agent `:name`.
 
 (k/defagent claude-researcher
   {:from researcher
-   :runner :claude})
+   :model "sonnet"})
 ```
 
 The old positional form `(k/defagent symbol instructions & opts)` is
@@ -297,7 +294,6 @@ Supported ops are:
 {:op :define
  :agent {:name "reader"
          :instructions "..."
-         :runner :claude
          :model "sonnet"
          :tools ["Read"]
          :config {}}}
@@ -389,15 +385,13 @@ Applies common agent configuration in one pass. Supported keys:
 
 | Key | Meaning |
 | --- | --- |
-| `:runner` | Runner registry key. |
 | `:model` | Model selector string. |
 | `:instructions/suffix` | Text appended to every agent instruction. |
 
 ```clojure
 (def production-workflow
   (->> workflow
-       (k/configure {:runner :claude
-                     :model "claude-sonnet-4"
+       (k/configure {:model "claude-sonnet-4"
                      :instructions/suffix "State assumptions before final answer."})))
 ```
 
@@ -410,7 +404,7 @@ Applies common agent configuration in one pass. Supported keys:
 (k/run runner workflow input opts)
 ```
 
-Interprets workflow data through a runner or runner registry.
+Interprets workflow data through the runner passed to `run`.
 
 ```clojure
 (k/run (k/mock-runner)
@@ -586,8 +580,8 @@ Options:
 | `:timeout-ms` | Kill the command after this many milliseconds. |
 | `:shell` | argv prefix used for string commands; defaults to `["sh" "-lc"]`. |
 
-`process-runner` does not accept a function of `k/agent`. Use the runner
-registry when different agents need different fixed commands.
+`process-runner` does not accept a function of `k/agent`. Different commands
+mean different process runner values; choose one before calling `run`.
 
 ### `openai-agents-runner`
 
@@ -603,25 +597,6 @@ vector of `k/subagent` values lowered to Agents SDK handoffs.
 (k/openai-agents-runner {:python-bin "python3"
                          :timeout-ms 120000
                          :subagents [refund-agent faq-agent]})
-```
-
-### Runner registries
-
-```clojure
-(def runners
-  {:default (k/mock-runner)
-   :claude  (k/claude-cli-runner {})
-   :acp     (k/acp-runner {:command ["my-acp-agent"]})})
-
-(k/run runners
-       (k/pipe
-        (k/agent {:name "planner"
-                  :instructions "Plan."
-                  :runner :claude})
-        (k/agent {:name "checker"
-                  :instructions "Check."
-                  :runner :acp}))
-       "ship the docs")
 ```
 
 ## Parsing generated data

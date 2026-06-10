@@ -56,7 +56,6 @@
       (assoc :_meta
              {:karcarthy.dev/agent
               (cond-> {:name (:name agent)}
-                (:runner agent) (assoc :runner (name (:runner agent)))
                 (:model agent)  (assoc :model (:model agent))
                 (:tools agent)  (assoc :tools (:tools agent)))}))))
 
@@ -371,7 +370,7 @@
 
   The runner speaks ACP over stdio. It does not make `k/agent` a native ACP
   agent; the ACP agent is the subprocess. Karcarthy folds the agent's
-  instructions into the prompt turn and uses `:runner` only as a registry key.
+  instructions into the prompt turn.
 
   Common options:
     :command                  argv vector for the ACP agent process

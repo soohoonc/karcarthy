@@ -71,7 +71,6 @@
                  "final answer"
                  (pr-str {:karcarthy/patch {:description "Updated self"
                                              :instructions "EVOLVED instructions"
-                                             :runner :specialist
                                              :config {:temperature 0.2}}
                           :reason "better"}))))
           r (o/run h
@@ -84,7 +83,6 @@
       (is (= 1 (count (:patches r))))
       (is (str/includes? (:instructions (:evolved r)) "EVOLVED"))
       (is (= "Updated self" (:description (:evolved r))))
-      (is (= :specialist (:runner (:evolved r))))
       (is (= {:temperature 0.2} (:config (:evolved r)))))))
 
 (deftest evolve-stops-at-max-rounds

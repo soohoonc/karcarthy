@@ -24,12 +24,11 @@ Validate EDN workflows with `workflow?`.
  :instructions "Research the question and cite sources."
  :model "sonnet"
  :tools ["mcp__feedback__search"]
- :runner :claude
  :config {:temperature 0.2}}
 ```
 
-Required keys: `:name`, `:instructions`. `:runner` is a registry key; `:model`,
-`:tools`, and `:config` are interpreted by the selected runner.
+Required keys: `:name`, `:instructions`. `:model`, `:tools`, and `:config` are
+interpreted by the runner passed to `run`.
 
 ## Subagent
 
@@ -185,7 +184,6 @@ The agent emits EDN ops:
 {:op :define
  :agent {:name "reader"
          :instructions "..."
-         :runner :claude
          :model "sonnet"
          :tools ["Read"]
          :config {}}}
