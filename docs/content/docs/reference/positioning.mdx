@@ -16,7 +16,7 @@ single-agent execution to systems that already run model calls and tools.
 | --- | --- | --- |
 | Agent loop | You already have an SDK, CLI, Clojure function, or process command that can run one agent. | You need a batteries-included agent runtime first. |
 | Workflow shape | You want the graph to be EDN/JSON data that can be stored, generated, diffed, and rewritten. | You want workflows only as Python/TypeScript objects. |
-| Tools | Tool execution belongs to Claude CLI, OpenAI Agents SDK, MCP config, or your process runner. | You want karcarthy itself to define and host tool schemas. |
+| Tools | Tool execution belongs to Claude, Codex, OpenAI, ACP/MCP config, or your process runner. | You want karcarthy itself to define and host tool schemas. |
 | Multi-agent patterns | You want `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, and `continue` as portable values. | You want a mature framework-native graph runtime and UI. |
 | Testing | You want deterministic offline orchestration tests with `mock-runner`. | You need provider-level simulation of model/tool behavior. |
 
@@ -24,8 +24,9 @@ single-agent execution to systems that already run model calls and tools.
 
 | System | Strong at | karcarthy relationship |
 | --- | --- | --- |
-| Claude CLI / Claude Agent SDK | Running single agents with tools, MCP, sessions, and CLI ergonomics. | Use as a runner. |
-| OpenAI Agents SDK | Agent loop, handoffs, tools, tracing, and structured SDK runtime. | Use as a runner or mirror routing with `route`. |
+| Claude | Running single agents with tools, MCP, sessions, and CLI ergonomics. | Use `claude-runner`. |
+| Codex | Running coding agents in non-interactive CLI mode. | Use `codex-runner`. |
+| OpenAI | Agent loop, handoffs, tools, tracing, and structured SDK runtime. | Use `openai-runner` or mirror routing with `route`. |
 | DSPy | Signatures, metrics, and prompt/program optimization. | Complementary; karcarthy does not optimize prompts today. |
 
 ## Design choice
@@ -37,8 +38,8 @@ karcarthy: workflow data, routing, fan-out, loops, result shape
 runner:   model calls, tool calls, sessions, provider-specific runtime
 ```
 
-That split lets the same workflow run offline, through Claude CLI, through the
-OpenAI Agents SDK bridge, or through a process runner.
+That split lets the same workflow run offline, through Claude, through Codex,
+through OpenAI, or through a process runner.
 
 ## Related Pages
 

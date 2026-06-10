@@ -3,7 +3,7 @@
             [karcarthy.core :as k]
             [karcarthy.runner.acp :as acp]))
 
-(defn- shell-runner [script]
+(defn- script-runner [script]
   (acp/acp-runner {:command ["sh" "-c" script]
                    :timeout-ms 3000}))
 
@@ -29,7 +29,7 @@
                   "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"m1\",\"content\":{\"type\":\"text\",\"text\":\"hello \"}}}}'\n"
                   "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"m1\",\"content\":{\"type\":\"text\",\"text\":\"from acp\"}}}}'\n"
                   "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"stopReason\":\"end_turn\"}}'\n")
-          runner (shell-runner script)
+          runner (script-runner script)
           agent  (k/agent {:name "a" :instructions "i"})
           result (k/run-agent runner agent "hi")]
       (is (k/ok? result))
@@ -50,7 +50,7 @@
                   "read permission\n"
                   "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"m1\",\"content\":{\"type\":\"text\",\"text\":\"done\"}}}}'\n"
                   "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"stopReason\":\"end_turn\"}}'\n")
-          runner (shell-runner script)
+          runner (script-runner script)
           result (k/run-agent runner (k/agent {:name "a" :instructions "i"}) "hi")]
       (is (k/ok? result))
       (is (= "done" (:text result))))))
@@ -67,7 +67,7 @@
                   "read prompt\n"
                   "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"m1\",\"content\":{\"type\":\"text\",\"text\":\"configured\"}}}}'\n"
                   "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\"}}'\n")
-          runner (shell-runner script)
+          runner (script-runner script)
           agent  (k/agent {:name "a" :instructions "i" :model "sonnet"})
           result (k/run-agent runner agent "hi")]
       (is (k/ok? result))

@@ -21,7 +21,7 @@
    "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"])
 
 (def runner
-  (k/claude-cli-runner {:system-prompt-mode :replace
+  (k/claude-runner {:system-prompt-mode :replace
                  :max-turns          3
                  :model              "haiku"
                  :dir                "/tmp/karc"

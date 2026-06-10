@@ -171,7 +171,7 @@
     (testing "a real claude -p call round-trips through the runner and parses"
       (let [tmp (str (System/getProperty "java.io.tmpdir") "/karcarthy-live")
             _   (.mkdirs (java.io.File. tmp))
-            h   (cc/claude-cli-runner {:system-prompt-mode :replace
+            h   (cc/claude-runner {:system-prompt-mode :replace
                                  :max-turns          6
                                  :dir                tmp})
             r   (k/run-agent h

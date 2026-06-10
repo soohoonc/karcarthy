@@ -1,4 +1,4 @@
-;; A LIVE delegate/reduce run against the Claude CLI runner (`claude -p`).
+;; A LIVE delegate/reduce run against the Claude runner (`claude -p`).
 ;;
 ;; Unlike the offline `karcarthy.demo`, this makes real, paid API calls, so run
 ;; it intentionally. It needs a working `claude` CLI with valid auth on PATH.
@@ -23,7 +23,7 @@
    "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite,NotebookEdit,MultiEdit"])
 
 (def runner
-  (k/claude-cli-runner {:system-prompt-mode :replace
+  (k/claude-runner {:system-prompt-mode :replace
                  :max-turns          4
                  :model              "haiku"
                  :dir                "/tmp/karc"

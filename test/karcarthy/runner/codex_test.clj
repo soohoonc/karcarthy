@@ -3,6 +3,55 @@
             [karcarthy.core :as k]
             [karcarthy.runner.codex :as codex]))
 
+(defn- after
+  "The argv element immediately following `flag`, or nil if `flag` is absent."
+  [argv flag]
+  (second (drop-while #(not= % flag) argv)))
+
+(deftest command-building
+  (testing "agent fields and runner options map to codex exec flags"
+    (let [agent (k/agent {:name "researcher"
+                          :instructions "Research carefully."
+                          :model "gpt-5"})
+          argv  (codex/command agent {:codex-bin "/opt/bin/codex"
+                                      :dir "/tmp/karc"
+                                      :sandbox :workspace-write
+                                      :color :never
+                                      :extra-args ["--json"]})]
+      (is (= ["/opt/bin/codex" "exec"] (subvec argv 0 2)))
+      (is (some #{"--ephemeral"} argv))
+      (is (some #{"--skip-git-repo-check"} argv))
+      (is (= "workspace-write" (after argv "--sandbox")))
+      (is (= "never" (after argv "--color")))
+      (is (= "/tmp/karc" (after argv "--cd")))
+      (is (= "gpt-5" (after argv "--model")))
+      (is (some #{"--json"} argv))
+      (is (re-find #"Agent name: researcher" (last argv)))
+      (is (re-find #"Research carefully" (last argv))))))
+
+(deftest command-building-model-override
+  (testing "runner :model overrides the agent model"
+    (let [argv (codex/command (k/agent {:name "a"
+                                        :instructions "i"
+                                        :model "gpt-5"})
+                              {:model "gpt-5.1"})]
+      (is (= "gpt-5.1" (after argv "--model"))))))
+
+(deftest codex-runner-runs-a-command
+  (testing "the runner writes workflow input to stdin and returns stdout"
+    (let [script (java.io.File/createTempFile "karcarthy_codex_runner" ".sh")
+          _      (spit script "#!/bin/sh\nprintf 'seen: '\ncat\n")
+          _      (.setExecutable script true)
+          runner (codex/codex-runner {:codex-bin (.getPath script)
+                                      :timeout-ms 3000})
+          result (k/run-agent runner
+                              (k/agent {:name "codex" :instructions "echo input"})
+                              "hello")]
+      (is (k/ok? result))
+      (is (= "seen: hello" (:text result)))
+      (is (= :codex (get-in result [:raw :runner])))
+      (is (= "exec" (second (get-in result [:raw :argv])))))))
+
 (deftest subagent-config
   (testing "subagents lower to Codex custom agent config keys"
     (let [reviewer (k/subagent "security-reviewer"

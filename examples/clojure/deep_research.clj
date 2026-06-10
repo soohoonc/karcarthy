@@ -18,7 +18,7 @@
 ;; - The Deep Research API exposes web search, code interpreter, and MCP calls
 ;;   in response output metadata.
 ;; - Codex CLI supports non-interactive `codex exec` and stdin, making it a
-;;   natural process-backed runner target. Codex can also run as an MCP server
+;;   natural `codex-runner` target. Codex can also run as an MCP server
 ;;   for OpenAI Agents SDK workflows; this example uses `exec` because it is
 ;;   the thinnest leaf-agent runner shape.
 ;; - Anthropic describes Dynamic Workflows as Claude planning work, running many
@@ -31,9 +31,7 @@
 (require '[clojure.edn :as edn]
          '[clojure.pprint :as pp]
          '[clojure.string :as str]
-         '[karcarthy :as k]
-         '[karcarthy.core :as core]
-         '[karcarthy.proc :as proc])
+         '[karcarthy :as k])
 
 (defn bullets [xs]
   (str/join "\n" (map #(str "- " %) xs)))
@@ -141,47 +139,6 @@
    report-critic
    :max-rounds 2))
 
-(defn codex-prompt [agent]
-  (str "You are running as one karcarthy leaf agent.\n\n"
-       "Agent name: " (:name agent) "\n\n"
-       "Instructions:\n" (:instructions agent) "\n\n"
-       "Return only the output requested by the instructions. "
-       "The current input will be appended on stdin."))
-
-(defn codex-runner
-  "Live/paid Codex CLI runner.
-
-  Codex CLI docs describe `codex exec` as the non-interactive mode and allow the
-  prompt to be passed on stdin. Exact flags vary by installed version; verify
-  with `codex exec --help` before using this in production."
-  ([] (codex-runner {}))
-  ([{:keys [dir timeout-ms] :or {dir "/tmp/karc-deep-research"
-                                 timeout-ms (* 20 60 1000)}}]
-   (.mkdirs (java.io.File. dir))
-   (reify core/Runner
-     (-run [_ agent input _opts]
-       (let [argv (cond-> ["codex" "exec"
-                           "--ephemeral"
-                           "--color" "never"
-                           "--sandbox" "read-only"
-                           "--skip-git-repo-check"
-                           "--cd" dir]
-                    (:model agent) (into ["--model" (:model agent)])
-                    true           (conj (codex-prompt agent)))
-             {:keys [exit out err timed-out?]}
-             (proc/run argv {:in input :dir dir :timeout-ms timeout-ms})]
-         (core/result {:agent (:name agent)
-                       :ok? (and (not timed-out?) (= 0 exit))
-                       :text (str/trim (or out ""))
-                       :error (cond timed-out? "codex timed out"
-                                    (not= 0 exit) (str "codex exited with status " exit))
-                       :raw {:runner :codex
-                             :exit exit
-                             :out out
-                             :err err
-                             :timed-out? timed-out?
-                             :argv argv}}))))))
-
 (def offline-responses
   {"research-planner"
    (pr-str
@@ -203,7 +160,7 @@
          :why "API documentation describing tool-call metadata for deep research models."}
         {:title "Codex exec mode"
          :url "https://developers.openai.com/codex/noninteractive"
-         :why "Codex CLI non-interactive mode for process-runner execution."}
+         :why "Codex CLI non-interactive mode for codex-runner execution."}
         {:title "Introducing dynamic workflows in Claude Code"
          :url "https://claude.com/blog/introducing-dynamic-workflows-in-claude-code"
          :why "Primary announcement for the plan, parallel subagent, verification, and synthesis pattern."}]}))
@@ -295,8 +252,11 @@
 (defn run-with-codex []
   (println "=== Live Codex Deep Research-shaped run ===")
   (println "This invokes Codex once per leaf agent call and may take several minutes.")
-  (let [events (atom [])
-        result (k/run {:runner (codex-runner)
+  (let [dir "/tmp/karc-deep-research"
+        _ (.mkdirs (java.io.File. dir))
+        events (atom [])
+        result (k/run {:runner (k/codex-runner {:dir dir
+                                                :timeout-ms (* 20 60 1000)})
                        :workflow deep-research-workflow
                        :input "Can karcarthy express an OpenAI Deep Research-style workflow?"
                        :options {:observe #(swap! events conj %)}})]

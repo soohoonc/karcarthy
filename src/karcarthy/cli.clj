@@ -109,7 +109,7 @@
   [req]
   (let [name (get req "runner")]
     (if (= name "claude")
-      (cc/claude-cli-runner {:system-prompt-mode :replace
+      (cc/claude-runner {:system-prompt-mode :replace
                       :max-turns          4
                       :model              "haiku"
                       :dir                "/tmp/karc"

@@ -19,7 +19,7 @@ languages, to show the library is reachable from each.
 - `clojure/deep_research.clj` - a Deep Research-shaped workflow:
   plan research tracks, investigate them in parallel, filter evidence, write a
   cited report, and critique/revise. Runs offline with canned evidence and
-  includes an opt-in live Codex CLI `process-runner` path.
+  includes an opt-in live `codex-runner` path.
 - `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
   model and instruction configuration, then run the rewritten value.
 - `clojure/live.clj` - a live delegate/reduce run (paid `claude -p`).
@@ -52,7 +52,7 @@ mock runner ignores tools.
 - `javascript/claude_dynamic_agents.mjs` - builds a dynamic Claude-style
   delegate/reduce/critic workflow as JSON and sends it through
   `bin/karcarthy json`. Offline by default; set `KARCARTHY_CLAUDE_LIVE=1` for
-  the Claude CLI runner.
+  the Claude runner.
 - `javascript/openai_deep_research.mjs` - calls the OpenAI Responses API Deep
   Research shape directly with `background`, web search, code interpreter, and
   optional vector-store or MCP data sources. Offline by default; set

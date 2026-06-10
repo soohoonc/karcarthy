@@ -130,8 +130,9 @@ Runner lowering:
 
 | Runner | Native primitive |
 | --- | --- |
-| `claude-cli-runner` | Claude Code `--agents` JSON. |
-| `openai-agents-runner` | OpenAI Agents SDK `handoffs`. |
+| `claude-runner` | Claude Code `--agents` JSON. |
+| `codex-runner` | Codex `codex exec` leaf-agent calls. |
+| `openai-runner` | OpenAI Agents SDK `handoffs`. |
 | `karcarthy.runner.codex/subagent->config` | Codex custom agent config keys for `.codex/agents/` or `~/.codex/agents/`. |
 | `process-runner` | Unsupported; process commands stay fixed runner config. |
 
@@ -510,24 +511,56 @@ receives only the input string. With `{:call? true}`, it receives the agent call
  {:call? true})
 ```
 
-### `claude-cli-runner`
+### `claude-runner`
 
 ```clojure
-(k/claude-cli-runner)
-(k/claude-cli-runner default-options)
+(k/claude-runner)
+(k/claude-runner default-options)
 ```
 
-Runs agent calls through the Claude CLI. Common options include model, working
-directory, turn limits, subagents, and extra Claude CLI args.
+Runs agent calls through Claude. The current implementation drives `claude -p`.
+Common options include model, working directory, turn limits, subagents, and
+extra `claude` args.
 
 ```clojure
-(k/claude-cli-runner {:model "haiku"
-                      :max-turns 4
-                      :subagents [security-reviewer]})
+(k/claude-runner {:model "haiku"
+                  :max-turns 4
+                  :subagents [security-reviewer]})
 ```
 
 `:subagents` is a vector of `k/subagent` values lowered to Claude Code
 `--agents` JSON.
+
+### `codex-runner`
+
+```clojure
+(k/codex-runner)
+(k/codex-runner default-options)
+```
+
+Runs agent calls through Codex. The current implementation drives `codex exec`.
+The flowing workflow input is written to stdin, and the agent name/instructions
+become the Codex prompt.
+
+```clojure
+(k/codex-runner {:dir "."
+                 :model "gpt-5"
+                 :sandbox :read-only
+                 :timeout-ms 120000})
+```
+
+Common options:
+
+| Option | Meaning |
+| --- | --- |
+| `:codex-bin` | Codex CLI executable; defaults to `"codex"`. |
+| `:dir` / `:cwd` | Working directory for the Codex process and `--cd`. |
+| `:model` | Default model for agents that do not set one. |
+| `:sandbox` | Codex sandbox mode; defaults to `:read-only`. |
+| `:extra-args` | Additional `codex exec` args appended before the prompt. |
+| `:env` | Extra environment variables. |
+| `:timeout-ms` | Kill the subprocess after this many milliseconds. |
+| `:trim?` | Trim stdout; defaults to true. |
 
 ### `acp-runner`
 
@@ -600,20 +633,21 @@ Options:
 `process-runner` does not accept a function of `k/agent`. Different commands
 mean different process runner values; choose one before calling `run`.
 
-### `openai-agents-runner`
+### `openai-runner`
 
 ```clojure
-(k/openai-agents-runner)
-(k/openai-agents-runner default-options)
+(k/openai-runner)
+(k/openai-runner default-options)
 ```
 
-Delegates single-agent calls to the OpenAI Agents SDK bridge. `:subagents` is a
-vector of `k/subagent` values lowered to Agents SDK handoffs.
+Runs agent calls through OpenAI. The current implementation delegates to the
+OpenAI Agents SDK bridge. `:subagents` is a vector of `k/subagent` values
+lowered to Agents SDK handoffs.
 
 ```clojure
-(k/openai-agents-runner {:python-bin "python3"
-                         :timeout-ms 120000
-                         :subagents [refund-agent faq-agent]})
+(k/openai-runner {:python-bin "python3"
+                  :timeout-ms 120000
+                  :subagents [refund-agent faq-agent]})
 ```
 
 ## Parsing generated data

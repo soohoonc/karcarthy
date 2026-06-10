@@ -214,7 +214,7 @@
 
 (defn live-claude-runner []
   (let [model (System/getenv "KARCARTHY_CLAUDE_MODEL")]
-    (k/claude-cli-runner
+    (k/claude-runner
      (cond-> {:system-prompt-mode :replace
               :max-turns 6
               :timeout-ms (* 10 60 1000)

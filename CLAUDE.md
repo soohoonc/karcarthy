@@ -22,9 +22,10 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 | `src/karcarthy/schema.clj` | EDN and JSON schema reference values for public workflow data |
 | `src/karcarthy/rewrite.clj` | structural workflow rewrites: `agents`, `over`, and `config` |
 | `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node |
-| `src/karcarthy/runner/claude.clj` | Claude CLI runner |
+| `src/karcarthy/runner/claude.clj` | Claude runner, backed by `claude -p` |
+| `src/karcarthy/runner/codex.clj` | Codex runner, backed by `codex exec`, plus Codex custom-agent config lowering |
 | `src/karcarthy/runner/process.clj` | process and shell runners; wrap CLIs or shell commands as agents (prompt → stdin, stdout → result) |
-| `src/karcarthy/runner/openai.clj` | OpenAI Agents SDK runner via `resources/karcarthy/openai_runner.py` |
+| `src/karcarthy/runner/openai.clj` | OpenAI runner via `resources/karcarthy/openai_runner.py` |
 | `test/…` | mirrors `src/`; the test runner lists namespaces in `test/karcarthy/test_runner.clj` |
 
 ## Conventions

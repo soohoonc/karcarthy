@@ -1,10 +1,14 @@
 (ns karcarthy.runner.codex
-  "Pure lowering helpers for Codex custom agent configuration.
+  "Runner and lowering helpers for Codex.
 
   Codex custom agents are file-backed TOML definitions under `.codex/agents/`
-  or `~/.codex/agents/`. This namespace returns config maps that can be rendered
-  by a caller or a future dedicated Codex runner; it does not write files."
-  (:require [karcarthy.core :as k]))
+  or `~/.codex/agents/`. The config helpers return maps that can be rendered by
+  a caller; they do not write files.
+
+  `codex-runner` drives Codex CLI non-interactive mode (`codex exec`)."
+  (:require [clojure.string :as str]
+            [karcarthy.core :as k]
+            [karcarthy.proc :as proc]))
 
 (defn- option-name [x]
   (cond
@@ -36,3 +40,80 @@
     max-threads (assoc :max_threads max-threads)
     max-depth (assoc :max_depth max-depth)
     job-max-runtime-seconds (assoc :job_max_runtime_seconds job-max-runtime-seconds)))
+
+(defn prompt
+  "Build the Codex prompt for one karcarthy leaf agent.
+
+  The flowing workflow input is sent on stdin by `codex-runner`; this prompt
+  carries the agent name and instructions."
+  [agent]
+  (str "You are running as one karcarthy leaf agent.\n\n"
+       "Agent name: " (:name agent) "\n\n"
+       "Instructions:\n" (:instructions agent) "\n\n"
+       "Return only the output requested by the instructions. "
+       "The current input will be provided on stdin."))
+
+(defn command
+  "Pure: build the argv for `codex exec`.
+
+  Options:
+    :codex-bin              CLI executable (default \"codex\")
+    :dir / :cwd             working directory for the run
+    :model                  default model override
+    :sandbox                sandbox mode, e.g. :read-only or :workspace-write
+    :color                  color mode, default :never
+    :ephemeral?             pass --ephemeral, default true
+    :skip-git-repo-check?   pass --skip-git-repo-check, default true
+    :extra-args             vector of strings appended before the prompt
+
+  Agent fields used: :instructions and :model."
+  [agent {:keys [codex-bin dir cwd model sandbox color ephemeral?
+                 skip-git-repo-check? extra-args]
+          :or   {codex-bin "codex"
+                 sandbox :read-only
+                 color :never
+                 ephemeral? true
+                 skip-git-repo-check? true}}]
+  (let [workdir (or dir cwd)
+        model   (or model (:model agent))]
+    (cond-> [codex-bin "exec"]
+      ephemeral? (conj "--ephemeral")
+      color (into ["--color" (option-name color)])
+      sandbox (into ["--sandbox" (option-name sandbox)])
+      skip-git-repo-check? (conj "--skip-git-repo-check")
+      workdir (into ["--cd" (str workdir)])
+      model (into ["--model" model])
+      (seq extra-args) (into (vec extra-args))
+      true (conj (prompt agent)))))
+
+(defn codex-runner
+  "Runner for Codex. `default-options` are merged beneath per-run options.
+  This implementation drives `codex exec`; see `command` for command-building
+  option keys.
+
+  Additional options:
+    :env         extra environment variables
+    :timeout-ms  kill the subprocess after this many milliseconds
+    :trim?       trim stdout before returning result text, default true"
+  ([] (codex-runner {}))
+  ([default-options]
+   (reify k/Runner
+     (-run [_ agent input opts]
+       (let [opts (merge {:trim? true} default-options opts)
+             argv (command agent opts)
+             {:keys [exit out err timed-out?]}
+             (proc/run argv {:in         input
+                             :dir        (or (:dir opts) (:cwd opts))
+                             :env        (:env opts)
+                             :timeout-ms (:timeout-ms opts)})]
+         (k/result {:agent (:name agent)
+                    :ok?   (and (not timed-out?) (= 0 exit))
+                    :text  (cond-> (or out "") (:trim? opts) str/trim)
+                    :error (cond timed-out?    "codex timed out"
+                                 (not= 0 exit) (str "codex exited with status " exit))
+                    :raw   {:runner :codex
+                            :exit exit
+                            :out out
+                            :err err
+                            :timed-out? timed-out?
+                            :argv argv}}))))))

@@ -18,7 +18,7 @@ that runs each agent call. `input` is the initial value given to the workflow.
 
 | Key | Meaning |
 | --- | --- |
-| `:runner` | The backend used for each agent call, such as mock, ACP, Claude CLI, OpenAI, or a local function. |
+| `:runner` | The backend used for each agent call, such as mock, ACP, Claude, Codex, OpenAI, a process, or a local function. |
 | `:workflow` | The agent or workflow data to run. |
 | `:input` | The initial workflow value. A string is a prompt; EDN is rendered before the first agent call. |
 | `:options` | Runtime controls for this run, such as `:observe`, `:state`, timeouts, or runner-specific overrides. |
@@ -125,7 +125,8 @@ Pick the runner before calling `run`:
           :input input}))
 
 (review (k/mock-runner) "check this design")
-(review (k/claude-cli-runner {}) "check this design")
+(review (k/claude-runner {}) "check this design")
+(review (k/codex-runner {:dir "."}) "check this design")
 (review (k/acp-runner {:command ["my-acp-agent"]}) "check this design")
 ```
 
@@ -164,5 +165,5 @@ Choose the CLI runner for the whole invocation with `--runner`:
 ## Next
 
 - [Workflows](/docs/workflows) explains the workflow nodes.
-- [Runners](/docs/runners) explains mock, function, process, Claude, ACP, and OpenAI runners.
+- [Runners](/docs/runners) explains mock, function, process, Claude, Codex, ACP, and OpenAI runners.
 - [Examples](/docs/examples) has runnable launch-readiness and deep-research workflows.

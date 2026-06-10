@@ -3,7 +3,7 @@
   namespace, so you can use a single alias instead of juggling several:
 
       (require '[karcarthy :as k])
-      (k/run {:runner (k/claude-cli-runner {})
+      (k/run {:runner (k/claude-runner {})
               :workflow (k/pipe a b)
               :input \"hi\"})
 
@@ -18,6 +18,7 @@
             [karcarthy.self]
             [karcarthy.runner.acp]
             [karcarthy.runner.claude]
+            [karcarthy.runner.codex]
             [karcarthy.runner.process]
             [karcarthy.runner.openai]))
 
@@ -83,8 +84,9 @@
 (export karcarthy.self/read-agent)
 (export karcarthy.self/dsl-reference)
 
-;; Agent SDK/CLI runners
+;; Provider/protocol/process runners
 (export karcarthy.runner.acp/acp-runner)
-(export karcarthy.runner.claude/claude-cli-runner)
+(export karcarthy.runner.claude/claude-runner)
+(export karcarthy.runner.codex/codex-runner)
 (export karcarthy.runner.process/process-runner)
-(export karcarthy.runner.openai/openai-agents-runner)
+(export karcarthy.runner.openai/openai-runner)

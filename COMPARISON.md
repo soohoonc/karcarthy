@@ -26,12 +26,12 @@ The frameworks referenced:
 | Pattern | PydanticAI / DSPy / Agno / Vercel AI SDK | karcarthy |
 | --- | --- | --- |
 | Define an agent | a host-language object/module: `Agent(model, instructions, tools)`, a DSPy `Signature` + module, or `{ model, tools }` (TS) | a data map: `{:karcarthy/type :agent :name … :instructions … :model …}` |
-| The agent loop | the framework runs it for you | delegated to the `claude` CLI, OpenAI Agents SDK, a local model, or another runner |
-| Tools | typed functions: Pydantic models / Zod schemas / Python callables; DSPy `ReAct` can use tools | a tool allowlist handed to the selected SDK/CLI, when that system supports it |
+| The agent loop | the framework runs it for you | delegated to Claude, Codex, OpenAI, ACP, a local model, or another runner |
+| Tools | typed functions: Pydantic models / Zod schemas / Python callables; DSPy `ReAct` can use tools | a tool allowlist handed to the selected runner, when that system supports it |
 | Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | functional workflow data: `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue` |
 | Structured output | Pydantic model / Zod / `generateObject`; DSPy signatures type input/output fields | parse the reply yourself (roadmap: typed signatures / JSON Schema) |
 | Optimization | DSPy optimizers compile programs against metrics; others mostly leave prompt tuning to the application | no optimizer yet; workflows are easy to transform because they are data |
-| Streaming | tokens/events, especially to a UI | Claude CLI streaming hooks today |
+| Streaming | tokens/events, especially to a UI | Claude stream events today |
 | Sessions / memory | built in (Agno AgentOS, PydanticAI) | runner/session state is delegated; richer memory is out of scope today |
 | Observability | Logfire, AgentOS, DSPy tracing/debugging, etc. | OTel-compatible event maps via `:observe` |
 
@@ -44,8 +44,8 @@ The frameworks referenced:
   it drives an Agent SDK, agent framework, coding-agent CLI, Clojure function,
   subprocess, or shell command.
   That makes it provider-neutral and thin, and it means karcarthy can sit *on
-  top of* the others: a Pydantic AI or Agno agent can be wrapped through the
-  `process-runner`, `shell-runner`, or `openai-agents-runner`, or a small shim.
+  top of* the others: a Pydantic AI, Agno, or coding-agent CLI can be wrapped
+  through `process-runner`, `codex-runner`, `openai-runner`, or a small shim.
 - **The runtime state is an intermediate representation.** DSPy is strong
   evidence for separating *what* a module should do from *how* its prompt or
   weights are tuned. karcarthy applies the same pressure one level up: keep
@@ -72,7 +72,7 @@ The frameworks referenced:
 - Orchestration you want as inspectable, generatable, serializable data;
   provider-neutral; on the JVM/Lisp; or where agents generate and rewrite
   workflows themselves: **karcarthy** (early and minimal, and able to drive the
-  others through SDK/CLI runners).
+  others through provider, protocol, process, or function runners).
 
 These aren't strictly either/or: karcarthy is a thin coordination layer, and the
-frameworks above are good candidates to run *inside* it as SDK/CLI runners.
+frameworks above are good candidates to run *inside* it as runners.

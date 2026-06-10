@@ -56,19 +56,20 @@
         (io/copy in tmp))
       (.getPath tmp))))
 
-(defn openai-agents-runner
-  "Runner that drives the OpenAI Agents SDK via the Python script.
-  `default-opts` are merged beneath per-run opts. Options:
+(defn openai-runner
+  "Runner for OpenAI. `default-options` are merged beneath per-run options.
+  This implementation drives the OpenAI Agents SDK via the Python bridge.
+  Options:
     :python-bin  python executable (default \"python3\")
     :script      path to the Python script (default: the bundled resource)
     :model       default model for agents that don't set one
     :dir / :env  working directory / extra environment for the process
     :timeout-ms  kill the subprocess if it runs longer than this (milliseconds)"
-  ([] (openai-agents-runner {}))
-  ([default-opts]
+  ([] (openai-runner {}))
+  ([default-options]
    (reify k/Runner
      (-run [_ agent prompt opts]
-       (let [opts   (merge default-opts opts)
+       (let [opts   (merge default-options opts)
              python (get opts :python-bin "python3")
              script (or (:script opts) @bridge-file)
              req    (json/write-str (request agent prompt opts))

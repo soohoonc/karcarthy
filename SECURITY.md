@@ -11,6 +11,6 @@ opening a public issue. Include steps to reproduce and the affected version or
 commit. We'll acknowledge the report and work with you on a fix and disclosure.
 
 Some runners execute external programs by design. `process-runner` runs an argv
-vector, `shell-runner` runs a shell command string, and
-`openai-agents-runner` shells out to `python3`, so treat agent instructions,
-tool allowlists, and runner commands as trusted input.
+vector or shell command string, `codex-runner` shells out to `codex exec`, and
+`openai-runner` shells out to `python3`, so treat agent instructions, tool
+allowlists, and runner commands as trusted input.

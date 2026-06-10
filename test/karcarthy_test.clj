@@ -24,6 +24,7 @@
     (is (kc/ok? (kc/run {:runner (kc/process-runner "cat")
                          :workflow (kc/agent "process" "i")
                          :input "hi"})))
+    (is (some? (kc/codex-runner)))
     (let [a (kc/agent "a" "i")
           b (kc/agent "b" "i")]
       (is (kc/workflow? (kc/branch [a b])))

@@ -4,8 +4,8 @@ description: Data-first agent orchestration for Clojure and command-line workflo
 ---
 
 karcarthy coordinates multi-agent workflows while keeping the plan as ordinary
-data. The model/tool loop belongs to a runner such as Claude CLI, the OpenAI
-Agents SDK bridge, a process command, or the local mock runner. karcarthy owns
+data. The model/tool loop belongs to a runner such as Claude, Codex, OpenAI,
+ACP, a process command, or the local mock runner. karcarthy owns
 the orchestration value above those systems.
 
 ```clojure
@@ -74,7 +74,7 @@ model, and multimethods fit tagged workflow nodes cleanly.
 | --- | --- |
 | Run one agent and compose the first workflow | [Quickstart](/docs/quickstart) |
 | Understand how data moves through `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic` | [Workflows](/docs/workflows) |
-| Swap mock execution for ACP, Claude CLI, OpenAI Agents SDK, or a process command | [Runners](/docs/runners) |
+| Swap mock execution for ACP, Claude, Codex, OpenAI, or a process command | [Runners](/docs/runners) |
 | Copy realistic launch-readiness and deep-research patterns | [Examples](/docs/examples) |
 | Look up signatures and JSON shapes | [Reference](/docs/reference) |
 
@@ -85,7 +85,7 @@ model, and multimethods fit tagged workflow nodes cleanly.
 | Agents | Plain maps tagged with `:karcarthy/type :agent`; usually defined with `defagent`. |
 | Workflows | `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic`. |
 | Rewrites | `agents`, `over`, and `configure`. |
-| Runners | Mock, Clojure function, process command, ACP, Claude CLI, and OpenAI Agents SDK bridge. |
+| Runners | Mock, Clojure function, process command, ACP, Claude, Codex, and OpenAI. |
 | CLI | `bin/karcarthy agent`, `run`, `demo`, and `json`. |
 
 ## Current status

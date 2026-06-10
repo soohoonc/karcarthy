@@ -8,21 +8,21 @@
 karcarthy coordinates many AI agents. The agents, tools, and the workflow itself
 are plain Clojure data (EDN).
 
-## Why Lisp, and why Agent SDKs & CLIs
+## Why Lisp, and why runners
 
 Running a single agent (the model-call and tool-call loop) is close to a
-commodity now: the `claude` CLI, the OpenAI Agents SDK, and local models all do
-it. The harder, more interesting problem is coordinating *many* agents while
-keeping the plan something you can see and change.
+commodity now: Claude, Codex, the OpenAI Agents SDK, and local models all do it.
+The harder, more interesting problem is coordinating *many* agents while keeping
+the plan something you can see and change.
 
 In a Lisp, code is data, so karcarthy makes the plan a value. A workflow is an
 EDN structure you generate, transform with `clojure.walk`, store, and diff like
 any other data. karcarthy delegates the inner loop to systems people already
-use: Pydantic AI, Claude Agent SDK/CLI, OpenAI Agents SDK, Clojure functions,
+use: Pydantic AI, Claude, Codex, OpenAI Agents SDK, Clojure functions,
 subprocesses, shell commands, or a local mock. karcarthy keeps only the
 data-first coordination layer on top. Two things fall out of that:
 
-- you swap Agent SDK/CLI runners without touching the workflow; and
+- you swap provider, protocol, process, or mock runners without touching the workflow; and
 - because the plan is data in a Lisp, an agent can **write a workflow as EDN
   that karcarthy runs, or rewrite its own definition at runtime**. The language
   the agents are described in is available to the agents themselves.
@@ -53,14 +53,16 @@ io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
 ;=> {:karcarthy/type :result, :ok? true, :text "...", ...}
 ```
 
-Swap the mock runner for `(k/claude-cli-runner {})`, `(k/acp-runner
-{:command [...]})`, or another runner to use a live agent system.
+Swap the mock runner for `(k/claude-runner {})`, `(k/codex-runner {:dir "."})`,
+`(k/openai-runner {})`,
+`(k/acp-runner {:command [...]})`, or another runner to use a live agent system.
 
 ## Highlights
 
 - **Runners** behind one protocol: `mock-runner`, `fn-runner`,
-  `process-runner`, `acp-runner`, `claude-cli-runner`, and
-  `openai-agents-runner`. Pass the runner you want to `run`.
+  `process-runner`, `acp-runner`, `claude-runner`, `codex-runner`, and
+  `openai-runner`.
+  Pass the runner you want to `run`.
 - **Workflows as data**: compose agents with `pipe`, `branch`, `delegate`,
   `reduce`, `revise`, `route`, `continue`, and `dynamic`; inspect and rewrite
   those workflow values before running them.
@@ -68,8 +70,8 @@ Swap the mock runner for `(k/claude-cli-runner {})`, `(k/acp-runner
   `process-runner` when the whole run should execute agent calls through a
   fixed argv or shell command.
 - **Runner-native subagents**: define `subagent` maps for Claude Code
-  subagents or OpenAI Agents SDK handoffs while keeping workflow branches as
-  explicit karcarthy orchestration.
+  subagents, Codex custom-agent config, or OpenAI Agents SDK handoffs while
+  keeping workflow branches as explicit karcarthy orchestration.
 - **Structural rewrites**: stamp configuration onto every agent without changing the
   original workflow:
   ```clojure

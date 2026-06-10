@@ -207,14 +207,14 @@
     (stream agent prompt opts)
     (buffer agent prompt opts)))
 
-(defn claude-cli-runner
-  "Runner for live execution through the Claude CLI. `default-opts` are merged
-  beneath per-run opts (per-run wins). See `command` for command-building
+(defn claude-runner
+  "Runner for Claude. `default-options` are merged beneath per-run options
+  (per-run wins). See `command` for command-building
   option keys; additionally `:dir` sets the agent's working directory,
   `:timeout-ms` force-kills a hung run, and `:on-event` (a fn of each stream
   event) streams via --output-format stream-json."
-  ([] (claude-cli-runner {}))
-  ([default-opts]
+  ([] (claude-runner {}))
+  ([default-options]
    (reify k/Runner
      (-run [_ agent prompt opts]
-       (invoke! agent prompt (merge default-opts opts))))))
+       (invoke! agent prompt (merge default-options opts))))))
