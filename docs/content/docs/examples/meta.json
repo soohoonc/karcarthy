@@ -1,6 +1,9 @@
 {
   "title": "Examples",
   "pages": [
-    "index"
+    "index",
+    "clojure",
+    "python",
+    "typescript"
   ]
 }

@@ -1,9 +1,9 @@
 ---
-title: Run Requests
-description: Start a workflow with one EDN request map.
+title: Quickstart
+description: Run one agent, compose a workflow, and choose a runner.
 ---
 
-The whole API starts here:
+Start here. Every run begins with one request map:
 
 ```clojure
 (k/run {:runner runner
@@ -12,9 +12,9 @@ The whole API starts here:
         :options options})
 ```
 
-`workflow` can be a single agent. `runner` is the value that actually runs each
-agent call. `input` is the initial value given to the workflow. `options` is
-runtime configuration such as observation callbacks.
+`workflow` can be a single agent or a composed workflow. `runner` is the value
+that runs each agent call. `input` is the initial value given to the workflow.
+`options` is runtime configuration such as observation callbacks.
 
 | Key | Meaning |
 | --- | --- |
@@ -165,4 +165,4 @@ Choose the CLI runner for the whole invocation with `--runner`:
 
 - [Workflow Data](/docs/workflows) explains the workflow nodes.
 - [Execution Runners](/docs/runners) explains mock, function, process, Claude, ACP, and OpenAI runners.
-- [Worked Examples](/docs/tutorials) walks through a realistic launch-review workflow.
+- [Examples](/docs/examples) has runnable launch-readiness and deep-research workflows.
