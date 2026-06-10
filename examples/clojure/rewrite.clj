@@ -45,6 +45,6 @@
 (println "\n=== run rewritten workflow ===")
 (println
  (:text
-  (k/run runner
-         production-workflow
-         "Why does representing workflows as EDN matter?")))
+  (k/run {:runner runner
+          :workflow production-workflow
+          :input "Why does representing workflows as EDN matter?"})))

@@ -61,8 +61,9 @@
     (println "after: " (mapv :model (k/agents opusified))))
 
   (println "\n=== Run the support desk on the offline mock runner ===")
-  (let [r (o/run (k/mock-runner canned) support-desk
-                 "my deploy 500s intermittently")]
+  (let [r (k/run {:runner (k/mock-runner canned)
+                  :workflow support-desk
+                  :input "my deploy 500s intermittently"})]
     (println "ok?  " (k/ok? r))
     (println "text:" (:text r)))
 
@@ -93,7 +94,9 @@
 
                      (str "[" (:name agent) "] " input)))
                  {:context? true})
-        r        (o/run runner workflow "homoiconic agents are data")]
+        r        (k/run {:runner runner
+                         :workflow workflow
+                         :input "homoiconic agents are data"})]
     (println "subtasks:" (get-in r [:source :subtasks]))
     (println "result:  " (:text r)))
 

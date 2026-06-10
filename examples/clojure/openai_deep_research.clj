@@ -208,7 +208,9 @@
           (core/run-agent offline-default agent input opts))))))
 
 (defn -main [& _]
-  (let [result (k/run (research-runner) workflow research-task)]
+  (let [result (k/run {:runner (research-runner)
+                       :workflow workflow
+                       :input research-task})]
     (println "=== OpenAI Deep Research request shape ===")
     (pp/pprint (select-keys (deep-research-request deep-researcher rewritten-prompt)
                             ["model" "background" "store" "reasoning" "max_tool_calls" "include" "tools"]))

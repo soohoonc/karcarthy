@@ -482,33 +482,80 @@
   (throw (ex-info "Not a runnable workflow node (missing or unknown :karcarthy/type)"
                   {:node node})))
 
+(def ^:private run-request-keys
+  #{:runner :workflow :input :opts})
+
+(defn- input->text
+  [input]
+  (cond
+    (nil? input) ""
+    (string? input) input
+    :else (pr-str input)))
+
+(defn- run-request->args
+  [request]
+  (when-not (map? request)
+    (throw (ex-info "run expects a request map"
+                    {:value request
+                     :supported '(run {:runner ... :workflow ... :input ...})})))
+  (when-let [unknown (seq (remove run-request-keys (keys request)))]
+    (throw (ex-info "run request contains unknown options"
+                    {:unknown (vec unknown)
+                     :supported (vec run-request-keys)})))
+  (doseq [k [:runner :workflow]]
+    (when-not (contains? request k)
+      (throw (ex-info (str "run request requires " k) {:request request}))))
+  (when (and (contains? request :opts) (not (map? (:opts request))))
+    (throw (ex-info "run request :opts must be a map"
+                    {:opts (:opts request)})))
+  [(:runner request)
+   (:workflow request)
+   (input->text (:input request))
+   (or (:opts request) {})])
+
 (defn run
-  "Interpret `workflow` through `runner`, starting from `input` (a string).
-  Returns a `karcarthy.core` result map. `workflow` may be an agent or any
-  composite node."
+  "Interpret workflow data through a runner and return a result map.
+
+  Preferred form:
+
+    (run {:runner runner
+          :workflow workflow
+          :input {:question \"...\"}
+          :opts {:observe observe-fn}})
+
+  `:input` may be a string or EDN value. Non-string input is rendered with
+  `pr-str` before entering the text-threaded workflow interpreter.
+
+  Positional form is still used internally by the interpreter:
+
+    (run runner workflow input opts)"
+  ([request]
+   (let [[runner workflow input opts] (run-request->args request)]
+     (run runner workflow input opts)))
   ([runner workflow input] (run runner workflow input {}))
   ([runner workflow input opts]
-   (if-not (:observe opts)
-     (run-node runner workflow input opts)
-     (let [span-id        (span-id)
-           parent-span-id (:karcarthy/parent-span-id opts)
-           started-ns     (System/nanoTime)
-           opts'          (assoc opts :karcarthy/parent-span-id span-id)]
-       (observe! opts (event :start span-id parent-span-id workflow opts))
-       (try
-         (let [result (run-node runner workflow input opts')]
-           (observe! opts (event :finish span-id parent-span-id workflow
-                                 (assoc opts
-                                        :duration-ms (duration-ms started-ns)
-                                        :ok? (k/ok? result))))
-           result)
-         (catch Throwable t
-           (observe! opts (event :error span-id parent-span-id workflow
-                                 (assoc opts
-                                        :duration-ms (duration-ms started-ns)
-                                        :ok? false
-                                        :error (or (.getMessage t) (str t)))))
-           (throw t)))))))
+   (let [input (input->text input)]
+     (if-not (:observe opts)
+       (run-node runner workflow input opts)
+       (let [span-id        (span-id)
+             parent-span-id (:karcarthy/parent-span-id opts)
+             started-ns     (System/nanoTime)
+             opts'          (assoc opts :karcarthy/parent-span-id span-id)]
+         (observe! opts (event :start span-id parent-span-id workflow opts))
+         (try
+           (let [result (run-node runner workflow input opts')]
+             (observe! opts (event :finish span-id parent-span-id workflow
+                                   (assoc opts
+                                          :duration-ms (duration-ms started-ns)
+                                          :ok? (k/ok? result))))
+             result)
+           (catch Throwable t
+             (observe! opts (event :error span-id parent-span-id workflow
+                                   (assoc opts
+                                          :duration-ms (duration-ms started-ns)
+                                          :ok? false
+                                          :error (or (.getMessage t) (str t)))))
+             (throw t))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; DSL sugar

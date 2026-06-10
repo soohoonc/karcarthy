@@ -238,9 +238,10 @@
         live? (boolean (System/getenv "KARCARTHY_CLAUDE_LIVE"))
         runner (if live? (live-claude-runner) offline-runner)
         runnable-workflow (if live? (strip-agent-tools workflow) workflow)
-        result (k/run runner runnable-workflow
-                      "Prepare a migration-readiness memo for the card-token vault migration."
-                      {:observe #(swap! events conj %)})]
+        result (k/run {:runner runner
+                       :workflow runnable-workflow
+                       :input "Prepare a migration-readiness memo for the card-token vault migration."
+                       :opts {:observe #(swap! events conj %)}})]
     (println "=== Claude dynamic-agent workflow ===")
     (pp/pprint {:shape "evolve lead -> plan workstreams -> parallel worker pipeline -> synthesize -> critique"
                 :valid? (k/workflow? runnable-workflow)

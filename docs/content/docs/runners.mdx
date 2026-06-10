@@ -1,5 +1,5 @@
 ---
-title: Use Runners
+title: Execution Runners
 description: Choose the execution backend for a run.
 ---
 
@@ -7,7 +7,9 @@ A runner runs one agent to completion. Karcarthy uses that same runner for each
 agent it encounters while interpreting a workflow.
 
 ```clojure
-(k/run runner workflow input)
+(k/run {:runner runner
+        :workflow workflow
+        :input input})
 ```
 
 Agents describe the work:
@@ -22,9 +24,17 @@ Agents describe the work:
 The caller chooses the runner:
 
 ```clojure
-(k/run (k/mock-runner) reviewer "check this design")
-(k/run (k/claude-cli-runner {}) reviewer "check this design")
-(k/run (k/acp-runner {:command ["my-acp-agent"]}) reviewer "check this design")
+(k/run {:runner (k/mock-runner)
+        :workflow reviewer
+        :input "check this design"})
+
+(k/run {:runner (k/claude-cli-runner {})
+        :workflow reviewer
+        :input "check this design"})
+
+(k/run {:runner (k/acp-runner {:command ["my-acp-agent"]})
+        :workflow reviewer
+        :input "check this design"})
 ```
 
 Agents do not carry a backend selector. If the backend changes at runtime, pass
@@ -42,7 +52,9 @@ Keep runner choice in application code:
     :live (k/claude-cli-runner {})))
 
 (defn review [env input]
-  (k/run (runner-for env) reviewer input))
+  (k/run {:runner (runner-for env)
+          :workflow reviewer
+          :input input}))
 ```
 
 This keeps the agent data stable. The same agent can run through a mock in
@@ -54,9 +66,9 @@ environment.
 Use `mock-runner` for tests, docs, and local workflow design:
 
 ```clojure
-(k/run (k/mock-runner)
-       (k/agent {:name "echo" :instructions "Echo the input."})
-       "hi")
+(k/run {:runner (k/mock-runner)
+        :workflow (k/agent {:name "echo" :instructions "Echo the input."})
+        :input "hi"})
 ```
 
 Output:
@@ -89,9 +101,9 @@ Use `fn-runner` when a Clojure function is the backend for agent calls:
 (def uppercase
   (k/fn-runner clojure.string/upper-case))
 
-(k/run uppercase
-       (k/agent {:name "shout" :instructions "Uppercase the input."})
-       "quiet please")
+(k/run {:runner uppercase
+        :workflow (k/agent {:name "shout" :instructions "Uppercase the input."})
+        :input "quiet please"})
 ```
 
 By default the function receives the input string. Use `:context? true` when it
@@ -116,18 +128,18 @@ Use `process-runner` to wrap one fixed command:
 (def upper
   (k/process-runner ["tr" "a-z" "A-Z"]))
 
-(k/run upper
-       (k/agent {:name "shout" :instructions "Uppercase the input."})
-       "quiet please")
+(k/run {:runner upper
+        :workflow (k/agent {:name "shout" :instructions "Uppercase the input."})
+        :input "quiet please"})
 ```
 
 The command receives the input on stdin and returns text on stdout. String
 commands go through the configured shell:
 
 ```clojure
-(k/run (k/process-runner "tr a-z A-Z")
-       (k/agent {:name "shout" :instructions "Uppercase the input."})
-       "quiet please")
+(k/run {:runner (k/process-runner "tr a-z A-Z")
+        :workflow (k/agent {:name "shout" :instructions "Uppercase the input."})
+        :input "quiet please"})
 ```
 
 Different commands mean different runner values. Choose the runner before
@@ -142,11 +154,11 @@ Use `claude-cli-runner` when each agent call should run through `claude -p`:
   (k/claude-cli-runner {:model "haiku"
                         :max-turns 4}))
 
-(k/run claude
-       (k/agent {:name "reviewer"
-                 :instructions "Find one launch risk and one mitigation."
-                 :tools ["mcp__feedback__search"]})
-       "enterprise SSO beta")
+(k/run {:runner claude
+        :workflow (k/agent {:name "reviewer"
+                            :instructions "Find one launch risk and one mitigation."
+                            :tools ["mcp__feedback__search"]})
+        :input "enterprise SSO beta"})
 ```
 
 `tools` is an allowlist passed to runners that support tool selection. The tool
@@ -166,11 +178,11 @@ JSON-RPC:
     :mcp-servers []
     :permission-policy :reject}))
 
-(k/run acp
-       (k/agent {:name "reviewer"
-                 :instructions "Review the current branch."
-                 :model "sonnet"})
-       "Check for correctness and missing tests.")
+(k/run {:runner acp
+        :workflow (k/agent {:name "reviewer"
+                            :instructions "Review the current branch."
+                            :model "sonnet"})
+        :input "Check for correctness and missing tests."})
 ```
 
 The ACP agent is the subprocess. Karcarthy folds the agent spec's
@@ -183,10 +195,10 @@ session config options when the agent advertises a `model` option.
 bridge:
 
 ```clojure
-(k/run (k/openai-agents-runner {})
-       (k/agent {:name "triage"
-                 :instructions "Route to refund, sales, or support."})
-       "I was charged twice.")
+(k/run {:runner (k/openai-agents-runner {})
+        :workflow (k/agent {:name "triage"
+                            :instructions "Route to refund, sales, or support."})
+        :input "I was charged twice."})
 ```
 
 ## Mixed Backends
@@ -206,7 +218,9 @@ backends, make that dispatch visible in a custom runner:
           (core/run-agent acp agent input opts)
           (core/run-agent mock agent input opts))))))
 
-(k/run hybrid workflow "review this release")
+(k/run {:runner hybrid
+        :workflow workflow
+        :input "review this release"})
 ```
 
 That is ordinary host code, not workflow data. The workflow remains a visible
@@ -228,11 +242,11 @@ agent session:
 (def claude
   (k/claude-cli-runner {:subagents [security-reviewer]}))
 
-(k/run claude
-       (k/agent {:name "review-coordinator"
-                 :instructions "Review this branch. Use the security-reviewer subagent where useful."
-                 :tools ["Agent" "Read" "Grep" "Glob"]})
-       "Review current changes.")
+(k/run {:runner claude
+        :workflow (k/agent {:name "review-coordinator"
+                            :instructions "Review this branch. Use the security-reviewer subagent where useful."
+                            :tools ["Agent" "Read" "Grep" "Glob"]})
+        :input "Review current changes."})
 ```
 
 Subagents are runner configuration, not workflow nodes. A workflow branch is

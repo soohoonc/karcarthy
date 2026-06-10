@@ -1,5 +1,5 @@
 ---
-title: Tutorials
+title: Worked Examples
 description: Build a launch-readiness workflow in Clojure, Python, and TypeScript.
 ---
 
@@ -41,13 +41,13 @@ The Clojure workflow is small:
 Then the caller chooses a runner:
 
 ```clojure
-(k/run (k/mock-runner responses)
-       workflow
-       "Prepare an enterprise SSO beta launch review.")
+(k/run {:runner (k/mock-runner responses)
+        :workflow workflow
+        :input "Prepare an enterprise SSO beta launch review."})
 ```
 
-The workflow data does not contain a runner selector. Use a mock, Claude, ACP,
-OpenAI, or process runner by passing a different runner to `run`.
+The workflow data does not contain a runner. Use a mock, Claude, ACP, OpenAI,
+or process runner by passing a different runner value to `run`.
 
 ## Run The Examples
 

@@ -1,5 +1,5 @@
 ---
-title: Overview
+title: karcarthy
 description: Data-first agent orchestration for Clojure and command-line workflows.
 ---
 
@@ -17,9 +17,9 @@ the orchestration value above those systems.
 (k/defagent summarizer
   {:instructions "Summarize the findings in one sentence."})
 
-(k/run (k/mock-runner)
-       (k/pipe researcher summarizer)
-       "what is a monad?")
+(k/run {:runner (k/mock-runner)
+        :workflow (k/pipe researcher summarizer)
+        :input "what is a monad?"})
 ```
 
 ## Why data-first
@@ -53,10 +53,10 @@ visible coordination value and the small interpreter for that value.
 
 | Task | Start here |
 | --- | --- |
-| Run one agent or workflow file from the command line | [Quickstart](/docs/start) |
-| Understand how data moves through `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic` | [Build Workflows](/docs/workflows) |
-| Swap mock execution for ACP, Claude CLI, OpenAI Agents SDK, or a process command | [Use Runners](/docs/runners) |
-| Build a realistic launch-readiness workflow | [Tutorials](/docs/tutorials) |
+| Start a run from one EDN request | [Run Requests](/docs/start) |
+| Understand how data moves through `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic` | [Workflow Data](/docs/workflows) |
+| Swap mock execution for ACP, Claude CLI, OpenAI Agents SDK, or a process command | [Execution Runners](/docs/runners) |
+| Build a realistic launch-readiness workflow | [Worked Examples](/docs/tutorials) |
 | Look up signatures and JSON shapes | [Reference](/docs/reference) |
 
 ## Core surfaces
@@ -76,8 +76,8 @@ the small public vocabulary as the product surface and keep implementation
 internals out of the main path.
 
 <Cards>
-  <Card title="Quickstart" href="/docs/start" />
-  <Card title="Build Workflows" href="/docs/workflows" />
-  <Card title="Use Runners" href="/docs/runners" />
+  <Card title="Run Requests" href="/docs/start" />
+  <Card title="Workflow Data" href="/docs/workflows" />
+  <Card title="Execution Runners" href="/docs/runners" />
   <Card title="Reference" href="/docs/reference" />
 </Cards>

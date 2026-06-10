@@ -73,6 +73,28 @@
       (is (k/ok? r))
       (is (= "[c] [b] [a] hi" (:text r))))))
 
+(deftest run-accepts-request-map
+  (testing "public runs can be described as one EDN request"
+    (let [r (o/run {:runner h
+                    :workflow a
+                    :input "hi"})]
+      (is (k/ok? r))
+      (is (= "[a] hi" (:text r)))))
+  (testing "structured input is rendered as EDN at the runner boundary"
+    (let [r (o/run {:runner h
+                    :workflow a
+                    :input {:ticket 42 :risk :high}})]
+      (is (= "[a] {:ticket 42, :risk :high}" (:text r)))))
+  (testing "request opts feed the interpreter"
+    (let [events (atom [])
+          r      (o/run {:runner h
+                         :workflow a
+                         :input "hi"
+                         :opts {:observe #(swap! events conj %)}})]
+      (is (k/ok? r))
+      (is (seq @events))
+      (is (= #{:workflow :agent} (set (map :kind @events)))))))
+
 (deftest step-runs-host-function
   (testing "a host Clojure step receives the flowing input directly"
     (let [r (o/run h (o/pipe (o/step str/upper-case :name "up") a) "hi")]

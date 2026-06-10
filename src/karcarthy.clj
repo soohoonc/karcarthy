@@ -3,7 +3,9 @@
   namespace, so you can use a single alias instead of juggling several:
 
       (require '[karcarthy :as k])
-      (k/run (k/claude-cli-runner {}) (k/pipe a b) \"hi\")
+      (k/run {:runner (k/claude-cli-runner {})
+              :workflow (k/pipe a b)
+              :input \"hi\"})
 
   The canonical homes are still `karcarthy.core`, `karcarthy.orchestrate`,
   `karcarthy.self`, and the implementation runners; this namespace only

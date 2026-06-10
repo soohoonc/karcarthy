@@ -1,5 +1,5 @@
 ---
-title: Build Workflows
+title: Workflow Data
 description: Compose agents with pipe, branch, delegate, reduce, revise, route, continue, and dynamic.
 ---
 
@@ -7,7 +7,9 @@ A workflow is data that describes work. `run` interprets that data through the
 runner you pass in:
 
 ```clojure
-(k/run runner workflow "input text")
+(k/run {:runner runner
+        :workflow workflow
+        :input {:task "review" :subject "launch plan"}})
 ```
 
 An agent is already a workflow:
@@ -16,7 +18,9 @@ An agent is already a workflow:
 (k/defagent reviewer
   {:instructions "Review the input and return concrete issues."})
 
-(k/run (k/mock-runner) reviewer "check this design")
+(k/run {:runner (k/mock-runner)
+        :workflow reviewer
+        :input "check this design"})
 ```
 
 Use the composition nodes only when there is actual composition.
@@ -35,7 +39,9 @@ Use `pipe` when steps happen in order:
 (def workflow
   (k/pipe researcher summarizer))
 
-(k/run (k/mock-runner) workflow "why does Lisp use code as data?")
+(k/run {:runner (k/mock-runner)
+        :workflow workflow
+        :input "why does Lisp use code as data?"})
 ```
 
 The first agent receives the original input. The second agent receives the
@@ -81,7 +87,9 @@ Use `branch` when several workflows should inspect the same input:
 (def reviewers
   (k/branch [product-reviewer engineering-reviewer security-reviewer]))
 
-(k/run runner reviewers "enterprise SSO beta")
+(k/run {:runner runner
+        :workflow reviewers
+        :input "enterprise SSO beta"})
 ```
 
 The result keeps each child result and joins their text:
@@ -199,7 +207,9 @@ work while the run is in progress:
 (def workflow
   (k/dynamic workflow-agent :max-steps 25))
 
-(k/run runner workflow "audit this migration")
+(k/run {:runner runner
+        :workflow workflow
+        :input "audit this migration"})
 ```
 
 The dynamic agent emits one EDN op at a time:

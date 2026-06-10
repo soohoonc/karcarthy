@@ -1,5 +1,5 @@
 ---
-title: Clojure API
+title: Clojure Reference
 description: Signatures, parameters, return values, and examples for the public facade.
 ---
 
@@ -283,9 +283,9 @@ Builds a workflow whose agent emits EDN ops while the run is in progress.
 Run it with the same `run` function as any other workflow:
 
 ```clojure
-(k/run runner
-       (k/dynamic workflow-agent :max-steps 25)
-       "audit this migration")
+(k/run {:runner runner
+        :workflow (k/dynamic workflow-agent :max-steps 25)
+        :input "audit this migration"})
 ```
 
 Supported ops are:
@@ -400,16 +400,20 @@ Applies common agent configuration in one pass. Supported keys:
 ### `run`
 
 ```clojure
-(k/run runner workflow input)
-(k/run runner workflow input opts)
+(k/run {:runner runner
+        :workflow workflow
+        :input input
+        :opts opts})
 ```
 
-Interprets workflow data through the runner passed to `run`.
+Interprets workflow data through the runner passed to `run`. `:input` can be a
+string or an EDN value; non-string input is rendered with `pr-str` before
+entering the text-threaded workflow interpreter.
 
 ```clojure
-(k/run (k/mock-runner)
-       (k/pipe researcher summarizer)
-       "map the agent framework space")
+(k/run {:runner (k/mock-runner)
+        :workflow (k/pipe researcher summarizer)
+        :input {:task "map" :subject "agent framework space"}})
 ```
 
 Returns a result map:
@@ -429,10 +433,10 @@ exceptions into not-ok result maps.
 Pass `:observe` to receive OpenTelemetry-compatible span events as plain data:
 
 ```clojure
-(k/run (k/mock-runner)
-       (k/pipe researcher summarizer)
-       "map the agent framework space"
-       {:observe (fn [event] ...)})
+(k/run {:runner (k/mock-runner)
+        :workflow (k/pipe researcher summarizer)
+        :input "map the agent framework space"
+        :opts {:observe (fn [event] ...)}})
 ```
 
 Events contain span ids, parent span ids, names, attributes, paths, status, and
@@ -529,11 +533,11 @@ agent spec's instructions into the prompt turn.
                  :cwd "."
                  :permission-policy :reject}))
 
-(k/run acp
-       (k/agent {:name "reviewer"
-                 :instructions "Review this diff."
-                 :model "sonnet"})
-       "Check the current branch.")
+(k/run {:runner acp
+        :workflow (k/agent {:name "reviewer"
+                            :instructions "Review this diff."
+                            :model "sonnet"})
+        :input "Check the current branch."})
 ```
 
 Common options:

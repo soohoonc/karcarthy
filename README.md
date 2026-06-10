@@ -22,12 +22,12 @@ use: Pydantic AI, Claude Agent SDK/CLI, OpenAI Agents SDK, Clojure functions,
 subprocesses, shell commands, or a local mock. karcarthy keeps only the
 data-first coordination layer on top. Two things fall out of that:
 
-- you swap Agent SDK/CLI runners, or pick one per agent, without touching the workflow; and
+- you swap Agent SDK/CLI runners without touching the workflow; and
 - because the plan is data in a Lisp, an agent can **write a workflow as EDN
   that karcarthy runs, or rewrite its own definition at runtime**. The language
   the agents are described in is available to the agents themselves.
 
-## Quickstart
+## Run Request
 
 It's early, with no published release yet, so depend on it from git:
 
@@ -47,7 +47,9 @@ io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
   {:instructions "Summarize the findings in one sentence."})
 
 ;; a workflow is data; run it through any runner (mock is offline and deterministic)
-(k/run (k/mock-runner) (k/pipe researcher summarizer) "what is a monad?")
+(k/run {:runner (k/mock-runner)
+        :workflow (k/pipe researcher summarizer)
+        :input "what is a monad?"})
 ;=> {:karcarthy/type :result, :ok? true, :text "...", ...}
 ```
 

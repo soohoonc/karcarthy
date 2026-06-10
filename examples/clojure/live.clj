@@ -44,8 +44,9 @@
 (def research
   (o/reduce (o/delegate planner writer) reducer))
 
-(let [r (o/run runner research
-               "Why is homoiconicity useful for agent orchestration?")]
+(let [r (k/run {:runner runner
+                :workflow research
+                :input "Why is homoiconicity useful for agent orchestration?"})]
   (println "SUBTASKS:" (pr-str (get-in r [:source :subtasks])))
   (println "OK?      " (k/ok? r))
   (println "RESULT:")

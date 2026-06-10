@@ -1,16 +1,19 @@
 ---
-title: Quickstart
-description: Run one agent, compose a tiny workflow, and choose a runner at call time.
+title: Run Requests
+description: Start a workflow with one EDN request map.
 ---
 
 The whole API starts here:
 
 ```clojure
-(k/run runner workflow input)
+(k/run {:runner runner
+        :workflow workflow
+        :input input})
 ```
 
-`workflow` can be a single agent. `runner` is the thing that actually runs that
-agent. The workflow does not choose its own backend.
+`workflow` can be a single agent. `runner` is the value that actually runs each
+agent call. `input` can be a string or structured EDN; non-string input is
+rendered as EDN text before it reaches an agent runner.
 
 ## Requirements
 
@@ -26,7 +29,9 @@ agent. The workflow does not choose its own backend.
 (k/defagent echo
   {:instructions "Echo the input."})
 
-(k/run (k/mock-runner) echo "hi")
+(k/run {:runner (k/mock-runner)
+        :workflow echo
+        :input "hi"})
 ```
 
 Result:
@@ -39,7 +44,7 @@ Result:
  :raw {:runner :mock}}
 ```
 
-That is the smallest workflow: one agent node, one runner, one input.
+That is the smallest workflow: one request, one agent node, one runner.
 
 ## Compose Two Agents
 
@@ -53,9 +58,9 @@ That is the smallest workflow: one agent node, one runner, one input.
 (def workflow
   (k/pipe researcher summarizer))
 
-(k/run (k/mock-runner)
-       workflow
-       "why does Lisp use code as data?")
+(k/run {:runner (k/mock-runner)
+        :workflow workflow
+        :input "why does Lisp use code as data?"})
 ```
 
 `pipe` feeds the first result's `:text` into the second agent.
@@ -74,7 +79,9 @@ Pick the runner before calling `run`:
 
 ```clojure
 (defn review [runner input]
-  (k/run runner reviewer input))
+  (k/run {:runner runner
+          :workflow reviewer
+          :input input}))
 
 (review (k/mock-runner) "check this design")
 (review (k/claude-cli-runner {}) "check this design")
@@ -115,6 +122,6 @@ Choose the CLI runner for the whole invocation with `--runner`:
 
 ## Next
 
-- [Build Workflows](/docs/workflows) explains the workflow nodes.
-- [Use Runners](/docs/runners) explains mock, function, process, Claude, ACP, and OpenAI runners.
-- [Tutorials](/docs/tutorials) walks through a realistic launch-review workflow.
+- [Workflow Data](/docs/workflows) explains the workflow nodes.
+- [Execution Runners](/docs/runners) explains mock, function, process, Claude, ACP, and OpenAI runners.
+- [Worked Examples](/docs/tutorials) walks through a realistic launch-review workflow.

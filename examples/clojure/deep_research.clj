@@ -283,10 +283,10 @@
   (pp/pprint deep-research-workflow)
   (println "\n=== Offline run ===")
   (let [events (atom [])
-        result (k/run offline-runner
-                      deep-research-workflow
-                      "Can karcarthy express an OpenAI Deep Research-style workflow?"
-                      {:observe #(swap! events conj %)})]
+        result (k/run {:runner offline-runner
+                       :workflow deep-research-workflow
+                       :input "Can karcarthy express an OpenAI Deep Research-style workflow?"
+                       :opts {:observe #(swap! events conj %)}})]
     (println (:text result))
     (println "\naccepted?" (:accepted? result) "rounds" (:rounds result))
     (println "\n=== Observable execution shape ===")
@@ -296,10 +296,10 @@
   (println "=== Live Codex Deep Research-shaped run ===")
   (println "This invokes Codex once per leaf agent call and may take several minutes.")
   (let [events (atom [])
-        result (k/run (codex-runner)
-                      deep-research-workflow
-                      "Can karcarthy express an OpenAI Deep Research-style workflow?"
-                      {:observe #(swap! events conj %)})]
+        result (k/run {:runner (codex-runner)
+                       :workflow deep-research-workflow
+                       :input "Can karcarthy express an OpenAI Deep Research-style workflow?"
+                       :opts {:observe #(swap! events conj %)}})]
     (println (:text result))
     (println "\naccepted?" (:accepted? result) "rounds" (:rounds result))
     (println "\n=== Observable execution shape ===")

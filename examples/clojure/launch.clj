@@ -224,8 +224,9 @@
 (println "route(classifier, {launch: revise(pipe(branch(reviewers), brief-writer), critic), incident})")
 
 (println "\nresult:")
-(let [r (k/run runner workflow
-               "Prepare the launch brief for a new enterprise SSO feature.")]
+(let [r (k/run {:runner runner
+                :workflow workflow
+                :input "Prepare the launch brief for a new enterprise SSO feature."})]
   (println (:text r))
   (println "\nrounds:" (:rounds r) "accepted?" (:accepted? r)))
 

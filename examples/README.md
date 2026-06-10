@@ -21,7 +21,7 @@ languages, to show the library is reachable from each.
   cited report, and critique/revise. Runs offline with canned evidence and
   includes an opt-in live Codex CLI `process-runner` path.
 - `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
-  runner/model/instruction configuration, then run the rewritten value.
+  model and instruction configuration, then run the rewritten value.
 - `clojure/live.clj` - a live delegate/reduce run (paid `claude -p`).
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
