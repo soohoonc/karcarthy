@@ -44,6 +44,10 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
   result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
 - **Adding a workflow node:** add a constructor in `orchestrate.clj`, a `run-node`
   defmethod, schema entries in `schema.clj`, and tests.
+- **Model-facing EDN protocols self-repair.** Nodes that parse model replies
+  (planner, evaluator, router, dynamic ops) re-ask the model with the error and
+  its previous reply before failing (`:edn-retries` run option, default 1).
+  New protocol-reading nodes should go through `elicit!` in `orchestrate.clj`.
 - **Adding a test namespace:** register it in `test/karcarthy/test_runner.clj`
   (zero-dependency test runner; no Clojars test libs).
 - **Prefer pure, offline-testable builders** (e.g. `claude-command`,

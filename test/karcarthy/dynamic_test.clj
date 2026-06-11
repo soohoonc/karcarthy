@@ -128,12 +128,32 @@
       (is (= "version two" (get-in r [:state :agents "worker" :instructions])))
       (is (= "version two" (-> r :state :history (nth 4) :result :text))))))
 
-(deftest dynamic-workflow-reports-bad-op
-  (let [runner        (k/mock-runner (fn [_] "{:op :bogus}"))
-        workflow-agent (k/agent {:name "workflow" :instructions "bad op"})
-        r              (o/run {:runner runner
-                               :workflow (o/dynamic workflow-agent :max-steps 1)
-                               :input "x"})]
-    (is (not (k/ok? r)))
-    (is (str/includes? (:error r) "unknown dynamic workflow op"))
-    (is (map? (:state r)))))
+(deftest dynamic-workflow-feeds-back-bad-ops-then-aborts
+  (testing "an invalid op is retried once via feedback, then aborts the run"
+    (let [calls          (atom 0)
+          runner         (k/mock-runner (fn [_] (swap! calls inc) "{:op :bogus}"))
+          workflow-agent (k/agent {:name "workflow" :instructions "bad op"})
+          r              (o/run {:runner runner
+                                 :workflow (o/dynamic workflow-agent :max-steps 10)
+                                 :input "x"})]
+      (is (not (k/ok? r)))
+      (is (str/includes? (:error r) "unknown dynamic workflow op"))
+      (is (= 2 @calls))
+      (is (map? (:state r))))))
+
+(deftest dynamic-workflow-recovers-from-bad-op
+  (testing "the op error is fed back as the last result, so the agent can recover"
+    (let [prompts        (atom [])
+          runner         (k/mock-runner
+                          (fn [{:keys [prompt]}]
+                            (swap! prompts conj prompt)
+                            (if (= 1 (count @prompts))
+                              "this is not an op"
+                              (pr-str {:op :complete :text "recovered"}))))
+          workflow-agent (k/agent {:name "workflow" :instructions "drive"})
+          r              (o/run {:runner runner
+                                 :workflow (o/dynamic workflow-agent :max-steps 10)
+                                 :input "x"})]
+      (is (k/ok? r))
+      (is (= "recovered" (:text r)))
+      (is (str/includes? (second @prompts) "no EDN map found")))))
