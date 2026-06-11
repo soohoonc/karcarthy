@@ -73,21 +73,29 @@
     :partial-messages?   stream token-level chunks (-> --include-partial-messages,
                          only meaningful with :output-format \"stream-json\")
     :subagents           vector of k/subagent values for Claude --agents
+    :prompt-via          :argv (default) passes the prompt as an argument;
+                         :stdin omits it from the argv and the runner pipes it
+                         to the process instead (`claude -p` reads stdin when
+                         no positional prompt is given). Use :stdin for prompts
+                         that can exceed OS argv limits, e.g. reduce fan-in.
     :extra-args          vector of strings appended verbatim (escape hatch for
                          --add-dir, --mcp-config, --disallowedTools, ...)
 
   Agent fields used: :instructions, :model, :tools (-> --allowedTools)."
   [agent prompt {:keys [claude-bin output-format system-prompt-mode
                         max-turns permission-mode resume continue?
-                        partial-messages? subagents extra-args]
+                        partial-messages? subagents extra-args prompt-via]
                  :or   {claude-bin "claude"
                         output-format "json"
-                        system-prompt-mode :append}}]
+                        system-prompt-mode :append
+                        prompt-via :argv}}]
   (let [{:keys [instructions model tools]} agent
         sp-flag (if (= system-prompt-mode :replace)
                   "--system-prompt"
                   "--append-system-prompt")]
-    (cond-> [claude-bin "-p" prompt "--output-format" output-format]
+    (cond-> (if (= prompt-via :stdin)
+              [claude-bin "-p" "--output-format" output-format]
+              [claude-bin "-p" prompt "--output-format" output-format])
       ;; claude requires --verbose for stream-json under --print
       (= output-format "stream-json") (conj "--verbose")
       instructions      (into [sp-flag instructions])
@@ -126,14 +134,23 @@
   keys), call `(on-event ev)` per event, and return
   {:events [...] :exit n :result <terminal \"result\" event map, or nil>}.
   stderr is merged into stdout; non-JSON lines are ignored. `opts`: :on-event
-  :dir :timeout-ms (a watchdog force-kills the process after :timeout-ms).
-  Exposed (and runner-agnostic) so it can be tested with any line-emitting
-  command."
-  [argv {:keys [on-event dir timeout-ms]}]
+  :dir :timeout-ms (a watchdog force-kills the process after :timeout-ms),
+  :in (a string written to the process's stdin, then closed - used by
+  :prompt-via :stdin). Exposed (and runner-agnostic) so it can be tested with
+  any line-emitting command."
+  [argv {:keys [on-event dir timeout-ms in]}]
   (let [pb (doto (ProcessBuilder. ^java.util.List (vec argv))
              (.redirectErrorStream true))]
     (when dir (.directory pb (io/file (str dir))))
     (let [proc     (.start pb)
+          _        (when (some? in)
+                     ;; the process may exit before reading stdin; ignore the
+                     ;; broken pipe
+                     (try
+                       (with-open [os (.getOutputStream proc)]
+                         (.write os (.getBytes (str in) "UTF-8"))
+                         (.flush os))
+                       (catch java.io.IOException _ nil)))
           watchdog (when timeout-ms
                      (future (Thread/sleep timeout-ms)
                              (when (.isAlive proc) (.destroyForcibly proc))))]
@@ -155,8 +172,10 @@
   "Stream `claude -p --output-format stream-json`, invoking (:on-event opts) per
   event, and return the karcarthy result built from the terminal result event."
   [agent prompt opts]
-  (let [argv (command agent prompt (assoc opts :output-format "stream-json"))
-        {:keys [result exit events]} (stream! argv (select-keys opts [:on-event :dir :timeout-ms]))]
+  (let [argv        (command agent prompt (assoc opts :output-format "stream-json"))
+        stream-opts (cond-> (select-keys opts [:on-event :dir :timeout-ms])
+                      (= :stdin (:prompt-via opts)) (assoc :in prompt))
+        {:keys [result exit events]} (stream! argv stream-opts)]
     (if result
       (payload->result (:name agent) result)
       (k/result {:agent (:name agent) :ok? false :text nil
@@ -168,7 +187,9 @@
   (let [output-format (get opts :output-format "json")
         argv          (command agent prompt opts)
         {:keys [exit out err timed-out?]}
-        (proc/run argv {:dir (:dir opts) :timeout-ms (:timeout-ms opts)})]
+        (proc/run argv {:dir        (:dir opts)
+                        :timeout-ms (:timeout-ms opts)
+                        :in         (when (= :stdin (:prompt-via opts)) prompt)})]
     (cond
       timed-out?
       (k/result {:agent (:name agent) :ok? false :text nil

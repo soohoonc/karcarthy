@@ -42,19 +42,23 @@
     job-max-runtime-seconds (assoc :job_max_runtime_seconds job-max-runtime-seconds)))
 
 (defn prompt
-  "Build the Codex prompt for one karcarthy leaf agent.
+  "Build the full prompt text for one karcarthy leaf agent, including the
+  flowing workflow input.
 
-  The flowing workflow input is sent on stdin by `codex-runner`; this prompt
-  carries the agent name and instructions."
-  [agent]
+  `codex-runner` sends this on stdin and passes `-` as the argv prompt:
+  `codex exec` reads the prompt from stdin only when the positional prompt is
+  absent or `-`, so a prompt argv plus piped input would silently drop the
+  input. Stdin also avoids OS argv-size limits for large fan-in prompts."
+  [agent input]
   (str "You are running as one karcarthy leaf agent.\n\n"
        "Agent name: " (:name agent) "\n\n"
        "Instructions:\n" (:instructions agent) "\n\n"
-       "Return only the output requested by the instructions. "
-       "The current input will be provided on stdin."))
+       "Return only the output requested by the instructions.\n\n"
+       "Input:\n" input))
 
 (defn command
-  "Pure: build the argv for `codex exec`.
+  "Pure: build the argv for `codex exec`. The prompt itself travels on stdin
+  (see `prompt`), so the argv ends with `-`.
 
   Options:
     :codex-bin              CLI executable (default \"codex\")
@@ -66,7 +70,7 @@
     :skip-git-repo-check?   pass --skip-git-repo-check, default true
     :extra-args             vector of strings appended before the prompt
 
-  Agent fields used: :instructions and :model."
+  Agent fields used: :model."
   [agent {:keys [codex-bin dir cwd model sandbox color ephemeral?
                  skip-git-repo-check? extra-args]
           :or   {codex-bin "codex"
@@ -84,7 +88,7 @@
       workdir (into ["--cd" (str workdir)])
       model (into ["--model" model])
       (seq extra-args) (into (vec extra-args))
-      true (conj (prompt agent)))))
+      true (conj "-"))))
 
 (defn codex-runner
   "Runner for Codex. `default-options` are merged beneath per-run options.
@@ -102,7 +106,7 @@
        (let [opts (merge {:trim? true} default-options opts)
              argv (command agent opts)
              {:keys [exit out err timed-out?]}
-             (proc/run argv {:in         input
+             (proc/run argv {:in         (prompt agent input)
                              :dir        (or (:dir opts) (:cwd opts))
                              :env        (:env opts)
                              :timeout-ms (:timeout-ms opts)})]

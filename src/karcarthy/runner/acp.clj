@@ -334,31 +334,69 @@
                           {:config-id id
                            :available (mapv :id options)})))))))
 
-(defn- run-acp! [agent input opts]
+(defn connect!
+  "Start an ACP agent process and initialize the protocol once. Returns a
+  connection that `acp-runner` reuses across runs when passed as `:connection`,
+  so each run pays one `session/new` and one prompt turn instead of a process
+  spawn plus `initialize` - the lifecycle ACP is designed for. Close it with
+  `close!`.
+
+    (def conn (acp/connect! {:command [\"some-acp-agent\"]}))
+    (def runner (acp/acp-runner {:connection conn}))
+    ;; ... many runs ...
+    (acp/close! conn)
+
+  Prompt turns on one connection are serialized; for parallel branches, give
+  each worker its own connection."
+  [opts]
   (let [conn  (start-process opts)
         ids   (atom 0)
-        state (atom {:responses {} :updates [] :text []})]
+        state (atom {:responses {}})]
     (try
-      (let [init           (initialize! conn ids state opts)
-            session-result (session! conn ids state init agent opts)
-            session-id     (:sessionId session-result)]
-        (set-config! conn ids state session-id session-result agent opts)
-        (let [prompt-result (request! conn ids state "session/prompt"
-                                      (prompt-params session-id agent input opts)
-                                      opts)
-              text          (str/join "" (:text @state))]
-          (k/result {:agent      (:name agent)
-                     :text       text
-                     :session-id session-id
-                     :stop-reason (:stopReason prompt-result)
-                     :raw        {:runner :acp
-                                  :session-id session-id
-                                  :stop-reason (:stopReason prompt-result)
-                                  :agent-info (:agentInfo init)
-                                  :updates (:updates @state)
-                                  :stderr (stderr conn)}})))
-      (finally
-        (close-process! conn)))))
+      {:karcarthy/type :acp-connection
+       :conn conn
+       :ids  ids
+       :init (initialize! conn ids state opts)
+       :lock (Object.)}
+      (catch Throwable t
+        (close-process! conn)
+        (throw t)))))
+
+(defn close!
+  "Shut down an ACP connection created by `connect!`."
+  [{:keys [conn]}]
+  (close-process! conn))
+
+(defn- run-on-connection!
+  [{:keys [conn ids init lock]} agent input opts]
+  (locking lock
+    (let [state          (atom {:responses {} :updates [] :text []})
+          session-result (session! conn ids state init agent opts)
+          session-id     (:sessionId session-result)]
+      (set-config! conn ids state session-id session-result agent opts)
+      (let [prompt-result (request! conn ids state "session/prompt"
+                                    (prompt-params session-id agent input opts)
+                                    opts)
+            text          (str/join "" (:text @state))]
+        (k/result {:agent      (:name agent)
+                   :text       text
+                   :session-id session-id
+                   :stop-reason (:stopReason prompt-result)
+                   :raw        {:runner :acp
+                                :session-id session-id
+                                :stop-reason (:stopReason prompt-result)
+                                :agent-info (:agentInfo init)
+                                :updates (:updates @state)
+                                :stderr (stderr conn)}})))))
+
+(defn- run-acp! [agent input opts]
+  (if-let [connection (:connection opts)]
+    (run-on-connection! connection agent input opts)
+    (let [connection (connect! opts)]
+      (try
+        (run-on-connection! connection agent input opts)
+        (finally
+          (close! connection))))))
 
 (defn acp-runner
   "Build a runner for an ACP-compliant agent process.
@@ -374,6 +412,10 @@
 
   Common options:
     :command                  argv vector for the ACP agent process
+    :connection               a connection from `connect!` to reuse across
+                              runs (one process and one `initialize` for many
+                              prompt turns); without it, each run spawns and
+                              tears down its own process
     :cwd / :dir               working directory for the ACP session
     :mcp-servers              ACP MCP server specs
     :client-capabilities      advertised ACP client capabilities
