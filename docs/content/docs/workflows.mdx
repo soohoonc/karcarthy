@@ -92,7 +92,9 @@ Use `branch` when several workflows should inspect the same input:
         :input "enterprise SSO beta"})
 ```
 
-The result keeps each child result and joins their text:
+The result keeps each child result and joins their text into labeled
+sections (`## <agent>` headers, with `## <agent> (failed)` for failures), so
+a downstream workflow reading the flowing text can attribute each part:
 
 ```clojure
 {:karcarthy/type :result
@@ -100,7 +102,7 @@ The result keeps each child result and joins their text:
  :results [{:agent "product-reviewer" :text "..."}
            {:agent "engineering-reviewer" :text "..."}
            {:agent "security-reviewer" :text "..."}]
- :text "...joined child text..."}
+ :text "## product-reviewer\n...\n\n## engineering-reviewer\n..."}
 ```
 
 ## delegate
@@ -112,7 +114,10 @@ Use `delegate` when a planner should create subtasks for a worker:
   (k/delegate planner worker :max-concurrency 4))
 ```
 
-The planner must reply with EDN:
+The planner must reply with EDN. This applies to every model-facing EDN
+protocol below: when a reply fails to parse or validate, the node re-asks the
+model with the error and its previous reply before failing (`:edn-retries` in
+run options, default 1).
 
 ```clojure
 {:subtasks ["audit logs" "rollback plan" "support docs"]}

@@ -27,6 +27,15 @@
 (deftest extract-edn-none
   (is (thrown? clojure.lang.ExceptionInfo (self/extract-edn "no edn here"))))
 
+(deftest extract-edn-skips-prose-braces
+  (testing "a { in prose before the EDN map is skipped, not a parse failure"
+    (is (= {:x 1} (self/extract-edn "I {think} this works: {:x 1}")))))
+
+(deftest extract-edn-unparseable-braces-throw
+  (testing "braces that never parse still raise a parse error"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"could not parse EDN"
+                          (self/extract-edn "oops {:x")))))
+
 ;; --- read-workflow / read-agent --------------------------------------------
 
 (deftest read-agent-workflow

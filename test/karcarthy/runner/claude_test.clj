@@ -83,6 +83,22 @@
                        "review"
                        {:subagents [reviewer reviewer]}))))))
 
+(deftest command-prompt-via-stdin
+  (testing ":prompt-via :stdin keeps the prompt out of the argv"
+    (let [argv (cc/command (k/agent {:name "a" :instructions "i"}) "huge fan-in prompt"
+                           {:prompt-via :stdin})]
+      (is (= ["claude" "-p" "--output-format" "json"] (subvec argv 0 4)))
+      (is (not-any? #{"huge fan-in prompt"} argv)))))
+
+(deftest stream!-writes-stdin
+  (testing "stream! pipes :in to the process, for :prompt-via :stdin streaming"
+    (let [{:keys [result exit]}
+          (cc/stream! ["bash" "-c" "cat"]
+                      {:in (str "{\"type\":\"result\",\"subtype\":\"success\","
+                                "\"is_error\":false,\"result\":\"echoed\"}\n")})]
+      (is (zero? exit))
+      (is (= "echoed" (:result result))))))
+
 (deftest command-omits-absent-options
   (testing "optional flags are absent when the agent/opts don't supply them"
     (let [argv (cc/command (k/agent {:name "a" :instructions "i"}) "p" {})]

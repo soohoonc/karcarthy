@@ -2,7 +2,7 @@
   "Runners for local process execution.
 
   `process-runner` executes an argv vector directly, or executes a shell command
-  string through `sh -lc`. It writes the input to stdin and turns stdout into the
+  string through `sh -c`. It writes the input to stdin and turns stdout into the
   result text."
   (:require [clojure.string :as str]
             [karcarthy.core :as k]
@@ -48,14 +48,17 @@
     :env         extra environment variables (merged over the current env)
     :dir         working directory for the process
     :timeout-ms  kill the command if it runs longer than this (milliseconds)
-    :shell       argv prefix used for string commands (default [\"sh\" \"-lc\"])
+    :shell       argv prefix used for string commands (default [\"sh\" \"-c\"]).
+                 Deliberately not a login shell: profile scripts that write to
+                 stdout would corrupt the result text. Pass [\"bash\" \"-lc\"]
+                 if a command needs the login environment.
 
     (process-runner [\"cat\"])           ; echoes stdin
     (process-runner [\"tr\" \"a-z\" \"A-Z\"]) ; uppercases stdin
     (process-runner \"tr a-z A-Z\")      ; shell form"
   ([command] (process-runner command {}))
   ([command {:keys [trim? env dir timeout-ms shell]
-             :or   {trim? true shell ["sh" "-lc"]}}]
+             :or   {trim? true shell ["sh" "-c"]}}]
    (let [mode (if (string? command) :shell :exec)
          argv (command->argv command shell)]
      (reify k/Runner

@@ -1,0 +1,17 @@
+{;; defagent / defsubagent / defworkflow define a var from their first symbol.
+ :lint-as {karcarthy.core/defagent           clj-kondo.lint-as/def-catch-all
+           karcarthy.core/defsubagent        clj-kondo.lint-as/def-catch-all
+           karcarthy.orchestrate/defworkflow clj-kondo.lint-as/def-catch-all
+           karcarthy/defagent                clj-kondo.lint-as/def-catch-all
+           karcarthy/defsubagent             clj-kondo.lint-as/def-catch-all
+           karcarthy/defworkflow             clj-kondo.lint-as/def-catch-all}
+
+ ;; The facade builds its vars at load time with a private `export` macro,
+ ;; which clj-kondo cannot see.
+ :linters {:unresolved-var {:exclude [karcarthy]}}
+
+ ;; `map`, `iterate`, `bind`, and `config` are excluded on purpose as
+ ;; tombstones for removed legacy DSL names (pinned by
+ ;; facade-hides-low-level-execution-apis), not because they are shadowed.
+ :config-in-ns {karcarthy             {:linters {:unused-excluded-var {:level :off}}}
+                karcarthy.orchestrate {:linters {:unused-excluded-var {:level :off}}}}}

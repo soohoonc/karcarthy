@@ -17,13 +17,20 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 
 | File | Role |
 |------|------|
-| `src/karcarthy/core.clj` | data model (`agent`), spec validation, `result`, the `Runner` protocol, `mock-runner`, `fn-runner`, and the `defagent` macro |
-| `src/karcarthy/orchestrate.clj` | the workflow DSL - `pipe` / `map` / `reduce` / `iterate` / `bind`, the `run` interpreter (a `run-node` multimethod), and `defworkflow` / `workflow?` |
+| `src/karcarthy.clj` | facade namespace re-exporting the public API under one alias (`(require '[karcarthy :as k])`) |
+| `src/karcarthy/core.clj` | data model (`agent`, `subagent`), spec validation, `result`, the `Runner` protocol, `mock-runner`, `fn-runner`, and the `defagent` / `defsubagent` macros |
+| `src/karcarthy/orchestrate.clj` | the workflow DSL - `pipe` / `step` / `branch` / `delegate` / `reduce` / `revise` / `route` / `continue` / `dynamic`, the `run` interpreter (a `run-node` multimethod), and `defworkflow` / `workflow?` |
 | `src/karcarthy/schema.clj` | EDN and JSON schema reference values for public workflow data |
-| `src/karcarthy/rewrite.clj` | structural workflow rewrites: `agents`, `over`, and `config` |
+| `src/karcarthy/rewrite.clj` | structural workflow rewrites: `agents`, `over`, and `configure` |
 | `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node |
+| `src/karcarthy/edn.clj` | internal helper extracting the first EDN map from model output (`clojure.edn`, never `eval`) |
+| `src/karcarthy/observe.clj` | internal observation-event helpers shared by `core` and `orchestrate` (`:observe` callback) |
+| `src/karcarthy/proc.clj` | subprocess execution with timeout, shared by the subprocess-backed runners |
+| `src/karcarthy/cli.clj` | CLI entry point and language-agnostic JSON bridge behind `bin/karcarthy` |
+| `src/karcarthy/demo.clj` | offline demo (`clojure -M -m karcarthy.demo`) |
 | `src/karcarthy/runner/claude.clj` | Claude runner, backed by `claude -p` |
 | `src/karcarthy/runner/codex.clj` | Codex runner, backed by `codex exec`, plus Codex custom-agent config lowering |
+| `src/karcarthy/runner/acp.clj` | ACP (Agent Client Protocol) runner over stdio JSON-RPC |
 | `src/karcarthy/runner/process.clj` | process and shell runners; wrap CLIs or shell commands as agents (prompt → stdin, stdout → result) |
 | `src/karcarthy/runner/openai.clj` | OpenAI runner via `resources/karcarthy/openai_runner.py` |
 | `test/…` | mirrors `src/`; the test runner lists namespaces in `test/karcarthy/test_runner.clj` |
@@ -33,11 +40,15 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 - **Dependencies: Maven Central only.** Clojars is blocked in the dev sandbox.
   HTTP uses Java's built-in client or shelling out - no HTTP-client dep.
 - **Everything is data.** Each entity is a map tagged with `:karcarthy/type`
-  (`:agent`, `:result`, `:pipe`, `:map`, …). Prefer plain maps over records.
+  (`:agent`, `:result`, `:pipe`, `:branch`, …). Prefer plain maps over records.
 - **A runner** implements `karcarthy.core/Runner` (`-run`) and returns a
   result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
 - **Adding a workflow node:** add a constructor in `orchestrate.clj`, a `run-node`
   defmethod, schema entries in `schema.clj`, and tests.
+- **Model-facing EDN protocols self-repair.** Nodes that parse model replies
+  (planner, evaluator, router, dynamic ops) re-ask the model with the error and
+  its previous reply before failing (`:edn-retries` run option, default 1).
+  New protocol-reading nodes should go through `elicit!` in `orchestrate.clj`.
 - **Adding a test namespace:** register it in `test/karcarthy/test_runner.clj`
   (zero-dependency test runner; no Clojars test libs).
 - **Prefer pure, offline-testable builders** (e.g. `claude-command`,

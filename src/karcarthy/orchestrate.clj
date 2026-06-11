@@ -33,9 +33,9 @@
   (:refer-clojure :exclude [iterate map reduce])
   (:require [clojure.string :as str]
             [karcarthy.core :as k]
-            [karcarthy.edn :as kedn])
-  (:import [java.util UUID]
-           [java.util.concurrent Executors Callable Future]))
+            [karcarthy.edn :as kedn]
+            [karcarthy.observe :as obs])
+  (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
 ;; Constructors - build workflow data
@@ -184,20 +184,6 @@
 
 ;; --- shared helpers --------------------------------------------------------
 
-(defn- span-id [] (str (UUID/randomUUID)))
-
-(defn- now-ms [] (System/currentTimeMillis))
-
-(defn- duration-ms [started-ns]
-  (/ (double (- (System/nanoTime) started-ns)) 1000000.0))
-
-(defn- observe!
-  [opts event]
-  (when-let [observe (:observe opts)]
-    (try
-      (observe event)
-      (catch Throwable _ nil))))
-
 (defn- descend
   [opts & path-segments]
   (if (:observe opts)
@@ -208,22 +194,12 @@
   [phase span-id parent-span-id workflow attrs]
   (let [type      (:karcarthy/type workflow)
         type-name (if type (name type) "unknown")]
-    (cond-> {:karcarthy/type :event
-             :event          phase
-             :kind           :workflow
-             :name           (str "karcarthy.workflow." type-name)
-             :span/kind      :internal
-             :span/id        span-id
-             :time-ms        (now-ms)
-             :path           (:karcarthy/path attrs)
-             :attributes     {"karcarthy.kind"          "workflow"
-                              "karcarthy.workflow.type" type-name}}
-      parent-span-id (assoc :parent/span-id parent-span-id)
-      (:karcarthy/path attrs)
-      (assoc-in [:attributes "karcarthy.path"] (pr-str (:karcarthy/path attrs)))
-      (:duration-ms attrs) (assoc :duration-ms (:duration-ms attrs))
-      (contains? attrs :ok?) (assoc :ok? (:ok? attrs))
-      (:error attrs) (assoc :error (:error attrs)))))
+    (obs/event phase span-id parent-span-id
+               {:kind :workflow
+                :name (str "karcarthy.workflow." type-name)
+                :attributes {"karcarthy.kind"          "workflow"
+                             "karcarthy.workflow.type" type-name}}
+               attrs)))
 
 (defn safe-run
   "Run a child workflow, converting a thrown exception into a not-ok result so one
@@ -285,6 +261,44 @@
             (contains? source-result :subtasks)
             (assoc :subtasks (:subtasks source-result)))))
 
+(defn- repair-prompt
+  [input kind shape failed-text error]
+  (str input
+       "\n\nYour previous reply could not be used as " (name kind) " output."
+       "\nError: " error
+       "\nYour previous reply:\n" failed-text
+       "\n\nReply with EDN only, matching: " shape))
+
+(defn- elicit!
+  "Run `workflow` on `input` and coerce its EDN reply with `parse!` (a fn of
+  the reply map that returns a value, or throws with a correctable message).
+
+  Models flub EDN; a single malformed reply should not fail a whole node. On
+  a parse or shape failure this re-asks up to `:edn-retries` times (default 1),
+  appending the failed reply and its error so the model can correct itself.
+  Returns {:result r :value v} on success, {:result r :error t} when retries
+  are exhausted, and {:result r} when the run itself failed."
+  [runner workflow input opts {:keys [kind shape parse!]}]
+  (let [retries (long (get opts :edn-retries 1))]
+    (loop [attempt 0, prompt input]
+      (let [r (safe-run runner workflow prompt opts)]
+        (if-not (k/ok? r)
+          {:result r}
+          (let [parsed (try
+                         {:value (parse! (result->map kind r))}
+                         (catch Throwable t {:error t}))]
+            (cond
+              (not (contains? parsed :error))
+              {:result r :value (:value parsed)}
+
+              (< attempt retries)
+              (recur (inc attempt)
+                     (repair-prompt input kind shape (:text r)
+                                    (ex-message (:error parsed))))
+
+              :else
+              {:result r :error (:error parsed)})))))))
+
 ;; --- canonical nodes --------------------------------------------------------
 
 (defmethod run-node :agent
@@ -293,19 +307,8 @@
 
 (defn- step-result
   [name reply]
-  (cond
-    (and (map? reply) (= :result (:karcarthy/type reply)))
-    reply
-
-    (map? reply)
-    (k/result (cond-> reply
-                (not (contains? reply :step)) (assoc :step name)
-                (not (contains? reply :raw)) (assoc :raw {:step name})))
-
-    :else
-    (k/result {:step name
-               :text (str reply)
-               :raw  {:step name}})))
+  (k/coerce-result reply {:step name
+                          :raw  {:step name}}))
 
 (defmethod run-node :step
   [_runner {:keys [f name call?] :as node} input opts]
@@ -326,6 +329,21 @@
           (recur (:text r) (rest indexed-steps) r)
           r)))))                                    ; short-circuit on failure
 
+(defn- section-label [idx r]
+  (or (:agent r) (:step r) (str "branch-" idx)))
+
+(defn- sections
+  "Join results into labeled sections, so a downstream workflow reading the
+  flowing text can attribute each part - and see failures - instead of
+  receiving anonymous prose. Structured access stays on :results."
+  [results]
+  (str/join "\n\n"
+            (keep (fn [[idx r]]
+                    (cond
+                      (:text r)  (str "## " (section-label idx r) "\n" (:text r))
+                      (:error r) (str "## " (section-label idx r) " (failed)\n" (:error r))))
+                  (map-indexed vector results))))
+
 (defn- branch! [runner {:keys [branches max-concurrency]} input opts]
   (let [results  (dispatch max-concurrency
                            (fn [[idx branch]]
@@ -333,32 +351,38 @@
                            (map-indexed vector branches))]
     (k/result {:ok?      (every? k/ok? results)
                :results  results
-               :text     (str/join "\n\n" (keep :text results))})))
+               :text     (sections results)})))
 
 (defn- route! [runner source routes default input opts]
-  (let [r (safe-run runner source input (descend opts :source))]
-    (if-not (k/ok? r)
-      r
-      (try
-        (let [m        (result->map :route r)
-              label    (:route m)
-              workflow (or (get routes label) default)]
-          (cond
-            (not (contains? m :route))
-            (reject :invalid-route
-                    "route output must contain :route"
-                    {:output m :result r})
+  (let [shape  (str "{:route <label>} where <label> is one of "
+                    (pr-str (vec (keys routes)))
+                    (when default
+                      " (any other label falls back to the default workflow)"))
+        parse! (fn [m]
+                 (when-not (contains? m :route)
+                   (throw (ex-info "route output must contain :route" {:output m})))
+                 (let [label (:route m)]
+                   (when-not (or (contains? routes label) default)
+                     (throw (ex-info (str "no route for label: " (pr-str label))
+                                     {:karcarthy/error :no-route :label label})))
+                   label))
+        {:keys [result error] :as parsed}
+        (elicit! runner source input (descend opts :source)
+                 {:kind :route :shape shape :parse! parse!})]
+    (cond
+      (not (k/ok? result)) result
 
-            workflow
-            (if (contains? routes label)
-              (safe-run runner workflow input (descend opts :routes label))
-              (safe-run runner workflow input (descend opts :default)))
+      error
+      (if (= :no-route (:karcarthy/error (ex-data error)))
+        (k/result {:ok? false :error :no-route :label (:label (ex-data error))
+                   :text (ex-message error)})
+        (reject :invalid-route (ex-message error) {:result result}))
 
-            :else
-            (k/result {:ok? false :error :no-route :label label
-                       :text (str "no route for label: " (pr-str label))})))
-        (catch Throwable t
-          (reject :invalid-route (.getMessage t) {:result r}))))))
+      :else
+      (let [label (:value parsed)]
+        (if (contains? routes label)
+          (safe-run runner (get routes label) input (descend opts :routes label))
+          (safe-run runner default input (descend opts :default)))))))
 
 (defn- judge!
   "Run `evaluator` against a draft, returning {:accept? :feedback :evaluation}."
@@ -368,28 +392,28 @@
                     "\n{:accept? true}"
                     "\nor"
                     "\n{:accept? false :feedback \"specific, actionable feedback\"}")
-        r      (safe-run runner evaluator prompt opts)]
-    (if-not (k/ok? r)
-      {:accept? false :feedback (:text r) :evaluation r}
-      (try
-        (let [m (result->map :evaluation r)]
-          (cond
-            (not (contains? m :accept?))
-            {:accept? false :feedback "evaluation output must contain :accept?" :evaluation r}
+        parse! (fn [m]
+                 (cond
+                   (not (contains? m :accept?))
+                   (throw (ex-info "evaluation output must contain :accept?" {:output m}))
 
-            (not (boolean? (:accept? m)))
-            {:accept? false :feedback "evaluation :accept? must be true or false" :evaluation r}
+                   (not (boolean? (:accept? m)))
+                   (throw (ex-info "evaluation :accept? must be true or false" {:output m}))
 
-            (:accept? m)
-            {:accept? true :feedback (:feedback m) :evaluation r}
+                   (and (not (:accept? m)) (not (string? (:feedback m))))
+                   (throw (ex-info "rejected evaluations must include string :feedback" {:output m}))
 
-            (string? (:feedback m))
-            {:accept? false :feedback (:feedback m) :evaluation r}
-
-            :else
-            {:accept? false :feedback "rejected evaluations must include string :feedback" :evaluation r}))
-        (catch Throwable t
-          {:accept? false :feedback (.getMessage t) :evaluation r})))))
+                   :else
+                   (select-keys m [:accept? :feedback])))
+        {:keys [result error] :as parsed}
+        (elicit! runner evaluator prompt opts
+                 {:kind  :evaluation
+                  :shape "{:accept? true} or {:accept? false :feedback \"...\"}"
+                  :parse! parse!})]
+    (cond
+      (not (k/ok? result)) {:accept? false :feedback (:text result) :evaluation result}
+      error                {:accept? false :feedback (ex-message error) :evaluation result}
+      :else                (assoc (:value parsed) :evaluation result))))
 
 (defn- revise! [runner {:keys [worker evaluator max-rounds]} input opts]
   (loop [round 1, worker-input input]
@@ -411,18 +435,19 @@
 
   The planner must reply with EDN `{:subtasks [\"...\"]}`."
   [runner planner input opts]
-  (let [r (safe-run runner planner input (descend opts :planner))]
-    (if-not (k/ok? r)
-      r
-      (try
-        (let [m        (result->map :planner r)
-              subtasks (:subtasks m)]
-          (if (and (vector? subtasks) (every? string? subtasks))
-            subtasks
-            (throw (ex-info "planner output must be {:subtasks [string ...]}"
-                            {:output m :result r}))))
-        (catch Throwable t
-          (reject :invalid-subtasks (.getMessage t) {:result r}))))))
+  (let [parse! (fn [m]
+                 (let [subtasks (:subtasks m)]
+                   (when-not (and (vector? subtasks) (every? string? subtasks))
+                     (throw (ex-info "planner output must be {:subtasks [string ...]}"
+                                     {:output m})))
+                   subtasks))
+        {:keys [result error] :as parsed}
+        (elicit! runner planner input (descend opts :planner)
+                 {:kind :planner :shape "{:subtasks [\"...\"]}" :parse! parse!})]
+    (cond
+      (not (k/ok? result)) result
+      error                (reject :invalid-subtasks (ex-message error) {:result result})
+      :else                (:value parsed))))
 
 (defn- delegate! [runner {:keys [planner worker max-concurrency]} input opts]
   (let [subtasks (plan! runner planner input opts)]
@@ -528,24 +553,24 @@
   (let [input (input->text input)]
     (if-not (:observe opts)
       (run-node runner workflow input opts)
-      (let [span-id        (span-id)
+      (let [span-id        (obs/span-id)
             parent-span-id (:karcarthy/parent-span-id opts)
             started-ns     (System/nanoTime)
             opts'          (assoc opts :karcarthy/parent-span-id span-id)]
-        (observe! opts (event :start span-id parent-span-id workflow opts))
+        (obs/observe! opts (event :start span-id parent-span-id workflow opts))
         (try
           (let [result (run-node runner workflow input opts')]
-            (observe! opts (event :finish span-id parent-span-id workflow
-                                  (assoc opts
-                                         :duration-ms (duration-ms started-ns)
-                                         :ok? (k/ok? result))))
+            (obs/observe! opts (event :finish span-id parent-span-id workflow
+                                      (assoc opts
+                                             :duration-ms (obs/duration-ms started-ns)
+                                             :ok? (k/ok? result))))
             result)
           (catch Throwable t
-            (observe! opts (event :error span-id parent-span-id workflow
-                                  (assoc opts
-                                         :duration-ms (duration-ms started-ns)
-                                         :ok? false
-                                         :error (or (.getMessage t) (str t)))))
+            (obs/observe! opts (event :error span-id parent-span-id workflow
+                                      (assoc opts
+                                             :duration-ms (obs/duration-ms started-ns)
+                                             :ok? false
+                                             :error (or (.getMessage t) (str t)))))
             (throw t)))))))
 
 (defn run
@@ -559,7 +584,13 @@
   `:input` is the initial task/user message/state. A string is passed as the
   prompt. A map with `:prompt` uses that string as the prompt and appends the
   remaining keys as EDN. Other EDN input is rendered with `pr-str` before
-  entering the text-threaded workflow interpreter."
+  entering the text-threaded workflow interpreter.
+
+  `:options` keys read by the interpreter:
+    :observe      fn called with each observation event map
+    :edn-retries  how many times a node re-asks the model when its EDN reply
+                  fails to parse or validate (default 1; 0 fails fast)
+  Remaining options are passed through to the runner."
   [request]
   (let [[runner workflow input opts] (run-request->args request)]
     (run* runner workflow input opts)))
@@ -1029,7 +1060,7 @@
 (defmethod run-node :dynamic
   [runner {:keys [agent max-steps]} input opts]
   (let [st (or (:state opts) (state))]
-    (loop [step 1, last-result nil]
+    (loop [step 1, last-result nil, failures 0]
       (if (and max-steps (> step max-steps))
         (k/result {:agent (:name agent)
                    :ok?   false
@@ -1050,16 +1081,28 @@
                             (catch Throwable t
                               {:error t}))]
               (if-let [t (:error outcome)]
-                (k/result {:agent (:name agent)
-                           :ok?   false
-                           :error (or (ex-message t) (str t))
-                           :text  (:text agent-result)
-                           :state (snapshot st)
-                           :raw   {:agent agent-result}})
+                ;; An invalid op is fed back as the last result - like a tool
+                ;; error in an agent loop - so the agent can correct itself;
+                ;; consecutive failures beyond :edn-retries abort the run.
+                (let [failures (inc failures)
+                      message  (or (ex-message t) (str t))]
+                  (if (> failures (long (get opts :edn-retries 1)))
+                    (k/result {:agent (:name agent)
+                               :ok?   false
+                               :error message
+                               :text  (:text agent-result)
+                               :state (snapshot st)
+                               :raw   {:agent agent-result}})
+                    (recur (inc step)
+                           (k/result {:agent (:name agent)
+                                      :ok?   false
+                                      :error message
+                                      :text  (:text agent-result)})
+                           failures)))
                 (let [{:keys [op result]} outcome]
                   (if (= :complete (:op op))
                     result
-                    (recur (inc step) result)))))))))))
+                    (recur (inc step) result 0)))))))))))
 
 (defmacro defworkflow
   "Define a var holding a workflow, validating at load time that it is runnable.

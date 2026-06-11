@@ -1,5 +1,6 @@
 (ns karcarthy.runner.codex-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [karcarthy.core :as k]
             [karcarthy.runner.codex :as codex]))
 
@@ -26,8 +27,16 @@
       (is (= "/tmp/karc" (after argv "--cd")))
       (is (= "gpt-5" (after argv "--model")))
       (is (some #{"--json"} argv))
-      (is (re-find #"Agent name: researcher" (last argv)))
-      (is (re-find #"Research carefully" (last argv))))))
+      (is (= "-" (last argv))))))
+
+(deftest prompt-carries-instructions-and-input
+  (testing "the stdin prompt folds in the agent spec and the flowing input"
+    (let [p (codex/prompt (k/agent {:name "researcher"
+                                    :instructions "Research carefully."})
+                          "find X")]
+      (is (re-find #"Agent name: researcher" p))
+      (is (re-find #"Research carefully" p))
+      (is (re-find #"Input:\nfind X" p)))))
 
 (deftest command-building-model-override
   (testing "runner :model overrides the agent model"
@@ -38,7 +47,7 @@
       (is (= "gpt-5.1" (after argv "--model"))))))
 
 (deftest codex-runner-runs-a-command
-  (testing "the runner writes workflow input to stdin and returns stdout"
+  (testing "the runner writes the full prompt (with input) to stdin"
     (let [script (java.io.File/createTempFile "karcarthy_codex_runner" ".sh")
           _      (spit script "#!/bin/sh\nprintf 'seen: '\ncat\n")
           _      (.setExecutable script true)
@@ -48,9 +57,12 @@
                               (k/agent {:name "codex" :instructions "echo input"})
                               "hello")]
       (is (k/ok? result))
-      (is (= "seen: hello" (:text result)))
+      (is (str/starts-with? (:text result) "seen: "))
+      (is (str/includes? (:text result) "Agent name: codex"))
+      (is (str/includes? (:text result) "Input:\nhello"))
       (is (= :codex (get-in result [:raw :runner])))
-      (is (= "exec" (second (get-in result [:raw :argv])))))))
+      (is (= "exec" (second (get-in result [:raw :argv]))))
+      (is (= "-" (last (get-in result [:raw :argv])))))))
 
 (deftest subagent-config
   (testing "subagents lower to Codex custom agent config keys"

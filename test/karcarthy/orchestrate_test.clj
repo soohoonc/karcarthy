@@ -153,18 +153,25 @@
       (is (not (str/includes? (:text r) "[c]"))))))
 
 (deftest branch-runs-workflows
-  (testing "branches run on the same input; results are returned in order"
+  (testing "branches run on the same input; the joined text is labeled per branch"
     (let [r (run h (o/branch [a b c]) "hi")]
       (is (k/ok? r))
       (is (= 3 (count (:results r))))
       (is (= ["[a] hi" "[b] hi" "[c] hi"] (map :text (:results r))))
-      (is (= "[a] hi\n\n[b] hi\n\n[c] hi" (:text r))))))
+      (is (= "## a\n[a] hi\n\n## b\n[b] hi\n\n## c\n[c] hi" (:text r))))))
 
 (deftest branch-ok-requires-all-results
   (testing "one failing branch makes the whole node not-ok"
     (let [r (run (failing-runner #{"b"}) (o/branch [a b c]) "hi")]
       (is (not (k/ok? r)))
       (is (= 3 (count (:results r)))))))
+
+(deftest branch-text-reports-failed-sections
+  (testing "a throwing branch appears in the joined text as a failed section"
+    (let [r (run (throwing-runner #{"b"}) (o/branch [a b c]) "hi")]
+      (is (str/includes? (:text r) "## a\n[a] hi"))
+      (is (str/includes? (:text r) "(failed)\nboom"))
+      (is (str/includes? (:text r) "## c\n[c] hi")))))
 
 (deftest reduce-runs-a-reducer-workflow
   (testing "reduce is a workflow node, not a host function stored in data"
@@ -296,6 +303,43 @@
           r       (run runner flow "refund")]
       (is (not (k/ok? r)))
       (is (= :no-route (:error r))))))
+
+(deftest route-repairs-malformed-reply
+  (testing "a malformed router reply is re-asked with its error, then succeeds"
+    (let [prompts (atom [])
+          runner  (scripted-runner
+                   {"router" (fn [prompt]
+                               (swap! prompts conj prompt)
+                               (if (= 1 (count @prompts))
+                                 "billing, obviously"
+                                 "{:route :billing}"))})
+          r       (run runner (o/route router {:billing a}) "refund please")]
+      (is (k/ok? r))
+      (is (= "[a] refund please" (:text r)))
+      (is (= 2 (count @prompts)))
+      (is (str/includes? (second @prompts) "could not be used as route output"))
+      (is (str/includes? (second @prompts) "billing, obviously")))))
+
+(deftest delegate-repairs-malformed-plan
+  (testing "an invalid planner reply is corrected on the second attempt"
+    (let [calls  (atom 0)
+          runner (scripted-runner
+                  {"planner" (fn [_]
+                               (if (= 1 (swap! calls inc))
+                                 "{:subtasks \"oops\"}"
+                                 "{:subtasks [\"alpha\"]}"))})
+          r      (run runner (o/delegate planner a) "go")]
+      (is (k/ok? r))
+      (is (= ["alpha"] (:subtasks r))))))
+
+(deftest edn-retries-can-be-disabled
+  (testing ":edn-retries 0 restores fail-fast EDN parsing"
+    (let [calls  (atom 0)
+          runner (scripted-runner {"router" (fn [_] (swap! calls inc) "prose")})
+          r      (run runner (o/route router {:billing a}) "hi" {:edn-retries 0})]
+      (is (not (k/ok? r)))
+      (is (= :invalid-route (:error r)))
+      (is (= 1 @calls)))))
 
 (deftest nested-composition
   (testing "workflows nest: a pipe whose step is a branch"

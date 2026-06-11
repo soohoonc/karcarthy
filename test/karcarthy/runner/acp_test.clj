@@ -55,6 +55,36 @@
       (is (k/ok? result))
       (is (= "done" (:text result))))))
 
+(deftest acp-connection-reuses-one-process-across-runs
+  (testing "connect! pays initialize once; each run is one session + prompt turn"
+    (let [script (str
+                  "read init\n"
+                  "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{},\"agentInfo\":{\"name\":\"fake-acp\"}}}'\n"
+                  "read s1\n"
+                  "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"sessionId\":\"S1\"}}'\n"
+                  "read p1\n"
+                  "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"one\"}}}}'\n"
+                  "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"stopReason\":\"end_turn\"}}'\n"
+                  "read s2\n"
+                  "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"sessionId\":\"S2\"}}'\n"
+                  "read p2\n"
+                  "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S2\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"two\"}}}}'\n"
+                  "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"stopReason\":\"end_turn\"}}'\n")
+          connection (acp/connect! {:command ["sh" "-c" script] :timeout-ms 3000})
+          runner     (acp/acp-runner {:connection connection :timeout-ms 3000})
+          agent      (k/agent {:name "a" :instructions "i"})]
+      (try
+        (let [r1 (k/run-agent runner agent "first")
+              r2 (k/run-agent runner agent "second")]
+          (is (k/ok? r1))
+          (is (= "one" (:text r1)))
+          (is (= "S1" (:session-id r1)))
+          (is (k/ok? r2))
+          (is (= "two" (:text r2)))
+          (is (= "S2" (:session-id r2))))
+        (finally
+          (acp/close! connection))))))
+
 (deftest acp-runner-sets-model-through-config-options
   (testing "agent :model is mapped to an ACP model config option when advertised"
     (let [script (str

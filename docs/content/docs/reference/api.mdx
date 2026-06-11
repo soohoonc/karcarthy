@@ -414,7 +414,7 @@ Interprets workflow data through the runner passed to `run`.
 | `:runner` | A value implementing the runner protocol. |
 | `:workflow` | An agent or workflow node. |
 | `:input` | The initial value given to the workflow. |
-| `:options` | Optional interpreter/runtime options such as `:observe`. |
+| `:options` | Optional interpreter/runtime options such as `:observe` and `:edn-retries` (how many times a node re-asks the model when its EDN reply fails to parse or validate; default 1, `0` fails fast). |
 
 Input rendering:
 
@@ -539,8 +539,9 @@ extra `claude` args.
 ```
 
 Runs agent calls through Codex. The current implementation drives `codex exec`.
-The flowing workflow input is written to stdin, and the agent name/instructions
-become the Codex prompt.
+The full prompt - agent name, instructions, and the flowing workflow input -
+is written to stdin, with `-` as the positional prompt, so large inputs are
+neither dropped nor limited by argv size.
 
 ```clojure
 (k/codex-runner {:dir "."
@@ -628,7 +629,7 @@ Options:
 | `:env` | Extra environment variables. |
 | `:dir` | Working directory. |
 | `:timeout-ms` | Kill the command after this many milliseconds. |
-| `:shell` | argv prefix used for string commands; defaults to `["sh" "-lc"]`. |
+| `:shell` | argv prefix used for string commands; defaults to `["sh" "-c"]`. Deliberately not a login shell: profile scripts that print to stdout would corrupt the result text. Pass `["bash" "-lc"]` when a command needs the login environment. |
 
 `process-runner` does not accept a function of `k/agent`. Different commands
 mean different process runner values; choose one before calling `run`.

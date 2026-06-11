@@ -22,12 +22,6 @@
                     {:value x})))
   x)
 
-(defn- keyword! [label x]
-  (when-not (keyword? x)
-    (throw (ex-info (str label " expects a keyword")
-                    {:value x})))
-  x)
-
 (defn- map! [label x]
   (when-not (map? x)
     (throw (ex-info (str label " expects a map")
