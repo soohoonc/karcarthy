@@ -960,43 +960,104 @@
      (remember! state op result))))
 
 (def dynamic-reference
-  "Prompt fragment for dynamic workflow agents."
+  "Prompt fragment teaching a dynamic workflow agent the op protocol: how the
+  loop works, every op with its meaning, the workflow grammar, EDN rules, and
+  a worked example."
   (str/join
    "\n"
-   ["You are the agent running one karcarthy dynamic workflow."
-    "Output exactly one EDN op map. Do not output prose."
+   ["You are the orchestrator of one karcarthy dynamic workflow run."
     ""
-    "Ops:"
+    "HOW THIS WORKS"
+    "karcarthy runs agents and workflows described as plain EDN data. You hold a"
+    "registry of named agents and named workflows. Each step you see the task,"
+    "the registry (AGENTS / WORKFLOWS below), the run HISTORY, and your last"
+    "op's result; you reply with EXACTLY ONE EDN op map. The host executes it"
+    "and shows you the result next step. End the run with :complete."
+    ""
+    "OPS (agent and workflow names are strings)"
     "{:op :define :agent {:name \"writer\" :instructions \"...\" :model \"sonnet\"}}"
+    "  register an agent; :name and :instructions required, :description /"
+    "  :model / :tools [\"...\"] optional."
     "{:op :define :name \"draft\" :workflow WORKFLOW}"
+    "  register a workflow built from the grammar below."
     "{:op :patch :agent \"writer\" :merge {:instructions \"...\"}}"
-    "{:op :patch :workflow \"draft\" :merge MAP}"
-    "{:op :remove :agent \"writer\"}"
-    "{:op :remove :workflow \"draft\"}"
+    "{:op :patch :workflow \"draft\" :merge {...}}"
+    "  merge fields into a registered agent or workflow."
+    "{:op :remove :agent \"writer\"}   {:op :remove :workflow \"draft\"}"
+    "  delete from the registry."
     "{:op :call :agent \"writer\" :input \"...\"}"
     "{:op :call :workflow \"draft\" :input \"...\"}"
+    "  run the target once on :input; its result is your next LAST RESULT."
     "{:op :spawn :agent \"reviewer\" :inputs [\"a\" \"b\"]}"
     "{:op :spawn :workflow \"review\" :inputs [\"a\" \"b\"]}"
+    "  run the target once per input, concurrently; results come back in order."
     "{:op :complete :text \"final answer\"}"
+    "  finish the run; :text is the final answer to the task."
     ""
-    "Late-bound refs inside workflows:"
-    "{:karcarthy/type :agent-ref :name \"agent-name\"}"
-    "{:karcarthy/type :workflow-ref :name \"workflow-name\"}"]))
+    "WORKFLOW grammar (any WORKFLOW position takes an agent map, a ref, or a node)"
+    "{:karcarthy/type :agent-ref :name \"writer\"}       an agent from the registry"
+    "{:karcarthy/type :workflow-ref :name \"draft\"}     a workflow from the registry"
+    "  (refs resolve at call time, so later patches take effect)"
+    "{:karcarthy/type :pipe :steps [WORKFLOW ...]}      run in sequence, text flows"
+    "{:karcarthy/type :branch :branches [WORKFLOW ...]} same input to each"
+    "{:karcarthy/type :delegate :planner WORKFLOW :worker WORKFLOW}"
+    "  planner replies {:subtasks [\"...\"]}; worker runs once per subtask"
+    "{:karcarthy/type :reduce :source BRANCH-OR-DELEGATE :reducer WORKFLOW}"
+    "{:karcarthy/type :revise :worker WORKFLOW :evaluator WORKFLOW :max-rounds 3}"
+    "{:karcarthy/type :route :source WORKFLOW :routes {:label WORKFLOW}}"
+    "{:karcarthy/type :continue :source WORKFLOW :to WORKFLOW}"
+    ""
+    "RULES"
+    "- Reply with EDN, not JSON: keywords like :op, double-quoted strings,"
+    "  unquoted true/false, no commas needed."
+    "- Exactly one op map per reply. No prose around it (an ```edn fence is ok)."
+    "- Refer to registered agents and workflows by their string :name."
+    "- If LAST RESULT shows :ok? false, read its :error and send a corrected op."
+    ""
+    "EXAMPLE (one run, one op per step)"
+    "step 1 -> {:op :define :agent {:name \"researcher\""
+    "                               :instructions \"Answer with one short fact.\"}}"
+    "step 2 -> {:op :spawn :agent \"researcher\" :inputs [\"solar\" \"wind\"]}"
+    "step 3 -> {:op :complete :text \"solar: ...  wind: ...\"}"]))
 
-(defn- state-view [state]
-  (-> @state
-      (select-keys [:agents :workflows :history])
-      (update :agents update-vals
-              #(select-keys % [:karcarthy/type :name :description
-                               :instructions :model :tools :config]))))
+(def ^:private history-window
+  "How many of the most recent history entries the dynamic prompt shows."
+  10)
+
+(defn- render-lines
+  "One `render` line per item of `coll`, or a placeholder when it is empty."
+  [render coll]
+  (if (empty? coll)
+    "(none yet)"
+    (str/join "\n" (mapv render coll))))
+
+(defn- render-agents [agents]
+  (render-lines (fn [[_ agent]]
+                  (pr-str (select-keys agent [:karcarthy/type :name :description
+                                              :instructions :model :tools])))
+                agents))
+
+(defn- render-workflows [workflows]
+  (render-lines (fn [[n workflow]] (str (pr-str n) " " (pr-str workflow)))
+                workflows))
+
+(defn- render-history [history]
+  (let [recent (take-last history-window history)
+        elided (- (count history) (count recent))]
+    (str (when (pos? elided)
+           (str "(" elided " earlier steps elided)\n"))
+         (render-lines pr-str recent))))
 
 (defn- dynamic-prompt [task state last-result step]
-  (str dynamic-reference
-       "\n\nTASK:\n" task
-       "\n\nSTEP: " step
-       "\n\nSTATE EDN:\n" (pr-str (state-view state))
-       "\n\nLAST RESULT EDN:\n" (pr-str (compact-result last-result))
-       "\n\nOutput exactly one EDN op now."))
+  (let [{:keys [agents workflows history]} @state]
+    (str dynamic-reference
+         "\n\nTASK:\n" task
+         "\n\nSTEP: " step
+         "\n\nAGENTS (registered; target by :name):\n" (render-agents agents)
+         "\n\nWORKFLOWS (registered; target by name):\n" (render-workflows workflows)
+         "\n\nHISTORY (op and result, oldest first):\n" (render-history history)
+         "\n\nLAST RESULT EDN:\n" (pr-str (compact-result last-result))
+         "\n\nOutput exactly one EDN op now.")))
 
 (defmethod node? :dynamic
   [{:keys [agent max-steps]}]

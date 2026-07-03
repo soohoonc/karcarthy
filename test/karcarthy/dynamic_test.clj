@@ -128,6 +128,44 @@
       (is (= "version two" (get-in r [:state :agents "worker" :instructions])))
       (is (= "version two" (-> r :state :history (nth 4) :result :text))))))
 
+(deftest dynamic-reference-documents-every-op
+  (testing "the prompt curriculum names every op the interpreter accepts"
+    (doseq [op [":define" ":patch" ":remove" ":call" ":spawn" ":complete"]]
+      (is (str/includes? o/dynamic-reference (str "{:op " op))
+          (str op " op is documented")))))
+
+(deftest dynamic-prompt-lists-registered-agents
+  (testing "each step's prompt shows the agent roster with descriptions"
+    (let [prompts (atom [])
+          calls   (atom 0)
+          script  [{:op :define
+                    :agent {:name "writer"
+                            :description "Drafts short prose."
+                            :instructions "Write."}}
+                   {:op :complete :text "done"}]
+          runner  (k/mock-runner
+                   (fn [{:keys [prompt]}]
+                     (swap! prompts conj prompt)
+                     (pr-str (nth script (dec (swap! calls inc))))))
+          r       (o/run {:runner runner
+                          :workflow (o/dynamic (k/agent {:name "driver"
+                                                         :instructions "drive"}))
+                          :input "t"})]
+      (is (k/ok? r))
+      (is (str/includes? (first @prompts) "AGENTS"))
+      (is (str/includes? (first @prompts) "(none yet)"))
+      (is (str/includes? (second @prompts) "Drafts short prose.")))))
+
+(deftest dynamic-prompt-elides-old-history
+  (testing "long runs keep the prompt bounded by windowing history"
+    (let [st (o/state)]
+      (dotimes [i 15]
+        (o/step! (k/mock-runner) st
+                 {:op :define
+                  :agent {:name (str "a" i) :instructions "x"}}))
+      (let [prompt (#'o/dynamic-prompt "t" st nil 16)]
+        (is (str/includes? prompt "(5 earlier steps elided)"))))))
+
 (deftest dynamic-workflow-feeds-back-bad-ops-then-aborts
   (testing "an invalid op is retried once via feedback, then aborts the run"
     (let [calls          (atom 0)
