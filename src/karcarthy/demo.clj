@@ -10,7 +10,6 @@
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [karcarthy :as k]
-            [karcarthy.orchestrate :as o]
             [karcarthy.proc :as proc]))
 
 ;; --- Agents via defagent: the var name becomes the agent name --------------
@@ -35,10 +34,10 @@
    :model "sonnet"})
 
 ;; --- A workflow via defworkflow: validated at load time --------------------
-(o/defworkflow support-desk
-  (o/route triage
+(k/defworkflow support-desk
+  (k/route triage
            {:billing   billing
-            :technical (o/pipe technical reviewer)   ; draft, then review
+            :technical (k/pipe technical reviewer)   ; draft, then review
             :general   general}
            :default general))
 
@@ -70,8 +69,8 @@
   (println "\n=== Structured delegate/reduce with real subprocess workers ===")
   ;; The planner emits EDN data, each worker is `tr a-z A-Z` (uppercase via a
   ;; real subprocess), and the reducer receives the source result summary as EDN.
-  (let [workflow (o/reduce
-                  (o/delegate (k/agent {:name "split"
+  (let [workflow (k/reduce
+                  (k/delegate (k/agent {:name "split"
                                         :instructions "Return EDN subtasks."})
                               (k/agent {:name "shout"
                                         :instructions "uppercase"}))

@@ -44,7 +44,8 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 - **A runner** implements `karcarthy.core/Runner` (`-run`) and returns a
   result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
 - **Adding a workflow node:** add a constructor in `orchestrate.clj`, a `run-node`
-  defmethod, schema entries in `schema.clj`, and tests.
+  defmethod, schema entries in `schema.clj`, and tests. Option-taking
+  constructors guard their options with `karcarthy.core/reject-unknown!`.
 - **Model-facing EDN protocols self-repair.** Nodes that parse model replies
   (planner, evaluator, router, dynamic ops) re-ask the model with the error and
   its previous reply before failing (`:edn-retries` run option, default 1).

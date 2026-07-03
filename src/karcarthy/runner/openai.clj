@@ -77,12 +77,14 @@
              (proc/run [python script] {:in         req
                                         :dir        (:dir opts)
                                         :env        (:env opts)
-                                        :timeout-ms (:timeout-ms opts)})]
+                                        :timeout-ms (:timeout-ms opts)})
+             raw    {:runner :openai :exit exit :out out :err err
+                     :timed-out? timed-out? :argv [python script]}]
          (cond
            timed-out?
            (k/result {:agent (:name agent) :ok? false :text nil
                       :error "openai runner timed out"
-                      :raw   {:timed-out? true :err err}})
+                      :raw   raw})
 
            (seq (str/trim (or out "")))
            (try
@@ -91,10 +93,10 @@
                (k/result {:agent (:name agent) :ok? false
                           :text  (or (not-empty err) out)
                           :error (str "could not parse runner JSON: " (.getMessage e))
-                          :raw   {:exit exit :out out :err err}})))
+                          :raw   raw})))
 
            :else
            (k/result {:agent (:name agent) :ok? false
                       :text  (or (not-empty err) out)
                       :error (str "runner exited with status " exit)
-                      :raw   {:exit exit :out out :err err}})))))))
+                      :raw   raw})))))))

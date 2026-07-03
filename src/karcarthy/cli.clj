@@ -27,7 +27,10 @@
 
 (declare json->workflow)
 
-(def ^:dynamic *exit-on-error* true)
+(def ^:dynamic *exit-on-error*
+  "When true (the default), `-main` exits the JVM with status 1 after printing
+  an error. Rebind to false to keep failures in-process (REPL, tests)."
+  true)
 
 (def ^:private help-text
   (str
@@ -91,10 +94,14 @@
                       (if (contains? m "prompt")
                         (o/continue source to :prompt (g "prompt"))
                         (o/continue source to)))
-      "revise"      (o/revise (json->workflow (g "worker")) (json->workflow (g "evaluator"))
-                               :max-rounds (or (g "max-rounds") 3))
-      "dynamic"     (o/dynamic (json->workflow (g "agent"))
-                                :max-steps (or (g "max-steps") 25))
+      "revise"      (let [worker    (json->workflow (g "worker"))
+                          evaluator (json->workflow (g "evaluator"))]
+                      (if-let [n (g "max-rounds")]
+                        (o/revise worker evaluator :max-rounds n)
+                        (o/revise worker evaluator)))
+      "dynamic"     (if-let [n (g "max-steps")]
+                      (o/dynamic (json->workflow (g "agent")) :max-steps n)
+                      (o/dynamic (json->workflow (g "agent"))))
       (throw (ex-info (str "unknown workflow type: " (pr-str (g "type"))) {:node m})))))
 
 (defn- mock [responses]
@@ -106,19 +113,21 @@
          (str "[" (:name agent) "] " prompt))))
     (k/mock-runner)))
 
-(defn- runner
+(def ^:private claude-workdir "/tmp/karc")
+
+(defn- request->runner
   "Build the runner named in the request. \"claude\" uses lean sub-agent
   defaults (replace mode, tools off) so cross-language agents answer directly."
   [req]
-  (let [name (get req "runner")]
-    (if (= name "claude")
-      (cc/claude-runner {:system-prompt-mode :replace
-                      :max-turns          4
-                      :model              "haiku"
-                      :dir                "/tmp/karc"
-                      :extra-args         ["--disallowedTools"
-                                           "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]})
-      (mock (get req "mock-responses")))))
+  (if (= "claude" (get req "runner"))
+    (do (.mkdirs (java.io.File. ^String claude-workdir))
+        (cc/claude-runner {:system-prompt-mode :replace
+                           :max-turns          4
+                           :model              "haiku"
+                           :dir                claude-workdir
+                           :extra-args         ["--disallowedTools"
+                                                "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]}))
+    (mock (get req "mock-responses"))))
 
 (defn- result->json [r]
   (try
@@ -145,8 +154,8 @@
 (defn- invoke! [req]
   (let [workflow (json->workflow (get req "workflow"))
         input    (get req "input" "")
-        h        (runner req)]
-    (o/run {:runner h
+        runner   (request->runner req)]
+    (o/run {:runner runner
             :workflow workflow
             :input input})))
 
@@ -173,7 +182,7 @@
       (throw (ex-info "--mock-response expects AGENT=TEXT" {:value s})))
     [k v]))
 
-(defn- opts [args]
+(defn- args->opts [args]
   (loop [args (seq args)
          opts {:positionals [] :tools [] :mock-responses {}}]
     (if-not args
@@ -255,22 +264,21 @@
 
 (defn- dispatch! [args]
   (let [[cmd & rest] args
-        parsed (opts rest)]
+        opts (args->opts rest)]
     (cond
-      (or (:help? parsed) (= cmd "help") (= cmd "--help") (= cmd "-h")) help-text
-      (= cmd "agent")                  (render (invoke! (agent->request parsed)) parsed)
-      (= cmd "run")                    (render (invoke! (file->request parsed)) parsed)
-      (= cmd "json")                   (json-command! parsed)
+      (or (:help? opts) (= cmd "help") (= cmd "--help") (= cmd "-h")) help-text
+      (= cmd "agent")                  (render (invoke! (agent->request opts)) opts)
+      (= cmd "run")                    (render (invoke! (file->request opts)) opts)
+      (= cmd "json")                   (json-command! opts)
       (= cmd "demo")                   (render (invoke! {"workflow" {"type" "agent"
                                                                       "name" "echo"
                                                                       "instructions" "Echo the input."}
                                                          "input"    "hi"})
-                                               parsed)
+                                               opts)
       (nil? cmd)                       help-text
       :else                            (throw (ex-info (str "unknown command: " cmd) {:command cmd})))))
 
 (defn -main [& args]
-  (.mkdirs (java.io.File. "/tmp/karc"))
   (let [out (try
               (if (and (empty? args) (System/console))
                 help-text

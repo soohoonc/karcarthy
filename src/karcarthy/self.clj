@@ -99,7 +99,8 @@
   :description, :instructions, :model, :tools or :config) and retry,
   or with a plain final answer.
   Stops at the final answer or `:max-rounds` (default 5)."
-  [agent & {:keys [max-rounds] :or {max-rounds 5}}]
+  [agent & {:keys [max-rounds] :or {max-rounds 5} :as opts}]
+  (k/reject-unknown! "evolve" [:max-rounds] opts)
   {:karcarthy/type :evolve :agent agent :max-rounds max-rounds})
 
 (defmethod o/node? :evolve
@@ -110,39 +111,29 @@
 
 (def ^:private no-patch ::no-patch)
 
-(def ^:private patch-keys
-  #{:description :instructions :model :tools :config})
+(def ^:private patch-checks
+  "Patchable agent fields: key -> [valid? description]. The single source of
+  truth for both the allowed key set and the per-key validation."
+  {:description  [string? "a string"]
+   :instructions [string? "a string"]
+   :model        [(some-fn nil? string?) "a string or nil"]
+   :tools        [#(and (vector? %) (every? string? %)) "a vector of strings"]
+   :config       [map? "a map"]})
 
-(defn- patch!
+(defn- validate-patch!
+  "Throw unless `patch` is a well-formed :karcarthy/patch for `agent`;
+  returns `patch`."
   [agent patch]
   (when-not (map? patch)
     (throw (ex-info ":karcarthy/patch must be a map" {:patch patch})))
-  (when-let [unknown (seq (remove patch-keys (keys patch)))]
+  (when-let [unknown (seq (remove (set (keys patch-checks)) (keys patch)))]
     (throw (ex-info ":karcarthy/patch contains unknown keys"
                     {:unknown (vec unknown)
-                     :supported (vec patch-keys)})))
-  (when (and (contains? patch :instructions)
-             (not (string? (:instructions patch))))
-    (throw (ex-info ":karcarthy/patch :instructions must be a string"
-                    {:patch patch})))
-  (when (and (contains? patch :description)
-             (not (string? (:description patch))))
-    (throw (ex-info ":karcarthy/patch :description must be a string"
-                    {:patch patch})))
-  (when (and (contains? patch :model)
-             (some? (:model patch))
-             (not (string? (:model patch))))
-    (throw (ex-info ":karcarthy/patch :model must be a string or nil"
-                    {:patch patch})))
-  (when (and (contains? patch :tools)
-             (not (and (vector? (:tools patch))
-                       (every? string? (:tools patch)))))
-    (throw (ex-info ":karcarthy/patch :tools must be a vector of strings"
-                    {:patch patch})))
-  (when (and (contains? patch :config)
-             (not (map? (:config patch))))
-    (throw (ex-info ":karcarthy/patch :config must be a map"
-                    {:patch patch})))
+                     :supported (vec (keys patch-checks))})))
+  (doseq [[k [valid? expected]] patch-checks]
+    (when (and (contains? patch k) (not (valid? (get patch k))))
+      (throw (ex-info (str ":karcarthy/patch " k " must be " expected)
+                      {:patch patch}))))
   (let [agent' (merge agent patch)]
     (when-not (k/agent? agent')
       (throw (ex-info ":karcarthy/patch would produce an invalid agent"
@@ -157,7 +148,7 @@
   (try
     (let [v (extract-edn text)]
       (if (and (map? v) (contains? v :karcarthy/patch))
-        (patch! agent (:karcarthy/patch v))
+        (validate-patch! agent (:karcarthy/patch v))
         no-patch))
     (catch Exception e
       (if (= "no EDN map found in output" (.getMessage e))

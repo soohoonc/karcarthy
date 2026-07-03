@@ -6,8 +6,7 @@
   a caller; they do not write files.
 
   `codex-runner` drives Codex CLI non-interactive mode (`codex exec`)."
-  (:require [clojure.string :as str]
-            [karcarthy.core :as k]
+  (:require [karcarthy.core :as k]
             [karcarthy.proc :as proc]))
 
 (defn- option-name [x]
@@ -104,20 +103,10 @@
    (reify k/Runner
      (-run [_ agent input opts]
        (let [opts (merge {:trim? true} default-options opts)
-             argv (command agent opts)
-             {:keys [exit out err timed-out?]}
-             (proc/run argv {:in         (prompt agent input)
-                             :dir        (or (:dir opts) (:cwd opts))
-                             :env        (:env opts)
-                             :timeout-ms (:timeout-ms opts)})]
-         (k/result {:agent (:name agent)
-                    :ok?   (and (not timed-out?) (= 0 exit))
-                    :text  (cond-> (or out "") (:trim? opts) str/trim)
-                    :error (cond timed-out?    "codex timed out"
-                                 (not= 0 exit) (str "codex exited with status " exit))
-                    :raw   {:runner :codex
-                            :exit exit
-                            :out out
-                            :err err
-                            :timed-out? timed-out?
-                            :argv argv}}))))))
+             argv (command agent opts)]
+         (proc/->result (proc/run argv {:in         (prompt agent input)
+                                        :dir        (or (:dir opts) (:cwd opts))
+                                        :env        (:env opts)
+                                        :timeout-ms (:timeout-ms opts)})
+                        {:agent (:name agent) :label "codex" :trim? (:trim? opts)
+                         :raw   {:runner :codex :argv argv}}))))))

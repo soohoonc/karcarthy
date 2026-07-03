@@ -6,9 +6,15 @@
   helpers. Observer errors are swallowed so observation can never fail a run."
   (:import [java.util UUID]))
 
-(defn span-id [] (str (UUID/randomUUID)))
+(defn span-id
+  "Return a fresh random span id (a UUID string)."
+  []
+  (str (UUID/randomUUID)))
 
-(defn now-ms [] (System/currentTimeMillis))
+(defn now-ms
+  "Current wall-clock time in epoch milliseconds."
+  []
+  (System/currentTimeMillis))
 
 (defn duration-ms
   "Milliseconds elapsed since `started-ns` (a `System/nanoTime` value)."
@@ -43,3 +49,31 @@
     (:duration-ms attrs) (assoc :duration-ms (:duration-ms attrs))
     (contains? attrs :ok?) (assoc :ok? (:ok? attrs))
     (:error attrs)       (assoc :error (:error attrs))))
+
+(defn with-span
+  "Run `(body span-id)` bracketed by :start/:finish/:error events built by
+  `(make-event phase span-id parent-span-id attrs)`. When `opts` has no
+  `:observe` callback, calls `body` with nil and emits nothing."
+  [opts make-event body]
+  (if-not (:observe opts)
+    (body nil)
+    (let [span-id        (span-id)
+          parent-span-id (:karcarthy/parent-span-id opts)
+          started-ns     (System/nanoTime)]
+      (observe! opts (make-event :start span-id parent-span-id opts))
+      (try
+        (let [result (body span-id)]
+          (observe! opts (make-event :finish span-id parent-span-id
+                                     (assoc opts
+                                            :duration-ms (duration-ms started-ns)
+                                            ;; (boolean (:ok? result)) is k/ok?,
+                                            ;; inlined to keep observe core-free
+                                            :ok? (boolean (:ok? result)))))
+          result)
+        (catch Throwable t
+          (observe! opts (make-event :error span-id parent-span-id
+                                     (assoc opts
+                                            :duration-ms (duration-ms started-ns)
+                                            :ok? false
+                                            :error (or (ex-message t) (str t)))))
+          (throw t))))))

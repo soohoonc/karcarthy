@@ -10,7 +10,10 @@
             [karcarthy.core :as k])
   (:import [java.util.concurrent TimeUnit]))
 
-(def protocol-version 1)
+(def protocol-version
+  "The ACP protocol version this client requests during `initialize`. The
+  runner throws when the agent answers with a different version."
+  1)
 
 (defn request
   "Build a JSON-RPC request map."
@@ -49,15 +52,12 @@
 (defn prompt-params
   "Build ACP `session/prompt` params for a karcarthy agent and input."
   [session-id agent input opts]
-  (let [text (prompt-text agent input opts)]
-    (cond-> {:sessionId session-id
-             :prompt    [{:type "text" :text text}]}
-      true
-      (assoc :_meta
-             {:karcarthy.dev/agent
-              (cond-> {:name (:name agent)}
-                (:model agent)  (assoc :model (:model agent))
-                (:tools agent)  (assoc :tools (:tools agent)))}))))
+  {:sessionId session-id
+   :prompt    [{:type "text" :text (prompt-text agent input opts)}]
+   :_meta     {:karcarthy.dev/agent
+               (cond-> {:name (:name agent)}
+                 (:model agent) (assoc :model (:model agent))
+                 (:tools agent) (assoc :tools (:tools agent)))}})
 
 (defn- absolute-path [path]
   (.getAbsolutePath (io/file (or path "."))))

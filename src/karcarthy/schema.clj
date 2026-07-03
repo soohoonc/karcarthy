@@ -145,12 +145,12 @@
      "required" ["type" "name" "instructions"]
      "additionalProperties" false
      "properties" {"type" {"const" "agent"}
-	                   "name" {"type" "string" "minLength" 1}
-	                   "description" {"type" "string"}
-	                   "instructions" {"type" "string"}
-	                   "model" {"type" "string"}
-	                   "tools" {"type" "array" "items" {"type" "string"}}
-	                   "config" {"type" "object"}}}
+                   "name" {"type" "string" "minLength" 1}
+                   "description" {"type" "string"}
+                   "instructions" {"type" "string"}
+                   "model" {"type" "string"}
+                   "tools" {"type" "array" "items" {"type" "string"}}
+                   "config" {"type" "object"}}}
 
     "pipe"
     {"type" "object"

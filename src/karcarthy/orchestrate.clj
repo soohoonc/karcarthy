@@ -60,10 +60,7 @@
   partial result map, or a full result map. Step nodes are Clojure-local and are
   not EDN/JSON portable."
   [f & {:keys [name call?] :as opts}]
-  (when-let [unknown (seq (remove #{:name :call?} (keys opts)))]
-    (throw (ex-info "step contains unknown options"
-                    {:unknown (vec unknown)
-                     :supported [:name :call?]})))
+  (k/reject-unknown! "step" [:name :call?] opts)
   (cond-> {:karcarthy/type :step :f f}
     name (assoc :name (name-key name))
     call? (assoc :call? true)))
@@ -72,10 +69,7 @@
   "Run each workflow in `branches` on the same input. Options:
     :max-concurrency  max branch calls running at once."
   [branches & {:keys [max-concurrency] :as opts}]
-  (when-let [unknown (seq (remove #{:max-concurrency} (keys opts)))]
-    (throw (ex-info "branch contains unknown options"
-                    {:unknown (vec unknown)
-                     :supported [:max-concurrency]})))
+  (k/reject-unknown! "branch" [:max-concurrency] opts)
   (cond-> {:karcarthy/type :branch :branches (vec branches)}
     max-concurrency (assoc :max-concurrency max-concurrency)))
 
@@ -84,10 +78,7 @@
   subtask. Options:
     :max-concurrency  max worker calls running at once."
   [planner worker & {:keys [max-concurrency] :as opts}]
-  (when-let [unknown (seq (remove #{:max-concurrency} (keys opts)))]
-    (throw (ex-info "delegate contains unknown options"
-                    {:unknown (vec unknown)
-                     :supported [:max-concurrency]})))
+  (k/reject-unknown! "delegate" [:max-concurrency] opts)
   (cond-> {:karcarthy/type :delegate
            :planner        planner
            :worker         worker}
@@ -103,7 +94,8 @@
     {:input \"original input\"
      :subtasks [...]
      :results [{:agent \"...\" :ok? true :text \"...\"} ...]}"
-  [source reducer & {:keys [max-concurrency]}]
+  [source reducer & {:keys [max-concurrency] :as opts}]
+  (k/reject-unknown! "reduce" [:max-concurrency] opts)
   (let [node (if (sequential? source) (branch source) source)]
     (case (:karcarthy/type node)
       (:branch :delegate)
@@ -121,7 +113,8 @@
   The evaluator must reply with EDN:
     {:accept? true}
     {:accept? false :feedback \"what to improve\"}"
-  [worker evaluator & {:keys [max-rounds] :or {max-rounds 3}}]
+  [worker evaluator & {:keys [max-rounds] :or {max-rounds 3} :as opts}]
+  (k/reject-unknown! "revise" [:max-rounds] opts)
   {:karcarthy/type :revise :worker worker :evaluator evaluator :max-rounds max-rounds})
 
 (defn route
@@ -129,18 +122,18 @@
   `routes` on the original input. Matching is exact. Options:
     :default  workflow to run when the label is not in `routes`."
   [source routes & {:keys [default] :as opts}]
-  (if (contains? opts :default)
-    {:karcarthy/type :route :source source :routes routes :default default}
-    {:karcarthy/type :route :source source :routes routes}))
+  (k/reject-unknown! "route" [:default] opts)
+  (cond-> {:karcarthy/type :route :source source :routes routes}
+    (contains? opts :default) (assoc :default default)))
 
 (defn continue
   "Run `source`, then send its result text to `to`, preserving session ids when
   the runner supports them. Options:
     :prompt  override the prompt sent to `to`."
   [source to & {:keys [prompt] :as opts}]
-  (if (contains? opts :prompt)
-    {:karcarthy/type :continue :source source :to to :prompt prompt}
-    {:karcarthy/type :continue :source source :to to}))
+  (k/reject-unknown! "continue" [:prompt] opts)
+  (cond-> {:karcarthy/type :continue :source source :to to}
+    (contains? opts :prompt) (assoc :prompt prompt)))
 
 (defn agent-ref
   "A late-bound reference to an agent in a dynamic workflow run."
@@ -153,8 +146,12 @@
   {:karcarthy/type :workflow-ref :name (name-key name)})
 
 (defn dynamic
-  "Build a dynamic workflow. The agent emits EDN ops during the run."
-  [agent & {:keys [max-steps] :or {max-steps 25}}]
+  "Run `agent` in an op loop: each step it emits one EDN op to define, patch,
+  remove, call, or spawn agents and workflows (see `dynamic-reference`), until
+  it emits `{:op :complete ...}`. Options:
+    :max-steps  fail the run after this many ops (default 25)."
+  [agent & {:keys [max-steps] :or {max-steps 25} :as opts}]
+  (k/reject-unknown! "dynamic" [:max-steps] opts)
   {:karcarthy/type :dynamic
    :agent      agent
    :max-steps  max-steps})
@@ -190,7 +187,7 @@
     (update opts :karcarthy/path (fnil into []) path-segments)
     opts))
 
-(defn- event
+(defn- workflow-event
   [phase span-id parent-span-id workflow attrs]
   (let [type      (:karcarthy/type workflow)
         type-name (if type (name type) "unknown")]
@@ -214,9 +211,9 @@
                  :error     (or (.getMessage t) (str t))
                  :exception (.getName (class t))}))))
 
-(defn- dispatch
-  "Map `f` over `coll`, running at most `n` (default 16) calls concurrently via
-  a fixed thread pool. Returns results in order. `f` should not throw (wrap it
+(defn- bounded-pmap
+  "Like `mapv`, but with at most `n` (default 16) calls of `f` in flight at
+  once on a fixed thread pool, preserving order. `f` should not throw (wrap it
   in `safe-run`)."
   [n f coll]
   (let [n    (max 1 (or n 16))
@@ -269,7 +266,7 @@
        "\nYour previous reply:\n" failed-text
        "\n\nReply with EDN only, matching: " shape))
 
-(defn- elicit!
+(defn elicit!
   "Run `workflow` on `input` and coerce its EDN reply with `parse!` (a fn of
   the reply map that returns a value, or throws with a correctable message).
 
@@ -338,22 +335,22 @@
   receiving anonymous prose. Structured access stays on :results."
   [results]
   (str/join "\n\n"
-            (keep (fn [[idx r]]
-                    (cond
-                      (:text r)  (str "## " (section-label idx r) "\n" (:text r))
-                      (:error r) (str "## " (section-label idx r) " (failed)\n" (:error r))))
-                  (map-indexed vector results))))
+            (keep-indexed (fn [idx r]
+                            (cond
+                              (:text r)  (str "## " (section-label idx r) "\n" (:text r))
+                              (:error r) (str "## " (section-label idx r) " (failed)\n" (:error r))))
+                          results)))
 
 (defn- branch! [runner {:keys [branches max-concurrency]} input opts]
-  (let [results  (dispatch max-concurrency
-                           (fn [[idx branch]]
-                             (safe-run runner branch input (descend opts :branches idx)))
-                           (map-indexed vector branches))]
+  (let [results  (bounded-pmap max-concurrency
+                               (fn [[idx branch]]
+                                 (safe-run runner branch input (descend opts :branches idx)))
+                               (map-indexed vector branches))]
     (k/result {:ok?      (every? k/ok? results)
                :results  results
                :text     (sections results)})))
 
-(defn- route! [runner source routes default input opts]
+(defn- route! [runner {:keys [source routes default]} input opts]
   (let [shape  (str "{:route <label>} where <label> is one of "
                     (pr-str (vec (keys routes)))
                     (when default
@@ -453,16 +450,16 @@
   (let [subtasks (plan! runner planner input opts)]
     (if (map? subtasks)
       subtasks
-      (let [results (dispatch max-concurrency
-                              (fn [[idx subtask]]
-                                (safe-run runner worker subtask (descend opts :worker idx)))
-                              (map-indexed vector subtasks))]
+      (let [results (bounded-pmap max-concurrency
+                                  (fn [[idx subtask]]
+                                    (safe-run runner worker subtask (descend opts :worker idx)))
+                                  (map-indexed vector subtasks))]
         (k/result {:ok?      (every? k/ok? results)
                    :subtasks subtasks
                    :results  results
                    :text     (str/join "\n\n" (keep :text results))})))))
 
-(defn- continue! [runner source to prompt input opts]
+(defn- continue! [runner {:keys [source to prompt]} input opts]
   (let [r1 (safe-run runner source input (descend opts :source))]
     (if-not (k/ok? r1)
       r1                                              ; bail if the first agent failed
@@ -495,12 +492,12 @@
     (throw (ex-info "reduce workflow requires :source and :reducer" {:node node}))))
 
 (defmethod run-node :route
-  [runner {:keys [source routes default]} input opts]
-  (route! runner source routes default input opts))
+  [runner node input opts]
+  (route! runner node input opts))
 
 (defmethod run-node :continue
-  [runner {:keys [source to prompt]} input opts]
-  (continue! runner source to prompt input opts))
+  [runner node input opts]
+  (continue! runner node input opts))
 
 (defmethod run-node :default
   [_ node _ _]
@@ -533,10 +530,7 @@
     (throw (ex-info "run expects a request map"
                     {:value request
                      :supported '(run {:runner ... :workflow ... :input ...})})))
-  (when-let [unknown (seq (remove run-request-keys (keys request)))]
-    (throw (ex-info "run request contains unknown options"
-                    {:unknown (vec unknown)
-                     :supported (vec run-request-keys)})))
+  (k/reject-unknown! "run request" run-request-keys request)
   (doseq [k [:runner :workflow]]
     (when-not (contains? request k)
       (throw (ex-info (str "run request requires " k) {:request request}))))
@@ -551,27 +545,13 @@
 (defn- run*
   [runner workflow input opts]
   (let [input (input->text input)]
-    (if-not (:observe opts)
-      (run-node runner workflow input opts)
-      (let [span-id        (obs/span-id)
-            parent-span-id (:karcarthy/parent-span-id opts)
-            started-ns     (System/nanoTime)
-            opts'          (assoc opts :karcarthy/parent-span-id span-id)]
-        (obs/observe! opts (event :start span-id parent-span-id workflow opts))
-        (try
-          (let [result (run-node runner workflow input opts')]
-            (obs/observe! opts (event :finish span-id parent-span-id workflow
-                                      (assoc opts
-                                             :duration-ms (obs/duration-ms started-ns)
-                                             :ok? (k/ok? result))))
-            result)
-          (catch Throwable t
-            (obs/observe! opts (event :error span-id parent-span-id workflow
-                                      (assoc opts
-                                             :duration-ms (obs/duration-ms started-ns)
-                                             :ok? false
-                                             :error (or (.getMessage t) (str t)))))
-            (throw t)))))))
+    (obs/with-span opts
+      (fn [phase span-id parent-span-id attrs]
+        (workflow-event phase span-id parent-span-id workflow attrs))
+      (fn [span-id]
+        (run-node runner workflow input
+                  (cond-> opts
+                    span-id (assoc :karcarthy/parent-span-id span-id)))))))
 
 (defn run
   "Interpret workflow data through a runner and return a result map.
@@ -721,14 +701,10 @@
   [& {:keys [agents workflows history]}]
   (doseq [agent agents] (validate-agent agent))
   (doseq [[_ workflow] workflows] (validate-dynamic-workflow workflow))
-  (atom {:agents    (into {} (clojure.core/map
-                              (fn [agent]
-                                [(name-key (:name agent)) agent])
-                              agents))
-         :workflows (into {} (clojure.core/map
-                              (fn [[name workflow]]
-                                [(name-key name) workflow])
-                              workflows))
+  (atom {:agents    (into {} (for [agent agents]
+                               [(name-key (:name agent)) agent]))
+         :workflows (into {} (for [[name workflow] workflows]
+                               [(name-key name) workflow]))
          :history   (vec history)}))
 
 (defn snapshot
@@ -752,63 +728,38 @@
   "Resolve `agent-ref` and `workflow-ref` values against dynamic run state."
   ([state workflow] (refs->workflow state workflow #{}))
   ([state workflow seen]
-   (cond
-     (k/agent? workflow) workflow
-     (not (map? workflow)) workflow
-     :else
-     (case (:karcarthy/type workflow)
-       :agent-ref
-       (lookup-agent state (:name workflow))
+   (let [rec #(refs->workflow state % seen)]
+     (cond
+       (k/agent? workflow) workflow
+       (not (map? workflow)) workflow
+       :else
+       (case (:karcarthy/type workflow)
+         :agent-ref
+         (lookup-agent state (:name workflow))
 
-       :workflow-ref
-       (let [n      (name-key (:name workflow))
-             marker [:workflow n]]
-         (when (contains? seen marker)
-           (throw (ex-info "cyclic workflow reference"
-                           {:name n :seen seen})))
-         (refs->workflow state (lookup-workflow state n) (conj seen marker)))
+         :workflow-ref
+         (let [n      (name-key (:name workflow))
+               marker [:workflow n]]
+           (when (contains? seen marker)
+             (throw (ex-info "cyclic workflow reference"
+                             {:name n :seen seen})))
+           (refs->workflow state (lookup-workflow state n) (conj seen marker)))
 
-       :pipe
-       (update workflow :steps #(mapv (fn [w] (refs->workflow state w seen)) %))
+         :pipe     (update workflow :steps #(mapv rec %))
+         :branch   (update workflow :branches #(mapv rec %))
+         :delegate (-> workflow (update :planner rec) (update :worker rec))
+         :reduce   (-> workflow (update :source rec) (update :reducer rec))
+         :revise   (-> workflow (update :worker rec) (update :evaluator rec))
+         :continue (-> workflow (update :source rec) (update :to rec))
+         :evolve   (update workflow :agent rec)
 
-       :branch
-       (update workflow :branches #(mapv (fn [w] (refs->workflow state w seen)) %))
+         :route
+         (cond-> (-> workflow
+                     (update :source rec)
+                     (update :routes update-vals rec))
+           (contains? workflow :default) (update :default rec))
 
-       :delegate
-       (-> workflow
-           (update :planner #(refs->workflow state % seen))
-           (update :worker #(refs->workflow state % seen)))
-
-       :reduce
-       (-> workflow
-           (update :source #(refs->workflow state % seen))
-           (update :reducer #(refs->workflow state % seen)))
-
-       :revise
-       (-> workflow
-           (update :worker #(refs->workflow state % seen))
-           (update :evaluator #(refs->workflow state % seen)))
-
-       :route
-       (cond-> workflow
-         true (update :source #(refs->workflow state % seen))
-         true (update :routes (fn [routes]
-                                (into {} (clojure.core/map
-                                          (fn [[label w]]
-                                            [label (refs->workflow state w seen)])
-                                          routes))))
-         (contains? workflow :default)
-         (update :default #(refs->workflow state % seen)))
-
-       :continue
-       (-> workflow
-           (update :source #(refs->workflow state % seen))
-           (update :to #(refs->workflow state % seen)))
-
-       :evolve
-       (update workflow :agent #(refs->workflow state % seen))
-
-       workflow))))
+         workflow)))))
 
 (def ^:private op-kinds
   #{:define :patch :remove :call :spawn :complete})
@@ -844,6 +795,13 @@
 (defn- op-input [op]
   (or (:input op) (:prompt op) ""))
 
+(defn- op-result
+  "Result map for a state-changing dynamic op, e.g. \"defined agent writer\"."
+  [verb kind n & {:as extra}]
+  (k/result (merge {:agent "dynamic" :kind kind :name n
+                    :text  (str verb " " (name kind) " " n)}
+                   extra)))
+
 (defn- op-target-name [op target-key]
   (let [target (get op target-key)]
     (cond
@@ -874,8 +832,7 @@
     (let [agent (op-agent op)
           n     (name-key (:name agent))]
       (swap! state assoc-in [:agents n] agent)
-      (k/result {:agent "dynamic" :kind :agent :name n
-                 :text  (str "defined agent " n)}))
+      (op-result "defined" :agent n))
 
     (contains? op :workflow)
     (let [n        (name-key (:name op))
@@ -883,8 +840,7 @@
       (when (str/blank? n)
         (throw (ex-info "define workflow requires :name" {:op op})))
       (swap! state assoc-in [:workflows n] workflow)
-      (k/result {:agent "dynamic" :kind :workflow :name n
-                 :text  (str "defined workflow " n)}))
+      (op-result "defined" :workflow n))
 
     :else
     (throw (ex-info "define requires :agent or :workflow" {:op op}))))
@@ -899,16 +855,14 @@
             current (lookup-agent state n)
             updated (validate-agent (merge current patch))]
         (swap! state assoc-in [:agents n] updated)
-        (k/result {:agent "dynamic" :kind :agent :name n
-                   :text  (str "patched agent " n)}))
+        (op-result "patched" :agent n))
 
       (contains? op :workflow)
       (let [n       (name-key (op-target-name op :workflow))
             current (lookup-workflow state n)
             updated (validate-dynamic-workflow (merge current patch))]
         (swap! state assoc-in [:workflows n] updated)
-        (k/result {:agent "dynamic" :kind :workflow :name n
-                   :text  (str "patched workflow " n)}))
+        (op-result "patched" :workflow n))
 
       :else
       (throw (ex-info "patch requires :agent or :workflow target" {:op op})))))
@@ -918,14 +872,12 @@
     (contains? op :agent)
     (let [n (name-key (op-target-name op :agent))]
       (swap! state update :agents dissoc n)
-      (k/result {:agent "dynamic" :kind :agent :name n :removed? true
-                 :text  (str "removed agent " n)}))
+      (op-result "removed" :agent n :removed? true))
 
     (contains? op :workflow)
     (let [n (name-key (op-target-name op :workflow))]
       (swap! state update :workflows dissoc n)
-      (k/result {:agent "dynamic" :kind :workflow :name n :removed? true
-                 :text  (str "removed workflow " n)}))
+      (op-result "removed" :workflow n :removed? true))
 
     :else
     (throw (ex-info "remove requires :agent or :workflow target" {:op op}))))
@@ -978,11 +930,11 @@
       (throw (ex-info "spawn requires :inputs" {:op op})))
     (let [workflow (op-callable state op)
           indexed  (map-indexed vector inputs)
-          results  (dispatch (:max-concurrency op)
-                             (fn [[idx input]]
-                               (safe-run runner workflow (input->text input)
-                                         (descend opts :spawn idx)))
-                             indexed)]
+          results  (bounded-pmap (:max-concurrency op)
+                                 (fn [[idx input]]
+                                   (safe-run runner workflow (input->text input)
+                                             (descend opts :spawn idx)))
+                                 indexed)]
       (k/result {:agent   "dynamic"
                  :ok?     (every? k/ok? results)
                  :results results
@@ -1032,16 +984,11 @@
     "{:karcarthy/type :workflow-ref :name \"workflow-name\"}"]))
 
 (defn- state-view [state]
-  (let [{:keys [agents workflows history]} @state]
-    {:agents    (into {} (clojure.core/map
-                          (fn [[n agent]]
-                            [n (select-keys agent [:karcarthy/type :name
-                                                    :description :instructions
-                                                    :model :tools
-                                                    :config])])
-                          agents))
-     :workflows workflows
-     :history   history}))
+  (-> @state
+      (select-keys [:agents :workflows :history])
+      (update :agents update-vals
+              #(select-keys % [:karcarthy/type :name :description
+                               :instructions :model :tools :config]))))
 
 (defn- dynamic-prompt [task state last-result step]
   (str dynamic-reference

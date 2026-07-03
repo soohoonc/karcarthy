@@ -5,8 +5,22 @@
 
   Uses `ProcessBuilder` directly (so the process can be killed on timeout) and
   drains stdout/stderr on separate threads to avoid pipe-buffer deadlock."
-  (:require [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [karcarthy.core :as k])
   (:import [java.util.concurrent TimeUnit]))
+
+(defn write-stdin!
+  "Write `in` to `proc`'s stdin as UTF-8, then close it. Does nothing when
+  `in` is nil. The process may exit before reading stdin; the resulting
+  broken pipe is ignored."
+  [^Process proc in]
+  (when (some? in)
+    (try
+      (with-open [os (.getOutputStream proc)]
+        (.write os (.getBytes (str in) "UTF-8"))
+        (.flush os))
+      (catch java.io.IOException _ nil))))
 
 (defn run
   "Run `argv` (a vector of strings) as a subprocess. `opts`:
@@ -26,13 +40,7 @@
     (let [proc  (.start pb)
           out-f (future (slurp (.getInputStream proc)))
           err-f (future (slurp (.getErrorStream proc)))]
-      (when (some? in)
-        ;; the process may exit before reading stdin; ignore the broken pipe
-        (try
-          (with-open [os (.getOutputStream proc)]
-            (.write os (.getBytes (str in) "UTF-8"))
-            (.flush os))
-          (catch java.io.IOException _ nil)))
+      (write-stdin! proc in)
       (let [finished? (if timeout-ms
                         (.waitFor proc timeout-ms TimeUnit/MILLISECONDS)
                         (do (.waitFor proc) true))]
@@ -43,3 +51,14 @@
                :timed-out? true
                :out        (try @out-f (catch Throwable _ ""))
                :err        (try @err-f (catch Throwable _ ""))}))))))
+
+(defn ->result
+  "Build a karcarthy result from a `run` outcome. `label` names the tool in
+  error text; `raw` is merged over the outcome for the :raw payload."
+  [{:keys [exit out timed-out?] :as outcome} {:keys [agent label trim? raw]}]
+  (k/result {:agent agent
+             :ok?   (and (not timed-out?) (= 0 exit))
+             :text  (cond-> (or out "") trim? str/trim)
+             :error (cond timed-out?    (str label " timed out")
+                          (not= 0 exit) (str label " exited with status " exit))
+             :raw   (merge outcome raw)}))
