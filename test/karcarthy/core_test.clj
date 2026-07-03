@@ -21,10 +21,10 @@
     (let [a (k/agent {:name "x" :instructions "y"})]
       (is (= #{:karcarthy/type :name :instructions} (set (keys a))))
       (is (k/agent? a))))
-  (testing "legacy positional construction still works during deprecation"
-    (let [a (k/agent "x" "y" :model "m")]
-      (is (= "x" (:name a)))
-      (is (= "m" (:model a)))))
+  (testing "non-map specs are rejected"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"agent expects a map"
+                          (k/agent "x"))))
   (testing "agent variants can derive from existing agent data"
     (let [base    (k/agent {:name "reviewer" :instructions "Review." :model "sonnet"})
           variant (k/agent {:from base :model "gpt-5.2"})]

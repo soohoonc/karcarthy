@@ -57,8 +57,6 @@ To derive a variant from existing agent data:
           :model "gpt-5.2"})
 ```
 
-The old positional form `(k/agent name instructions & options)` is deprecated.
-
 ### `defagent`
 
 ```clojure
@@ -76,9 +74,6 @@ Defines a var containing an agent. The symbol name becomes the agent `:name`.
   {:from researcher
    :model "sonnet"})
 ```
-
-The old positional form `(k/defagent symbol instructions & options)` is
-deprecated.
 
 ### `agent?` and `explain-agent`
 

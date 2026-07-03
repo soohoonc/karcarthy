@@ -62,9 +62,6 @@
 (def ^:private agent-keys
   #{:name :description :instructions :model :tools :config})
 
-(def ^:private legacy-agent-keys
-  #{:description :model :tools :config})
-
 (defn- reject-unknown!
   [label supported m]
   (when-let [unknown (seq (remove supported (keys m)))]
@@ -104,8 +101,6 @@
 (defn agent
   "Build an agent spec as plain EDN data.
 
-  Preferred form:
-
     (agent {:name \"researcher\"
             :instructions \"Research questions thoroughly.\"
             :model \"sonnet\"
@@ -116,24 +111,32 @@
 
   To derive a variant from an existing agent:
 
-    (agent {:from reviewer :model \"gpt-5.2\"})
-
-  Deprecated compatibility form:
-
-    (agent \"researcher\" \"Research questions thoroughly.\" :model \"sonnet\")"
-  ([spec]
-   (normalize-agent spec))
-  ([name instructions & opts]
-   (let [opts-map (apply hash-map opts)]
-     (reject-unknown! "agent" legacy-agent-keys opts-map)
-     (normalize-agent (assoc opts-map
-                             :name name
-                             :instructions instructions)))))
+    (agent {:from reviewer :model \"gpt-5.2\"})"
+  [spec]
+  (normalize-agent spec))
 
 (defn agent?
   "True if `x` is a karcarthy agent value (well-formed)."
   [x]
   (and (map? x) (= :agent (:karcarthy/type x)) (s/valid? ::agent x)))
+
+(def ^:private subagent-option-keys
+  "Option keys accepted by `subagent`, in the order they appear in the built
+  map. The single source of truth for the option surface; `::subagent` above
+  mirrors it for validation."
+  [:model :tools :disallowed-tools :permission-mode :sandbox-mode
+   :mcp-servers :max-turns :skills :initial-prompt :memory :effort
+   :reasoning-effort :background? :isolation :color :nicknames :hooks
+   :config])
+
+(defn- normalize-subagent-opts
+  [opts]
+  (cond-> opts
+    (contains? opts :tools)            (update :tools vec)
+    (contains? opts :disallowed-tools) (update :disallowed-tools vec)
+    (contains? opts :skills)           (update :skills vec)
+    (contains? opts :nicknames)        (update :nicknames vec)
+    (contains? opts :background?)      (update :background? boolean)))
 
 (defn subagent
   "Build a runner-native subagent definition.
@@ -146,47 +149,21 @@
               \"Use for auth, secrets, and permission review.\"
               \"Review like a security owner and return concrete findings.\"
               :tools [\"Read\" \"Grep\" \"Glob\"]
-              :model \"sonnet\")"
-  [name description instructions & {:keys [model tools disallowed-tools
-                                           permission-mode sandbox-mode
-                                           mcp-servers max-turns skills
-                                           initial-prompt memory effort
-                                           reasoning-effort background?
-                                           isolation color nicknames hooks
-                                           config]
-                                    :as opts}]
-  (when-let [unknown (seq (remove #{:model :tools :disallowed-tools
-                                    :permission-mode :sandbox-mode
-                                    :mcp-servers :max-turns :skills
-                                    :initial-prompt :memory :effort
-                                    :reasoning-effort :background?
-                                    :isolation :color :nicknames :hooks
-                                    :config}
-                                  (keys opts)))]
-    (throw (ex-info "subagent contains unknown options"
-                    {:unknown (vec unknown)})))
-  (cond-> {:karcarthy/type :subagent
+              :model \"sonnet\")
+
+  See `subagent-option-keys` in this namespace (and the `::subagent` spec) for
+  the full option list."
+  [name description instructions & {:as opts}]
+  (reject-unknown! "subagent" (set subagent-option-keys) (or opts {}))
+  (let [opts (normalize-subagent-opts (or opts {}))]
+    (into {:karcarthy/type :subagent
            :name name
            :description description
            :instructions instructions}
-    model (assoc :model model)
-    tools (assoc :tools (vec tools))
-    disallowed-tools (assoc :disallowed-tools (vec disallowed-tools))
-    permission-mode (assoc :permission-mode permission-mode)
-    sandbox-mode (assoc :sandbox-mode sandbox-mode)
-    mcp-servers (assoc :mcp-servers mcp-servers)
-    max-turns (assoc :max-turns max-turns)
-    skills (assoc :skills (vec skills))
-    initial-prompt (assoc :initial-prompt initial-prompt)
-    memory (assoc :memory memory)
-    effort (assoc :effort effort)
-    reasoning-effort (assoc :reasoning-effort reasoning-effort)
-    (contains? opts :background?) (assoc :background? (boolean background?))
-    isolation (assoc :isolation isolation)
-    color (assoc :color color)
-    nicknames (assoc :nicknames (vec nicknames))
-    hooks (assoc :hooks hooks)
-    config (assoc :config config)))
+          (keep (fn [k]
+                  (when (some? (get opts k))
+                    [k (get opts k)])))
+          subagent-option-keys)))
 
 (defn subagent?
   "True if `x` is a karcarthy subagent value (well-formed)."
@@ -216,26 +193,16 @@
 
     (defagent claude-researcher
       {:from researcher
-       :model \"sonnet\"})
-
-  Deprecated compatibility form:
-
-    (defagent researcher \"Research questions thoroughly.\" :model \"sonnet\")"
-  [sym spec & opts]
-  (let [value (if (string? spec)
-                `(agent ~(name sym) ~spec ~@opts)
-                (do
-                  (when (seq opts)
-                    (throw (ex-info "defagent map form does not accept trailing options"
-                                    {:sym sym :options opts})))
-                  `(let [spec# ~spec]
-                     (agent (cond-> spec#
-                              (not (contains? spec# :name))
-                              (assoc :name ~(name sym)))))))]
-    `(do
-       (def ~sym ~value)
-       (alter-meta! (var ~sym) assoc :doc (:instructions ~sym))
-       (var ~sym))))
+       :model \"sonnet\"})"
+  [sym spec]
+  `(do
+     (def ~sym
+       (let [spec# ~spec]
+         (agent (cond-> spec#
+                  (and (map? spec#) (not (contains? spec# :name)))
+                  (assoc :name ~(name sym))))))
+     (alter-meta! (var ~sym) assoc :doc (:instructions ~sym))
+     (var ~sym)))
 
 (defmacro defsubagent
   "Define a var holding a subagent map. The symbol's name becomes the
