@@ -21,13 +21,20 @@ public class Demo {
         IFn mockRunner = Clojure.var("karcarthy.core", "mock-runner");
         IFn pipe        = Clojure.var("karcarthy.orchestrate", "pipe");
         IFn run         = Clojure.var("karcarthy.orchestrate", "run");
+        IFn hashMap     = Clojure.var("clojure.core", "hash-map");
         IFn get         = Clojure.var("clojure.core", "get");
 
-        Object researcher = agent.invoke("researcher", "Research the question.");
-        Object summarizer = agent.invoke("summarizer", "Summarize in one line.");
+        // Agents are plain EDN data, so from Java they are simply read.
+        Object researcher = agent.invoke(Clojure.read(
+            "{:name \"researcher\" :instructions \"Research the question.\"}"));
+        Object summarizer = agent.invoke(Clojure.read(
+            "{:name \"summarizer\" :instructions \"Summarize in one line.\"}"));
         Object workflow   = pipe.invoke(researcher, summarizer);
 
-        Object result = run.invoke(mockRunner.invoke(), workflow, "what is a monad?");
+        Object result = run.invoke(hashMap.invoke(
+            Clojure.read(":runner"),   mockRunner.invoke(),
+            Clojure.read(":workflow"), workflow,
+            Clojure.read(":input"),    "what is a monad?"));
 
         System.out.println("ok?  " + get.invoke(result, Clojure.read(":ok?")));
         System.out.println("text " + get.invoke(result, Clojure.read(":text")));

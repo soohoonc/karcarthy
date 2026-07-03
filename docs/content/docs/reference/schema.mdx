@@ -3,8 +3,9 @@ title: Data Shapes
 description: EDN shapes for agents, workflows, and results.
 ---
 
-Workflows are EDN values. Every node is a map tagged with `:karcarthy/type`.
-The code-level schema references are plain data:
+Look up the exact EDN shape of every karcarthy value. Each value is a plain
+map tagged with `:karcarthy/type`, and the schema references are themselves
+data:
 
 ```clojure
 (require '[karcarthy :as k])
@@ -106,7 +107,8 @@ Runs a worker once per subtask from a planner:
 
 ## reduce
 
-Runs branch/delegate work, then passes an EDN summary to a reducer workflow.
+Runs branch or delegate work, then passes an EDN summary to a reducer
+workflow.
 
 ```clojure
 {:karcarthy/type :reduce
@@ -151,6 +153,10 @@ Routes by the source result:
  :default WORKFLOW}
 ```
 
+`:source` replies with EDN `{:route :label}`, and the selected workflow
+receives the original input. Route matching is exact. `:default` is optional;
+without it, an unmatched label yields a result with `:error :no-route`.
+
 ## continue
 
 Continues from one workflow to another:
@@ -162,15 +168,14 @@ Continues from one workflow to another:
  :prompt "optional override"}
 ```
 
-When `:routes` is present, `:source` replies with EDN `{:route :label}` and the
-selected workflow receives the original input. Route matching is exact. When
-`:to` is present, the second workflow receives the source result text unless
-`:prompt` is provided.
+`:to` receives the source result's `:text` unless `:prompt` overrides it.
+When the source result carries a `:session-id`, the second run receives
+`:resume`, so runners that support sessions continue the same conversation.
 
 ## dynamic
 
-Lets an agent define, patch, call, spawn, and complete work while a workflow run
-is in progress:
+Lets an agent define, patch, remove, call, spawn, and complete work while a
+workflow run is in progress:
 
 ```clojure
 {:karcarthy/type :dynamic
@@ -189,6 +194,8 @@ The agent emits EDN ops:
          :config {}}}
 {:op :define :name "review" :workflow WORKFLOW}
 {:op :patch :agent "reader" :merge {:instructions "..."}}
+{:op :remove :agent "reader"}
+{:op :remove :workflow "review"}
 {:op :call :workflow "review" :input "..."}
 {:op :spawn :agent "reader" :inputs ["a" "b"]}
 {:op :complete :text "final answer"}
@@ -200,6 +207,15 @@ Refs are only resolved inside a dynamic run:
 {:karcarthy/type :agent-ref :name "reader"}
 {:karcarthy/type :workflow-ref :name "review"}
 ```
+
+## Malformed EDN replies
+
+`delegate` planners, `revise` evaluators, `route` sources, and `dynamic`
+agents all reply in EDN, and models flub EDN. When a reply fails to parse or
+validate, the node re-asks the model with the error and the failed reply
+appended so it can correct itself. Set the retry budget with the
+`:edn-retries` option to `run` (default `1`; `0` fails fast). `dynamic`
+applies the same budget to consecutive invalid ops.
 
 ## Result
 
@@ -222,3 +238,9 @@ Composite nodes add more fields:
 | `revise` | `:rounds`, `:accepted?`. |
 | `route` | selected child result fields, or `:error :no-route`. |
 | `continue` | continued workflow result fields. |
+| `dynamic` | `:state`, `:steps`, `:value` on `:complete`; `:error :max-steps` when the step budget is exceeded. |
+
+## Next
+
+Read [CLI + JSON](/docs/reference/json) for the same shapes over the JSON
+bridge.

@@ -3,6 +3,11 @@ title: CLI + JSON
 description: Run agents and workflow files from the karcarthy command.
 ---
 
+Run agents and workflow files from the `karcarthy` command, and drive
+karcarthy from any language over a stdin/stdout JSON protocol. This page
+covers the commands, the request and response JSON, and every workflow shape
+the JSON bridge accepts.
+
 Build the standalone CLI once:
 
 ```bash
@@ -18,7 +23,7 @@ Then use `bin/karcarthy` as a normal command:
 ./bin/karcarthy --help
 ```
 
-During source checkout development, the launcher can run from source if the
+In a source checkout, the launcher falls back to running from source when the
 standalone jar is not built. For installed copies, set
 `KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`.
 
@@ -34,7 +39,7 @@ Run one agent without writing a workflow file:
   "Enterprise SSO is ready for staged beta."
 ```
 
-By default, command output is just the result text. Add `--json` when a caller
+By default, the command prints the result text. Add `--json` when a caller
 needs the full result object:
 
 ```bash
@@ -45,13 +50,13 @@ Useful options:
 
 - `--runner mock|claude`
 - `--model NAME`
-- `--tool NAME`
-- `--mock-response AGENT=TEXT`
+- `--tool NAME` (repeatable)
+- `--mock-response AGENT=TEXT` (repeatable)
 - `--input TEXT`
 
 ### run
 
-Run a workflow JSON file. The file can be either a raw workflow object:
+Run a workflow JSON file. The file is either a raw workflow object:
 
 ```json
 {
@@ -61,10 +66,6 @@ Run a workflow JSON file. The file can be either a raw workflow object:
 }
 ```
 
-The JSON workflow schema covers portable workflow nodes. Runner configuration
-such as `subagent` definitions is supplied by Clojure runner construction or a
-runner-specific config file, not embedded as workflow nodes.
-
 or a full request object with `workflow`, `input`, and runner fields.
 
 ```bash
@@ -72,16 +73,20 @@ or a full request object with `workflow`, `input`, and runner fields.
 ./bin/karcarthy run examples/workflows/echo.json --input "hi" --json
 ```
 
+The JSON workflow schema covers portable workflow nodes. Runner configuration
+such as `subagent` definitions is supplied by Clojure runner construction or a
+runner-specific config file, not embedded as workflow nodes.
+
 ### json
 
-Use `json` for the machine protocol: request JSON on stdin, result JSON on
-stdout.
+The `json` command is the machine protocol: request JSON on stdin, result
+JSON on stdout.
 
 ```bash
 ./bin/karcarthy json < request.json
 ```
 
-Top-level request shape:
+## Request shape
 
 ```json
 {
@@ -94,19 +99,21 @@ Top-level request shape:
 }
 ```
 
-`runner` is `mock` by default. `claude` uses the Claude runner with
-sub-agent defaults.
+`runner` defaults to `mock`. `claude` uses the Claude runner with sub-agent
+defaults.
 
-`mock-responses` is optional. When present with the mock runner, it maps agent
-names to deterministic response text. It is useful for examples and tests that
-should show realistic output without calling a live model. Agents not listed
-fall back to the default echo-style mock response.
+`mock-responses` is optional. With the mock runner, it maps agent names to
+deterministic response text, which lets examples and tests show realistic
+output without calling a live model. Agents not listed fall back to the
+default echo-style mock response.
 
-`tools` is a runner allowlist. karcarthy passes these names to runners that
+`tools` is a per-agent field, not a top-level request key: set it on agent
+nodes inside `workflow`, or with repeated `--tool` flags on the `agent`
+command. It is a runner allowlist. karcarthy passes the names to runners that
 support tool selection; it does not create tool servers or bind MCP
 configuration. The mock runner ignores tools.
 
-## JSON workflow shapes
+## Workflow shapes
 
 The same shapes are available as a JSON Schema value from Clojure:
 
@@ -116,9 +123,9 @@ The same shapes are available as a JSON Schema value from Clojure:
 k/json-schema
 ```
 
-JSON workflows include portable workflow nodes only. Clojure-local `step` nodes
-store function values, so they are available from Clojure code but not from the
-JSON bridge.
+JSON workflows include portable workflow nodes only. Clojure-local `step`
+nodes store function values, so they are available from Clojure code but not
+from the JSON bridge.
 
 ### agent
 
@@ -128,12 +135,16 @@ JSON bridge.
   "name": "reviewer",
   "instructions": "Find launch risks.",
   "model": "sonnet",
-  "tools": ["mcp__feedback__search"],
-  "runner": "claude"
+  "tools": ["mcp__feedback__search"]
 }
 ```
 
+Runner selection is not an agent field. It comes from the top-level `runner`
+request key shown above.
+
 ### pipe
+
+Runs each step in order:
 
 ```json
 {
@@ -147,7 +158,7 @@ JSON bridge.
 
 ### branch
 
-Branches on the same input:
+Runs every branch on the same input:
 
 ```json
 {
@@ -173,6 +184,8 @@ Planner/worker shape:
 
 ### reduce
 
+Runs branch or delegate work, then passes an EDN summary to a reducer:
+
 ```json
 {
   "type": "reduce",
@@ -189,6 +202,8 @@ Planner/worker shape:
 
 ### revise
 
+Worker/evaluator loop:
+
 ```json
 {
   "type": "revise",
@@ -200,7 +215,7 @@ Planner/worker shape:
 
 ### route
 
-Choice map:
+Choice map keyed by the source result:
 
 ```json
 {
@@ -217,7 +232,9 @@ Choice map:
 The classifier result text should be EDN such as `{:route "launch"}` because
 JSON route labels are strings.
 
-Continuation:
+### continue
+
+Direct handoff from one workflow to another:
 
 ```json
 {
@@ -227,19 +244,44 @@ Continuation:
 }
 ```
 
-## JSON response
+### dynamic
 
-`karcarthy json` and command runs with `--json` return the karcarthy result map
-encoded as JSON:
+Agent-driven orchestration:
 
 ```json
 {
-  "karcarthy/type": "result",
+  "type": "dynamic",
+  "agent": { "type": "agent", "name": "lead", "instructions": "Orchestrate the review." },
+  "max-steps": 25
+}
+```
+
+`max-steps` is optional and defaults to `25`. The agent replies with EDN ops
+(`:define`, `:patch`, `:remove`, `:call`, `:spawn`, `:complete`); the op
+shapes are documented on the [Data Shapes](/docs/reference/schema#dynamic)
+page.
+
+## Response
+
+`karcarthy json` and command runs with `--json` return the karcarthy result
+map encoded as JSON:
+
+```json
+{
+  "type": "result",
   "ok?": true,
   "agent": "writer",
   "text": "..."
 }
 ```
 
-If a JSON request fails to parse or run, the JSON protocol returns an object
-with `ok: false`, `error`, and `exception`.
+The EDN result tag `:karcarthy/type` serializes as `"type"`: the JSON encoder
+drops keyword namespaces.
+
+If a JSON request fails to parse or run, the protocol returns an object with
+`ok: false`, `error`, and `exception`.
+
+## Next
+
+Read [Positioning](/docs/reference/positioning) for where karcarthy sits next
+to agent SDKs, CLIs, and graph runtimes.

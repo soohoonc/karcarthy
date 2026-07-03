@@ -23,6 +23,8 @@ languages, to show the library is reachable from each.
 - `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
   model and instruction configuration, then run the rewritten value.
 - `clojure/live.clj` - a live delegate/reduce run (paid `claude -p`).
+- `clojure/evolve.clj` - a live `evolve` run (paid `claude -p`): an agent
+  patches its own instructions via EDN before answering.
 - The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
 
 ## Python and TypeScript (via the executable)
@@ -73,15 +75,17 @@ clojure -T:build uber
 ./bin/karcarthy json < request.json
 ```
 
-`bin/karcarthy` also honors `KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`
-and `KARCARTHY_BIN=/path/to/karcarthy` for tests or installed copies.
+`bin/karcarthy` honors `KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`
+for tests or installed copies; the Python, TypeScript, and JavaScript example
+helpers honor `KARCARTHY_BIN=/path/to/karcarthy` to point at an installed
+launcher instead.
 
 ## Java (verified)
 
 ```bash
 CP=$(clojure -Spath)
-javac -d /tmp/karc -cp "$CP" examples/java/Demo.java
-java  -cp "$CP:/tmp/karc" Demo
+javac -d /tmp/karc-java -cp "$CP" examples/java/Demo.java
+java  -cp "$CP:/tmp/karc-java" Demo
 # ok?  true
 # text [summarizer] [researcher] what is a monad?
 ```
@@ -90,8 +94,8 @@ java  -cp "$CP:/tmp/karc" Demo
 
 ```bash
 CP=$(clojure -Spath)
-kotlinc -cp "$CP" examples/kotlin/Demo.kt -include-runtime -d /tmp/demo.jar
-java -cp "$CP:/tmp/demo.jar" DemoKt
+kotlinc -cp "$CP" examples/kotlin/Demo.kt -include-runtime -d /tmp/karc.jar
+java -cp "$CP:/tmp/karc.jar" DemoKt
 ```
 
 ## Scala

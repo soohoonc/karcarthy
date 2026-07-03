@@ -1,10 +1,11 @@
 ---
 title: Workflows
-description: Compose agents with pipe, branch, delegate, reduce, revise, route, continue, and dynamic.
+description: Compose agents with pipe, branch, route, revise, delegate, reduce, continue, step, and dynamic.
 ---
 
-A workflow is data that describes work. `run` interprets that data through the
-runner you pass in:
+A workflow is data that describes work, and `run` interprets that data through
+the runner you pass in. This page walks each workflow node in the order you are
+likely to reach for them, with one example each.
 
 ```clojure
 (k/run {:runner runner
@@ -45,7 +46,7 @@ Use `pipe` when steps happen in order:
 ```
 
 The first agent receives the original input. The second agent receives the
-first result's `:text`.
+first result's `:text`:
 
 ```text
 researcher input: why does Lisp use code as data?
@@ -53,31 +54,6 @@ summarizer input: [researcher] why does Lisp use code as data?
 ```
 
 If a step returns `:ok? false`, the pipe stops and returns that result.
-
-## step
-
-Use `step` for a local Clojure transform inside a workflow:
-
-```clojure
-(def workflow
-  (k/pipe
-   writer
-   (k/step clojure.string/trim :name "trim")
-   reviewer))
-```
-
-By default the function receives the flowing input string. Use `:call? true`
-when it needs the full step call map, `{:input input :options options :node node}`:
-
-```clojure
-(k/step
- (fn [{:keys [input node]}]
-   (str (:name node) ": " input))
- :name "tag"
- :call? true)
-```
-
-`step` stores a Clojure function, so it is not EDN/JSON portable.
 
 ## branch
 
@@ -92,9 +68,16 @@ Use `branch` when several workflows should inspect the same input:
         :input "enterprise SSO beta"})
 ```
 
-The result keeps each child result and joins their text into labeled
-sections (`## <agent>` headers, with `## <agent> (failed)` for failures), so
-a downstream workflow reading the flowing text can attribute each part:
+Pass `:max-concurrency` to cap how many branch calls run at once:
+
+```clojure
+(k/branch [product-reviewer engineering-reviewer security-reviewer]
+          :max-concurrency 2)
+```
+
+The result keeps each child result and joins their text into labeled sections
+(`## <agent>` headers, with `## <agent> (failed)` for failures), so a
+downstream workflow reading the flowing text can attribute each part:
 
 ```clojure
 {:karcarthy/type :result
@@ -103,6 +86,60 @@ a downstream workflow reading the flowing text can attribute each part:
            {:agent "engineering-reviewer" :text "..."}
            {:agent "security-reviewer" :text "..."}]
  :text "## product-reviewer\n...\n\n## engineering-reviewer\n..."}
+```
+
+## route
+
+Use `route` when one workflow chooses the next workflow:
+
+```clojure
+(def workflow
+  (k/route classifier
+           {:launch launch-brief
+            :incident incident-plan}
+           :default launch-brief))
+```
+
+The classifier replies with EDN:
+
+```clojure
+{:route :launch}
+```
+
+Matching is exact. The selected workflow receives the original input, not the
+classifier's output. When the label matches no route, the `:default` workflow
+runs; without a default, the route returns `:ok? false`.
+
+`route` is the first node here that reads EDN from a model. Every EDN-reading
+node — `route`, `revise`, `delegate`, and `dynamic` — self-repairs: when a
+reply fails to parse or validate, the node re-asks the model with the error and
+its previous reply before failing (`:edn-retries` in run options, default 1).
+
+## revise
+
+Use `revise` for draft, critique, revise loops:
+
+```clojure
+(def launch-brief
+  (k/revise brief-writer critic :max-rounds 2))
+```
+
+The loop stops when the evaluator accepts or `:max-rounds` (default 3) is
+reached. The evaluator replies with EDN:
+
+```clojure
+{:accept? true}
+{:accept? false :feedback "name the missing rollback owner"}
+```
+
+The result includes loop metadata:
+
+```clojure
+{:karcarthy/type :result
+ :ok? true
+ :text "final draft"
+ :rounds 2
+ :accepted? true}
 ```
 
 ## delegate
@@ -114,10 +151,7 @@ Use `delegate` when a planner should create subtasks for a worker:
   (k/delegate planner worker :max-concurrency 4))
 ```
 
-The planner must reply with EDN. This applies to every model-facing EDN
-protocol below: when a reply fails to parse or validate, the node re-asks the
-model with the error and its previous reply before failing (`:edn-retries` in
-run options, default 1).
+The planner replies with EDN:
 
 ```clojure
 {:subtasks ["audit logs" "rollback plan" "support docs"]}
@@ -145,53 +179,9 @@ The reducer receives an EDN summary:
 ```
 
 The reducer is a workflow, not a host function, so this remains portable data
-unless you add local `step` nodes.
-
-## revise
-
-Use `revise` for draft, critique, revise loops:
-
-```clojure
-(def launch-brief
-  (k/revise brief-writer critic :max-rounds 2))
-```
-
-The evaluator replies with EDN:
-
-```clojure
-{:accept? true}
-{:accept? false :feedback "name the missing rollback owner"}
-```
-
-The result includes loop metadata:
-
-```clojure
-{:karcarthy/type :result
- :ok? true
- :text "final draft"
- :rounds 2
- :accepted? true}
-```
-
-## route
-
-Use `route` when one workflow chooses the next workflow:
-
-```clojure
-(def workflow
-  (k/route classifier
-           {:launch launch-brief
-            :incident incident-plan}
-           :default launch-brief))
-```
-
-The classifier replies with EDN:
-
-```clojure
-{:route :launch}
-```
-
-The selected workflow receives the original input, not the classifier's output.
+unless you add local `step` nodes. Pass a plain collection of workflows as the
+source and `reduce` wraps it in a `branch`. `reduce` also accepts
+`:max-concurrency`, which it forwards onto its source node.
 
 ## continue
 
@@ -201,12 +191,48 @@ Use `continue` for a direct handoff:
 (k/continue triage-agent specialist-agent)
 ```
 
-The second workflow receives the first result's `:text`.
+The second workflow receives the first result's `:text`. Pass `:prompt` to
+override that handoff text:
+
+```clojure
+(k/continue triage-agent specialist-agent
+            :prompt "Apply the specialist checklist to the triage above.")
+```
+
+`continue` differs from a two-step `pipe` in one way: it preserves conversation
+sessions. When the first result carries a `:session-id`, the second run
+receives it as the `:resume` option, so a runner that supports sessions
+continues the same conversation instead of starting fresh.
+
+## step
+
+Use `step` for a local Clojure transform inside a workflow:
+
+```clojure
+(def workflow
+  (k/pipe
+   writer
+   (k/step clojure.string/trim :name "trim")
+   reviewer))
+```
+
+By default the function receives the flowing input string. Pass `:call? true`
+when it needs the full step call map, `{:input input :options options :node node}`:
+
+```clojure
+(k/step
+ (fn [{:keys [input node]}]
+   (str (:name node) ": " input))
+ :name "tag"
+ :call? true)
+```
+
+`step` stores a Clojure function, so it is not EDN/JSON portable.
 
 ## dynamic
 
-Use `dynamic` when an agent should define, patch, call, spawn, and complete
-work while the run is in progress:
+Use `dynamic` when an agent should define, patch, remove, call, spawn, and
+complete work while the run is in progress:
 
 ```clojure
 (def workflow
@@ -217,7 +243,8 @@ work while the run is in progress:
         :input "audit this migration"})
 ```
 
-The dynamic agent emits one EDN op at a time:
+`:max-steps` caps the op loop; the default is 25. The dynamic agent emits one
+EDN op at a time:
 
 ```clojure
 {:op :define
@@ -232,6 +259,7 @@ The dynamic agent emits one EDN op at a time:
 {:op :call :workflow "review" :input "src/foo.clj"}
 {:op :patch :agent "reader" :merge {:instructions "Inspect one file and list risks."}}
 {:op :spawn :agent "reader" :inputs ["src/a.clj" "src/b.clj"]}
+{:op :remove :agent "reader"}
 {:op :complete :text "done"}
 ```
 
@@ -239,7 +267,7 @@ The dynamic agent emits one EDN op at a time:
 agent patches `"reader"`, later calls to workflows containing
 `(k/agent-ref "reader")` use the patched agent.
 
-## Rewrite Before Running
+## Rewrite before running
 
 Because workflows are data, application code can inspect and rewrite them
 before `run`:
@@ -258,3 +286,8 @@ before `run`:
 
 Rewrites change workflow data. They do not choose the runner. Choose the runner
 when you call `run`.
+
+## Next
+
+- [Runners](/docs/runners) covers every execution backend and runner-native subagents.
+- [Examples](/docs/examples) composes these nodes into runnable launch-readiness and deep-research workflows.

@@ -17,13 +17,20 @@ fun main() {
     val mockRunner = Clojure.`var`("karcarthy.core", "mock-runner")
     val pipe        = Clojure.`var`("karcarthy.orchestrate", "pipe")
     val run         = Clojure.`var`("karcarthy.orchestrate", "run")
+    val hashMap     = Clojure.`var`("clojure.core", "hash-map")
     val get         = Clojure.`var`("clojure.core", "get")
 
-    val researcher = agent.invoke("researcher", "Research the question.")
-    val summarizer = agent.invoke("summarizer", "Summarize in one line.")
+    // Agents are plain EDN data, so from Kotlin they are simply read.
+    val researcher = agent.invoke(Clojure.read(
+        "{:name \"researcher\" :instructions \"Research the question.\"}"))
+    val summarizer = agent.invoke(Clojure.read(
+        "{:name \"summarizer\" :instructions \"Summarize in one line.\"}"))
     val workflow   = pipe.invoke(researcher, summarizer)
 
-    val result = run.invoke(mockRunner.invoke(), workflow, "what is a monad?")
+    val result = run.invoke(hashMap.invoke(
+        Clojure.read(":runner"),   mockRunner.invoke(),
+        Clojure.read(":workflow"), workflow,
+        Clojure.read(":input"),    "what is a monad?"))
     println("ok?  " + get.invoke(result, Clojure.read(":ok?")))
     println("text " + get.invoke(result, Clojure.read(":text")))
 }

@@ -1,8 +1,8 @@
 # karcarthy - guide for Codex
 
 Homoiconic agent **orchestration** in Clojure. Agents, tools, and workflows are
-plain EDN data; the inner agent loop (model calls + tool execution) is delegated
-to an external **runner** rather than reimplemented here.
+plain EDN data; karcarthy delegates the inner agent loop (model calls + tool
+execution) to an external **runner** instead of reimplementing it.
 
 ## Commands
 
@@ -50,9 +50,11 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
   New protocol-reading nodes should go through `elicit!` in `orchestrate.clj`.
 - **Adding a test namespace:** register it in `test/karcarthy/test_runner.clj`
   (zero-dependency test runner; no Clojars test libs).
-- **Prefer pure, offline-testable builders** (e.g. `claude-command`,
-  `openai-request`); gate any live/paid calls behind env vars
+- **Prefer pure, offline-testable builders** (e.g. `karcarthy.runner.claude/command`,
+  `karcarthy.runner.openai/request`); gate any live/paid calls behind env vars
   (`KARCARTHY_LIVE`) so `clojure -M:test` stays offline and free.
 - **Driving real Claude sub-agents:** use `:system-prompt-mode :replace` and
   disable tools (`:extra-args ["--disallowedTools" "…"]`) so they answer
   directly instead of inheriting Claude's interactive persona.
+
+Contribution workflow and PR expectations: [CONTRIBUTING.md](CONTRIBUTING.md).
