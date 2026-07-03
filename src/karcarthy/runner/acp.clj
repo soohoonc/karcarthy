@@ -161,19 +161,34 @@
   (let [{:keys [path line limit content]} (:params message)]
     (case (:method message)
       "fs/read_text_file"
-      (let [text  (slurp path)
-            lines (str/split-lines text)
-            start (max 0 (dec (or line 1)))
-            end   (if limit (min (count lines) (+ start limit)) (count lines))]
-        {:result {:content (str (str/join "\n" (subvec (vec lines) start end))
-                                (when (and (seq lines) (or (nil? limit)
-                                                           (< end (count lines))))
-                                  "\n"))}})
+      ;; whole-file reads return the content verbatim (no CRLF normalization
+      ;; or synthesized trailing newline); line/limit reads slice 1-based
+      ;; lines, and an offset past EOF yields empty content rather than an
+      ;; error.
+      (let [text (slurp path)]
+        (if (and (nil? line) (nil? limit))
+          {:result {:content text}}
+          (let [lines (vec (str/split-lines text))
+                start (min (max 0 (dec (or line 1))) (count lines))
+                end   (if limit (min (count lines) (+ start limit)) (count lines))
+                slice (subvec lines start end)]
+            {:result {:content (str (str/join "\n" slice)
+                                    (when (and (seq slice) (< end (count lines)))
+                                      "\n"))}})))
 
       "fs/write_text_file"
       (do
         (spit path content)
         {:result nil}))))
+
+(defn- fs-capability
+  "The advertised client capability flag for an fs method, nil for non-fs
+  methods. `fs.readTextFile` and `fs.writeTextFile` are declared independently,
+  so each method is gated on its own flag."
+  [opts method]
+  (when-let [capability ({"fs/read_text_file"  :readTextFile
+                          "fs/write_text_file" :writeTextFile} method)]
+    (get-in opts [:client-capabilities :fs capability])))
 
 (defn- handle-request! [conn message opts]
   (let [id (:id message)]
@@ -182,8 +197,7 @@
         (= "session/request_permission" (:method message))
         (send! conn (success id (permission-outcome message opts)))
 
-        (and (contains? #{"fs/read_text_file" "fs/write_text_file"} (:method message))
-             (get-in opts [:client-capabilities :fs]))
+        (fs-capability opts (:method message))
         (let [{:keys [result]} (handle-fs-request message)]
           (send! conn (success id result)))
 
@@ -203,12 +217,12 @@
     (try (on-event message) (catch Throwable _ nil))))
 
 (defn- remember-update! [state message]
-  (let [session-update (get-in message [:params :update])]
-    (swap! state update :updates conj session-update)
-    (when (and (= "session/update" (:method message))
-               (= "agent_message_chunk" (:sessionUpdate session-update)))
-      (when-let [text (get-in session-update [:content :text])]
-        (swap! state update :text conj text)))))
+  (when (= "session/update" (:method message))
+    (let [session-update (get-in message [:params :update])]
+      (swap! state update :updates conj session-update)
+      (when (= "agent_message_chunk" (:sessionUpdate session-update))
+        (when-let [text (get-in session-update [:content :text])]
+          (swap! state update :text conj text))))))
 
 (defn- wait-response! [conn id state opts]
   (if-let [message (get-in @state [:responses id])]
@@ -264,18 +278,36 @@
     result))
 
 (defn- session-capability? [init capability]
-  (contains? (or (get-in init [:agentCapabilities :sessionCapabilities]) {})
-             capability))
+  ;; capabilities are declared as values, so an explicit false means
+  ;; unsupported even though the key is present
+  (boolean (get-in init [:agentCapabilities :sessionCapabilities capability])))
+
+(defn- check-mcp-servers!
+  "HTTP and SSE MCP transports MUST only be sent to agents that advertised the
+  matching `mcpCapabilities` flag in `initialize`; stdio needs no capability."
+  [init servers]
+  (doseq [server servers
+          :let [transport (or (:type server) (get server "type"))]]
+    (when (and (#{"http" "sse"} transport)
+               (not (get-in init [:agentCapabilities :mcpCapabilities
+                                  (keyword transport)])))
+      (throw (ex-info "ACP agent does not advertise the MCP transport capability"
+                      {:transport transport
+                       :server server
+                       :mcp-capabilities (get-in init [:agentCapabilities
+                                                       :mcpCapabilities])})))))
 
 (defn- session-params [init agent opts]
-  (cond-> {:cwd        (absolute-path (or (:cwd opts) (:dir opts) "."))
-           :mcpServers (vec (or (:mcp-servers opts)
-                                (get-in agent [:config :mcp-servers])
-                                []))}
-    (and (:additional-directories opts)
-         (session-capability? init :additionalDirectories))
-    (assoc :additionalDirectories
-           (mapv absolute-path (:additional-directories opts)))))
+  (let [servers (vec (or (:mcp-servers opts)
+                         (get-in agent [:config :mcp-servers])
+                         []))]
+    (check-mcp-servers! init servers)
+    (cond-> {:cwd        (absolute-path (or (:cwd opts) (:dir opts) "."))
+             :mcpServers servers}
+      (and (:additional-directories opts)
+           (session-capability? init :additionalDirectories))
+      (assoc :additionalDirectories
+             (mapv absolute-path (:additional-directories opts))))))
 
 (defn- session! [conn ids state init agent opts]
   (let [resume (:resume opts)
@@ -283,19 +315,19 @@
     (cond
       resume
       (cond
+        ;; keep the response: load/resume MAY return configOptions and other
+        ;; session state that set-config! matches against
         (session-capability? init :resume)
-        (do
-          (request! conn ids state "session/resume"
-                    (assoc params :sessionId resume)
-                    opts)
-          {:sessionId resume})
+        (-> (request! conn ids state "session/resume"
+                      (assoc params :sessionId resume)
+                      opts)
+            (assoc :sessionId resume))
 
         (true? (get-in init [:agentCapabilities :loadSession]))
-        (do
-          (request! conn ids state "session/load"
-                    (assoc params :sessionId resume)
-                    opts)
-          {:sessionId resume})
+        (-> (request! conn ids state "session/load"
+                      (assoc params :sessionId resume)
+                      opts)
+            (assoc :sessionId resume))
 
         :else
         (throw (ex-info "ACP agent does not support session resume/load"
@@ -304,6 +336,13 @@
 
       :else
       (request! conn ids state "session/new" params opts))))
+
+(defn stop-reason-ok?
+  "True when an ACP `stopReason` means the prompt turn completed normally.
+  An absent stop reason is treated as success; `refusal`, `cancelled`, and
+  limit stops (`max_tokens`, `max_turn_requests`) are not."
+  [stop-reason]
+  (or (nil? stop-reason) (= "end_turn" stop-reason)))
 
 (defn- config-options [session-result]
   (vec (:configOptions session-result)))
@@ -374,20 +413,29 @@
           session-result (session! conn ids state init agent opts)
           session-id     (:sessionId session-result)]
       (set-config! conn ids state session-id session-result agent opts)
+      ;; session/load replays the prior conversation as agent_message_chunk
+      ;; updates before responding, so only chunks streamed during the prompt
+      ;; turn belong in :text; replayed history stays in :raw :updates.
+      (swap! state assoc :text [])
       (let [prompt-result (request! conn ids state "session/prompt"
                                     (prompt-params session-id agent input opts)
                                     opts)
+            stop-reason   (:stopReason prompt-result)
             text          (str/join "" (:text @state))]
-        (k/result {:agent      (:name agent)
-                   :text       text
-                   :session-id session-id
-                   :stop-reason (:stopReason prompt-result)
-                   :raw        {:runner :acp
-                                :session-id session-id
-                                :stop-reason (:stopReason prompt-result)
-                                :agent-info (:agentInfo init)
-                                :updates (:updates @state)
-                                :stderr (stderr conn)}})))))
+        (k/result
+         (cond-> {:agent      (:name agent)
+                  :ok?        (stop-reason-ok? stop-reason)
+                  :text       text
+                  :session-id session-id
+                  :stop-reason stop-reason
+                  :raw        {:runner :acp
+                               :session-id session-id
+                               :stop-reason stop-reason
+                               :agent-info (:agentInfo init)
+                               :updates (:updates @state)
+                               :stderr (stderr conn)}}
+           (not (stop-reason-ok? stop-reason))
+           (assoc :error (str "ACP prompt turn stopped: " stop-reason))))))))
 
 (defn- run-acp! [agent input opts]
   (if-let [connection (:connection opts)]
