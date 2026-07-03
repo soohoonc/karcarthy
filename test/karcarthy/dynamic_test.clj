@@ -2,21 +2,22 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [karcarthy.core :as k]
+            [karcarthy.dynamic :as dyn]
             [karcarthy.orchestrate :as o]))
 
 (deftest text->op-reads-agent-output
   (testing "dynamic workflow replies are EDN ops, not code"
     (is (= {:op :define
             :agent {:name "writer" :instructions "write"}}
-           (o/text->op
+           (dyn/text->op
             "```edn\n{:op :define :agent {:name \"writer\" :instructions \"write\"}}\n```")))))
 
 (deftest step-defines-patches-and-calls-agents
-  (let [st      (o/state)
+  (let [st      (dyn/state)
         runner (k/mock-runner
                  (fn [{:keys [agent prompt]}]
                    (str (:instructions agent) " :: " prompt)))]
-    (o/step! runner st {:op :define
+    (dyn/step! runner st {:op :define
                          :agent {:name "writer"
                                  :description "Draft writer"
                                  :instructions "version one"
@@ -27,52 +28,52 @@
             :model "sonnet"
             :tools ["Read"]
             :config {:temperature 0.2}}
-           (select-keys (get-in (o/snapshot st) [:agents "writer"])
+           (select-keys (get-in (dyn/snapshot st) [:agents "writer"])
                         [:description :model :tools :config])))
     (is (= "version one :: topic"
-           (:text (o/step! runner st {:op :call
+           (:text (dyn/step! runner st {:op :call
                                        :agent "writer"
                                        :input "topic"}))))
 
-    (o/step! runner st {:op :patch
+    (dyn/step! runner st {:op :patch
                          :agent "writer"
                          :merge {:instructions "version two"}})
     (is (= "version two :: topic"
-           (:text (o/step! runner st {:op :call
+           (:text (dyn/step! runner st {:op :call
                                        :agent "writer"
                                        :input "topic"}))))
-    (is (= 4 (count (:history (o/snapshot st)))))))
+    (is (= 4 (count (:history (dyn/snapshot st)))))))
 
 (deftest workflow-refs-resolve-at-call-time
   (testing "stored workflows pick up later agent patches"
-    (let [st      (o/state :agents [(k/agent {:name "writer"
+    (let [st      (dyn/state :agents [(k/agent {:name "writer"
                                               :instructions "version one"})])
           runner (k/mock-runner (fn [{:keys [agent]}] (:instructions agent)))]
-      (o/step! runner st {:op :define
+      (dyn/step! runner st {:op :define
                            :name "main"
-                           :workflow (o/pipe (o/agent-ref "writer"))})
+                           :workflow (o/pipe (dyn/agent-ref "writer"))})
       (is (= "version one"
-             (:text (o/step! runner st {:op :call
+             (:text (dyn/step! runner st {:op :call
                                          :workflow "main"
                                          :input "x"}))))
-      (o/step! runner st {:op :patch
+      (dyn/step! runner st {:op :patch
                            :agent "writer"
                            :merge {:instructions "version two"}})
       (is (= "version two"
-             (:text (o/step! runner st {:op :call
+             (:text (dyn/step! runner st {:op :call
                                          :workflow "main"
                                          :input "x"})))))))
 
 (deftest workflow-ref-resolves-to-named-workflow
-  (let [st (o/state :agents [(k/agent {:name "writer" :instructions "ok"})]
-                    :workflows {"leaf" (o/agent-ref "writer")
-                                "main" (o/pipe (o/workflow-ref "leaf"))})]
-    (is (= "writer" (:name (first (:steps (o/refs->workflow st (o/workflow-ref "main")))))))))
+  (let [st (dyn/state :agents [(k/agent {:name "writer" :instructions "ok"})]
+                    :workflows {"leaf" (dyn/agent-ref "writer")
+                                "main" (o/pipe (dyn/workflow-ref "leaf"))})]
+    (is (= "writer" (:name (first (:steps (dyn/refs->workflow st (dyn/workflow-ref "main")))))))))
 
 (deftest spawn-runs-one-input-per-agent-call
-  (let [st      (o/state :agents [(k/agent {:name "echo" :instructions "say"})])
+  (let [st      (dyn/state :agents [(k/agent {:name "echo" :instructions "say"})])
         runner (k/mock-runner (fn [{:keys [prompt]}] (str "got " prompt)))
-        r       (o/step! runner st {:op :spawn
+        r       (dyn/step! runner st {:op :spawn
                                      :agent "echo"
                                      :inputs ["a" "b" "c"]})]
     (is (k/ok? r))
@@ -80,9 +81,9 @@
     (is (= "got a\n\ngot b\n\ngot c" (:text r)))))
 
 (deftest spawn-renders-structured-inputs
-  (let [st      (o/state :agents [(k/agent {:name "echo" :instructions "say"})])
+  (let [st      (dyn/state :agents [(k/agent {:name "echo" :instructions "say"})])
         runner (k/mock-runner (fn [{:keys [prompt]}] prompt))
-        r       (o/step! runner st {:op :spawn
+        r       (dyn/step! runner st {:op :spawn
                                      :agent "echo"
                                      :inputs [{:prompt "review"
                                                :ticket 42}
@@ -100,7 +101,7 @@
                            :instructions "version one"}}
                   {:op :define
                    :name "main"
-                   :workflow (o/pipe (o/agent-ref "worker"))}
+                   :workflow (o/pipe (dyn/agent-ref "worker"))}
                   {:op :call
                    :workflow "main"
                    :input "topic"}
@@ -120,7 +121,7 @@
           workflow-agent (k/agent {:name "workflow"
                                    :instructions "Drive the workflow with EDN ops."})
           r (o/run {:runner runner
-                    :workflow (o/dynamic workflow-agent :max-steps 10)
+                    :workflow (dyn/dynamic workflow-agent :max-steps 10)
                     :input "build a worker"})]
       (is (k/ok? r))
       (is (= "done" (:text r)))
@@ -134,7 +135,7 @@
           runner         (k/mock-runner (fn [_] (swap! calls inc) "{:op :bogus}"))
           workflow-agent (k/agent {:name "workflow" :instructions "bad op"})
           r              (o/run {:runner runner
-                                 :workflow (o/dynamic workflow-agent :max-steps 10)
+                                 :workflow (dyn/dynamic workflow-agent :max-steps 10)
                                  :input "x"})]
       (is (not (k/ok? r)))
       (is (str/includes? (:error r) "unknown dynamic workflow op"))
@@ -152,7 +153,7 @@
                               (pr-str {:op :complete :text "recovered"}))))
           workflow-agent (k/agent {:name "workflow" :instructions "drive"})
           r              (o/run {:runner runner
-                                 :workflow (o/dynamic workflow-agent :max-steps 10)
+                                 :workflow (dyn/dynamic workflow-agent :max-steps 10)
                                  :input "x"})]
       (is (k/ok? r))
       (is (= "recovered" (:text r)))

@@ -22,6 +22,7 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [karcarthy.core :as k]
+            [karcarthy.dynamic :as dyn]
             [karcarthy.orchestrate :as o]
             [karcarthy.runner.claude :as cc]))
 
@@ -100,8 +101,8 @@
                         (o/revise worker evaluator :max-rounds n)
                         (o/revise worker evaluator)))
       "dynamic"     (if-let [n (g "max-steps")]
-                      (o/dynamic (json->workflow (g "agent")) :max-steps n)
-                      (o/dynamic (json->workflow (g "agent"))))
+                      (dyn/dynamic (json->workflow (g "agent")) :max-steps n)
+                      (dyn/dynamic (json->workflow (g "agent"))))
       (throw (ex-info (str "unknown workflow type: " (pr-str (g "type"))) {:node m})))))
 
 (defn- mock [responses]

@@ -8,11 +8,17 @@
               :input \"hi\"})
 
   The canonical homes are still `karcarthy.core`, `karcarthy.orchestrate`,
-  `karcarthy.rewrite`, `karcarthy.schema`, `karcarthy.self`, and the
-  implementation runners; this namespace only forwards the public surface."
+  `karcarthy.dynamic`, `karcarthy.rewrite`, `karcarthy.schema`,
+  `karcarthy.self`, and the implementation runners; this namespace only
+  forwards the public surface."
+  ;; `map` and `iterate` are excluded but deliberately left undefined - the
+  ;; names are reserved for future combinators, so `k/map` fails loudly today
+  ;; instead of silently resolving to clojure.core (guarded by
+  ;; `facade-hides-low-level-execution-apis`).
   (:refer-clojure :exclude [agent map iterate reduce])
   (:require [karcarthy.core]
             [karcarthy.orchestrate]
+            [karcarthy.dynamic]
             [karcarthy.rewrite]
             [karcarthy.schema]
             [karcarthy.self]
@@ -63,12 +69,14 @@
 (export karcarthy.orchestrate/revise)
 (export karcarthy.orchestrate/route)
 (export karcarthy.orchestrate/continue)
-(export karcarthy.orchestrate/dynamic)
-(export karcarthy.orchestrate/agent-ref)
-(export karcarthy.orchestrate/workflow-ref)
 (export karcarthy.orchestrate/run)
 (export karcarthy.orchestrate/workflow?)
 (export karcarthy.orchestrate/defworkflow)
+
+;; dynamic workflows
+(export karcarthy.dynamic/dynamic)
+(export karcarthy.dynamic/agent-ref)
+(export karcarthy.dynamic/workflow-ref)
 
 ;; schema reference values
 (export karcarthy.schema/edn-schema)
