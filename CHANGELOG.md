@@ -26,11 +26,13 @@ Early and not yet released. What works so far:
   across many runs via the `:connection` option.
 - Workflow nodes interpreted by `run`: `pipe`, `step`, `branch`, `delegate`,
   `reduce`, `revise`, `route`, `continue`, and `dynamic`.
-- Dynamic workflows: an agent can emit EDN ops (`:define`, `:patch`, `:remove`,
-  `:call`, `:spawn`, `:complete`) during a run; `agent-ref` and `workflow-ref`
-  resolve against that run's state.
+- Dynamic workflows (experimental — the op protocol and prompt format may
+  change between releases): an agent can emit EDN ops (`:define`, `:patch`,
+  `:remove`, `:call`, `:spawn`, `:complete`) during a run; `agent-ref` and
+  `workflow-ref` resolve against that run's state.
 - `karcarthy.self`: safe EDN parsing for agent-authored workflows and agents,
-  plus the `evolve` extension node for runtime instruction/model/tool patches.
+  plus the experimental `evolve` extension node for runtime
+  instruction/model/tool patches.
 - `karcarthy.rewrite`: structural workflow rewrites (`agents`, `over`,
   `configure`) that edit workflow EDN before `run` interprets it, without
   calling runners or `eval`.
