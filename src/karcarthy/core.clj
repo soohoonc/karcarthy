@@ -15,13 +15,13 @@
   (:require [clojure.spec.alpha :as s]
             [karcarthy.observe :as obs]))
 
-;; ===========================================================================
+;; ---------------------------------------------------------------------------
 ;; Data model
 ;;
 ;; Every karcarthy entity is a map tagged with `:karcarthy/type`. We use plain,
 ;; unqualified keys (`:name`, `:instructions`, ...) so the maps are pleasant to
 ;; write and read by hand; specs below validate them with `:req-un`/`:opt-un`.
-;; ===========================================================================
+;; ---------------------------------------------------------------------------
 
 (s/def ::name        (s/and string? seq))
 (s/def ::instructions string?)
@@ -62,9 +62,11 @@
 (def ^:private agent-keys
   #{:name :description :instructions :model :tools :config})
 
-(defn- reject-unknown!
+(defn reject-unknown!
+  "Throw when `m` contains keys outside `supported`; otherwise return `m`.
+  The shared guard behind every option-taking constructor."
   [label supported m]
-  (when-let [unknown (seq (remove supported (keys m)))]
+  (when-let [unknown (seq (remove (set supported) (keys m)))]
     (throw (ex-info (str label " contains unknown options")
                     {:unknown (vec unknown)
                      :supported (vec supported)})))
@@ -82,16 +84,13 @@
                       {:from base})))
     (reject-unknown! "agent" (conj agent-keys :from) spec)
     (let [spec'  (cond-> spec
-                   (and (contains? spec :tools) (some? (:tools spec)))
+                   (some? (:tools spec))
                    (update :tools vec)
 
                    (and (contains? spec :tools) (nil? (:tools spec)))
                    (dissoc :tools))
-          merged (merge (or base {})
-                        (dissoc spec' :from))
-          agent' (cond-> merged
-                   (not= :agent (:karcarthy/type merged))
-                   (assoc :karcarthy/type :agent))]
+          agent' (-> (merge base (dissoc spec' :from))
+                     (assoc :karcarthy/type :agent))]
       (when-not (agent? agent')
         (throw (ex-info "agent spec is invalid"
                         {:agent agent'
@@ -120,7 +119,7 @@
   [x]
   (and (map? x) (= :agent (:karcarthy/type x)) (s/valid? ::agent x)))
 
-(def ^:private subagent-option-keys
+(def subagent-option-keys
   "Option keys accepted by `subagent`, in the order they appear in the built
   map. The single source of truth for the option surface; `::subagent` above
   mirrors it for validation."
@@ -154,16 +153,21 @@
   See `subagent-option-keys` in this namespace (and the `::subagent` spec) for
   the full option list."
   [name description instructions & {:as opts}]
-  (reject-unknown! "subagent" (set subagent-option-keys) (or opts {}))
-  (let [opts (normalize-subagent-opts (or opts {}))]
-    (into {:karcarthy/type :subagent
-           :name name
-           :description description
-           :instructions instructions}
-          (keep (fn [k]
-                  (when (some? (get opts k))
-                    [k (get opts k)])))
-          subagent-option-keys)))
+  (reject-unknown! "subagent" subagent-option-keys (or opts {}))
+  (let [opts      (normalize-subagent-opts (or opts {}))
+        subagent' (into {:karcarthy/type :subagent
+                         :name name
+                         :description description
+                         :instructions instructions}
+                        (keep (fn [k]
+                                (when (some? (get opts k))
+                                  [k (get opts k)])))
+                        subagent-option-keys)]
+    (when-not (s/valid? ::subagent subagent')
+      (throw (ex-info "subagent spec is invalid"
+                      {:subagent subagent'
+                       :problems (s/explain-str ::subagent subagent')})))
+    subagent'))
 
 (defn subagent?
   "True if `x` is a karcarthy subagent value (well-formed)."
@@ -218,12 +222,12 @@
   `(def ~(vary-meta sym assoc :doc instructions)
      (subagent ~(name sym) ~description ~instructions ~@opts)))
 
-;; ===========================================================================
+;; ---------------------------------------------------------------------------
 ;; Results
 ;;
 ;; Running an agent yields a *result map*. Keeping a single, well-known shape
 ;; lets orchestration combinators treat every runner uniformly.
-;; ===========================================================================
+;; ---------------------------------------------------------------------------
 
 (defn result
   "Construct a result map, defaulting `:ok?` to true.
@@ -256,13 +260,13 @@
     :else
     (result (assoc defaults :text (str reply)))))
 
-;; ===========================================================================
+;; ---------------------------------------------------------------------------
 ;; Runner implementation protocol
 ;;
 ;; A runner runs a *single* agent's model<->tool loop to completion. The
 ;; concrete implementations can be Agent SDKs, coding-agent CLIs, Clojure
 ;; functions, subprocesses, shell commands, or mocks.
-;; ===========================================================================
+;; ---------------------------------------------------------------------------
 
 (defprotocol Runner
   "Implementation protocol for runners that run one agent to completion.
@@ -299,33 +303,17 @@
      (throw (ex-info (str "Invalid agent: " msg)
                      {:agent agent :problems (s/explain-data ::agent agent)})))
    (let [runner (runner! runner)]
-     (if-not (:observe opts)
-       (-run runner agent prompt opts)
-     (let [span-id        (obs/span-id)
-           parent-span-id (:karcarthy/parent-span-id opts)
-           started-ns     (System/nanoTime)]
-       (obs/observe! opts (agent-event :start span-id parent-span-id agent opts))
-       (try
-         (let [result (-run runner agent prompt opts)]
-           (obs/observe! opts (agent-event :finish span-id parent-span-id agent
-                                           (assoc opts
-                                                  :duration-ms (obs/duration-ms started-ns)
-                                                  :ok? (ok? result))))
-           result)
-         (catch Throwable t
-           (obs/observe! opts (agent-event :error span-id parent-span-id agent
-                                           (assoc opts
-                                                  :duration-ms (obs/duration-ms started-ns)
-                                                  :ok? false
-                                                  :error (or (.getMessage t) (str t)))))
-           (throw t))))))))
+     (obs/with-span opts
+       (fn [phase span-id parent-span-id attrs]
+         (agent-event phase span-id parent-span-id agent attrs))
+       (fn [_] (-run runner agent prompt opts))))))
 
-;; ===========================================================================
+;; ---------------------------------------------------------------------------
 ;; Mock runner
 ;;
 ;; A fully offline runner for tests, demos, and developing orchestration logic
 ;; without burning tokens or needing network access.
-;; ===========================================================================
+;; ---------------------------------------------------------------------------
 
 (defn mock-runner
   "An offline runner. `respond` is a fn of {:agent :prompt :options} -> String
@@ -351,10 +339,7 @@
   string, a partial result map, or a full result map."
   ([f] (fn-runner f {}))
   ([f {:keys [call?] :as config}]
-   (when-let [unknown (seq (remove #{:call?} (keys config)))]
-     (throw (ex-info "fn-runner contains unknown options"
-                     {:unknown (vec unknown)
-                      :supported [:call?]})))
+   (reject-unknown! "fn-runner" [:call?] config)
    (let [call? (boolean call?)]
      (reify Runner
        (-run [_ agent input opts]

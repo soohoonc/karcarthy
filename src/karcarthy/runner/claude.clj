@@ -143,14 +143,7 @@
              (.redirectErrorStream true))]
     (when dir (.directory pb (io/file (str dir))))
     (let [proc     (.start pb)
-          _        (when (some? in)
-                     ;; the process may exit before reading stdin; ignore the
-                     ;; broken pipe
-                     (try
-                       (with-open [os (.getOutputStream proc)]
-                         (.write os (.getBytes (str in) "UTF-8"))
-                         (.flush os))
-                       (catch java.io.IOException _ nil)))
+          _        (proc/write-stdin! proc in)
           watchdog (when timeout-ms
                      (future (Thread/sleep timeout-ms)
                              (when (.isAlive proc) (.destroyForcibly proc))))]
@@ -168,7 +161,7 @@
         (finally
           (when watchdog (future-cancel watchdog)))))))
 
-(defn- stream
+(defn- run-streaming!
   "Stream `claude -p --output-format stream-json`, invoking (:on-event opts) per
   event, and return the karcarthy result built from the terminal result event."
   [agent prompt opts]
@@ -180,21 +173,23 @@
       (payload->result (:name agent) result)
       (k/result {:agent (:name agent) :ok? false :text nil
                  :error (str "stream ended without a result event (exit " exit ")")
-                 :raw   {:exit exit :events events :argv argv}}))))
+                 :raw   {:runner :claude :exit exit :events events :argv argv}}))))
 
-(defn- buffer
+(defn- run-buffered!
   [agent prompt opts]
   (let [output-format (get opts :output-format "json")
         argv          (command agent prompt opts)
         {:keys [exit out err timed-out?]}
         (proc/run argv {:dir        (:dir opts)
                         :timeout-ms (:timeout-ms opts)
-                        :in         (when (= :stdin (:prompt-via opts)) prompt)})]
+                        :in         (when (= :stdin (:prompt-via opts)) prompt)})
+        raw {:runner :claude :exit exit :out out :err err
+             :timed-out? timed-out? :argv argv}]
     (cond
       timed-out?
       (k/result {:agent (:name agent) :ok? false :text nil
                  :error "claude timed out"
-                 :raw   {:timed-out? true :out out :err err :argv argv}})
+                 :raw   raw})
 
       ;; JSON mode: claude emits a structured result (with cost, subtype and
       ;; partial text) even when it errors and exits non-zero, so prefer parsing
@@ -206,27 +201,27 @@
           (k/result {:agent (:name agent) :ok? false
                      :text  (or (not-empty err) out)
                      :error (str "could not parse claude JSON: " (.getMessage e))
-                     :raw   {:exit exit :out out :err err :argv argv}})))
+                     :raw   raw})))
 
       ;; Non-JSON output (or empty stdout): trust the exit code.
       (and exit (zero? exit))
       (k/result {:agent (:name agent) :ok? true
                  :text  out
-                 :raw   {:out out :err err}})
+                 :raw   raw})
 
       :else
       (k/result {:agent (:name agent) :ok? false
                  :text  (or (not-empty err) out)
                  :error (str "claude exited with status " exit)
-                 :raw   {:exit exit :out out :err err :argv argv}}))))
+                 :raw   raw}))))
 
 (defn- invoke!
   "Dispatch to the streaming reader when an :on-event callback is supplied or
   :output-format is \"stream-json\"; otherwise run buffered."
   [agent prompt opts]
   (if (or (:on-event opts) (= "stream-json" (get opts :output-format)))
-    (stream agent prompt opts)
-    (buffer agent prompt opts)))
+    (run-streaming! agent prompt opts)
+    (run-buffered! agent prompt opts)))
 
 (defn claude-runner
   "Runner for Claude. `default-options` are merged beneath per-run options

@@ -8,8 +8,8 @@
               :input \"hi\"})
 
   The canonical homes are still `karcarthy.core`, `karcarthy.orchestrate`,
-  `karcarthy.self`, and the implementation runners; this namespace only
-  forwards the public surface."
+  `karcarthy.rewrite`, `karcarthy.schema`, `karcarthy.self`, and the
+  implementation runners; this namespace only forwards the public surface."
   (:refer-clojure :exclude [agent map iterate reduce])
   (:require [karcarthy.core]
             [karcarthy.orchestrate]
@@ -32,13 +32,13 @@
       (throw (ex-info (str "export: cannot resolve " qsym) {:sym qsym})))
     (let [m  (meta v)
           nm (symbol (name qsym))]
-      (if (:macro m)
-        `(defmacro ~nm [~'& args#] (cons '~qsym args#))
-        ;; copy :doc/:arglists as quoted data via alter-meta! (putting :arglists
-        ;; as symbol metadata would make the compiler evaluate the arglist).
-        `(do (def ~nm @(var ~qsym))
-             (alter-meta! (var ~nm) merge '~(select-keys m [:doc :arglists]))
-             (var ~nm))))))
+      `(do ~(if (:macro m)
+              `(defmacro ~nm [~'& args#] (cons '~qsym args#))
+              `(def ~nm @(var ~qsym)))
+           ;; copy :doc/:arglists as quoted data via alter-meta! (putting
+           ;; :arglists as symbol metadata would make the compiler evaluate it).
+           (alter-meta! (var ~nm) merge '~(select-keys m [:doc :arglists]))
+           (var ~nm)))))
 
 ;; data model + mock runner
 (export karcarthy.core/agent)

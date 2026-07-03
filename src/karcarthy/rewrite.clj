@@ -32,13 +32,7 @@
   "Return the valid agent leaves in `workflow`, in traversal order."
   [workflow]
   (workflow! "agents" workflow)
-  (let [found (atom [])]
-    (walk/postwalk (fn [x]
-                     (when (k/agent? x)
-                       (swap! found conj x))
-                     x)
-                   workflow)
-    @found))
+  (filterv k/agent? (tree-seq coll? seq workflow)))
 
 (defn over
   "Apply `f` to every value in `workflow` where `pred` returns true.

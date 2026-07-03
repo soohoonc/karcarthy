@@ -4,26 +4,14 @@
   `process-runner` executes an argv vector directly, or executes a shell command
   string through `sh -c`. It writes the input to stdin and turns stdout into the
   result text."
-  (:require [clojure.string :as str]
-            [karcarthy.core :as k]
+  (:require [karcarthy.core :as k]
             [karcarthy.proc :as proc]))
 
 (defn- run-process
   [mode argv agent-name input {:keys [trim? env dir timeout-ms]}]
-  (let [{:keys [exit out err timed-out?]}
-        (proc/run argv {:in input :env env :dir dir :timeout-ms timeout-ms})]
-    (k/result {:agent agent-name
-               :ok?   (and (not timed-out?) (= 0 exit))
-               :text  (cond-> (or out "") trim? str/trim)
-               :error (cond timed-out?    "process timed out"
-                            (not= 0 exit) (str "process exited with status " exit))
-               :raw   {:runner :process
-                       :mode mode
-                       :exit exit
-                       :out out
-                       :err err
-                       :timed-out? timed-out?
-                       :argv (vec argv)}})))
+  (proc/->result (proc/run argv {:in input :env env :dir dir :timeout-ms timeout-ms})
+                 {:agent agent-name :label "process" :trim? trim?
+                  :raw   {:runner :process :mode mode :argv (vec argv)}}))
 
 (defn- command->argv
   [command shell]
