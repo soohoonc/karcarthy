@@ -106,17 +106,20 @@
    :dynamic
    {:karcarthy/type :dynamic
     :required        {:agent :agent}
-    :optional        {:max-steps :integer}}
+    :optional        {:max-steps :integer}
+    :experimental?   true}
 
    :agent-ref
    {:karcarthy/type :agent-ref
     :required        {:name :string}
-    :dynamic-only?   true}
+    :dynamic-only?   true
+    :experimental?   true}
 
    :workflow-ref
    {:karcarthy/type :workflow-ref
     :required        {:name :string}
-    :dynamic-only?   true}})
+    :dynamic-only?   true
+    :experimental?   true}})
 
 (def json-schema
   "JSON Schema for CLI workflow objects.
@@ -216,6 +219,7 @@
 
     "dynamic"
     {"type" "object"
+     "description" "Experimental: the dynamic op protocol may change between releases."
      "required" ["type" "agent"]
      "additionalProperties" false
      "properties" {"type" {"const" "dynamic"}

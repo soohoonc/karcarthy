@@ -122,7 +122,8 @@ The repository ships more complete examples than the two walkthroughs above.
 Unless marked live, each runs offline with no API keys.
 
 - `examples/clojure/claude_dynamic_agents.clj` — Claude dynamic-workflow style
-  orchestration: a lead agent sharpens its own instructions with `evolve`, a
+  orchestration: a lead agent sharpens its own instructions with the
+  experimental `evolve`, a
   planner creates workstreams at runtime (`delegate` into a worker `pipe`,
   synthesized with `reduce`), and a critic accepts or requests one revision
   (`revise`). Offline by default; set `KARCARTHY_CLAUDE_LIVE=1` to run through

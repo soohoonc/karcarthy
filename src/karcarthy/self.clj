@@ -89,16 +89,18 @@
     "or a node."]))
 
 ;; ---------------------------------------------------------------------------
-;; Agents editing their own behavior at runtime
+;; Agents editing their own behavior at runtime (experimental)
 ;; ---------------------------------------------------------------------------
 
-(defn evolve
+(defn ^:experimental evolve
   "A workflow node: run `agent`, letting it edit its own definition at runtime. Each
   round the agent may reply with an EDN patch
   `{:karcarthy/patch {<fields to merge>} :reason \"...\"}` to change itself (its
   :description, :instructions, :model, :tools or :config) and retry,
   or with a plain final answer.
-  Stops at the final answer or `:max-rounds` (default 5)."
+  Stops at the final answer or `:max-rounds` (default 5).
+
+  Experimental: the self-patch protocol may change between releases."
   [agent & {:keys [max-rounds] :or {max-rounds 5} :as opts}]
   (k/reject-unknown! "evolve" [:max-rounds] opts)
   {:karcarthy/type :evolve :agent agent :max-rounds max-rounds})

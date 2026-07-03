@@ -72,7 +72,12 @@
     (is (nil? (ns-resolve 'karcarthy 'step!)))
     (is (nil? (ns-resolve 'karcarthy 'state)))
     (is (nil? (ns-resolve 'karcarthy 'text->op)))
-    (is (nil? (ns-resolve 'karcarthy 'dynamic-reference)))))
+    (is (nil? (ns-resolve 'karcarthy 'dynamic-reference))))
+  (testing "the experimental tag survives the re-export"
+    (doseq [sym '[dynamic agent-ref workflow-ref]]
+      (is (:experimental (meta (ns-resolve 'karcarthy sym)))
+          (str "karcarthy/" sym " is tagged ^:experimental")))
+    (is (get-in kc/edn-schema [:dynamic :experimental?]))))
 
 (deftest facade-hides-low-level-execution-apis
   (testing "normal users get one execution entrypoint: run"

@@ -47,7 +47,8 @@ system.
   `process-runner`, `acp-runner`, `claude-runner`, `codex-runner`, and
   `openai-runner`. Pass the runner you want to `run`.
 - **Workflows as data**: compose agents with `pipe`, `branch`, `delegate`,
-  `reduce`, `revise`, `route`, `continue`, and `dynamic`; inspect and rewrite
+  `reduce`, `revise`, `route`, `continue`, and the experimental `dynamic`;
+  inspect and rewrite
   those workflow values before running them.
 - **Host Clojure steps**: use `step` for local functions inside workflows; use
   `process-runner` when the whole run should execute agent calls through a

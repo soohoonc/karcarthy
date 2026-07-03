@@ -61,6 +61,9 @@
 
 ;; --- evolve: an agent edits its own definition at runtime ------------------
 
+(deftest evolve-is-marked-experimental
+  (is (:experimental (meta #'self/evolve))))
+
 (deftest evolve-workflow-predicate-validates-extension-data
   (testing "extension nodes must validate their own workflow data"
     (is (o/workflow? (self/evolve (k/agent {:name "self" :instructions "i"}))))

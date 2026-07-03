@@ -20,10 +20,10 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 | `src/karcarthy.clj` | facade namespace re-exporting the public API under one alias (`(require '[karcarthy :as k])`) |
 | `src/karcarthy/core.clj` | data model (`agent`, `subagent`), spec validation, `result`, the `Runner` protocol, `mock-runner`, `fn-runner`, and the `defagent` / `defsubagent` macros |
 | `src/karcarthy/orchestrate.clj` | the workflow DSL - `pipe` / `step` / `branch` / `delegate` / `reduce` / `revise` / `route` / `continue`, the `run` interpreter (a `run-node` multimethod), and `defworkflow` / `workflow?` |
-| `src/karcarthy/dynamic.clj` | dynamic workflows: the `dynamic` op-loop node, `agent-ref` / `workflow-ref`, mutable run state, and op application (`step!`) |
+| `src/karcarthy/dynamic.clj` | dynamic workflows (experimental): the `dynamic` op-loop node, `agent-ref` / `workflow-ref`, mutable run state, and op application (`step!`) |
 | `src/karcarthy/schema.clj` | EDN and JSON schema reference values for public workflow data |
 | `src/karcarthy/rewrite.clj` | structural workflow rewrites: `agents`, `over`, and `configure` |
-| `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node |
+| `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node (experimental) |
 | `src/karcarthy/edn.clj` | internal helper extracting the first EDN map from model output (`clojure.edn`, never `eval`) |
 | `src/karcarthy/observe.clj` | internal observation-event helpers shared by `core` and `orchestrate` (`:observe` callback) |
 | `src/karcarthy/proc.clj` | subprocess execution with timeout, shared by the subprocess-backed runners |

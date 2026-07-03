@@ -93,6 +93,51 @@
             "{:topic \"billing\"}"]
            (mapv :text (:results r))))))
 
+(deftest dynamic-machinery-is-marked-experimental
+  (testing "every public var of the dynamic namespace is tagged ^:experimental"
+    (doseq [v [#'dyn/dynamic #'dyn/agent-ref #'dyn/workflow-ref
+               #'dyn/state #'dyn/snapshot #'dyn/step!
+               #'dyn/text->op #'dyn/refs->workflow #'dyn/dynamic-reference]]
+      (is (:experimental (meta v)) (str v " is tagged ^:experimental")))))
+
+(deftest dynamic-reference-documents-every-op
+  (testing "the prompt curriculum names every op the interpreter accepts"
+    (doseq [op [":define" ":patch" ":remove" ":call" ":spawn" ":complete"]]
+      (is (str/includes? dyn/dynamic-reference (str "{:op " op))
+          (str op " op is documented")))))
+
+(deftest dynamic-prompt-lists-registered-agents
+  (testing "each step's prompt shows the agent roster with descriptions"
+    (let [prompts (atom [])
+          calls   (atom 0)
+          script  [{:op :define
+                    :agent {:name "writer"
+                            :description "Drafts short prose."
+                            :instructions "Write."}}
+                   {:op :complete :text "done"}]
+          runner  (k/mock-runner
+                   (fn [{:keys [prompt]}]
+                     (swap! prompts conj prompt)
+                     (pr-str (nth script (dec (swap! calls inc))))))
+          r       (o/run {:runner runner
+                          :workflow (dyn/dynamic (k/agent {:name "driver"
+                                                           :instructions "drive"}))
+                          :input "t"})]
+      (is (k/ok? r))
+      (is (str/includes? (first @prompts) "AGENTS"))
+      (is (str/includes? (first @prompts) "(none yet)"))
+      (is (str/includes? (second @prompts) "Drafts short prose.")))))
+
+(deftest dynamic-prompt-elides-old-history
+  (testing "long runs keep the prompt bounded by windowing history"
+    (let [st (dyn/state)]
+      (dotimes [i 15]
+        (dyn/step! (k/mock-runner) st
+                   {:op :define
+                    :agent {:name (str "a" i) :instructions "x"}}))
+      (let [prompt (#'dyn/dynamic-prompt "t" st nil 16)]
+        (is (str/includes? prompt "(5 earlier steps elided)"))))))
+
 (deftest dynamic-workflow-runs-until-complete
   (testing "the dynamic workflow agent can define, call, patch, call again, and finish"
     (let [calls  (atom 0)
