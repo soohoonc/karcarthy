@@ -128,6 +128,13 @@
       (is (= "version two" (get-in r [:state :agents "worker" :instructions])))
       (is (= "version two" (-> r :state :history (nth 4) :result :text))))))
 
+(deftest dynamic-machinery-is-marked-experimental
+  (testing "every public var of the dynamic section is tagged ^:experimental"
+    (doseq [v [#'o/dynamic #'o/agent-ref #'o/workflow-ref
+               #'o/state #'o/snapshot #'o/step!
+               #'o/text->op #'o/refs->workflow #'o/dynamic-reference]]
+      (is (:experimental (meta v)) (str v " is tagged ^:experimental")))))
+
 (deftest dynamic-reference-documents-every-op
   (testing "the prompt curriculum names every op the interpreter accepts"
     (doseq [op [":define" ":patch" ":remove" ":call" ":spawn" ":complete"]]

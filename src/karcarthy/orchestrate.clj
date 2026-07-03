@@ -135,21 +135,25 @@
   (cond-> {:karcarthy/type :continue :source source :to to}
     (contains? opts :prompt) (assoc :prompt prompt)))
 
-(defn agent-ref
-  "A late-bound reference to an agent in a dynamic workflow run."
+(defn ^:experimental agent-ref
+  "A late-bound reference to an agent in a dynamic workflow run (experimental)."
   [name]
   {:karcarthy/type :agent-ref :name (name-key name)})
 
-(defn workflow-ref
-  "A late-bound reference to a named workflow in a dynamic workflow run."
+(defn ^:experimental workflow-ref
+  "A late-bound reference to a named workflow in a dynamic workflow run
+  (experimental)."
   [name]
   {:karcarthy/type :workflow-ref :name (name-key name)})
 
-(defn dynamic
+(defn ^:experimental dynamic
   "Run `agent` in an op loop: each step it emits one EDN op to define, patch,
   remove, call, or spawn agents and workflows (see `dynamic-reference`), until
   it emits `{:op :complete ...}`. Options:
-    :max-steps  fail the run after this many ops (default 25)."
+    :max-steps  fail the run after this many ops (default 25).
+
+  Experimental: the dynamic op protocol and prompt format may change between
+  releases."
   [agent & {:keys [max-steps] :or {max-steps 25} :as opts}]
   (k/reject-unknown! "dynamic" [:max-steps] opts)
   {:karcarthy/type :dynamic
@@ -650,7 +654,10 @@
                  (node? x)))))))
 
 ;; ---------------------------------------------------------------------------
-;; Dynamic workflows
+;; Dynamic workflows (experimental)
+;;
+;; The public vars in this section are tagged ^:experimental: the op protocol
+;; and prompt format may change between releases.
 ;; ---------------------------------------------------------------------------
 
 (defn- dynamic-workflow?
@@ -696,7 +703,7 @@
     workflow
     (throw (ex-info "invalid workflow" {:workflow workflow}))))
 
-(defn state
+(defn ^:experimental state
   "Create mutable state for one dynamic workflow run."
   [& {:keys [agents workflows history]}]
   (doseq [agent agents] (validate-agent agent))
@@ -707,7 +714,7 @@
                                [(name-key name) workflow]))
          :history   (vec history)}))
 
-(defn snapshot
+(defn ^:experimental snapshot
   "Return dynamic workflow run state as plain data."
   [state]
   @state)
@@ -724,7 +731,7 @@
         (throw (ex-info (str "unknown workflow: " (pr-str n))
                         {:name n :known (vec (keys (:workflows @state)))})))))
 
-(defn refs->workflow
+(defn ^:experimental refs->workflow
   "Resolve `agent-ref` and `workflow-ref` values against dynamic run state."
   ([state workflow] (refs->workflow state workflow #{}))
   ([state workflow seen]
@@ -778,7 +785,7 @@
                       {:op op :known (vec op-kinds)})))
     (assoc op :op k)))
 
-(defn text->op
+(defn ^:experimental text->op
   "Parse the first EDN map in `text` into a dynamic workflow op."
   [text]
   (normalize-op (kedn/extract-map! text)))
@@ -940,7 +947,7 @@
                  :results results
                  :text    (str/join "\n\n" (keep :text results))}))))
 
-(defn step!
+(defn ^:experimental step!
   "Apply one dynamic workflow op to state."
   ([runner state op] (step! runner state op {}))
   ([runner state op opts]
@@ -959,7 +966,7 @@
                                        :value (:value op)}))]
      (remember! state op result))))
 
-(def dynamic-reference
+(def ^:experimental dynamic-reference
   "Prompt fragment teaching a dynamic workflow agent the op protocol: how the
   loop works, every op with its meaning, the workflow grammar, EDN rules, and
   a worked example."

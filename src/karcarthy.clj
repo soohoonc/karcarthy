@@ -24,8 +24,8 @@
 
 (defmacro ^:private export
   "Re-export the var named by the fully-qualified symbol `qsym` into this
-  namespace under its short name, preserving :doc and :arglists. Macros are
-  re-exported as forwarding macros."
+  namespace under its short name, preserving :doc, :arglists, and
+  :experimental. Macros are re-exported as forwarding macros."
   [qsym]
   (let [v (resolve qsym)]
     (when (nil? v)
@@ -35,9 +35,9 @@
       `(do ~(if (:macro m)
               `(defmacro ~nm [~'& args#] (cons '~qsym args#))
               `(def ~nm @(var ~qsym)))
-           ;; copy :doc/:arglists as quoted data via alter-meta! (putting
+           ;; copy the metadata as quoted data via alter-meta! (putting
            ;; :arglists as symbol metadata would make the compiler evaluate it).
-           (alter-meta! (var ~nm) merge '~(select-keys m [:doc :arglists]))
+           (alter-meta! (var ~nm) merge '~(select-keys m [:doc :arglists :experimental]))
            (var ~nm)))))
 
 ;; data model + mock runner
@@ -63,12 +63,14 @@
 (export karcarthy.orchestrate/revise)
 (export karcarthy.orchestrate/route)
 (export karcarthy.orchestrate/continue)
-(export karcarthy.orchestrate/dynamic)
-(export karcarthy.orchestrate/agent-ref)
-(export karcarthy.orchestrate/workflow-ref)
 (export karcarthy.orchestrate/run)
 (export karcarthy.orchestrate/workflow?)
 (export karcarthy.orchestrate/defworkflow)
+
+;; dynamic workflows (experimental)
+(export karcarthy.orchestrate/dynamic)
+(export karcarthy.orchestrate/agent-ref)
+(export karcarthy.orchestrate/workflow-ref)
 
 ;; schema reference values
 (export karcarthy.schema/edn-schema)

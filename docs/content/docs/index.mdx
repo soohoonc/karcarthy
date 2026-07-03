@@ -77,7 +77,7 @@ dispatch cleanly on tagged workflow nodes.
 | Task | Start here |
 | --- | --- |
 | Run one agent and compose the first workflow | [Quickstart](/docs/quickstart) |
-| Understand how data moves through `pipe`, `branch`, `route`, `revise`, `delegate`, `reduce`, `continue`, `step`, and `dynamic` | [Workflows](/docs/workflows) |
+| Understand how data moves through `pipe`, `branch`, `route`, `revise`, `delegate`, `reduce`, `continue`, `step`, and the experimental `dynamic` | [Workflows](/docs/workflows) |
 | Swap mock execution for ACP, Claude, Codex, OpenAI, or a process command | [Runners](/docs/runners) |
 | Copy realistic launch-readiness and deep-research patterns | [Examples](/docs/examples) |
 | Look up signatures and JSON shapes | [Reference](/docs/reference) |
@@ -87,7 +87,7 @@ dispatch cleanly on tagged workflow nodes.
 | Surface | Description |
 | --- | --- |
 | Agents | Plain maps tagged with `:karcarthy/type :agent`; usually defined with `defagent`. |
-| Workflows | `pipe`, `branch`, `route`, `revise`, `delegate`, `reduce`, `continue`, `step`, and `dynamic` (`step` is the host-local Clojure escape hatch). |
+| Workflows | `pipe`, `branch`, `route`, `revise`, `delegate`, `reduce`, `continue`, `step`, and `dynamic` (`step` is the host-local Clojure escape hatch; `dynamic` is experimental). |
 | Subagents | Runner-native delegation config built with `subagent`/`defsubagent`, passed to runners that support native delegation. Distinct from workflow nodes. See [Runners](/docs/runners#subagents). |
 | Rewrites | `agents`, `over`, and `configure`. |
 | Runners | Mock, Clojure function, process command, ACP, Claude, Codex, and OpenAI. |
