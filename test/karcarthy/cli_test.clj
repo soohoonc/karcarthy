@@ -93,6 +93,19 @@
       (is (o/workflow? workflow))
       (is (= "fallback" (get-in workflow [:default :name]))))))
 
+(deftest json->workflow-continue-accepts-prompt
+  (testing "JSON continue includes a prompt only when one is present"
+    (let [with-prompt (cli/json->workflow {"type"   "continue"
+                                           "source" {"type" "agent" "name" "a" "instructions" "i"}
+                                           "to"     {"type" "agent" "name" "b" "instructions" "i"}
+                                           "prompt" "Now summarize."})
+          without     (cli/json->workflow {"type"   "continue"
+                                           "source" {"type" "agent" "name" "a" "instructions" "i"}
+                                           "to"     {"type" "agent" "name" "b" "instructions" "i"}})]
+      (is (o/workflow? with-prompt))
+      (is (= "Now summarize." (:prompt with-prompt)))
+      (is (not (contains? without :prompt))))))
+
 (deftest json->workflow-unknown-type
   (is (thrown? clojure.lang.ExceptionInfo (cli/json->workflow {"type" "nope"}))))
 

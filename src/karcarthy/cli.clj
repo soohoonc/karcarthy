@@ -12,7 +12,7 @@
     {\"type\":\"delegate\" \"planner\":<workflow> \"worker\":<workflow> \"max-concurrency\":?}
     {\"type\":\"reduce\" \"source\":<branch-or-delegate-workflow> \"reducer\":<workflow>}
     {\"type\":\"route\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
-    {\"type\":\"continue\" \"source\":<workflow> \"to\":<workflow>}
+    {\"type\":\"continue\" \"source\":<workflow> \"to\":<workflow> \"prompt\":?}
     {\"type\":\"revise\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
     {\"type\":\"dynamic\" \"agent\":<agent> \"max-steps\":?}
   Response is the karcarthy result map as JSON. \"runner\" is \"mock\" (default,
@@ -86,8 +86,11 @@
                       (if (contains? m "default")
                         (o/route source routes :default (json->workflow (g "default")))
                         (o/route source routes)))
-      "continue"    (o/continue (json->workflow (g "source"))
-                                (json->workflow (g "to")))
+      "continue"    (let [source (json->workflow (g "source"))
+                          to     (json->workflow (g "to"))]
+                      (if (contains? m "prompt")
+                        (o/continue source to :prompt (g "prompt"))
+                        (o/continue source to)))
       "revise"      (o/revise (json->workflow (g "worker")) (json->workflow (g "evaluator"))
                                :max-rounds (or (g "max-rounds") 3))
       "dynamic"     (o/dynamic (json->workflow (g "agent"))
