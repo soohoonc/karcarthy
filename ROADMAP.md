@@ -16,7 +16,9 @@ that loop sharper, not broader.
 ## Runners
 
 - Keep runners thin: one agent in, one result map out.
-- Add live conformance tests for Claude CLI and OpenAI only as opt-in tests.
+- Keep live conformance tests opt-in: the Claude CLI test already runs behind
+  `KARCARTHY_LIVE`; add matching opt-in tests for the OpenAI, Codex, and ACP
+  runners.
 - Avoid turning karcarthy into a tool host; tools stay in SDKs, CLIs, MCP
   config, or subprocess-backed runners.
 

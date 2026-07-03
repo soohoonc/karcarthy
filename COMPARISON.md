@@ -1,12 +1,12 @@
 # karcarthy vs. other agent builders
 
-Most agent frameworks define agents, tools, and workflows as **objects or
-decorators in a host language**, and bundle the agent loop (model call to tool
-call to model, until done). karcarthy makes a different pair of choices: the
-workflow is **plain data** (EDN), and the loop is **delegated to an Agent SDK,
-agent framework, coding-agent CLI, Clojure function, subprocess, or shell
-runner**.
-This page compares the common patterns and is honest about the trade-offs.
+Use this page to decide when karcarthy fits and when another agent framework
+serves you better. Most frameworks define agents, tools, and workflows as
+**objects or decorators in a host language**, and bundle the agent loop (model
+call to tool call to model, until done). karcarthy makes a different pair of
+choices: the workflow is **plain data** (EDN), and the loop is **delegated to
+an Agent SDK, agent framework, coding-agent CLI, Clojure function, subprocess,
+or shell runner**.
 
 The frameworks referenced:
 
@@ -28,10 +28,10 @@ The frameworks referenced:
 | Define an agent | a host-language object/module: `Agent(model, instructions, tools)`, a DSPy `Signature` + module, or `{ model, tools }` (TS) | a data map: `{:karcarthy/type :agent :name … :instructions … :model …}` |
 | The agent loop | the framework runs it for you | delegated to Claude, Codex, OpenAI, ACP, a local model, or another runner |
 | Tools | typed functions: Pydantic models / Zod schemas / Python callables; DSPy `ReAct` can use tools | a tool allowlist handed to the selected runner, when that system supports it |
-| Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | functional workflow data: `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue` |
-| Structured output | Pydantic model / Zod / `generateObject`; DSPy signatures type input/output fields | parse the reply yourself (roadmap: typed signatures / JSON Schema) |
+| Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | functional workflow data: `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, `step`, `dynamic` |
+| Structured output | Pydantic model / Zod / `generateObject`; DSPy signatures type input/output fields | parse the reply yourself |
 | Optimization | DSPy optimizers compile programs against metrics; others mostly leave prompt tuning to the application | no optimizer yet; workflows are easy to transform because they are data |
-| Streaming | tokens/events, especially to a UI | Claude stream events today |
+| Streaming | tokens/events, especially to a UI | Claude stream events and ACP session-update events via `:on-event` |
 | Sessions / memory | built in (Agno AgentOS, PydanticAI) | runner/session state is delegated; richer memory is out of scope today |
 | Observability | Logfire, AgentOS, DSPy tracing/debugging, etc. | OTel-compatible event maps via `:observe` |
 
@@ -43,8 +43,8 @@ The frameworks referenced:
 - **The loop is delegated.** karcarthy doesn't reimplement the model/tool loop;
   it drives an Agent SDK, agent framework, coding-agent CLI, Clojure function,
   subprocess, or shell command.
-  That makes it provider-neutral and thin, and it means karcarthy can sit *on
-  top of* the others: a Pydantic AI, Agno, or coding-agent CLI can be wrapped
+  That keeps it provider-neutral and thin, and it means karcarthy can sit *on
+  top of* the others: you can wrap PydanticAI, Agno, or a coding-agent CLI
   through `process-runner`, `codex-runner`, `openai-runner`, or a small shim.
 - **The runtime state is an intermediate representation.** DSPy is strong
   evidence for separating *what* a module should do from *how* its prompt or
@@ -76,3 +76,6 @@ The frameworks referenced:
 
 These aren't strictly either/or: karcarthy is a thin coordination layer, and the
 frameworks above are good candidates to run *inside* it as runners.
+
+Next: run the quickstart in the [README](README.md), or copy a complete
+workflow from [`examples/`](examples/).

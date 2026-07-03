@@ -3,7 +3,67 @@ title: Quickstart
 description: Run one agent, compose a workflow, and choose a runner.
 ---
 
-Start here. Every run begins with one request map:
+In this guide you run one agent on the offline mock runner, compose two agents
+into a workflow, and run the same thing from the command line. Nothing here
+needs an API key until the final section, which is marked as paid.
+
+## Requirements
+
+- JDK 21 or newer
+- Clojure CLI
+- A checkout of `soohoonc/karcarthy`
+
+## Run one agent
+
+Start a REPL in the checkout and run:
+
+```clojure
+(require '[karcarthy :as k])
+
+(k/defagent echo
+  {:instructions "Echo the input."})
+
+(k/run {:runner (k/mock-runner)
+        :workflow echo
+        :input "hi"})
+```
+
+The mock runner answers offline by echoing the prompt, tagged with the agent
+name:
+
+```clojure
+{:karcarthy/type :result
+ :ok? true
+ :agent "echo"
+ :text "[echo] hi"
+ :raw {:runner :mock}}
+```
+
+That is the smallest workflow: one request, one agent node, one runner.
+
+## Compose two agents
+
+`pipe` runs workflows in sequence and feeds the first result's `:text` into
+the second agent:
+
+```clojure
+(k/defagent researcher
+  {:instructions "Research the question and list the important facts."})
+
+(k/defagent summarizer
+  {:instructions "Summarize the previous answer in one sentence."})
+
+(def workflow
+  (k/pipe researcher summarizer))
+
+(k/run {:runner (k/mock-runner)
+        :workflow workflow
+        :input "why does Lisp use code as data?"})
+```
+
+## The request map
+
+Every run — including the two above — is one request map:
 
 ```clojure
 (k/run {:runner runner
@@ -12,18 +72,14 @@ Start here. Every run begins with one request map:
         :options options})
 ```
 
-`workflow` can be a single agent or a composed workflow. `runner` is the value
-that runs each agent call. `input` is the initial value given to the workflow.
-`options` is runtime configuration such as observation callbacks.
-
 | Key | Meaning |
 | --- | --- |
 | `:runner` | The backend used for each agent call, such as mock, ACP, Claude, Codex, OpenAI, a process, or a local function. |
-| `:workflow` | The agent or workflow data to run. |
+| `:workflow` | The agent or workflow data to run. A single agent is already a workflow. |
 | `:input` | The initial workflow value. A string is a prompt; EDN is rendered before the first agent call. |
 | `:options` | Runtime controls for this run, such as `:observe`, `:state`, timeouts, or runner-specific overrides. |
 
-## Input Shape
+## Input shapes
 
 The common case is a string prompt:
 
@@ -56,86 +112,10 @@ A map without `:prompt` is passed as EDN text. Put execution configuration in
 `:options`, runner construction, or agent fields such as `:model` and `:tools`,
 not inside `:input`.
 
-## Requirements
+## Run from the command line
 
-- JDK 21 or newer
-- Clojure CLI
-- A checkout of `soohoonc/karcarthy`
-
-## Run One Agent
-
-```clojure
-(require '[karcarthy :as k])
-
-(k/defagent echo
-  {:instructions "Echo the input."})
-
-(k/run {:runner (k/mock-runner)
-        :workflow echo
-        :input "hi"})
-```
-
-Result:
-
-```clojure
-{:karcarthy/type :result
- :ok? true
- :agent "echo"
- :text "[echo] hi"
- :raw {:runner :mock}}
-```
-
-That is the smallest workflow: one request, one agent node, one runner.
-
-## Compose Two Agents
-
-```clojure
-(k/defagent researcher
-  {:instructions "Research the question and list the important facts."})
-
-(k/defagent summarizer
-  {:instructions "Summarize the previous answer in one sentence."})
-
-(def workflow
-  (k/pipe researcher summarizer))
-
-(k/run {:runner (k/mock-runner)
-        :workflow workflow
-        :input "why does Lisp use code as data?"})
-```
-
-`pipe` feeds the first result's `:text` into the second agent.
-
-## Choose The Runner At Runtime
-
-Keep agents runner-agnostic:
-
-```clojure
-(k/defagent reviewer
-  {:instructions "Review the input and return concrete issues."
-   :model "sonnet"})
-```
-
-Pick the runner before calling `run`:
-
-```clojure
-(defn review [runner input]
-  (k/run {:runner runner
-          :workflow reviewer
-          :input input}))
-
-(review (k/mock-runner) "check this design")
-(review (k/claude-runner {}) "check this design")
-(review (k/codex-runner {:dir "."}) "check this design")
-(review (k/acp-runner {:command ["my-acp-agent"]}) "check this design")
-```
-
-Agents do not carry a backend. If the runner changes at runtime, pass a
-different runner value.
-
-## CLI
-
-Build the CLI jar:
+In a repo checkout, `./bin/karcarthy` runs through the Clojure CLI directly.
+Build a standalone jar for faster startup or installed copies:
 
 ```bash
 clojure -T:build uber
@@ -153,7 +133,34 @@ Expected output:
 [echo] hi
 ```
 
-Choose the CLI runner for the whole invocation with `--runner`:
+## Run a live model (paid)
+
+Everything above runs offline and free. The calls below invoke real model
+backends: `claude-runner` shells out to the `claude` CLI and `codex-runner` to
+`codex exec`, so each needs its CLI installed and authenticated — and each call
+costs money.
+
+Agents stay runner-agnostic; they never carry a backend:
+
+```clojure
+(k/defagent reviewer
+  {:instructions "Review the input and return concrete issues."
+   :model "sonnet"})
+
+(defn review [runner input]
+  (k/run {:runner runner
+          :workflow reviewer
+          :input input}))
+
+(review (k/mock-runner) "check this design")                            ; offline
+(review (k/claude-runner {}) "check this design")                       ; paid: claude CLI
+(review (k/codex-runner {:dir "."}) "check this design")                ; paid: codex exec
+(review (k/acp-runner {:command ["my-acp-agent"]}) "check this design") ; your ACP agent
+```
+
+If the runner changes at runtime, pass a different runner value.
+
+The same switch exists on the CLI with `--runner`:
 
 ```bash
 ./bin/karcarthy agent reviewer \
@@ -162,8 +169,11 @@ Choose the CLI runner for the whole invocation with `--runner`:
   "check this design"
 ```
 
+The CLI's `claude` runner uses lean sub-agent defaults — system-prompt replace
+mode, tools disabled — so agents answer directly.
+
 ## Next
 
-- [Workflows](/docs/workflows) explains the workflow nodes.
-- [Runners](/docs/runners) explains mock, function, process, Claude, Codex, ACP, and OpenAI runners.
+- [Workflows](/docs/workflows) walks every workflow node with one example each.
+- [Runners](/docs/runners) covers mock, function, process, Claude, Codex, ACP, and OpenAI runners.
 - [Examples](/docs/examples) has runnable launch-readiness and deep-research workflows.

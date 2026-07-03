@@ -118,15 +118,27 @@ Common options:
 | `:permission-mode` / `:sandbox-mode` | Provider permission or sandbox controls. |
 | `:max-turns` | Turn cap for providers that support it. |
 | `:skills` | Skills preloaded or enabled by providers that support skills. |
+| `:initial-prompt` | First message sent when the subagent starts, where supported (Claude `initialPrompt`). |
+| `:memory` | Provider memory setting (Claude `memory`). |
 | `:effort` / `:reasoning-effort` | Provider reasoning effort controls. |
 | `:background?` / `:isolation` | Provider concurrency or isolation controls. |
+| `:color` | Display color where supported (Claude `color`). |
+| `:nicknames` | Vector of nickname candidates (Codex `nickname_candidates`). |
+| `:hooks` | Hook configuration passed through where supported (Claude `hooks`). |
+| `:config` | Extra provider config; merged beneath the generated Codex custom-agent config keys. |
+
+Options with nil values are generally omitted from the built map, and non-nil
+falsy values (for example `:background? false`) are kept. The coerced options
+are the exception: the collection options (`:tools`, `:disallowed-tools`,
+`:skills`, `:nicknames`) turn an explicit nil into `[]`, and `:background?`
+turns an explicit nil into `false`. Unknown option keys throw.
 
 Runner lowering:
 
 | Runner | Native primitive |
 | --- | --- |
 | `claude-runner` | Claude Code `--agents` JSON. |
-| `codex-runner` | Codex `codex exec` leaf-agent calls. |
+| `codex-runner` | None at run time; `codex-runner` ignores `:subagents` and runs one leaf agent per `codex exec` call. Lower with `karcarthy.runner.codex/subagent->config` instead (below). |
 | `openai-runner` | OpenAI Agents SDK `handoffs`. |
 | `karcarthy.runner.codex/subagent->config` | Codex custom agent config keys for `.codex/agents/` or `~/.codex/agents/`. |
 | `process-runner` | Unsupported; process commands stay fixed runner config. |
@@ -212,12 +224,16 @@ Reads planner EDN `{:subtasks [...]}` and runs the worker once per subtask.
 (k/reduce source reducer & {:keys [max-concurrency]})
 ```
 
-Runs branch/delegate work, then sends an EDN result summary to a reducer workflow.
+Runs branch/delegate work, then sends an EDN result summary to a reducer
+workflow. `source` is a branch or delegate node, or a plain collection of
+workflows, which is wrapped as `(k/branch source)` first.
 
 ```clojure
 (k/reduce
   (k/branch [product-reviewer engineering-reviewer])
   brief-writer)
+
+(k/reduce [product-reviewer engineering-reviewer] brief-writer)
 ```
 
 The reducer receives EDN shaped like `{:input ... :subtasks ... :results [...]}`.
@@ -263,7 +279,12 @@ workflow receives the original input.
 (k/continue source continuation & {:keys [prompt]})
 ```
 
-The continuation receives the source result text.
+The continuation receives the source result text, or the `:prompt` override
+when given. When the source result carries a `:session-id`, `continue` passes
+it as the `:resume` option on the continuation's runner call, so runners with
+session support keep the conversation (`claude-runner` turns it into
+`--resume <id>`; `acp-runner` into `session/resume` or `session/load`). This
+session threading is what distinguishes `continue` from a two-step `pipe`.
 
 ```clojure
 (k/continue triage-agent specialist-agent)
@@ -301,8 +322,12 @@ Supported ops are:
 {:op :call :agent "reader" :input "..."}
 {:op :call :workflow "review" :input "..."}
 {:op :spawn :agent "reader" :inputs ["a" "b"]}
+{:op :spawn :workflow "review" :inputs ["a" "b"]}
 {:op :complete :text "final answer"}
 ```
+
+`:spawn` fans the target agent or named workflow out over `:inputs`; the op may
+also carry `:max-concurrency` to cap parallel calls.
 
 Use `agent-ref` and `workflow-ref` inside workflows defined during a dynamic
 run when later patches should affect later calls.
@@ -514,17 +539,38 @@ receives only the input string. With `{:call? true}`, it receives the agent call
 ```
 
 Runs agent calls through Claude. The current implementation drives `claude -p`.
-Common options include model, working directory, turn limits, subagents, and
-extra `claude` args.
+The model comes from the agent spec's `:model` field (lowered to `--model`);
+`claude-runner` has no `:model` option, and a runner-level `:model` is silently
+ignored. (`codex-runner` and `openai-runner` do accept a runner-level
+`:model`.)
 
 ```clojure
-(k/claude-runner {:model "haiku"
-                  :max-turns 4
+(k/claude-runner {:max-turns 4
                   :subagents [security-reviewer]})
+
+(k/agent {:name "reviewer"
+          :instructions "Find launch risks."
+          :model "haiku"})
 ```
 
-`:subagents` is a vector of `k/subagent` values lowered to Claude Code
-`--agents` JSON.
+Common options:
+
+| Option | Meaning |
+| --- | --- |
+| `:claude-bin` | Claude CLI executable; defaults to `"claude"`. |
+| `:output-format` | `"json"` (default), `"text"`, or `"stream-json"`. |
+| `:system-prompt-mode` | `:append` (default, `--append-system-prompt`) or `:replace` (`--system-prompt`). |
+| `:max-turns` | Integer cap on agent turns. |
+| `:permission-mode` | Permission mode, e.g. `:acceptEdits`, `:bypassPermissions`, `:default`. |
+| `:resume` | Session id to resume (`--resume <id>`); the agent sees prior context. |
+| `:continue?` | Resume the most recent session (`--continue`). |
+| `:partial-messages?` | Stream token-level chunks (`--include-partial-messages`); only meaningful with `"stream-json"`. |
+| `:subagents` | Vector of `k/subagent` values lowered to Claude Code `--agents` JSON. |
+| `:prompt-via` | `:argv` (default) passes the prompt as an argument; `:stdin` pipes it to the process instead - use `:stdin` for prompts that can exceed OS argv limits, e.g. reduce fan-in. |
+| `:extra-args` | Vector of strings appended verbatim (escape hatch for `--add-dir`, `--mcp-config`, `--disallowedTools`, ...). |
+| `:dir` | Working directory for the `claude` process. |
+| `:timeout-ms` | Force-kill a hung run after this many milliseconds. |
+| `:on-event` | fn called with each stream event; switches the run to `--output-format stream-json`. |
 
 ### `codex-runner`
 
@@ -551,8 +597,11 @@ Common options:
 | --- | --- |
 | `:codex-bin` | Codex CLI executable; defaults to `"codex"`. |
 | `:dir` / `:cwd` | Working directory for the Codex process and `--cd`. |
-| `:model` | Default model for agents that do not set one. |
+| `:model` | Model override; takes precedence over the agent's `:model`. |
 | `:sandbox` | Codex sandbox mode; defaults to `:read-only`. |
+| `:color` | Color mode (`--color`); defaults to `:never`. |
+| `:ephemeral?` | Pass `--ephemeral` (run without persisting a session); defaults to true. |
+| `:skip-git-repo-check?` | Pass `--skip-git-repo-check`; defaults to true. |
 | `:extra-args` | Additional `codex exec` args appended before the prompt. |
 | `:env` | Extra environment variables. |
 | `:timeout-ms` | Kill the subprocess after this many milliseconds. |
@@ -587,7 +636,9 @@ Common options:
 | Option | Meaning |
 | --- | --- |
 | `:command` | argv vector for the ACP agent process. |
+| `:connection` | a connection from `karcarthy.runner.acp/connect!` reused across runs; without it, each run spawns and tears down its own agent process. |
 | `:cwd` / `:dir` | working directory for `session/new`. |
+| `:resume` | session id to resume, via ACP `session/resume` or `session/load` depending on agent capabilities; throws when the agent supports neither. |
 | `:mcp-servers` | ACP MCP server specs passed during session setup. |
 | `:client-capabilities` | ACP client capabilities to advertise. Defaults to none. |
 | `:config-options` | session config option id/category to value map. |
@@ -597,6 +648,32 @@ Common options:
 | `:request-handler` | fn for custom agent-to-client JSON-RPC requests. |
 | `:on-event` | fn called with each ACP message received. |
 | `:timeout-ms` | max wait per ACP message. |
+
+Session config: agents can carry ACP config under
+`{:config {:acp {:config-options {...}}}}`, merged beneath the runner's
+`:config-options`. The agent spec's `:model` is applied through ACP
+`session/set_config_option` when the session advertises a `model` config
+option, unless the merged config options already include a model entry.
+`:strict-config?` applies to all of these.
+
+#### Connection reuse: `connect!` and `close!`
+
+`karcarthy.runner.acp/connect!` starts the ACP agent process and initializes
+the protocol once. Passing the returned connection as `:connection` reuses it
+across runs, so each run pays one `session/new` and one prompt turn instead of
+a process spawn plus `initialize`. `close!` shuts the connection down.
+
+```clojure
+(require '[karcarthy.runner.acp :as acp])
+
+(def conn (acp/connect! {:command ["some-acp-agent"]}))
+(def runner (k/acp-runner {:connection conn}))
+;; ... many runs ...
+(acp/close! conn)
+```
+
+Prompt turns on one connection are serialized; for parallel branches, give each
+worker its own connection.
 
 ### `process-runner`
 

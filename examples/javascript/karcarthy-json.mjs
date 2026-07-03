@@ -44,7 +44,6 @@ export function agent(profile) {
     instructions: profile.instructions,
     ...(profile.model ? { model: profile.model } : {}),
     ...(profile.tools?.length ? { tools: profile.tools } : {}),
-    ...(profile.runner ? { runner: profile.runner } : {}),
   };
 }
 

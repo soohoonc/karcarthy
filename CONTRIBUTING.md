@@ -19,7 +19,10 @@ clojure -T:build jar         # build a jar into target/
   (e.g. `KARCARTHY_LIVE`) so the default test run stays offline and free.
 - Add a test for new behavior, and register new test namespaces in
   `test/karcarthy/test_runner.clj`.
-- Adding an orchestration node: a constructor + a `run-node` defmethod + tests.
+- Adding a workflow node: a constructor in `src/karcarthy/orchestrate.clj` +
+  a `run-node` defmethod + schema entries in `src/karcarthy/schema.clj` +
+  tests. Nodes that parse model EDN replies should go through `elicit!` in
+  `orchestrate.clj` so they get the `:edn-retries` self-repair path.
 - Adding a runner: implement `karcarthy.core/Runner` and return a result map.
 
 ## Pull requests
