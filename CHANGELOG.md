@@ -33,4 +33,9 @@ Early and not yet released. What works so far:
 - JavaScript and Clojure examples for Claude dynamic-agent style workflows and
   OpenAI Deep Research request setup.
 
+### Fixed
+- The CLI JSON bridge now passes the optional `"prompt"` field on `continue`
+  nodes through to `karcarthy.orchestrate/continue`; it was declared in the
+  published JSON schema but silently dropped.
+
 [Unreleased]: https://github.com/soohoonc/karcarthy
