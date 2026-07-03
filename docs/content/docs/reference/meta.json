@@ -4,7 +4,6 @@
     "index",
     "api",
     "schema",
-    "json",
-    "positioning"
+    "json"
   ]
 }
