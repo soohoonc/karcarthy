@@ -5,28 +5,28 @@
 
 (deftest facade-reexports-fns
   (testing "core + orchestrate functions are reachable under one alias"
-    (let [a (kc/agent "x" "i")]
+    (let [a (kc/agent {:name "x" :instructions "i"})]
       (is (kc/agent? a)))
     (let [s (kc/subagent "reviewer" "Use for review." "Review carefully.")]
       (is (kc/subagent? s)))
     (let [r (kc/run {:runner (kc/mock-runner)
-                     :workflow (kc/pipe (kc/agent "a" "i") (kc/agent "b" "i"))
+                     :workflow (kc/pipe (kc/agent {:name "a" :instructions "i"}) (kc/agent {:name "b" :instructions "i"}))
                      :input "hi"})]
       (is (kc/ok? r))
       (is (= "[b] [a] hi" (:text r))))
     (is (kc/ok? (kc/run {:runner (kc/fn-runner identity)
-                         :workflow (kc/agent "fn" "i")
+                         :workflow (kc/agent {:name "fn" :instructions "i"})
                          :input "hi"})))
     (is (= "[a] HI" (:text (kc/run {:runner (kc/mock-runner)
                                     :workflow (kc/pipe (kc/step str/upper-case)
-                                                       (kc/agent "a" "i"))
+                                                       (kc/agent {:name "a" :instructions "i"}))
                                     :input "hi"}))))
     (is (kc/ok? (kc/run {:runner (kc/process-runner "cat")
-                         :workflow (kc/agent "process" "i")
+                         :workflow (kc/agent {:name "process" :instructions "i"})
                          :input "hi"})))
     (is (some? (kc/codex-runner)))
-    (let [a (kc/agent "a" "i")
-          b (kc/agent "b" "i")]
+    (let [a (kc/agent {:name "a" :instructions "i"})
+          b (kc/agent {:name "b" :instructions "i"})]
       (is (kc/workflow? (kc/branch [a b])))
       (is (kc/workflow? (kc/route a {:next b})))
       (is (kc/workflow? (kc/continue a b)))
@@ -34,7 +34,7 @@
 
 (deftest facade-reexports-macros
   (testing "defagent and defworkflow are re-exported as working macros"
-    (kc/defagent facade-agent "instr" :model "m")
+    (kc/defagent facade-agent {:instructions "instr" :model "m"})
     (is (= "facade-agent" (:name facade-agent)))
     (is (= "m" (:model facade-agent)))
     (kc/defsubagent facade-subagent "Use for review." "Review carefully.")
@@ -44,7 +44,7 @@
 
 (deftest facade-reexports-rewrites
   (testing "workflow rewrites are reachable under the facade"
-    (let [workflow  (kc/pipe (kc/agent "a" "i") (kc/agent "b" "j"))
+    (let [workflow  (kc/pipe (kc/agent {:name "a" :instructions "i"}) (kc/agent {:name "b" :instructions "j"}))
           rewritten (kc/configure {:model "m"} workflow)]
       (is (kc/workflow? rewritten))
       (is (= ["a" "b"] (map :name (kc/agents rewritten))))
@@ -66,7 +66,7 @@
 
 (deftest facade-reexports-dynamic-workflow-helpers
   (testing "the one-alias surface gets workflow builders, not the stepping API"
-    (is (kc/workflow? (kc/dynamic (kc/agent "workflow" "emit EDN ops"))))
+    (is (kc/workflow? (kc/dynamic (kc/agent {:name "workflow" :instructions "emit EDN ops"}))))
     (is (map? (kc/agent-ref "worker")))
     (is (map? (kc/workflow-ref "draft")))
     (is (nil? (ns-resolve 'karcarthy 'step!)))
