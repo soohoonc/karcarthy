@@ -332,7 +332,7 @@
   (the agent's final reply). With no args it echoes the prompt, tagged with the
   agent name, which is handy for asserting how orchestration routes work.
 
-    (run-agent (mock-runner) (agent \"echo\" \"e\") \"hi\")
+    (run-agent (mock-runner) (agent {:name \"echo\" :instructions \"e\"}) \"hi\")
     ;=> {:karcarthy/type :result :ok? true :agent \"echo\" :text \"[echo] hi\" ...}"
   ([] (mock-runner (fn [{:keys [agent prompt]}]
                       (str "[" (:name agent) "] " prompt))))
