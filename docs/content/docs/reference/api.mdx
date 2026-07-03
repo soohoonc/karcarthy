@@ -638,9 +638,9 @@ Common options:
 | `:command` | argv vector for the ACP agent process. |
 | `:connection` | a connection from `karcarthy.runner.acp/connect!` reused across runs; without it, each run spawns and tears down its own agent process. |
 | `:cwd` / `:dir` | working directory for `session/new`. |
-| `:resume` | session id to resume, via ACP `session/resume` or `session/load` depending on agent capabilities; throws when the agent supports neither. |
-| `:mcp-servers` | ACP MCP server specs passed during session setup. |
-| `:client-capabilities` | ACP client capabilities to advertise. Defaults to none. |
+| `:resume` | session id to resume, via ACP `session/resume` or `session/load` depending on agent capabilities; throws when the agent supports neither. Replayed history from `session/load` stays in `:raw :updates`; the returned `:text` is only the new turn. |
+| `:mcp-servers` | ACP MCP server specs passed during session setup. `http`/`sse` specs require the agent's matching `mcpCapabilities` flag; stdio specs need no capability. |
+| `:client-capabilities` | ACP client capabilities to advertise. Defaults to none. `fs/read_text_file` and `fs/write_text_file` are served only when the corresponding `:fs` flag (`:readTextFile`, `:writeTextFile`) is advertised. |
 | `:config-options` | session config option id/category to value map. |
 | `:strict-config?` | throw if a requested config option is unavailable. |
 | `:permission-policy` | `:reject` default, `:allow`, or `:cancel`. |
@@ -655,6 +655,10 @@ Session config: agents can carry ACP config under
 `session/set_config_option` when the session advertises a `model` config
 option, unless the merged config options already include a model entry.
 `:strict-config?` applies to all of these.
+
+Results map the ACP `stopReason` onto `:ok?`: `end_turn` (or absent) is
+success; `refusal`, `cancelled`, `max_tokens`, and `max_turn_requests` yield
+`{:ok? false}` with an `:error`, keeping `:stop-reason` and partial `:text`.
 
 #### Connection reuse: `connect!` and `close!`
 
