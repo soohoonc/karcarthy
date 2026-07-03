@@ -14,7 +14,7 @@
     {\"type\":\"route\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
     {\"type\":\"continue\" \"source\":<workflow> \"to\":<workflow> \"prompt\":?}
     {\"type\":\"revise\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
-    {\"type\":\"dynamic\" \"agent\":<agent> \"max-steps\":?}
+    {\"type\":\"dynamic\" \"agent\":<agent> \"max-steps\":?}   (experimental)
   Response is the karcarthy result map as JSON. \"runner\" is \"mock\" (default,
   offline) or \"claude\". For deterministic offline demos, add
   \"mock-responses\": {\"agent-name\":\"text\"}."
