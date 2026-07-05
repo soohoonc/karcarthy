@@ -142,6 +142,10 @@ The result includes loop metadata:
  :accepted? true}
 ```
 
+Reaching `:max-rounds` without acceptance is fail-closed: the last draft is
+preserved in `:text`, but the result has `:ok? false`, `:accepted? false`, and
+`:error :not-accepted`. Evaluator runner or protocol failure stops the loop.
+
 ## delegate
 
 Use `delegate` when a planner should create subtasks for a worker:
@@ -265,6 +269,10 @@ EDN op at a time:
 {:op :remove :agent "reader"}
 {:op :complete :text "done"}
 ```
+
+After a failed `:call` or `:spawn`, the agent must successfully retry work
+before `:complete`; unresolved failed work cannot be replaced by a fresh
+success result.
 
 `agent-ref` and `workflow-ref` are late-bound within that dynamic run. If the
 agent patches `"reader"`, later calls to workflows containing

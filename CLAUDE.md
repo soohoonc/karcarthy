@@ -1,8 +1,9 @@
 # karcarthy - guide for Claude Code
 
-Homoiconic agent **orchestration** in Clojure. Agents, tools, and workflows are
-plain EDN data; karcarthy delegates the inner agent loop (model calls + tool
-execution) to an external **runner** instead of reimplementing it.
+Agent **orchestration as data**, inspired by Lisp's homoiconicity. Agents,
+tools, and workflows are plain EDN data; karcarthy delegates the inner agent
+loop (model calls + tool execution) to an external **runner** instead of
+reimplementing it.
 
 ## Commands
 
@@ -26,6 +27,7 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 | `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node (experimental) |
 | `src/karcarthy/edn.clj` | internal helper extracting the first EDN map from model output (`clojure.edn`, never `eval`) |
 | `src/karcarthy/observe.clj` | internal observation-event helpers shared by `core` and `orchestrate` (`:observe` callback) |
+| `src/karcarthy/scope.clj` | execution scope for concurrency, deadlines, and cancellation shared by workflow nodes |
 | `src/karcarthy/proc.clj` | subprocess execution with timeout, shared by the subprocess-backed runners |
 | `src/karcarthy/cli.clj` | CLI entry point and language-agnostic JSON bridge behind `bin/karcarthy` |
 | `src/karcarthy/demo.clj` | offline demo (`clojure -M -m karcarthy.demo`) |
@@ -44,6 +46,8 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
   (`:agent`, `:result`, `:pipe`, `:branch`, …). Prefer plain maps over records.
 - **A runner** implements `karcarthy.core/Runner` (`-run`) and returns a
   result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
+- **Failures are fail-closed.** `:ok?` is strictly Boolean, unaccepted revision
+  is failure, and process/protocol failure wins over success-looking payloads.
 - **Adding a workflow node:** add a constructor in `orchestrate.clj`, a `run-node`
   defmethod, schema entries in `schema.clj`, and tests. Option-taking
   constructors guard their options with `karcarthy.core/reject-unknown!`.

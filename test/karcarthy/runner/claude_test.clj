@@ -29,11 +29,13 @@
                 (k/agent {:name "a" :instructions "i"}) "p"
                 {:claude-bin         "/opt/node22/bin/claude"
                  :system-prompt-mode :replace
+                 :model              "haiku"
                  :max-turns          3
                  :permission-mode    :bypassPermissions
                  :extra-args         ["--add-dir" "/tmp"]})]
       (is (= "/opt/node22/bin/claude" (first argv)))
       (is (= "i" (after argv "--system-prompt")))
+      (is (= "haiku" (after argv "--model")))
       (is (nil? (after argv "--append-system-prompt")))
       (is (= "3" (after argv "--max-turns")))
       (is (= "bypassPermissions" (after argv "--permission-mode")))
@@ -128,6 +130,25 @@
     (is (not (k/ok? r)))
     (is (= "boom" (:text r)))))
 
+(deftest stdout->result-requires-explicit-status
+  (let [r (cc/stdout->result "t" "{\"result\":\"looks successful\"}")]
+    (is (not (k/ok? r)))
+    (is (re-find #"Boolean is_error" (:error r)))))
+
+(deftest nonzero-exit-overrides-a-success-payload
+  (let [script (java.io.File/createTempFile "fake-claude" ".sh")]
+    (try
+      (spit script (str "#!/bin/sh\n"
+                        "printf '%s\\n' '" sample-success "'\n"
+                        "exit 7\n"))
+      (.setExecutable script true)
+      (let [runner (cc/claude-runner {:claude-bin (.getPath script)})
+            r (k/run-agent runner (k/agent {:name "a" :instructions "i"}) "x")]
+        (is (not (k/ok? r)))
+        (is (re-find #"exited with status 7" (:error r)))
+        (is (= "pong" (:text r))))
+      (finally (.delete script)))))
+
 (deftest command-streaming-and-session-flags
   (testing "stream-json, resume, continue and partial-messages flags"
     (let [argv (cc/command (k/agent {:name "a" :instructions "i"}) "p"
@@ -162,6 +183,12 @@
       (is (= 3 (count events)))
       (is (= "hi" (:result result)))
       (is (= "S1" (:session_id result))))))
+
+(deftest stream!-reports-timeout
+  (let [{:keys [timed-out? result]} (cc/stream! ["sh" "-c" "sleep 10"]
+                                                {:timeout-ms 100})]
+    (is (true? timed-out?))
+    (is (nil? result))))
 
 (deftest streaming-result-event-becomes-result
   (testing "the terminal result event maps to a karcarthy result"

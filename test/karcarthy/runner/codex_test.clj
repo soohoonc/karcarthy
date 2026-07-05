@@ -4,6 +4,13 @@
             [karcarthy.core :as k]
             [karcarthy.runner.codex :as codex]))
 
+(deftest codex-rejects-unenforced-tool-allowlists
+  (let [runner (codex/codex-runner)
+        agent (k/agent {:name "a" :instructions "i" :tools ["WebSearch"]})]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"does not support agent :tools"
+                          (k/run-agent runner agent "x")))))
+
 (defn- after
   "The argv element immediately following `flag`, or nil if `flag` is absent."
   [argv flag]
@@ -54,7 +61,8 @@
           runner (codex/codex-runner {:codex-bin (.getPath script)
                                       :timeout-ms 3000})
           result (k/run-agent runner
-                              (k/agent {:name "codex" :instructions "echo input"})
+                              (k/agent {:name "codex"
+                                        :instructions "echo input"})
                               "hello")]
       (is (k/ok? result))
       (is (str/starts-with? (:text result) "seen: "))

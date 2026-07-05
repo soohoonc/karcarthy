@@ -103,6 +103,30 @@
                               {:karcarthy/type :agent}
                               "x")))))
 
+(deftest results-require-boolean-status
+  (testing "only the Boolean true represents success"
+    (is (k/ok? (k/result {:text "ok"})))
+    (is (not (k/ok? {:ok? "false"})))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #":ok\? must be true or false"
+                          (k/result {:ok? "false"}))))
+  (testing "run-agent rejects malformed runner results"
+    (let [runner (reify k/Runner
+                   (-run [_ _ _ _]
+                     {:karcarthy/type :result :ok? "yes" :text "bad"}))]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"invalid result"
+                            (k/run-agent runner
+                                         (k/agent {:name "a" :instructions "i"})
+                                         "x"))))))
+
+(deftest run-agent-requires-a-tagged-agent
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                        #":karcarthy/type :agent"
+                        (k/run-agent (k/mock-runner)
+                                     {:name "a" :instructions "i"}
+                                     "x"))))
+
 (k/defagent test-researcher
   {:instructions "Research questions thoroughly."
    :model "sonnet"

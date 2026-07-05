@@ -40,11 +40,13 @@
   "Parse the Python script's JSON stdout into a karcarthy result map."
   [agent-name stdout]
   (let [m (json/read-str stdout :key-fn keyword)]
-    (k/result {:agent agent-name
-               :ok?   (boolean (:ok m))
-               :text  (:text m)
-               :error (:error m)
-               :raw   m})))
+    (k/result (cond-> {:agent agent-name
+                       :ok?   (true? (:ok m))
+                       :text  (:text m)
+                       :error (:error m)
+                       :raw   m}
+                (not (boolean? (:ok m)))
+                (assoc :error "OpenAI runner result is missing Boolean ok")))))
 
 ;; The bundled Python script is copied to a temp file once, so it works whether karcarthy
 ;; runs from source or from a jar (where the resource isn't a real file).
@@ -69,6 +71,7 @@
   ([default-options]
    (reify k/Runner
      (-run [_ agent prompt opts]
+       (k/reject-tools! :openai agent)
        (let [opts   (merge default-options opts)
              python (get opts :python-bin "python3")
              script (or (:script opts) @bridge-file)
@@ -88,7 +91,13 @@
 
            (seq (str/trim (or out "")))
            (try
-             (stdout->result (:name agent) out)
+             (let [parsed (stdout->result (:name agent) out)]
+               (if (zero? exit)
+                 parsed
+                 (k/result (assoc parsed
+                                  :ok? false
+                                  :error (str "runner exited with status " exit)
+                                  :raw {:payload (:raw parsed) :process raw}))))
              (catch Exception e
                (k/result {:agent (:name agent) :ok? false
                           :text  (or (not-empty err) out)

@@ -1,5 +1,6 @@
 (ns karcarthy.core
-  "karcarthy: homoiconic agent orchestration for Clojure.
+  "karcarthy: agent orchestration as data for Clojure, inspired by Lisp's
+  homoiconicity.
 
   Agents, tools, and workflows are plain Clojure maps (EDN). They are
   values, so you build, transform, inspect and serialize them with ordinary
@@ -117,7 +118,10 @@
 (defn agent?
   "True if `x` is a karcarthy agent value (well-formed)."
   [x]
-  (and (map? x) (= :agent (:karcarthy/type x)) (s/valid? ::agent x)))
+  (and (map? x)
+       (= :agent (:karcarthy/type x))
+       (every? (conj agent-keys :karcarthy/type) (keys x))
+       (s/valid? ::agent x)))
 
 (def subagent-option-keys
   "Option keys accepted by `subagent`, in the order they appear in the built
@@ -177,8 +181,14 @@
 (defn explain-agent
   "Return a human-readable validation message for `x`, or nil if it is valid."
   [x]
-  (when-not (s/valid? ::agent x)
-    (s/explain-str ::agent x)))
+  (when-not (agent? x)
+    (cond
+      (not (map? x)) "agent must be a map"
+      (not= :agent (:karcarthy/type x)) "agent must have :karcarthy/type :agent"
+      :else (or (when-let [unknown (seq (remove (conj agent-keys :karcarthy/type)
+                                                     (keys x)))]
+                  (str "agent contains unknown keys: " (pr-str (vec unknown))))
+                (s/explain-str ::agent x)))))
 
 (defn explain-subagent
   "Return a human-readable validation message for `x`, or nil if it is valid."
@@ -238,12 +248,26 @@
      :text  \"...final reply...\"
      :raw   <runner-specific payload>}"
   [m]
-  (merge {:karcarthy/type :result :ok? true} m))
+  (when-not (map? m)
+    (throw (ex-info "result expects a map" {:value m})))
+  (let [r (merge {:karcarthy/type :result :ok? true} m)]
+    (when-not (= :result (:karcarthy/type r))
+      (throw (ex-info "result :karcarthy/type must be :result" {:result r})))
+    (when-not (boolean? (:ok? r))
+      (throw (ex-info "result :ok? must be true or false" {:result r})))
+    r))
+
+(defn result?
+  "True when `x` is a tagged result with a Boolean status."
+  [x]
+  (and (map? x)
+       (= :result (:karcarthy/type x))
+       (boolean? (:ok? x))))
 
 (defn ok?
   "True if `result` represents a successful run."
   [result]
-  (boolean (:ok? result)))
+  (true? (:ok? result)))
 
 (defn coerce-result
   "Coerce `reply` - a string, a partial result map, or a full result map -
@@ -252,7 +276,7 @@
   [reply defaults]
   (cond
     (and (map? reply) (= :result (:karcarthy/type reply)))
-    reply
+    (result reply)
 
     (map? reply)
     (result (merge defaults reply))
@@ -294,19 +318,37 @@
                             (:tools agent) (assoc "karcarthy.agent.tools.count" (count (:tools agent))))}
              attrs))
 
+(def ^:private interpreter-options
+  [:karcarthy/scope :karcarthy/path :karcarthy/parent-span-id
+   :max-concurrency :run-timeout-ms :cancel? :observe :edn-retries :state])
+
+(defn ^:no-doc reject-tools!
+  "Fail when a runner cannot enforce an agent's tool allowlist."
+  [runner agent]
+  (when (seq (:tools agent))
+    (throw (ex-info (str (name runner) " runner does not support agent :tools")
+                    {:runner runner :tools (:tools agent)}))))
+
 (defn run-agent
   "Validate `agent`, then run it on `prompt` with `runner`. Returns a result map;
   throws `ExceptionInfo` if the agent is malformed."
   ([runner agent prompt] (run-agent runner agent prompt {}))
   ([runner agent prompt opts]
-   (when-let [msg (explain-agent agent)]
-     (throw (ex-info (str "Invalid agent: " msg)
-                     {:agent agent :problems (s/explain-data ::agent agent)})))
+   (when-not (agent? agent)
+     (let [msg (explain-agent agent)]
+       (throw (ex-info (str "Invalid agent: " msg)
+                       {:agent agent :problems (s/explain-data ::agent agent)}))))
    (let [runner (runner! runner)]
      (obs/with-span opts
        (fn [phase span-id parent-span-id attrs]
          (agent-event phase span-id parent-span-id agent attrs))
-       (fn [_] (-run runner agent prompt opts))))))
+       (fn [_]
+         (let [runner-opts (apply dissoc opts interpreter-options)
+               r (-run runner agent prompt runner-opts)]
+           (when-not (result? r)
+             (throw (ex-info "runner returned an invalid result"
+                             {:agent (:name agent) :result r})))
+           r))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Mock runner

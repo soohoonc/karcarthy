@@ -72,13 +72,13 @@
    :branch
    {:karcarthy/type :branch
     :required        {:branches [:vector :workflow]}
-    :optional        {:max-concurrency :integer}}
+    :optional        {:max-concurrency :positive-integer}}
 
    :delegate
    {:karcarthy/type :delegate
     :required        {:planner :workflow
                       :worker :workflow}
-    :optional        {:max-concurrency :integer}}
+    :optional        {:max-concurrency :positive-integer}}
 
    :reduce
    {:karcarthy/type :reduce
@@ -89,7 +89,7 @@
    {:karcarthy/type :revise
     :required        {:worker :workflow
                       :evaluator :workflow}
-    :optional        {:max-rounds :integer}}
+    :optional        {:max-rounds :positive-integer}}
 
    :route
    {:karcarthy/type :route
@@ -106,7 +106,7 @@
    :dynamic
    {:karcarthy/type :dynamic
     :required        {:agent :agent}
-    :optional        {:max-steps :integer}
+    :optional        {:max-steps :positive-integer}
     :experimental?   true}
 
    :agent-ref
@@ -169,6 +169,7 @@
      "additionalProperties" false
      "properties" {"type" {"const" "branch"}
                    "branches" {"type" "array"
+                               "minItems" 1
                                "items" {"$ref" "#/$defs/workflow"}}
                    "max-concurrency" {"type" "integer" "minimum" 1}}}
 

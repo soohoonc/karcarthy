@@ -1,6 +1,6 @@
 # karcarthy
 
-> Homoiconic agent orchestration for Clojure.
+> Agent orchestration as data, inspired by Lisp's homoiconicity.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -66,10 +66,12 @@ system.
 - **Agents speak karcarthy**: advanced workflows parse EDN via `clojure.edn`,
   never `eval`, so an agent can write a workflow before a run or adapt the
   workflow while the run is in progress.
-- **Run options**: under `:options` in the run request, `:observe` streams
-  OTel-compatible event maps for every workflow and agent span, and
-  `:edn-retries` (default 1) lets planner, evaluator, router, and dynamic
-  nodes self-repair by re-asking the model when an EDN reply fails to parse.
+- **Run controls**: `:max-concurrency` bounds leaf calls across the whole run,
+  `:run-timeout-ms` and `:cancel?` stop outstanding work, `:observe` streams
+  OTel-compatible events, and `:edn-retries` repairs malformed model EDN.
+- **Fail-closed results**: statuses are Boolean, rejected revisions are not-ok,
+  dynamic workflows cannot complete over unresolved failed work, and the CLI
+  exits nonzero for a not-ok result.
 - **Schemas as data**: `edn-schema` and `json-schema` keep generated workflows
   inspectable without adding another runtime.
 
@@ -80,15 +82,15 @@ commodity: Claude, Codex, the OpenAI Agents SDK, and local models all do it.
 The harder problem is coordinating *many* agents while keeping the plan
 something you can see and change.
 
-In a Lisp, code is data, so karcarthy makes the plan a value. A workflow is an
+Inspired by Lisp's code-as-data tradition, karcarthy makes the plan a value. A workflow is an
 EDN structure you generate, transform with `clojure.walk`, store, and diff like
 any other data. karcarthy delegates the inner loop to systems you already use —
 PydanticAI, Claude, Codex, the OpenAI Agents SDK, Clojure functions,
 subprocesses, shell commands, or a local mock — and keeps only the data-first
 coordination layer on top. Two things fall out of that:
 
-- You swap provider, protocol, process, or mock runners without touching the
-  workflow.
+- You swap provider, protocol, process, or mock runners without changing the
+  workflow structure when their declared capabilities match.
 - Because the plan is data in a Lisp, an agent can **write a workflow as EDN
   that karcarthy runs, or rewrite its own definition at runtime**. The language
   the agents are described in is available to the agents themselves.
@@ -108,6 +110,10 @@ coordination layer on top. Two things fall out of that:
   `./bin/karcarthy agent echo --instructions "Echo the input." hi` runs it as a CLI.
 - Pre-release (0.0.2). JDK 21+; depends on `org.clojure/clojure` and
   `org.clojure/data.json`.
+
+karcarthy coordinates one in-memory run. Durable checkpoints, crash recovery,
+and exactly-once execution belong in the application or an external workflow
+system rather than this library's core.
 
 ## License
 

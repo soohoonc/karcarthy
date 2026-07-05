@@ -3,7 +3,7 @@
 
 karcarthy is a Clojure library, but a workflow is just data, so any language can
 build one and run it. This builds workflows as plain Python dicts and runs them
-through the karcarthy executable. The homoiconic part survives the boundary:
+through the karcarthy executable. The data-first design survives the boundary:
 Python constructs (and could transform) the workflow as data.
 
 Run from the repo root:

@@ -244,7 +244,8 @@ The reducer receives EDN shaped like `{:input ... :subtasks ... :results [...]}`
 (k/revise worker evaluator & {:keys [max-rounds]})
 ```
 
-Runs a worker/evaluator loop until accepted or the round limit is reached.
+Runs a worker/evaluator loop until accepted or the round limit is reached. An
+exhausted, unaccepted loop returns `:ok? false` and `:error :not-accepted`.
 
 ```clojure
 (k/revise draft-writer critic :max-rounds 3)
@@ -331,6 +332,7 @@ Supported ops are:
 
 `:spawn` fans the target agent or named workflow out over `:inputs`; the op may
 also carry `:max-concurrency` to cap parallel calls.
+Failed `:call` or `:spawn` work must be retried successfully before `:complete`.
 
 Use `agent-ref` and `workflow-ref` inside workflows defined during a dynamic
 run when later patches should affect later calls.
@@ -437,7 +439,7 @@ Interprets workflow data through the runner passed to `run`.
 | `:runner` | A value implementing the runner protocol. |
 | `:workflow` | An agent or workflow node. |
 | `:input` | The initial value given to the workflow. |
-| `:options` | Optional interpreter/runtime options such as `:observe` and `:edn-retries` (how many times a node re-asks the model when its EDN reply fails to parse or validate; default 1, `0` fails fast). |
+| `:options` | Runtime controls and runner overrides. Interpreter options include `:observe`, `:edn-retries`, run-wide `:max-concurrency`, `:run-timeout-ms`, and a zero-argument `:cancel?` predicate. |
 
 Input rendering:
 
@@ -477,7 +479,8 @@ Pass `:observe` to receive OpenTelemetry-compatible span events as plain data:
 ```
 
 Events contain span ids, parent span ids, names, attributes, paths, status, and
-duration metadata. They do not include prompt text or result text.
+duration metadata. They do not include prompt text or result text, and
+observation is always best-effort.
 
 ```clojure
 {:karcarthy/type :event
@@ -542,10 +545,8 @@ receives only the input string. With `{:call? true}`, it receives the agent call
 ```
 
 Runs agent calls through Claude. The current implementation drives `claude -p`.
-The model comes from the agent spec's `:model` field (lowered to `--model`);
-`claude-runner` has no `:model` option, and a runner-level `:model` is silently
-ignored. (`codex-runner` and `openai-runner` do accept a runner-level
-`:model`.)
+The model comes from the agent spec's `:model` field (lowered to `--model`), or
+from a runner-level `:model` override.
 
 ```clojure
 (k/claude-runner {:max-turns 4

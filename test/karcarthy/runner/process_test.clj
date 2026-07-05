@@ -1,6 +1,7 @@
 (ns karcarthy.runner.process-test
   (:require [clojure.test :refer [deftest is testing]]
             [karcarthy.core :as k]
+            [karcarthy.orchestrate :as o]
             [karcarthy.runner.process :as proc-runner]))
 
 (deftest fixed-command-echoes-stdin
@@ -37,6 +38,18 @@
       (is (not (k/ok? r)))
       (is (= "process timed out" (:error r)))
       (is (true? (get-in r [:raw :timed-out?]))))))
+
+(deftest run-deadline-does-not-loosen-runner-timeout
+  (let [runner (proc-runner/process-runner ["sleep" "10"] {:timeout-ms 150})
+        started (System/currentTimeMillis)
+        r (o/run {:runner runner
+                  :workflow (k/agent {:name "slow" :instructions "i"})
+                  :input "x"
+                  :options {:run-timeout-ms 2000}})
+        elapsed (- (System/currentTimeMillis) started)]
+    (is (not (k/ok? r)))
+    (is (= "process timed out" (:error r)))
+    (is (< elapsed 1000))))
 
 (deftest process-runner-runs-shell-command-string
   (testing "a shell command string reads the prompt from stdin"

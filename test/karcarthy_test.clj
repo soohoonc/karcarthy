@@ -62,6 +62,7 @@
   (is (string? (kc/explain-subagent {:karcarthy/type :subagent})))
   (is (map? kc/edn-schema))
   (is (map? kc/json-schema))
+  (is (kc/result? (kc/result {:text "ok"})))
   (is (kc/agent? (kc/read-agent "{:karcarthy/type :agent :name \"x\" :instructions \"i\"}"))))
 
 (deftest facade-reexports-dynamic-workflow-helpers

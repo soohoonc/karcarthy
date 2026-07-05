@@ -164,6 +164,7 @@
   (testing "one failing branch makes the whole node not-ok"
     (let [r (run (failing-runner #{"b"}) (o/branch [a b c]) "hi")]
       (is (not (k/ok? r)))
+      (is (= :branch-failed (:error r)))
       (is (= 3 (count (:results r)))))))
 
 (deftest branch-text-reports-failed-sections
@@ -205,6 +206,12 @@
       (is (not (k/ok? r)))
       (is (= :invalid-subtasks (:error r))))))
 
+(deftest delegate-rejects-an-empty-plan
+  (let [runner (scripted-runner {"planner" "{:subtasks []}"})
+        r (run runner (o/delegate planner a) "do stuff")]
+    (is (not (k/ok? r)))
+    (is (= :invalid-subtasks (:error r)))))
+
 (deftest delegate-bounded-concurrency
   (testing "all subtasks run correctly even with a small concurrency bound"
     (let [runner (scripted-runner
@@ -242,6 +249,8 @@
     (let [runner (scripted-runner {"judge" "{:accept? false :feedback \"more\"}"})
           flow    (o/revise a judge :max-rounds 3)
           r       (run runner flow "topic")]
+      (is (not (k/ok? r)))
+      (is (= :not-accepted (:error r)))
       (is (false? (:accepted? r)))
       (is (= 3 (:rounds r)))
       (is (str/includes? (:text r) "topic")))))
@@ -264,6 +273,13 @@
     (let [r (run (failing-runner #{"a"}) (o/revise a judge) "x")]
       (is (not (k/ok? r)))
       (is (= "a" (:agent r))))))
+
+(deftest revise-stops-when-the-evaluator-fails
+  (let [r (run (failing-runner #{"judge"}) (o/revise a judge :max-rounds 3) "x")]
+    (is (not (k/ok? r)))
+    (is (false? (:accepted? r)))
+    (is (= 1 (:rounds r)))
+    (is (= "judge" (:agent r)))))
 
 (deftest route-with-agent-source
   (testing "a router source selects a branch with EDN {:route ...}"
@@ -453,6 +469,56 @@
       (is (every? #(contains? % :duration-ms) finishes))
       (is (not-any? #(contains? % :text) @events))
       (is (not-any? #(contains? % :prompt) @events)))))
+
+(deftest workflow-validation-is-strict
+  (let [bad (assoc-in (o/pipe (o/branch [a]))
+                      [:steps 0 :max-concurrency]
+                      0)]
+    (is (not (o/workflow? bad)))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"Invalid workflow"
+                          (run h bad "x"))))
+  (testing "workflow validation rejects invalid limits"
+    (doseq [bad [(o/branch [])
+                 (o/branch [a] :max-concurrency 0)
+                 (o/delegate planner a :max-concurrency -1)
+                 (o/revise a judge :max-rounds 0)]]
+      (is (not (o/workflow? bad))))))
+
+(deftest run-wide-concurrency-bounds-nested-fanout
+  (let [active (atom 0)
+        peak (atom 0)
+        runner (k/fn-runner
+                (fn [_]
+                  (let [n (swap! active inc)]
+                    (swap! peak max n)
+                    (try
+                      (Thread/sleep 40)
+                      "ok"
+                      (finally (swap! active dec))))))
+        inner #(o/branch [a b c] :max-concurrency 3)
+        flow (o/branch [(inner) (inner)] :max-concurrency 2)
+        r (run runner flow "x" {:max-concurrency 2})]
+    (is (k/ok? r))
+    (is (= 2 @peak))))
+
+(deftest run-deadline-cancels-slow-work
+  (let [runner (k/fn-runner (fn [_] (Thread/sleep 1000) "late"))
+        started (System/nanoTime)
+        r (run runner a "x" {:run-timeout-ms 50})
+        elapsed-ms (/ (- (System/nanoTime) started) 1000000.0)]
+    (is (not (k/ok? r)))
+    (is (= :deadline-exceeded (:error r)))
+    (is (< elapsed-ms 500))))
+
+(deftest run-observes-external-cancellation
+  (let [cancelled? (atom false)
+        trigger (future (Thread/sleep 50) (reset! cancelled? true))
+        runner (k/fn-runner (fn [_] (Thread/sleep 1000) "late"))
+        r (run runner a "x" {:cancel? #(deref cancelled?)})]
+    @trigger
+    (is (not (k/ok? r)))
+    (is (= :cancelled (:error r)))))
 
 (deftest unknown-node-throws
   (is (thrown? clojure.lang.ExceptionInfo

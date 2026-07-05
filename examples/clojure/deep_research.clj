@@ -255,9 +255,12 @@
   (let [dir "/tmp/karc-deep-research"
         _ (.mkdirs (java.io.File. dir))
         events (atom [])
+        ;; codex-runner cannot enforce k/agent :tools allowlists. Remove those
+        ;; declarations explicitly instead of silently pretending they apply.
+        workflow (k/over k/agent? #(dissoc % :tools) deep-research-workflow)
         result (k/run {:runner (k/codex-runner {:dir dir
                                                 :timeout-ms (* 20 60 1000)})
-                       :workflow deep-research-workflow
+                       :workflow workflow
                        :input "Can karcarthy express an OpenAI Deep Research-style workflow?"
                        :options {:observe #(swap! events conj %)}})]
     (println (:text result))

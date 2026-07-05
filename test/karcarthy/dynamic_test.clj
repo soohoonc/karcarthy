@@ -203,3 +203,47 @@
       (is (k/ok? r))
       (is (= "recovered" (:text r)))
       (is (str/includes? (second @prompts) "no EDN map found")))))
+
+(deftest dynamic-workflow-cannot-complete-after-failed-work
+  (let [ops [{:op :define :agent {:name "worker" :instructions "work"}}
+             {:op :call :agent "worker" :input "x"}
+             {:op :complete :text "pretend success"}
+             {:op :complete :text "pretend success again"}]
+        controller-calls (atom 0)
+        runner (reify k/Runner
+                 (-run [_ agent _ _]
+                   (if (= "controller" (:name agent))
+                     (k/result {:agent "controller"
+                                :text (pr-str (nth ops (dec (swap! controller-calls inc))))})
+                     (k/result {:agent (:name agent) :ok? false :error :worker-failed}))))
+        r (o/run {:runner runner
+                  :workflow (dyn/dynamic
+                             (k/agent {:name "controller" :instructions "orchestrate"})
+                             :max-steps 6)
+                  :input "x"})]
+    (is (not (k/ok? r)))
+    (is (str/includes? (:error r) "failed work is unresolved"))))
+
+(deftest dynamic-workflow-may-complete-after-a-successful-retry
+  (let [ops [{:op :define :agent {:name "worker" :instructions "work"}}
+             {:op :call :agent "worker" :input "x"}
+             {:op :call :agent "worker" :input "retry"}
+             {:op :complete :text "recovered"}]
+        controller-calls (atom 0)
+        worker-calls (atom 0)
+        runner (reify k/Runner
+                 (-run [_ agent _ _]
+                   (if (= "controller" (:name agent))
+                     (k/result {:agent "controller"
+                                :text (pr-str (nth ops (dec (swap! controller-calls inc))))})
+                     (let [n (swap! worker-calls inc)]
+                       (k/result {:agent (:name agent)
+                                  :ok? (> n 1)
+                                  :text (if (> n 1) "fixed" "failed")})))))
+        r (o/run {:runner runner
+                  :workflow (dyn/dynamic
+                             (k/agent {:name "controller" :instructions "orchestrate"})
+                             :max-steps 6)
+                  :input "x"})]
+    (is (k/ok? r))
+    (is (= "recovered" (:text r)))))
