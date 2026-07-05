@@ -220,6 +220,9 @@ appended so it can correct itself. Set the retry budget with the
 `:edn-retries` option to `run` (default `1`; `0` fails fast). `dynamic`
 applies the same budget to consecutive invalid ops.
 
+`run` validates the complete workflow before execution. Use
+`(k/workflow? value)` to check workflow data without running it.
+
 ## Result
 
 ```clojure
@@ -229,6 +232,9 @@ applies the same budget to consecutive invalid ops.
  :text "final reply"
  :raw {...}}
 ```
+
+`:ok?` is always Boolean. Rejected revision, incomplete protocols, nonzero
+process exits, timeouts, and malformed runner results fail closed.
 
 Composite nodes add more fields:
 

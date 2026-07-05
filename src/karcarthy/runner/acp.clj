@@ -98,9 +98,14 @@
 
 (defn- read-line! [{:keys [reader process]} timeout-ms]
   (let [line-f (future (.readLine ^java.io.BufferedReader reader))
-        line   (if timeout-ms
-                 (deref line-f timeout-ms ::timeout)
-                 @line-f)]
+        line   (try
+                 (if timeout-ms
+                   (deref line-f timeout-ms ::timeout)
+                   @line-f)
+                 (catch InterruptedException e
+                   (future-cancel line-f)
+                   (.destroyForcibly ^Process process)
+                   (throw e)))]
     (when (= ::timeout line)
       (.destroyForcibly ^Process process)
       (throw (ex-info "ACP agent timed out waiting for a message"
@@ -339,10 +344,9 @@
 
 (defn stop-reason-ok?
   "True when an ACP `stopReason` means the prompt turn completed normally.
-  An absent stop reason is treated as success; `refusal`, `cancelled`, and
-  limit stops (`max_tokens`, `max_turn_requests`) are not."
+  Missing, refusal, cancellation, and limit stops are failures."
   [stop-reason]
-  (or (nil? stop-reason) (= "end_turn" stop-reason)))
+  (= "end_turn" stop-reason))
 
 (defn- config-options [session-result]
   (vec (:configOptions session-result)))

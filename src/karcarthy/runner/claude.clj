@@ -84,12 +84,13 @@
   Agent fields used: :instructions, :model, :tools (-> --allowedTools)."
   [agent prompt {:keys [claude-bin output-format system-prompt-mode
                         max-turns permission-mode resume continue?
-                        partial-messages? subagents extra-args prompt-via]
+                        partial-messages? subagents extra-args prompt-via model]
                  :or   {claude-bin "claude"
                         output-format "json"
                         system-prompt-mode :append
                         prompt-via :argv}}]
-  (let [{:keys [instructions model tools]} agent
+  (let [{agent-model :model :keys [instructions tools]} agent
+        model (or model agent-model)
         sp-flag (if (= system-prompt-mode :replace)
                   "--system-prompt"
                   "--append-system-prompt")]
@@ -113,15 +114,18 @@
   "Turn a parsed `claude -p` result object (keyword-keyed map - the JSON `result`
   payload, or the terminal `result` event in a stream) into a karcarthy result."
   [agent-name m]
-  (k/result {:agent      agent-name
-             :ok?        (not (true? (:is_error m)))
-             :text       (:result m)
-             :subtype    (:subtype m)          ; e.g. "success", "error_max_turns"
-             :num-turns  (:num_turns m)
-             :session-id (:session_id m)
-             :cost-usd   (:total_cost_usd m)
-             :usage      (:usage m)
-             :raw        m}))
+  (let [status (:is_error m)]
+    (k/result (cond-> {:agent      agent-name
+                       :ok?        (and (boolean? status) (not status))
+                       :text       (:result m)
+                       :subtype    (:subtype m) ; e.g. "success", "error_max_turns"
+                       :num-turns  (:num_turns m)
+                       :session-id (:session_id m)
+                       :cost-usd   (:total_cost_usd m)
+                       :usage      (:usage m)
+                       :raw        m}
+                (not (boolean? status))
+                (assoc :error "claude result is missing Boolean is_error")))))
 
 (defn stdout->result
   "Parse the stdout of `claude -p --output-format json` (one JSON object) into a
@@ -142,24 +146,37 @@
   (let [pb (doto (ProcessBuilder. ^java.util.List (vec argv))
              (.redirectErrorStream true))]
     (when dir (.directory pb (io/file (str dir))))
-    (let [proc     (.start pb)
-          _        (proc/write-stdin! proc in)
+    (let [process    (.start pb)
+          timed-out? (atom false)
           watchdog (when timeout-ms
                      (future (Thread/sleep timeout-ms)
-                             (when (.isAlive proc) (.destroyForcibly proc))))]
+                             (when (.isAlive process)
+                               (reset! timed-out? true)
+                               (proc/terminate! process))))
+          stdin-f   (future (proc/write-stdin! process in))
+          events-f  (future
+                      (with-open [rdr (io/reader (.getInputStream process))]
+                        (loop [events []]
+                          (if-let [line (.readLine ^java.io.BufferedReader rdr)]
+                            (let [ev (try (json/read-str line :key-fn keyword)
+                                          (catch Exception _ nil))]
+                              (when (and ev on-event) (on-event ev))
+                              (recur (if ev (conj events ev) events)))
+                            events))))]
       (try
-        (with-open [rdr (io/reader (.getInputStream proc))]
-          (loop [events []]
-            (if-let [line (.readLine ^java.io.BufferedReader rdr)]
-              (let [ev (try (json/read-str line :key-fn keyword)
-                            (catch Exception _ nil))]
-                (when (and ev on-event) (on-event ev))
-                (recur (if ev (conj events ev) events)))
-              {:events events
-               :exit   (.waitFor proc)
-               :result (last (filter #(= "result" (:type %)) events))})))
+        (let [events (try
+                       @events-f
+                       (catch Throwable t
+                         (if @timed-out? [] (throw t))))]
+          {:events events
+           :exit   (.waitFor process)
+           :timed-out? @timed-out?
+           :result (last (filter #(= "result" (:type %)) events))})
         (finally
-          (when watchdog (future-cancel watchdog)))))))
+          (future-cancel stdin-f)
+          (future-cancel events-f)
+          (when watchdog (future-cancel watchdog))
+          (when (.isAlive process) (proc/terminate! process)))))))
 
 (defn- run-streaming!
   "Stream `claude -p --output-format stream-json`, invoking (:on-event opts) per
@@ -168,9 +185,25 @@
   (let [argv        (command agent prompt (assoc opts :output-format "stream-json"))
         stream-opts (cond-> (select-keys opts [:on-event :dir :timeout-ms])
                       (= :stdin (:prompt-via opts)) (assoc :in prompt))
-        {:keys [result exit events]} (stream! argv stream-opts)]
-    (if result
-      (payload->result (:name agent) result)
+        {:keys [result exit events timed-out?]} (stream! argv stream-opts)
+        parsed (when result (payload->result (:name agent) result))]
+    (cond
+      timed-out?
+      (k/result {:agent (:name agent) :ok? false :text (:text parsed)
+                 :error "claude timed out"
+                 :raw {:runner :claude :exit exit :events events :argv argv}})
+
+      (and parsed (zero? exit))
+      parsed
+
+      parsed
+      (k/result (assoc parsed
+                       :ok? false
+                       :error (str "claude exited with status " exit)
+                       :raw {:runner :claude :exit exit :events events
+                             :payload (:raw parsed) :argv argv}))
+
+      :else
       (k/result {:agent (:name agent) :ok? false :text nil
                  :error (str "stream ended without a result event (exit " exit ")")
                  :raw   {:runner :claude :exit exit :events events :argv argv}}))))
@@ -191,12 +224,16 @@
                  :error "claude timed out"
                  :raw   raw})
 
-      ;; JSON mode: claude emits a structured result (with cost, subtype and
-      ;; partial text) even when it errors and exits non-zero, so prefer parsing
-      ;; stdout and let the payload's `is_error` decide `:ok?`.
+      ;; Preserve structured output for diagnostics, but process failure wins.
       (and (= output-format "json") (seq (str/trim (or out ""))))
       (try
-        (stdout->result (:name agent) out)
+        (let [parsed (stdout->result (:name agent) out)]
+          (if (zero? exit)
+            parsed
+            (k/result (assoc parsed
+                             :ok? false
+                             :error (str "claude exited with status " exit)
+                             :raw {:payload (:raw parsed) :process raw}))))
         (catch Exception e
           (k/result {:agent (:name agent) :ok? false
                      :text  (or (not-empty err) out)

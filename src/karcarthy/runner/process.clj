@@ -50,9 +50,11 @@
    (let [mode (if (string? command) :shell :exec)
          argv (command->argv command shell)]
      (reify k/Runner
-       (-run [_ agent input _opts]
-         (run-process mode argv (:name agent) input
-                      {:trim? trim?
-                       :env env
-                       :dir dir
-                       :timeout-ms timeout-ms}))))))
+       (-run [_ agent input opts]
+         (k/reject-tools! :process agent)
+         (let [timeout (or (:timeout-ms opts) timeout-ms)]
+           (run-process mode argv (:name agent) input
+                        {:trim? trim?
+                         :env env
+                         :dir dir
+                         :timeout-ms timeout})))))))

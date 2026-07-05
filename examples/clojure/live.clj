@@ -46,7 +46,7 @@
 
 (let [r (k/run {:runner runner
                 :workflow research
-                :input "Why is homoiconicity useful for agent orchestration?"})]
+                :input "Why is representing agent orchestration as data useful?"})]
   (println "SUBTASKS:" (pr-str (get-in r [:source :subtasks])))
   (println "OK?      " (k/ok? r))
   (println "RESULT:")

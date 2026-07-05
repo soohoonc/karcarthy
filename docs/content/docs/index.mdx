@@ -51,21 +51,21 @@ and parsed without `eval`. You can also rewrite it before execution:
 
 karcarthy does not implement model calls or tool execution. The runner you pass
 to `run` owns that loop. karcarthy owns the visible coordination value and the
-small interpreter that walks it. Swap the runner and the workflow data does not
-change.
+small interpreter that walks it. The workflow structure stays portable when
+the selected runners advertise matching capabilities.
 
 ## Why Clojure
 
-karcarthy takes Lisp homoiconicity and applies it in a practical way: the agent
-program is data. Agents are maps, workflows are EDN trees, and constructors
-such as `pipe`, `branch`, and `revise` return values you can print, store,
-diff, walk, rewrite, validate, or have another agent generate.
+karcarthy borrows a practical benefit from Lisp's homoiconicity: representing
+program structure as ordinary data. Agents are maps, workflows are EDN trees,
+and constructors such as `pipe`, `branch`, and `revise` return values you can
+print, store, diff, walk, rewrite, validate, or have another agent generate.
 
 That does not mean karcarthy evaluates arbitrary agent-written code. Dynamic
 workflows parse EDN operations with `clojure.edn`, validate them, and interpret
-them through the same workflow interpreter. The homoiconic move is that the
-language for describing coordination is available as ordinary data, not hidden
-inside an opaque object graph.
+them through the same workflow interpreter. The homoiconic-inspired move is
+that the language for describing coordination is available as ordinary data,
+not hidden inside an opaque object graph.
 
 Clojure fits because EDN is native, maps and vectors are the default building
 blocks, structural rewrites are ordinary code, macros such as `defagent` add

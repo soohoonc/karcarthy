@@ -58,6 +58,7 @@
 (export karcarthy.core/mock-runner)
 (export karcarthy.core/fn-runner)
 (export karcarthy.core/result)
+(export karcarthy.core/result?)
 (export karcarthy.core/ok?)
 
 ;; orchestration

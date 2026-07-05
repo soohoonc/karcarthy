@@ -64,11 +64,10 @@
       (try
         (let [result (body span-id)]
           (observe! opts (make-event :finish span-id parent-span-id
-                                     (assoc opts
-                                            :duration-ms (duration-ms started-ns)
-                                            ;; (boolean (:ok? result)) is k/ok?,
-                                            ;; inlined to keep observe core-free
-                                            :ok? (boolean (:ok? result)))))
+                                     (cond-> (assoc opts
+                                                    :duration-ms (duration-ms started-ns)
+                                                    :ok? (true? (:ok? result)))
+                                       (:error result) (assoc :error (:error result)))))
           result)
         (catch Throwable t
           (observe! opts (make-event :error span-id parent-span-id

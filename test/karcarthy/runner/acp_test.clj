@@ -266,9 +266,9 @@
       (is (= "S1" (:session-id result))))))
 
 (deftest stop-reason-ok-matrix
-  (testing "only end_turn (or an absent stop reason) counts as success"
+  (testing "only an explicit end_turn counts as success"
     (is (acp/stop-reason-ok? "end_turn"))
-    (is (acp/stop-reason-ok? nil))
+    (is (not (acp/stop-reason-ok? nil)))
     (is (not (acp/stop-reason-ok? "refusal")))
     (is (not (acp/stop-reason-ok? "cancelled")))
     (is (not (acp/stop-reason-ok? "max_tokens")))

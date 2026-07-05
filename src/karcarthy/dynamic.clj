@@ -300,17 +300,17 @@
           agent  (if (k/agent? target)
                    target
                    (lookup-agent state (op-target-name op :agent)))]
-      (k/run-agent runner agent (o/input->text input) opts))
+      (o/safe-run runner agent (o/input->text input) opts))
 
     (contains? op :workflow)
     (let [target   (:workflow op)
           workflow (if (or (string? target) (keyword? target))
                      (lookup-workflow state target)
                      target)]
-      (o/run {:runner   runner
-              :workflow (refs->workflow state workflow)
-              :input    input
-              :options  opts}))
+      (o/safe-run runner
+                  (refs->workflow state workflow)
+                  (o/input->text input)
+                  opts))
 
     :else
     (throw (ex-info "call requires :agent or :workflow target" {:op op}))))
@@ -340,15 +340,16 @@
 
 (defn- spawn! [runner state op opts]
   (let [inputs (:inputs op)]
-    (when-not (sequential? inputs)
-      (throw (ex-info "spawn requires :inputs" {:op op})))
+    (when-not (and (sequential? inputs) (seq inputs))
+      (throw (ex-info "spawn requires one or more :inputs" {:op op})))
     (let [workflow (op-callable state op)
           indexed  (map-indexed vector inputs)
           results  (o/bounded-pmap (:max-concurrency op)
                                    (fn [[idx input]]
                                      (o/safe-run runner workflow (o/input->text input)
                                                  (o/descend opts :spawn idx)))
-                                   indexed)]
+                                   indexed
+                                   opts)]
       (k/result {:agent   "dynamic"
                  :ok?     (every? k/ok? results)
                  :results results
@@ -410,7 +411,8 @@
     "{:op :spawn :workflow \"review\" :inputs [\"a\" \"b\"]}"
     "  run the target once per input, concurrently; results come back in order."
     "{:op :complete :text \"final answer\"}"
-    "  finish the run; :text is the final answer to the task."
+    "  finish the run; :text is the final answer to the task. Completion is"
+    "  rejected while a failed :call or :spawn remains unresolved."
     ""
     "WORKFLOW grammar (any WORKFLOW position takes an agent map, a ref, or a node)"
     "{:karcarthy/type :agent-ref :name \"writer\"}       an agent from the registry"
@@ -431,6 +433,7 @@
     "- Exactly one op map per reply. No prose around it (an ```edn fence is ok)."
     "- Refer to registered agents and workflows by their string :name."
     "- If LAST RESULT shows :ok? false, read its :error and send a corrected op."
+    "- After a failed :call or :spawn, retry work successfully before :complete."
     ""
     "EXAMPLE (one run, one op per step)"
     "step 1 -> {:op :define :agent {:name \"researcher\""
@@ -486,20 +489,25 @@
 (defmethod o/run-node :dynamic
   [runner {:keys [agent max-steps]} input opts]
   (let [st (or (:state opts) (state))]
-    (loop [step 1, last-result nil, failures 0]
+    (loop [step 1, last-result nil, failures 0, work-failed? false]
       (if (and max-steps (> step max-steps))
         (k/result {:agent (:name agent)
                    :ok?   false
                    :error :max-steps
                    :text  (str "dynamic workflow exceeded max steps: " max-steps)
                    :state (snapshot st)})
-        (let [agent-result (k/run-agent runner agent
-                                        (dynamic-prompt input st last-result step)
-                                        opts)]
+        (let [agent-result (o/run-node runner agent
+                                       (dynamic-prompt input st last-result step)
+                                       opts)]
           (if-not (k/ok? agent-result)
             (k/result (assoc agent-result :state (snapshot st)))
             (let [outcome (try
                             (let [op     (text->op (:text agent-result))
+                                  _      (when (and work-failed?
+                                                    (= :complete (:op op)))
+                                           (throw (ex-info
+                                                   "cannot complete while failed work is unresolved"
+                                                   {:op op})))
                                   result (step! runner st op opts)]
                               {:op op :result (assoc result
                                                      :state (snapshot st)
@@ -524,8 +532,14 @@
                                       :ok?   false
                                       :error message
                                       :text  (:text agent-result)})
-                           failures)))
+                           failures
+                           work-failed?)))
                 (let [{:keys [op result]} outcome]
                   (if (= :complete (:op op))
                     result
-                    (recur (inc step) result 0)))))))))))
+                    (recur (inc step)
+                           result
+                           0
+                           (case (:op op)
+                             (:call :spawn) (not (k/ok? result))
+                             work-failed?))))))))))))

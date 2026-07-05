@@ -95,7 +95,7 @@
                  {:call? true})
         r        (k/run {:runner runner
                          :workflow workflow
-                         :input "homoiconic agents are data"})]
+                         :input "agent orchestration can be data"})]
     (println "subtasks:" (get-in r [:source :subtasks]))
     (println "result:  " (:text r)))
 

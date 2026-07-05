@@ -49,3 +49,23 @@
   (let [r (oa/stdout->result "writer" "{\"ok\":false,\"error\":\"no api key\"}")]
     (is (not (k/ok? r)))
     (is (= "no api key" (:error r)))))
+
+(deftest stdout->result-requires-explicit-status
+  (let [missing (oa/stdout->result "writer" "{\"text\":\"looks good\"}")
+        stringy (oa/stdout->result "writer" "{\"ok\":\"false\",\"text\":\"bad\"}")]
+    (is (not (k/ok? missing)))
+    (is (not (k/ok? stringy)))
+    (is (re-find #"Boolean ok" (:error missing)))))
+
+(deftest nonzero-exit-overrides-a-success-payload
+  (let [script (java.io.File/createTempFile "fake-openai" ".py")]
+    (try
+      (spit script (str "import sys\n"
+                        "print('{\"ok\": true, \"text\": \"looks good\"}')\n"
+                        "sys.exit(9)\n"))
+      (let [runner (oa/openai-runner {:script (.getPath script)})
+            r (k/run-agent runner (k/agent {:name "a" :instructions "i"}) "x")]
+        (is (not (k/ok? r)))
+        (is (re-find #"exited with status 9" (:error r)))
+        (is (= "looks good" (:text r))))
+      (finally (.delete script)))))

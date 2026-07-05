@@ -6,7 +6,7 @@ that loop sharper, not broader.
 
 ## Keep sharpening
 
-- Make workflow validation explain failures with paths.
+- Keep workflow validation aligned with constructors and schemas.
 - Add a printed canonical form for workflow EDN.
 - Keep generated workflow parsing data-only: `clojure.edn`, validation, no
   `eval`.

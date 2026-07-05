@@ -77,7 +77,7 @@ Every run — including the two above — is one request map:
 | `:runner` | The backend used for each agent call, such as mock, ACP, Claude, Codex, OpenAI, a process, or a local function. |
 | `:workflow` | The agent or workflow data to run. A single agent is already a workflow. |
 | `:input` | The initial workflow value. A string is a prompt; EDN is rendered before the first agent call. |
-| `:options` | Runtime controls for this run, such as `:observe`, `:state`, timeouts, or runner-specific overrides. |
+| `:options` | Runtime controls such as `:observe`, run-wide `:max-concurrency`, `:run-timeout-ms`, `:cancel?`, or runner-specific overrides. |
 
 ## Input shapes
 

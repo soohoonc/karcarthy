@@ -28,6 +28,22 @@
 
 (declare json->workflow)
 
+(def ^:private json-node-keys
+  {"agent" #{"type" "name" "description" "instructions" "model" "tools" "config"}
+   "pipe" #{"type" "steps"}
+   "branch" #{"type" "branches" "max-concurrency"}
+   "delegate" #{"type" "planner" "worker" "max-concurrency"}
+   "reduce" #{"type" "source" "reducer"}
+   "route" #{"type" "source" "routes" "default"}
+   "continue" #{"type" "source" "to" "prompt"}
+   "revise" #{"type" "worker" "evaluator" "max-rounds"}
+   "dynamic" #{"type" "agent" "max-steps"}})
+
+(defn- reject-json-unknown! [m type]
+  (when-let [supported (json-node-keys type)]
+    (k/reject-unknown! (str "workflow " type) supported m))
+  m)
+
 (def ^:dynamic *exit-on-error*
   "When true (the default), `-main` exits the JVM with status 1 after printing
   an error. Rebind to false to keep failures in-process (REPL, tests)."
@@ -67,10 +83,12 @@
   "Translate a JSON-parsed workflow map (string keys) into karcarthy workflow data.
   Route labels stay strings."
   [m]
-  (let [g                #(get m %)
+  (let [type             (get m "type")
+        _                (reject-json-unknown! m type)
+        g                #(get m %)
         with-concurrency #(cond-> %
                             (g "max-concurrency") (assoc :max-concurrency (g "max-concurrency")))]
-    (case (g "type")
+    (case type
       "agent"       (k/agent (cond-> {:name         (g "name")
                                       :instructions (g "instructions")}
                        (g "description") (assoc :description (g "description"))
@@ -120,15 +138,19 @@
   "Build the runner named in the request. \"claude\" uses lean sub-agent
   defaults (replace mode, tools off) so cross-language agents answer directly."
   [req]
-  (if (= "claude" (get req "runner"))
-    (do (.mkdirs (java.io.File. ^String claude-workdir))
-        (cc/claude-runner {:system-prompt-mode :replace
-                           :max-turns          4
-                           :model              "haiku"
-                           :dir                claude-workdir
-                           :extra-args         ["--disallowedTools"
-                                                "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]}))
-    (mock (get req "mock-responses"))))
+  (case (get req "runner" "mock")
+    "mock" (mock (get req "mock-responses"))
+    "claude" (do (.mkdirs (java.io.File. ^String claude-workdir))
+                 (cc/claude-runner
+                  {:system-prompt-mode :replace
+                   :max-turns          4
+                   :model              "haiku"
+                   :dir                claude-workdir
+                   :extra-args         ["--disallowedTools"
+                                        "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]}))
+    (throw (ex-info (str "unknown runner: " (pr-str (get req "runner")))
+                    {:runner (get req "runner")
+                     :supported ["mock" "claude"]}))))
 
 (defn- result->json [r]
   (try
@@ -137,9 +159,9 @@
       (json/write-str (select-keys r [:karcarthy/type :ok? :text :agent :rounds :subtasks])))))
 
 (defn- throwable->result [t]
-  {:ok false
-   :error (.getMessage t)
-   :exception (.getName (class t))})
+  (k/result {:ok? false
+             :error (.getMessage t)
+             :exception (.getName (class t))}))
 
 (defn- result->pretty-json [r]
   (try
@@ -148,17 +170,24 @@
       (with-out-str (json/pprint (select-keys r [:karcarthy/type :ok? :text :agent :rounds :subtasks]))))))
 
 (defn- result->text [r]
-  (or (:text r)
-      (get r "text")
-      (result->json r)))
+  (let [text (or (:text r) (get r "text"))]
+    (if (k/ok? r)
+      (or text (result->json r))
+      (let [error (or (:error r) (get r "error") "run failed")
+            error-text (if (keyword? error) (name error) (str error))]
+        (str "karcarthy failed: " error-text
+             (when (and (seq text) (not= text error-text))
+               (str "\n" text)))))))
 
 (defn- invoke! [req]
   (let [workflow (json->workflow (get req "workflow"))
         input    (get req "input" "")
-        runner   (request->runner req)]
+        runner   (request->runner req)
+        options  (update-keys (get req "options" {}) keyword)]
     (o/run {:runner runner
             :workflow workflow
-            :input input})))
+            :input input
+            :options options})))
 
 (defn- render [result opts]
   (cond
@@ -256,41 +285,60 @@
                    (or (:input opts)
                        (some->> prompt seq (str/join " "))))))
 
-(defn- json-command! [opts]
-  (let [json-opts (assoc opts :json? true)]
-    (try
-      (render (invoke! (json! (slurp *in*))) json-opts)
-      (catch Throwable t
-        (render (throwable->result t) json-opts)))))
+(defn- json-command! []
+  (try
+    (invoke! (json! (slurp *in*)))
+    (catch Throwable t
+      (throwable->result t))))
+
+(defn- rendered [result opts]
+  {:out (render result opts)
+   :exit (if (k/ok? result) 0 1)})
 
 (defn- dispatch! [args]
   (let [[cmd & rest] args
         opts (args->opts rest)]
     (cond
-      (or (:help? opts) (= cmd "help") (= cmd "--help") (= cmd "-h")) help-text
-      (= cmd "agent")                  (render (invoke! (agent->request opts)) opts)
-      (= cmd "run")                    (render (invoke! (file->request opts)) opts)
-      (= cmd "json")                   (json-command! opts)
-      (= cmd "demo")                   (render (invoke! {"workflow" {"type" "agent"
-                                                                      "name" "echo"
-                                                                      "instructions" "Echo the input."}
-                                                         "input"    "hi"})
-                                               opts)
-      (nil? cmd)                       help-text
+      (or (:help? opts) (= cmd "help") (= cmd "--help") (= cmd "-h"))
+      {:out help-text :exit 0}
+
+      (= cmd "agent")
+      (rendered (invoke! (agent->request opts)) opts)
+
+      (= cmd "run")
+      (rendered (invoke! (file->request opts)) opts)
+
+      (= cmd "json")
+      (rendered (json-command!) (assoc opts :json? true))
+
+      (= cmd "demo")
+      (rendered (invoke! {"workflow" {"type" "agent"
+                                      "name" "echo"
+                                      "instructions" "Echo the input."}
+                          "input"    "hi"})
+                opts)
+
+      (nil? cmd)
+      {:out help-text :exit 0}
+
       :else                            (throw (ex-info (str "unknown command: " cmd) {:command cmd})))))
 
+(defn- execute [args]
+  (try
+    (if (and (empty? args) (System/console))
+      {:out help-text :exit 0}
+      (dispatch! args))
+    (catch Throwable t
+      {:out ""
+       :err (str "karcarthy: " (.getMessage t) "\n\n" help-text)
+       :exit 1})))
+
 (defn -main [& args]
-  (let [out (try
-              (if (and (empty? args) (System/console))
-                help-text
-                (dispatch! args))
-              (catch Throwable t
-                (binding [*out* *err*]
-                  (println (str "karcarthy: " (.getMessage t)))
-                  (println)
-                  (print help-text))
-                (when *exit-on-error*
-                  (System/exit 1))
-                ""))]
+  (let [{:keys [out err exit]} (execute args)]
+    (when err
+      (binding [*out* *err*] (print err) (flush)))
     (print out)
-    (flush)))
+    (flush)
+    (when (and *exit-on-error* (pos? exit))
+      (System/exit exit))
+    exit))

@@ -109,6 +109,14 @@
 (deftest json->workflow-unknown-type
   (is (thrown? clojure.lang.ExceptionInfo (cli/json->workflow {"type" "nope"}))))
 
+(deftest json->workflow-rejects-unknown-keys
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                        #"contains unknown options"
+                        (cli/json->workflow {"type" "agent"
+                                             "name" "a"
+                                             "instructions" "i"
+                                             "temperature" 0.2}))))
+
 (deftest json->workflow-rejects-legacy-types
   (doseq [type ["map" "bind" "iterate"]]
     (is (thrown? clojure.lang.ExceptionInfo
@@ -139,6 +147,12 @@
                             "hi"))]
     (is (= "[echo] hi\n" output))))
 
+(deftest cli-text-output-labels-failures
+  (let [output (#'cli/render
+                (k/result {:ok? false :error :not-accepted :text "last draft"})
+                {})]
+    (is (= "karcarthy failed: not-accepted\nlast draft\n" output))))
+
 (deftest cli-main-agent-command-can-print-json
   (let [output (with-out-str
                  (cli/-main "agent" "echo"
@@ -163,8 +177,43 @@
         (.delete file)))))
 
 (deftest cli-main-json-command-keeps-errors-machine-readable
-  (let [output (with-in-str "{"
-                 (with-out-str (cli/-main "json")))
+  (let [output (binding [cli/*exit-on-error* false]
+                 (with-in-str "{"
+                   (with-out-str (cli/-main "json"))))
         result (json/read-str output)]
-    (is (= false (get result "ok")))
+    (is (= false (get result "ok?")))
     (is (contains? result "error"))))
+
+(deftest cli-failures-produce-a-nonzero-exit
+  (let [request {"workflow" {"type" "revise"
+                              "worker" {"type" "agent" "name" "writer" "instructions" "write"}
+                              "evaluator" {"type" "agent" "name" "judge" "instructions" "judge"}
+                              "max-rounds" 1}
+                 "mock-responses" {"writer" "draft"
+                                   "judge" "{:accept? false :feedback \"not ready\"}"}}
+        execution (with-in-str (json/write-str request)
+                    (#'cli/execute ["json"]))
+        result (json/read-str (:out execution))]
+    (is (= 1 (:exit execution)))
+    (is (= false (get result "ok?")))
+    (is (= "not-accepted" (get result "error")))))
+
+(deftest cli-rejects-unknown-runners
+  (let [request {"runner" "typo"
+                 "workflow" {"type" "agent" "name" "a" "instructions" "i"}}
+        execution (with-in-str (json/write-str request)
+                    (#'cli/execute ["json"]))
+        result (json/read-str (:out execution))]
+    (is (= 1 (:exit execution)))
+    (is (= false (get result "ok?")))
+    (is (re-find #"unknown runner" (get result "error")))))
+
+(deftest cli-json-passes-run-options
+  (let [request {"workflow" {"type" "agent" "name" "a" "instructions" "i"}
+                 "options" {"max-concurrency" 0}}
+        execution (with-in-str (json/write-str request)
+                    (#'cli/execute ["json"]))
+        result (json/read-str (:out execution))]
+    (is (= 1 (:exit execution)))
+    (is (= false (get result "ok?")))
+    (is (re-find #"max-concurrency" (get result "error")))))

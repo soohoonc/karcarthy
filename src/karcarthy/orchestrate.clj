@@ -41,7 +41,8 @@
   (:require [clojure.string :as str]
             [karcarthy.core :as k]
             [karcarthy.edn :as kedn]
-            [karcarthy.observe :as obs])
+            [karcarthy.observe :as obs]
+            [karcarthy.scope :as scope])
   (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@
   [branches & {:keys [max-concurrency] :as opts}]
   (k/reject-unknown! "branch" [:max-concurrency] opts)
   (cond-> {:karcarthy/type :branch :branches (vec branches)}
-    max-concurrency (assoc :max-concurrency max-concurrency)))
+    (contains? opts :max-concurrency) (assoc :max-concurrency max-concurrency)))
 
 (defn delegate
   "Ask `planner` for EDN `{:subtasks [\"...\"]}`, then run `worker` once per
@@ -89,7 +90,7 @@
   (cond-> {:karcarthy/type :delegate
            :planner        planner
            :worker         worker}
-    max-concurrency (assoc :max-concurrency max-concurrency)))
+    (contains? opts :max-concurrency) (assoc :max-concurrency max-concurrency)))
 
 (defn reduce
   "Run branch/delegate work, then pass an EDN result summary to `reducer`.
@@ -203,21 +204,31 @@
     (catch Throwable t
       (k/result {:ok?       false
                  :text      nil
-                 :error     (or (.getMessage t) (str t))
+                 :error     (or (::scope/error (ex-data t))
+                                (.getMessage t)
+                                (str t))
                  :exception (.getName (class t))}))))
 
 (defn bounded-pmap
   "Like `mapv`, but with at most `n` (default 16) calls of `f` in flight at
-  once on a fixed thread pool, preserving order. `f` should not throw (wrap it
-  in `safe-run`)."
-  [n f coll]
-  (let [n    (max 1 (or n 16))
-        pool (Executors/newFixedThreadPool n)]
-    (try
-      (->> coll
-           (mapv (fn [x] (.submit pool ^Callable (fn [] (f x)))))
-           (mapv (fn [^Future fut] (.get fut))))
-      (finally (.shutdown pool)))))
+  once, preserving order. The four-argument form also observes the run-wide
+  deadline and cancellation token in `opts`."
+  ([n f coll] (bounded-pmap n f coll {}))
+  ([n f coll opts]
+   (let [run-scope (:karcarthy/scope opts)
+         requested (or n 16)
+         n (max 1 (if-let [limit (:max-concurrency run-scope)]
+                    (min requested limit)
+                    requested))
+         pool (Executors/newFixedThreadPool n)
+         futures (mapv (fn [x] (.submit pool ^Callable (fn [] (f x)))) coll)]
+     (try
+       (mapv #(scope/await run-scope %) futures)
+       (finally
+         (doseq [^Future future futures]
+           (when-not (.isDone future) (.cancel future true)))
+         (.shutdownNow pool)
+         (.awaitTermination pool 1000 java.util.concurrent.TimeUnit/MILLISECONDS))))))
 
 (defn- reject
   [kind message data]
@@ -295,7 +306,9 @@
 
 (defmethod run-node :agent
   [runner agent input opts]
-  (k/run-agent runner agent input opts))
+  (let [run-scope (:karcarthy/scope opts)]
+    (scope/with-permit run-scope
+      #(k/run-agent runner agent input opts))))
 
 (defn- step-result
   [name reply]
@@ -340,10 +353,12 @@
   (let [results  (bounded-pmap max-concurrency
                                (fn [[idx branch]]
                                  (safe-run runner branch input (descend opts :branches idx)))
-                               (map-indexed vector branches))]
-    (k/result {:ok?      (every? k/ok? results)
-               :results  results
-               :text     (sections results)})))
+                               (map-indexed vector branches)
+                               opts)]
+    (k/result (cond-> {:ok?      (every? k/ok? results)
+                       :results  results
+                       :text     (sections results)}
+                (not-every? k/ok? results) (assoc :error :branch-failed)))))
 
 (defn- route! [runner {:keys [source routes default]} input opts]
   (let [shape  (str "{:route <label>} where <label> is one of "
@@ -377,7 +392,7 @@
           (safe-run runner default input (descend opts :default)))))))
 
 (defn- judge!
-  "Run `evaluator` against a draft, returning {:accept? :feedback :evaluation}."
+  "Run `evaluator` against a draft. Failures are returned under :failure."
   [runner evaluator draft input opts]
   (let [prompt (str "INPUT:\n" input "\n\nDRAFT:\n" (:text draft)
                     "\n\nReply with EDN only, either:"
@@ -403,19 +418,40 @@
                   :shape "{:accept? true} or {:accept? false :feedback \"...\"}"
                   :parse! parse!})]
     (cond
-      (not (k/ok? result)) {:accept? false :feedback (:text result) :evaluation result}
-      error                {:accept? false :feedback (ex-message error) :evaluation result}
-      :else                (assoc (:value parsed) :evaluation result))))
+      (not (k/ok? result)) {:failure result}
+      error                {:failure (reject :invalid-evaluation
+                                             (ex-message error)
+                                             {:result result})}
+      :else                (:value parsed))))
 
-(defn- revise! [runner {:keys [worker evaluator max-rounds]} input opts]
+(defn- revise! [runner {:keys [worker evaluator max-rounds]
+                        :or {max-rounds 3}} input opts]
   (loop [round 1, worker-input input]
     (let [draft (safe-run runner worker worker-input (descend opts :worker round))]
       (if-not (k/ok? draft)
         draft                                       ; worker failed; bail out
-        (let [{:keys [accept? feedback]} (judge! runner evaluator draft input
-                                                 (descend opts :evaluator round))]
-          (if (or accept? (>= round max-rounds))
-            (k/result (assoc draft :rounds round :accepted? (boolean accept?)))
+        (let [{:keys [accept? feedback failure]}
+              (judge! runner evaluator draft input (descend opts :evaluator round))]
+          (cond
+            failure
+            (k/result (assoc failure
+                             :rounds round
+                             :accepted? false))
+
+            accept?
+            (k/result (assoc draft
+                             :rounds round
+                             :accepted? true))
+
+            (>= round max-rounds)
+            (k/result (assoc draft
+                             :ok? false
+                             :error :not-accepted
+                             :rounds round
+                             :accepted? false
+                             :feedback feedback))
+
+            :else
             (recur (inc round)
                    (str "INPUT:\n" input
                         "\n\nYOUR PREVIOUS DRAFT:\n" (:text draft)
@@ -429,8 +465,9 @@
   [runner planner input opts]
   (let [parse! (fn [m]
                  (let [subtasks (:subtasks m)]
-                   (when-not (and (vector? subtasks) (every? string? subtasks))
-                     (throw (ex-info "planner output must be {:subtasks [string ...]}"
+                   (when-not (and (vector? subtasks) (seq subtasks)
+                                  (every? string? subtasks))
+                     (throw (ex-info "planner output must contain one or more string subtasks"
                                      {:output m})))
                    subtasks))
         {:keys [result error] :as parsed}
@@ -448,11 +485,13 @@
       (let [results (bounded-pmap max-concurrency
                                   (fn [[idx subtask]]
                                     (safe-run runner worker subtask (descend opts :worker idx)))
-                                  (map-indexed vector subtasks))]
-        (k/result {:ok?      (every? k/ok? results)
-                   :subtasks subtasks
-                   :results  results
-                   :text     (str/join "\n\n" (keep :text results))})))))
+                                  (map-indexed vector subtasks)
+                                  opts)]
+        (k/result (cond-> {:ok?      (every? k/ok? results)
+                           :subtasks subtasks
+                           :results  results
+                           :text     (str/join "\n\n" (keep :text results))}
+                    (not-every? k/ok? results) (assoc :error :delegate-failed)))))))
 
 (defn- continue! [runner {:keys [source to prompt]} input opts]
   (let [r1 (safe-run runner source input (descend opts :source))]
@@ -480,10 +519,15 @@
     (let [source-result  (safe-run runner source input (descend opts :source))
           reducer-result (safe-run runner reducer (collect input source-result)
                                    (descend opts :reducer))]
-      (k/result (assoc reducer-result
-                       :ok? (and (k/ok? source-result) (k/ok? reducer-result))
-                       :source source-result
-                       :reduced reducer-result)))
+      (k/result (cond-> (assoc reducer-result
+                               :ok? (and (k/ok? source-result) (k/ok? reducer-result))
+                               :source source-result
+                               :reduced reducer-result)
+                  (not (k/ok? source-result))
+                  (assoc :error :source-failed)
+
+                  (and (k/ok? source-result) (not (k/ok? reducer-result)))
+                  (assoc :error (:error reducer-result)))))
     (throw (ex-info "reduce workflow requires :source and :reducer" {:node node}))))
 
 (defmethod run-node :route
@@ -501,6 +545,8 @@
 
 (def ^:private run-request-keys
   #{:runner :workflow :input :options})
+
+(declare workflow?)
 
 (defn input->text
   "Coerce workflow input into the prompt string the text-threaded interpreter
@@ -551,6 +597,24 @@
                   (cond-> opts
                     span-id (assoc :karcarthy/parent-span-id span-id)))))))
 
+(defn- execute-run
+  [run-scope f]
+  (try
+    (if-not (scope/limited? run-scope)
+      (f)
+      (let [pool   (Executors/newSingleThreadExecutor)
+            future (.submit pool ^Callable f)]
+        (try
+          (scope/await run-scope future)
+          (finally
+            (when-not (.isDone future) (.cancel future true))
+            (.shutdownNow pool)
+            (.awaitTermination pool 1000 java.util.concurrent.TimeUnit/MILLISECONDS)))))
+    (catch Throwable t
+      (if-let [error (::scope/error (ex-data t))]
+        (k/result {:ok? false :error error :text (ex-message t)})
+        (throw t)))))
+
 (defn run
   "Interpret workflow data through a runner and return a result map.
 
@@ -565,19 +629,23 @@
   entering the text-threaded workflow interpreter.
 
   `:options` keys read by the interpreter:
-    :observe      fn called with each observation event map
-    :edn-retries  how many times a node re-asks the model when its EDN reply
-                  fails to parse or validate (default 1; 0 fails fast)
+    :observe         fn called with each observation event map
+    :edn-retries     model reply repair attempts (default 1)
+    :max-concurrency maximum leaf-agent calls across the whole run (default 16)
+    :run-timeout-ms  deadline for the whole run
+    :cancel?         zero-argument cancellation predicate
   Remaining options are passed through to the runner."
   [request]
   (let [[runner workflow input opts] (run-request->args request)]
-    (run* runner workflow input opts)))
+    (when-not (workflow? workflow)
+      (throw (ex-info "Invalid workflow" {:workflow workflow})))
+    (let [run-scope (scope/create opts)
+          opts      (assoc opts :karcarthy/scope run-scope)]
+      (execute-run run-scope #(run* runner workflow input opts)))))
 
 ;; ---------------------------------------------------------------------------
 ;; DSL sugar
 ;; ---------------------------------------------------------------------------
-
-(declare workflow?)
 
 (defn- portable?
   [x]
@@ -593,6 +661,24 @@
                    :agent :pipe :branch :delegate :reduce :revise :route :continue)
              (:karcarthy/type x)))
 
+(def ^:private core-node-keys
+  {:pipe     #{:karcarthy/type :steps}
+   :step     #{:karcarthy/type :f :name :call?}
+   :branch   #{:karcarthy/type :branches :max-concurrency}
+   :delegate #{:karcarthy/type :planner :worker :max-concurrency}
+   :reduce   #{:karcarthy/type :source :reducer}
+   :revise   #{:karcarthy/type :worker :evaluator :max-rounds}
+   :route    #{:karcarthy/type :source :routes :default}
+   :continue #{:karcarthy/type :source :to :prompt}})
+
+(defn- known-keys? [node]
+  (let [allowed (core-node-keys (:karcarthy/type node))]
+    (or (nil? allowed) (every? allowed (keys node)))))
+
+(defn- positive-option? [node key]
+  (or (not (contains? node key))
+      (and (integer? (get node key)) (pos? (get node key)))))
+
 (defn workflow?
   "True if `x` is a runnable workflow.
 
@@ -604,48 +690,44 @@
         (cond
           (k/agent? x) true
           (not (map? x)) false
+          (not (known-keys? x)) false
           :else
           (case (:karcarthy/type x)
-            :pipe
-            (and (sequential? (:steps x))
-                 (every? workflow? (:steps x)))
-
             :step
             (and (fn? (:f x))
-                 (or (not (contains? x :name))
-                     (string? (:name x)))
-                 (or (not (contains? x :call?))
-                     (boolean? (:call? x))))
+                 (or (not (contains? x :name)) (string? (:name x)))
+                 (or (not (contains? x :call?)) (boolean? (:call? x))))
+
+            :pipe
+            (and (vector? (:steps x)) (every? workflow? (:steps x)))
 
             :branch
-            (and (sequential? (:branches x))
+            (and (vector? (:branches x)) (seq (:branches x))
+                 (positive-option? x :max-concurrency)
                  (every? workflow? (:branches x)))
 
             :delegate
-            (and (workflow? (:planner x))
-                 (workflow? (:worker x)))
+            (and (positive-option? x :max-concurrency)
+                 (workflow? (:planner x)) (workflow? (:worker x)))
 
             :reduce
-            (and (workflow? (:source x))
-                 (workflow? (:reducer x)))
+            (and (workflow? (:source x)) (workflow? (:reducer x)))
 
             :revise
-            (and (workflow? (:worker x))
-                 (workflow? (:evaluator x)))
+            (and (positive-option? x :max-rounds)
+                 (workflow? (:worker x)) (workflow? (:evaluator x)))
 
             :route
             (and (workflow? (:source x))
                  (map? (:routes x))
                  (every? workflow? (vals (:routes x)))
-                 (or (not (contains? x :default))
-                     (workflow? (:default x))))
+                 (or (not (contains? x :default)) (workflow? (:default x))))
 
             :continue
-            (and (workflow? (:source x))
-                 (workflow? (:to x)))
+            (and (workflow? (:source x)) (workflow? (:to x))
+                 (or (not (contains? x :prompt)) (string? (:prompt x))))
 
-            (and (extension? x)
-                 (node? x)))))))
+            (and (extension? x) (node? x)))))))
 
 (defmacro defworkflow
   "Define a var holding a workflow, validating at load time that it is runnable.
@@ -657,5 +739,6 @@
   `(def ~sym
      (let [f# ~workflow-form]
        (when-not (workflow? f#)
-         (throw (ex-info "defworkflow: not a runnable workflow" {:sym '~sym :workflow f#})))
+         (throw (ex-info "defworkflow: not a runnable workflow"
+                         {:sym '~sym :workflow f#})))
        f#)))

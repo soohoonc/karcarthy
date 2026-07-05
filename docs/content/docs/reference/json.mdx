@@ -95,6 +95,11 @@ JSON on stdout.
   "runner": "mock",
   "mock-responses": {
     "echo": "hello back"
+  },
+  "options": {
+    "max-concurrency": 4,
+    "run-timeout-ms": 120000,
+    "edn-retries": 1
   }
 }
 ```
@@ -107,11 +112,20 @@ deterministic response text, which lets examples and tests show realistic
 output without calling a live model. Agents not listed fall back to the
 default echo-style mock response.
 
+`options` is optional. JSON-safe run options include `max-concurrency`,
+`run-timeout-ms` and `edn-retries`. Callback
+options such as `cancel?` and `observe` require Clojure function values, so
+they are available only through the Clojure API.
+
 `tools` is a per-agent field, not a top-level request key: set it on agent
 nodes inside `workflow`, or with repeated `--tool` flags on the `agent`
-command. It is a runner allowlist. karcarthy passes the names to runners that
-support tool selection; it does not create tool servers or bind MCP
-configuration. The mock runner ignores tools.
+command. It is a runner allowlist. The Claude runner enforces it, and ACP
+passes it as session metadata. Built-in runners that cannot enforce tools
+reject agents with non-empty tool lists. karcarthy does not create tool servers or bind
+MCP configuration. The mock and function runners have caller-defined tool
+semantics.
+
+Workflow objects reject unknown fields rather than silently ignoring typos.
 
 ## Workflow shapes
 

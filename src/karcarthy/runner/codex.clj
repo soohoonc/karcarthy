@@ -102,6 +102,7 @@
   ([default-options]
    (reify k/Runner
      (-run [_ agent input opts]
+       (k/reject-tools! :codex agent)
        (let [opts (merge {:trim? true} default-options opts)
              argv (command agent opts)]
          (proc/->result (proc/run argv {:in         (prompt agent input)

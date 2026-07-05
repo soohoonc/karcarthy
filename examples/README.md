@@ -20,6 +20,11 @@ languages, to show the library is reachable from each.
   plan research tracks, investigate them in parallel, filter evidence, write a
   cited report, and critique/revise. Runs offline with canned evidence and
   includes an opt-in live `codex-runner` path.
+- `clojure/adversarial_audit.clj` - a runner-neutral production stress test:
+  route a repository audit, plan and challenge three parallel tracks, synthesize
+  a verdict, and force one full revision when a strict critic rejects it.
+  Offline by default; select live Codex or Claude with
+  `KARCARTHY_STRESS_RUNNER=codex|claude`.
 - `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
   model and instruction configuration, then run the rewritten value.
 - `clojure/live.clj` - a live delegate/reduce run (paid `claude -p`).
