@@ -50,6 +50,12 @@ Early and not yet released. What works so far:
   OpenAI Deep Research request setup.
 
 ### Changed
+- Workflow fields now have one declarative source of truth in
+  `karcarthy.workflow`; recursive validation, public EDN/JSON schemas, and the
+  CLI JSON allowlist are derived from it.
+- Documentation dependencies were refreshed to current patch releases; the
+  locked tree has a zero-advisory `npm audit`, and CI now audits, lints,
+  type-checks, and builds the docs alongside the Clojure tests and JAR.
 - `run` takes a single request map —
   `(run {:runner … :workflow … :input … :options …})` — instead of positional
   arguments.
@@ -71,6 +77,21 @@ Early and not yet released. What works so far:
   map; workflows stay plain data.
 
 ### Fixed
+- ACP timeouts now send `session/cancel`, deny permission requests while
+  cancellation is pending, and wait for a bounded grace period before killing
+  the process. Capability-advertised sessions are closed after each turn.
+- ACP authentication can select an advertised method before session creation,
+  and additional image/audio/resource prompt blocks are validated against the
+  agent's advertised prompt capabilities.
+- Opt-in ACP client terminals now implement create, output, wait, kill, and
+  release with bounded UTF-8-safe capture and automatic process cleanup.
+- ACP wire encoding preserves namespaced `_meta` keys; session-scoped messages
+  are checked against the active session; malformed stdout poisons reusable
+  connections; missing filesystem parents are created; permission options
+  without `kind` fail closed; and sequential config changes use refreshed,
+  validated option lists.
+- Successful OpenAI runner results now keep a consistent `:raw :runner`
+  discriminator alongside the bridge payload.
 - The CLI JSON bridge now passes the optional `"prompt"` field on `continue`
   nodes through to `karcarthy.orchestrate/continue`; it was declared in the
   published JSON schema but silently dropped.

@@ -44,7 +44,7 @@
                        :ok?   (true? (:ok m))
                        :text  (:text m)
                        :error (:error m)
-                       :raw   m}
+                       :raw   {:runner :openai :payload m}}
                 (not (boolean? (:ok m)))
                 (assoc :error "OpenAI runner result is missing Boolean ok")))))
 
@@ -97,7 +97,7 @@
                  (k/result (assoc parsed
                                   :ok? false
                                   :error (str "runner exited with status " exit)
-                                  :raw {:payload (:raw parsed) :process raw}))))
+                                  :raw (assoc (:raw parsed) :process raw)))))
              (catch Exception e
                (k/result {:agent (:name agent) :ok? false
                           :text  (or (not-empty err) out)

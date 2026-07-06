@@ -18,7 +18,8 @@
   (:require [clojure.string :as str]
             [karcarthy.core :as k]
             [karcarthy.edn :as kedn]
-            [karcarthy.orchestrate :as o]))
+            [karcarthy.orchestrate :as o]
+            [karcarthy.workflow :as wf]))
 
 (defn- name-key [x]
   (cond
@@ -88,7 +89,7 @@
       :continue     (and (dynamic-workflow? (:source x))
                          (dynamic-workflow? (:to x)))
       :evolve       (dynamic-workflow? (:agent x))
-      :dynamic      (o/node? x)
+      :dynamic      (and (wf/known-keys? x) (o/node? x))
       false)))
 
 (defn- validate-agent [agent]

@@ -100,3 +100,18 @@
            (codex/agents->config :max-threads 4
                                  :max-depth 1
                                  :job-max-runtime-seconds 900)))))
+
+(deftest ^:live live-codex-roundtrip
+  (when (System/getenv "KARCARTHY_LIVE")
+    (testing "a real codex exec call round-trips through the runner"
+      (let [tmp (str (System/getProperty "java.io.tmpdir") "/karcarthy-codex-live")
+            _   (.mkdirs (java.io.File. tmp))
+            runner (codex/codex-runner {:dir tmp :timeout-ms 120000})
+            result (k/run-agent runner
+                                (k/agent {:name "ponger"
+                                          :instructions "Reply with exactly: pong"})
+                                "ping")]
+        (is (k/result? result))
+        (is (= :codex (get-in result [:raw :runner])))
+        (when (k/ok? result)
+          (is (re-find #"(?i)pong" (:text result))))))))

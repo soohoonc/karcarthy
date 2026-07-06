@@ -35,6 +35,9 @@ jobs:
         with:
           cli: latest
 
+      - name: Run tests
+        run: clojure -M:test
+
       - name: Build jars
         run: clojure -T:build all
 

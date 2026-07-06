@@ -24,23 +24,13 @@
             [karcarthy.core :as k]
             [karcarthy.dynamic :as dyn]
             [karcarthy.orchestrate :as o]
-            [karcarthy.runner.claude :as cc]))
+            [karcarthy.runner.claude :as cc]
+            [karcarthy.workflow :as wf]))
 
 (declare json->workflow)
 
-(def ^:private json-node-keys
-  {"agent" #{"type" "name" "description" "instructions" "model" "tools" "config"}
-   "pipe" #{"type" "steps"}
-   "branch" #{"type" "branches" "max-concurrency"}
-   "delegate" #{"type" "planner" "worker" "max-concurrency"}
-   "reduce" #{"type" "source" "reducer"}
-   "route" #{"type" "source" "routes" "default"}
-   "continue" #{"type" "source" "to" "prompt"}
-   "revise" #{"type" "worker" "evaluator" "max-rounds"}
-   "dynamic" #{"type" "agent" "max-steps"}})
-
 (defn- reject-json-unknown! [m type]
-  (when-let [supported (json-node-keys type)]
+  (when-let [supported ((wf/json-node-keys) type)]
     (k/reject-unknown! (str "workflow " type) supported m))
   m)
 

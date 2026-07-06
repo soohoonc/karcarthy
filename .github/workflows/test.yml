@@ -4,9 +4,17 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  clojure:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -30,3 +38,40 @@ jobs:
 
       - name: Run tests
         run: clojure -M:test
+
+      - name: Build library jar
+        run: clojure -T:build jar
+
+      - name: Check whitespace
+        run: git diff --check
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=low
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check types
+        run: npm run types:check
+
+      - name: Build docs
+        run: npm run build
