@@ -42,7 +42,8 @@
             [karcarthy.core :as k]
             [karcarthy.edn :as kedn]
             [karcarthy.observe :as obs]
-            [karcarthy.scope :as scope])
+            [karcarthy.scope :as scope]
+            [karcarthy.workflow :as wf])
   (:import [java.util.concurrent Executors Callable Future]))
 
 ;; ---------------------------------------------------------------------------
@@ -647,37 +648,10 @@
 ;; DSL sugar
 ;; ---------------------------------------------------------------------------
 
-(defn- portable?
-  [x]
-  (not-any? fn?
-            (tree-seq (fn [x]
-                        (and (coll? x)
-                             (not= :step (:karcarthy/type x))))
-                      seq
-                      x)))
-
 (defn- extension? [x]
   (contains? (disj (set (keys (methods run-node))) :default
                    :agent :pipe :branch :delegate :reduce :revise :route :continue)
              (:karcarthy/type x)))
-
-(def ^:private core-node-keys
-  {:pipe     #{:karcarthy/type :steps}
-   :step     #{:karcarthy/type :f :name :call?}
-   :branch   #{:karcarthy/type :branches :max-concurrency}
-   :delegate #{:karcarthy/type :planner :worker :max-concurrency}
-   :reduce   #{:karcarthy/type :source :reducer}
-   :revise   #{:karcarthy/type :worker :evaluator :max-rounds}
-   :route    #{:karcarthy/type :source :routes :default}
-   :continue #{:karcarthy/type :source :to :prompt}})
-
-(defn- known-keys? [node]
-  (let [allowed (core-node-keys (:karcarthy/type node))]
-    (or (nil? allowed) (every? allowed (keys node)))))
-
-(defn- positive-option? [node key]
-  (or (not (contains? node key))
-      (and (integer? (get node key)) (pos? (get node key)))))
 
 (defn workflow?
   "True if `x` is a runnable workflow.
@@ -686,48 +660,16 @@
   registered with `run-node` and validated by a `node?` method."
   [x]
   (boolean
-   (and (portable? x)
-        (cond
-          (k/agent? x) true
-          (not (map? x)) false
-          (not (known-keys? x)) false
-          :else
-          (case (:karcarthy/type x)
-            :step
-            (and (fn? (:f x))
-                 (or (not (contains? x :name)) (string? (:name x)))
-                 (or (not (contains? x :call?)) (boolean? (:call? x))))
-
-            :pipe
-            (and (vector? (:steps x)) (every? workflow? (:steps x)))
-
-            :branch
-            (and (vector? (:branches x)) (seq (:branches x))
-                 (positive-option? x :max-concurrency)
-                 (every? workflow? (:branches x)))
-
-            :delegate
-            (and (positive-option? x :max-concurrency)
-                 (workflow? (:planner x)) (workflow? (:worker x)))
-
-            :reduce
-            (and (workflow? (:source x)) (workflow? (:reducer x)))
-
-            :revise
-            (and (positive-option? x :max-rounds)
-                 (workflow? (:worker x)) (workflow? (:evaluator x)))
-
-            :route
-            (and (workflow? (:source x))
-                 (map? (:routes x))
-                 (every? workflow? (vals (:routes x)))
-                 (or (not (contains? x :default)) (workflow? (:default x))))
-
-            :continue
-            (and (workflow? (:source x)) (workflow? (:to x))
-                 (or (not (contains? x :prompt)) (string? (:prompt x))))
-
-            (and (extension? x) (node? x)))))))
+   (and
+    (wf/portable? x)
+    (cond
+      (k/agent? x) true
+      (not (map? x)) false
+      (wf/valid-core-node? x workflow?) true
+      :else (and (extension? x)
+                 (or (nil? (wf/node-spec (:karcarthy/type x)))
+                     (wf/known-keys? x))
+                 (node? x))))))
 
 (defmacro defworkflow
   "Define a var holding a workflow, validating at load time that it is runnable.

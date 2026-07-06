@@ -100,6 +100,14 @@
                #'dyn/text->op #'dyn/refs->workflow #'dyn/dynamic-reference]]
       (is (:experimental (meta v)) (str v " is tagged ^:experimental")))))
 
+(deftest dynamic-nodes-reject-unknown-fields
+  (let [node (assoc (dyn/dynamic (k/agent {:name "orchestrator"
+                                            :instructions "Emit ops."}))
+                    :surprise true)]
+    (is (not (o/workflow? node)))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"invalid workflow"
+                          (dyn/state :workflows {"bad" node})))))
+
 (deftest dynamic-reference-documents-every-op
   (testing "the prompt curriculum names every op the interpreter accepts"
     (doseq [op [":define" ":patch" ":remove" ":call" ":spawn" ":complete"]]

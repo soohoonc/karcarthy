@@ -13,11 +13,12 @@
    karcarthy.runner.codex-test
    karcarthy.runner.process-test
    karcarthy.runner.openai-test
-    karcarthy.orchestrate-test
-    karcarthy.dynamic-test
-    karcarthy.schema-test
-    karcarthy.rewrite-test
-    karcarthy.self-test])
+   karcarthy.orchestrate-test
+   karcarthy.dynamic-test
+   karcarthy.schema-test
+   karcarthy.rewrite-test
+   karcarthy.self-test
+   karcarthy.terminal-test])
 
 (defn -main [& _]
   (doseq [ns test-namespaces] (require ns))

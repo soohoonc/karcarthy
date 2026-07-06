@@ -9,7 +9,7 @@ reimplementing it.
 
 ```bash
 clojure -M:test                                    # offline test suite (no network/API)
-KARCARTHY_LIVE=1 clojure -M:test                   # also runs the live `claude -p` test
+KARCARTHY_LIVE=1 clojure -M:test                   # also runs installed live runner tests (paid)
 clojure -M -m karcarthy.demo                       # offline demo
 clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid claude -p)
 ```
@@ -22,12 +22,14 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
 | `src/karcarthy/core.clj` | data model (`agent`, `subagent`), spec validation, `result`, the `Runner` protocol, `mock-runner`, `fn-runner`, and the `defagent` / `defsubagent` macros |
 | `src/karcarthy/orchestrate.clj` | the workflow DSL - `pipe` / `step` / `branch` / `delegate` / `reduce` / `revise` / `route` / `continue`, the `run` interpreter (a `run-node` multimethod), and `defworkflow` / `workflow?` |
 | `src/karcarthy/dynamic.clj` | dynamic workflows (experimental): the `dynamic` op-loop node, `agent-ref` / `workflow-ref`, mutable run state, and op application (`step!`) |
+| `src/karcarthy/workflow.clj` | canonical declarative workflow grammar used by validation, EDN/JSON schemas, and the CLI wire allowlist |
 | `src/karcarthy/schema.clj` | EDN and JSON schema reference values for public workflow data |
 | `src/karcarthy/rewrite.clj` | structural workflow rewrites: `agents`, `over`, and `configure` |
 | `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node (experimental) |
 | `src/karcarthy/edn.clj` | internal helper extracting the first EDN map from model output (`clojure.edn`, never `eval`) |
 | `src/karcarthy/observe.clj` | internal observation-event helpers shared by `core` and `orchestrate` (`:observe` callback) |
 | `src/karcarthy/scope.clj` | execution scope for concurrency, deadlines, and cancellation shared by workflow nodes |
+| `src/karcarthy/terminal.clj` | internal lifecycle for capability-gated ACP client terminals and bounded output capture |
 | `src/karcarthy/proc.clj` | subprocess execution with timeout, shared by the subprocess-backed runners |
 | `src/karcarthy/cli.clj` | CLI entry point and language-agnostic JSON bridge behind `bin/karcarthy` |
 | `src/karcarthy/demo.clj` | offline demo (`clojure -M -m karcarthy.demo`) |
@@ -48,9 +50,11 @@ clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid 
   result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
 - **Failures are fail-closed.** `:ok?` is strictly Boolean, unaccepted revision
   is failure, and process/protocol failure wins over success-looking payloads.
-- **Adding a workflow node:** add a constructor in `orchestrate.clj`, a `run-node`
-  defmethod, schema entries in `schema.clj`, and tests. Option-taking
-  constructors guard their options with `karcarthy.core/reject-unknown!`.
+- **Adding a workflow node:** add its field grammar in `workflow.clj`, a
+  constructor and `run-node` defmethod in `orchestrate.clj`, then tests. EDN/JSON
+  schema shapes and the CLI key allowlist are derived from the grammar.
+  Option-taking constructors guard their options with
+  `karcarthy.core/reject-unknown!`.
 - **Model-facing EDN protocols self-repair.** Nodes that parse model replies
   (planner, evaluator, router, dynamic ops) re-ask the model with the error and
   its previous reply before failing (`:edn-retries` run option, default 1).

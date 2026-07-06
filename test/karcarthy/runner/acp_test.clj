@@ -1,8 +1,10 @@
 (ns karcarthy.runner.acp-test
   (:require [clojure.data.json :as json]
+            [clojure.edn :as edn]
             [clojure.test :refer [deftest is testing]]
             [karcarthy.core :as k]
-            [karcarthy.runner.acp :as acp]))
+            [karcarthy.runner.acp :as acp]
+            [karcarthy.terminal :as terminal]))
 
 (defn- script-runner [script]
   (acp/acp-runner {:command ["sh" "-c" script]
@@ -18,6 +20,69 @@
       (is (re-find #"Description:\nUse for code review" text))
       (is (re-find #"Instructions:\nFind concrete bugs" text))
       (is (re-find #"User input:\nreview this diff" text)))))
+
+(deftest wire-encoding-preserves-namespaced-meta-keys
+  (let [writer (java.io.StringWriter.)
+        agent  (k/agent {:name "reviewer" :instructions "Review."})]
+    (#'acp/send! {:writer writer}
+                 (acp/prompt-params "S1" agent "input" {}))
+    (is (= "reviewer"
+           (get-in (json/read-str (str writer))
+                   ["_meta" "karcarthy.dev/agent" "name"])))))
+
+(deftest prompt-content-is-appended-and-capability-gated
+  (let [agent (k/agent {:name "reviewer" :instructions "Review."})
+        image {:type "image" :mimeType "image/png" :data "AA=="}
+        params (acp/prompt-params "S1" agent "input" {:prompt-content [image]})]
+    (is (= ["text" "image"] (mapv :type (:prompt params))))
+    (is (nil? (#'acp/check-prompt-content!
+               {:agentCapabilities {:promptCapabilities {:image true}}}
+               [image])))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"does not accept image"
+         (#'acp/check-prompt-content! {:agentCapabilities {}} [image])))))
+
+(deftest acp-runner-authenticates-with-an-advertised-method
+  (let [script (str
+                "read init\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{},\"authMethods\":[{\"id\":\"login\",\"name\":\"Login\"}]}}'\n"
+                "read auth\n"
+                "case \"$auth\" in *authenticate*login*) ;; *) exit 9 ;; esac\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\n"
+                "read session\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"S1\"}}'\n"
+                "read prompt\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"authenticated\"}}}}'\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\"}}'\n")
+        runner (acp/acp-runner {:command ["sh" "-c" script]
+                                :timeout-ms 3000
+                                :auth-method "login"})
+        result (k/run-agent runner (k/agent {:name "a" :instructions "i"}) "hi")]
+    (is (k/ok? result))
+    (is (= "authenticated" (:text result)))))
+
+(deftest reused-connections-can-authenticate-lazily-from-runner-config
+  (let [script (str
+                "read init\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{},\"authMethods\":[{\"id\":\"login\",\"name\":\"Login\"}]}}'\n"
+                "read auth\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\n"
+                "read session\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"S1\"}}'\n"
+                "read prompt\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"lazy auth\"}}}}'\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\"}}'\n")
+        connection (acp/connect! {:command ["sh" "-c" script] :timeout-ms 3000})
+        runner (acp/acp-runner {:connection connection
+                                :timeout-ms 3000
+                                :auth-method "login"})]
+    (try
+      (let [result (k/run-agent runner (k/agent {:name "a" :instructions "i"}) "hi")]
+        (is (k/ok? result))
+        (is (= "lazy auth" (:text result))))
+      (finally
+        (acp/close! connection)))))
 
 (deftest acp-runner-runs-one-prompt-turn
   (testing "stdio ACP lifecycle returns collected agent message chunks"
@@ -154,6 +219,49 @@
     (#'acp/handle-request! {:writer writer} message opts)
     (json/read-str (str writer) :key-fn keyword)))
 
+(deftest permission-options-without-kind-fail-closed
+  (let [response (client-response
+                  {:jsonrpc "2.0" :id 7 :method "session/request_permission"
+                   :params {:sessionId "S1"
+                            :options [{:optionId "mystery" :name "Mystery"}]}}
+                  {})]
+    (is (nil? (:error response)))
+    (is (= "cancelled" (get-in response [:result :outcome :outcome])))))
+
+(deftest terminal-methods-require-opt-in-and-share-run-state
+  (let [writer (java.io.StringWriter.)
+        state  (atom {:terminals (terminal/service)})
+        invoke (fn [message opts]
+                 (.setLength (.getBuffer writer) 0)
+                 (#'acp/handle-request! {:writer writer} state message opts)
+                 (json/read-str (str writer) :key-fn keyword))
+        create {:jsonrpc "2.0" :id 1 :method "terminal/create"
+                :params {:sessionId "S1"
+                         :command "sh"
+                         :args ["-c" "printf terminal-ok"]
+                         :cwd (.getAbsolutePath (java.io.File. "."))
+                         :outputByteLimit 1024}}]
+    (try
+      (is (= -32601 (get-in (invoke create {}) [:error :code])))
+      (let [opts {:client-capabilities {:terminal true}}
+            id   (get-in (invoke create opts) [:result :terminalId])
+            params {:sessionId "S1" :terminalId id}]
+        (is (string? id))
+        (is (= 0 (get-in (invoke {:jsonrpc "2.0" :id 2
+                                  :method "terminal/wait_for_exit" :params params}
+                                 opts)
+                         [:result :exitCode])))
+        (is (= "terminal-ok"
+               (get-in (invoke {:jsonrpc "2.0" :id 3
+                                :method "terminal/output" :params params}
+                               opts)
+                       [:result :output])))
+        (is (= {} (:result (invoke {:jsonrpc "2.0" :id 4
+                                    :method "terminal/release" :params params}
+                                   opts)))))
+      (finally
+        (terminal/close! (:terminals @state))))))
+
 (deftest fs-methods-gated-on-their-own-capability-flags
   (testing "write is refused when only fs.readTextFile is advertised"
     (let [target   (doto (java.io.File/createTempFile "acp-test" ".txt") .delete)
@@ -227,6 +335,53 @@
         (finally
           (.delete file))))))
 
+(deftest fs-write-creates-missing-parent-directories
+  (let [root   (doto (java.io.File/createTempFile "acp-tree" ".tmp") .delete)
+        target (java.io.File. root "nested/result.txt")]
+    (try
+      (let [response (client-response
+                      {:jsonrpc "2.0" :id 1 :method "fs/write_text_file"
+                       :params {:sessionId "S1"
+                                :path (.getAbsolutePath target)
+                                :content "created"}}
+                      {:client-capabilities {:fs {:writeTextFile true}}})]
+        (is (nil? (:error response)))
+        (is (= "created" (slurp target))))
+      (finally
+        (.delete target)
+        (.delete (.getParentFile target))
+        (.delete root)))))
+
+(deftest config-values-must-match-advertised-options
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"not one of the advertised options"
+       (#'acp/validate-config-value!
+        {:id "model" :options [{:value "sonnet"} {:value "opus"}]}
+        "haiku"))))
+
+(deftest config-updates-refresh-options-for-the-next-setting
+  (let [script (str
+                "read init\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{}}}'\n"
+                "read session\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"sessionId\":\"S1\",\"configOptions\":[{\"id\":\"first\",\"options\":[{\"value\":\"a\"}]}]}}'\n"
+                "read first\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"configOptions\":[{\"id\":\"second\",\"options\":[{\"value\":\"b\"}]}]}}'\n"
+                "read second\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"configOptions\":[]}}'\n"
+                "read prompt\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"configured twice\"}}}}'\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"stopReason\":\"end_turn\"}}'\n")
+        runner (acp/acp-runner
+                {:command ["sh" "-c" script]
+                 :timeout-ms 3000
+                 :strict-config? true
+                 :config-options (array-map "first" "a" "second" "b")})
+        result (k/run-agent runner (k/agent {:name "a" :instructions "i"}) "hi")]
+    (is (k/ok? result))
+    (is (= "configured twice" (:text result)))))
+
 (deftest mcp-server-transports-gated-on-agent-capabilities
   (testing "http/sse MCP specs require the matching mcpCapabilities flag;
             stdio needs no capability"
@@ -264,6 +419,77 @@
       (is (k/ok? result))
       (is (= "resumed" (:text result)))
       (is (= "S1" (:session-id result))))))
+
+(deftest session-scoped-messages-must-match-the-active-session
+  (let [script (str
+                "read init\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{}}}'\n"
+                "read session\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"sessionId\":\"S1\"}}'\n"
+                "read prompt\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S2\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"wrong session\"}}}}'\n")
+        result (k/run-agent (script-runner script)
+                            (k/agent {:name "a" :instructions "i"}) "hi")]
+    (is (not (k/ok? result)))
+    (is (re-find #"unexpected sessionId" (:error result)))))
+
+(deftest advertised-session-close-runs-after-the-prompt
+  (let [script (str
+                "read init\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{\"sessionCapabilities\":{\"close\":{}}}}}'\n"
+                "read session\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"sessionId\":\"S1\"}}'\n"
+                "read prompt\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"S1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"done\"}}}}'\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"stopReason\":\"end_turn\"}}'\n"
+                "read close\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}'\n")
+        result (k/run-agent (script-runner script)
+                            (k/agent {:name "a" :instructions "i"}) "hi")]
+    (is (k/ok? result))
+    (is (= "done" (:text result)))))
+
+(deftest malformed-stdout-poisons-a-reused-connection
+  (let [script (str
+                "read init\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{}}}'\n"
+                "read session\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"sessionId\":\"S1\"}}'\n"
+                "read prompt\n"
+                "printf '%s\\n' 'not-json'\n"
+                "sleep 5\n")
+        connection (acp/connect! {:command ["sh" "-c" script] :timeout-ms 3000})
+        runner (acp/acp-runner {:connection connection :timeout-ms 3000})
+        agent (k/agent {:name "a" :instructions "i"})]
+    (try
+      (let [first-result (k/run-agent runner agent "first")
+            second-result (k/run-agent runner agent "second")]
+        (is (not (k/ok? first-result)))
+        (is (not (k/ok? second-result)))
+        (is (re-find #"not usable" (:error second-result))))
+      (finally
+        (acp/close! connection)))))
+
+(deftest timeout-cancels-the-session-and-denies-pending-permissions
+  (let [script (str
+                "read init\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{}}}'\n"
+                "read session\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"sessionId\":\"S1\"}}'\n"
+                "read prompt\n"
+                "read cancel\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":77,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"S1\",\"options\":[{\"optionId\":\"allow\",\"kind\":\"allow_once\"}]}}'\n"
+                "read permission\n"
+                "case \"$permission\" in *cancelled*) ;; *) exit 9 ;; esac\n"
+                "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"stopReason\":\"cancelled\"}}'\n")
+        runner (acp/acp-runner {:command ["sh" "-c" script]
+                                :timeout-ms 100
+                                :cancel-grace-ms 1000
+                                :permission-policy :allow})
+        result (k/run-agent runner (k/agent {:name "a" :instructions "i"}) "hi")]
+    (is (not (k/ok? result)))
+    (is (= "cancelled" (:stop-reason result)))
+    (is (= "ACP prompt turn timed out and was cancelled" (:error result)))))
 
 (deftest stop-reason-ok-matrix
   (testing "only an explicit end_turn counts as success"
@@ -308,3 +534,23 @@
       (is (= "hi" (:text result)))
       (is (= 1 (count (get-in result [:raw :updates]))))
       (is (every? some? (get-in result [:raw :updates]))))))
+
+(deftest ^:live live-acp-roundtrip
+  (when (System/getenv "KARCARTHY_LIVE")
+    (when-let [command-text (System/getenv "KARCARTHY_ACP_COMMAND")]
+      (testing "a real ACP agent completes initialize, session, and prompt"
+        (let [command (edn/read-string command-text)
+              _       (when-not (and (vector? command) (seq command)
+                                     (every? string? command))
+                        (throw (ex-info "KARCARTHY_ACP_COMMAND must be an EDN argv vector"
+                                        {:value command-text})))
+              runner  (acp/acp-runner {:command command :timeout-ms 120000})
+              result  (k/run-agent runner
+                                   (k/agent {:name "ponger"
+                                             :instructions "Reply with exactly: pong"})
+                                   "ping")]
+          (is (k/result? result))
+          (is (= :acp (get-in result [:raw :runner])))
+          (is (string? (:session-id result)))
+          (when (k/ok? result)
+            (is (re-find #"(?i)pong" (:text result)))))))))

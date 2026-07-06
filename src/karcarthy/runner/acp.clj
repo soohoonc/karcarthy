@@ -7,7 +7,8 @@
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [karcarthy.core :as k])
+            [karcarthy.core :as k]
+            [karcarthy.terminal :as terminal])
   (:import [java.util.concurrent TimeUnit]))
 
 (def protocol-version
@@ -52,12 +53,35 @@
 (defn prompt-params
   "Build ACP `session/prompt` params for a karcarthy agent and input."
   [session-id agent input opts]
-  {:sessionId session-id
-   :prompt    [{:type "text" :text (prompt-text agent input opts)}]
-   :_meta     {:karcarthy.dev/agent
-               (cond-> {:name (:name agent)}
-                 (:model agent) (assoc :model (:model agent))
-                 (:tools agent) (assoc :tools (:tools agent)))}})
+  (let [extra (:prompt-content opts)]
+    (when (and (some? extra) (not (and (vector? extra) (every? map? extra))))
+      (throw (ex-info ":prompt-content must be a vector of ACP content maps"
+                      {:prompt-content extra})))
+    {:sessionId session-id
+     :prompt    (into [{:type "text" :text (prompt-text agent input opts)}]
+                      extra)
+     :_meta     {:karcarthy.dev/agent
+                 (cond-> {:name (:name agent)}
+                   (:model agent) (assoc :model (:model agent))
+                   (:tools agent) (assoc :tools (:tools agent)))}}))
+
+(defn- check-prompt-content! [init content]
+  (let [capabilities (get-in init [:agentCapabilities :promptCapabilities])]
+    (doseq [block content
+            :let [type (some-> (or (:type block) (get block "type")) name)]]
+      (case type
+        ("text" "resource_link") nil
+        "image" (when-not (:image capabilities)
+                  (throw (ex-info "ACP agent does not accept image prompt content"
+                                  {:content block :promptCapabilities capabilities})))
+        "audio" (when-not (:audio capabilities)
+                  (throw (ex-info "ACP agent does not accept audio prompt content"
+                                  {:content block :promptCapabilities capabilities})))
+        "resource" (when-not (:embeddedContext capabilities)
+                     (throw (ex-info "ACP agent does not accept embedded prompt context"
+                                     {:content block :promptCapabilities capabilities})))
+        (throw (ex-info "unknown ACP prompt content type"
+                        {:content block :type type}))))))
 
 (defn- absolute-path [path]
   (.getAbsolutePath (io/file (or path "."))))
@@ -78,7 +102,8 @@
        :writer  (io/writer (.getOutputStream process) :encoding "UTF-8")
        :stderr  (future (slurp (.getErrorStream process)))})))
 
-(defn- close-process! [{:keys [process reader writer]}]
+(defn- close-process! [{:keys [process reader writer status]}]
+  (when status (reset! status {:kind :closed :message "ACP connection is closed"}))
   (try (.close ^java.io.Writer writer) (catch Throwable _ nil))
   (try (.close ^java.io.Reader reader) (catch Throwable _ nil))
   (when (.isAlive ^Process process)
@@ -91,31 +116,72 @@
     (deref stderr 100 "")
     (catch Throwable _ "")))
 
-(defn- send! [{:keys [writer]} message]
-  (.write ^java.io.Writer writer (json/write-str message))
-  (.write ^java.io.Writer writer "\n")
-  (.flush ^java.io.Writer writer))
+(defn- wire-key [key]
+  (if (keyword? key)
+    (if-let [ns (namespace key)]
+      (str ns "/" (name key))
+      (name key))
+    (str key)))
 
-(defn- read-line! [{:keys [reader process]} timeout-ms]
+(defn- mark-dead! [{:keys [status]} cause]
+  (when status
+    (compare-and-set! status nil
+                      {:kind :protocol-error
+                       :message (or (ex-message cause) (str cause))})))
+
+(defn- send! [{:keys [writer] :as conn} message]
+  (try
+    (.write ^java.io.Writer writer (json/write-str message :key-fn wire-key))
+    (.write ^java.io.Writer writer "\n")
+    (.flush ^java.io.Writer writer)
+    (catch Throwable t
+      (mark-dead! conn t)
+      (throw t))))
+
+(defn- read-line!
+  [{:keys [reader process]} timeout-ms on-timeout cancel-grace-ms]
   (let [line-f (future (.readLine ^java.io.BufferedReader reader))
+        await  #(if % (deref line-f % ::timeout) @line-f)
         line   (try
-                 (if timeout-ms
-                   (deref line-f timeout-ms ::timeout)
-                   @line-f)
+                 (let [first-line (await timeout-ms)]
+                   (if-not (= ::timeout first-line)
+                     first-line
+                     (if (and on-timeout (on-timeout))
+                       (await (or cancel-grace-ms 1000))
+                       ::timeout)))
                  (catch InterruptedException e
                    (future-cancel line-f)
                    (.destroyForcibly ^Process process)
                    (throw e)))]
     (when (= ::timeout line)
+      (future-cancel line-f)
       (.destroyForcibly ^Process process)
       (throw (ex-info "ACP agent timed out waiting for a message"
-                      {:timeout-ms timeout-ms})))
+                      {:timeout-ms timeout-ms
+                       :cancel-grace-ms cancel-grace-ms})))
     (when-not line
       (throw (ex-info "ACP agent closed stdout before responding" {})))
     line))
 
-(defn- read-message! [conn timeout-ms]
-  (json/read-str (read-line! conn timeout-ms) :key-fn keyword))
+(defn- cancel-active-session! [conn state]
+  (when-let [session-id (:session-id @state)]
+    (when-not (:cancelling? @state)
+      (swap! state assoc :cancelling? true :timed-out? true)
+      (send! conn {:jsonrpc "2.0"
+                   :method "session/cancel"
+                   :params {:sessionId session-id}}))
+    true))
+
+(defn- read-message! [conn state opts]
+  (try
+    (json/read-str (read-line! conn
+                               (:timeout-ms opts)
+                               #(cancel-active-session! conn state)
+                               (:cancel-grace-ms opts))
+                   :key-fn keyword)
+    (catch Throwable t
+      (mark-dead! conn t)
+      (throw t))))
 
 (defn- response? [message]
   (and (contains? message :id)
@@ -149,7 +215,7 @@
           :else {:outcome {:outcome "cancelled"}}))
 
       (= :allow policy)
-      (if-let [option (or (first (filter #(str/starts-with? (:kind %) "allow") options))
+      (if-let [option (or (first (filter #(str/starts-with? (or (:kind %) "") "allow") options))
                           (first options))]
         (selected option)
         {:outcome {:outcome "cancelled"}})
@@ -158,7 +224,7 @@
       {:outcome {:outcome "cancelled"}}
 
       :else
-      (if-let [option (first (filter #(str/starts-with? (:kind %) "reject") options))]
+      (if-let [option (first (filter #(str/starts-with? (or (:kind %) "") "reject") options))]
         (selected option)
         {:outcome {:outcome "cancelled"}}))))
 
@@ -183,6 +249,7 @@
 
       "fs/write_text_file"
       (do
+        (io/make-parents path)
         (spit path content)
         {:result nil}))))
 
@@ -195,27 +262,39 @@
                           "fs/write_text_file" :writeTextFile} method)]
     (get-in opts [:client-capabilities :fs capability])))
 
-(defn- handle-request! [conn message opts]
-  (let [id (:id message)]
-    (try
-      (cond
-        (= "session/request_permission" (:method message))
-        (send! conn (success id (permission-outcome message opts)))
+(defn- handle-request!
+  ([conn message opts]
+   (handle-request! conn (atom {:terminals (terminal/service)}) message opts))
+  ([conn state message opts]
+   (let [id (:id message)]
+     (try
+       (cond
+         (= "session/request_permission" (:method message))
+         (send! conn (success id (permission-outcome message opts)))
 
-        (fs-capability opts (:method message))
-        (let [{:keys [result]} (handle-fs-request message)]
-          (send! conn (success id result)))
+         (fs-capability opts (:method message))
+         (let [{:keys [result]} (handle-fs-request message)]
+           (send! conn (success id result)))
 
-        (:request-handler opts)
-        (let [reply ((:request-handler opts) message)]
-          (send! conn (if (and (map? reply) (contains? reply :error))
-                        (assoc reply :jsonrpc "2.0" :id id)
-                        (success id reply))))
+         (and (true? (get-in opts [:client-capabilities :terminal]))
+              (str/starts-with? (:method message) "terminal/"))
+         (send! conn (success id (terminal/handle! (:terminals @state)
+                                                   (:method message)
+                                                   (:params message))))
 
-        :else
-        (send! conn (error id -32601 "Method not found")))
-      (catch Throwable t
-        (send! conn (error id -32603 (or (ex-message t) (str t))))))))
+         (:request-handler opts)
+         (let [reply ((:request-handler opts) message)]
+           (send! conn (if (and (map? reply) (contains? reply :error))
+                         (assoc reply :jsonrpc "2.0" :id id)
+                         (success id reply))))
+
+         :else
+         (send! conn (error id -32601 "Method not found")))
+       (catch InterruptedException e
+         (.interrupt (Thread/currentThread))
+         (throw e))
+       (catch Throwable t
+         (send! conn (error id -32603 (or (ex-message t) (str t)))))))))
 
 (defn- observe-message! [message opts]
   (when-let [on-event (:on-event opts)]
@@ -229,13 +308,30 @@
         (when-let [text (get-in session-update [:content :text])]
           (swap! state update :text conj text))))))
 
+(defn- session-scoped-message? [message]
+  (let [method (:method message)]
+    (or (= "session/update" method)
+        (= "session/request_permission" method)
+        (str/starts-with? (or method "") "fs/")
+        (str/starts-with? (or method "") "terminal/"))))
+
+(defn- validate-session-id! [state message]
+  (when-let [expected (:session-id @state)]
+    (when (and (session-scoped-message? message)
+               (not= expected (get-in message [:params :sessionId])))
+      (throw (ex-info "ACP message has an unexpected sessionId"
+                      {:expected expected
+                       :actual (get-in message [:params :sessionId])
+                       :method (:method message)})))))
+
 (defn- wait-response! [conn id state opts]
   (if-let [message (get-in @state [:responses id])]
     (do
       (swap! state update :responses dissoc id)
       message)
     (loop []
-      (let [message (read-message! conn (:timeout-ms opts))]
+      (let [message (read-message! conn state opts)]
+        (validate-session-id! state message)
         (observe-message! message opts)
         (cond
           (response? message)
@@ -247,7 +343,10 @@
 
           (request? message)
           (do
-            (handle-request! conn message opts)
+            (handle-request! conn state message
+                             (cond-> opts
+                               (:cancelling? @state)
+                               (assoc :permission-policy :cancel)))
             (recur))
 
           (notification? message)
@@ -281,6 +380,24 @@
                       {:requested protocol-version
                        :returned  (:protocolVersion result)})))
     result))
+
+(defn- selected-auth-method [init opts]
+  (let [methods (:authMethods init)
+        selected (or (:auth-method opts)
+                     (when-let [selector (:auth-method-selector opts)]
+                       (selector methods)))]
+    (when selected
+      (let [method-id (name selected)]
+        (when-not (some #(= method-id (:id %)) methods)
+          (throw (ex-info "ACP authentication method was not advertised"
+                          {:method-id method-id
+                           :available (mapv :id methods)})))
+        method-id))))
+
+(defn- authenticate! [conn ids state init opts]
+  (when-let [method-id (selected-auth-method init opts)]
+    (request! conn ids state "authenticate" {:methodId method-id} opts)
+    method-id))
 
 (defn- session-capability? [init capability]
   ;; capabilities are declared as values, so an explicit false means
@@ -363,19 +480,35 @@
       (and (:model agent) (not (contains? explicit :model)) (not (contains? explicit "model")))
       (assoc "model" (:model agent)))))
 
+(defn- validate-config-value! [option value]
+  (let [allowed (keep :value (:options option))]
+    (when (and (seq allowed) (not (contains? (set (map str allowed)) (str value))))
+      (throw (ex-info "ACP config value is not one of the advertised options"
+                      {:config-id (:id option)
+                       :value value
+                       :allowed (vec allowed)})))))
+
 (defn- set-config! [conn ids state session-id session-result agent opts]
-  (let [options (config-options session-result)]
-    (doseq [[id value] (desired-config agent opts)]
+  (loop [options (config-options session-result)
+         settings (seq (desired-config agent opts))]
+    (when-let [[id value] (first settings)]
       (if-let [option (config-option options id)]
-        (request! conn ids state "session/set_config_option"
-                  {:sessionId session-id
-                   :configId  (:id option)
-                   :value     (str value)}
-                  opts)
-        (when (:strict-config? opts)
+        (do
+          (validate-config-value! option value)
+          (let [response (request! conn ids state "session/set_config_option"
+                                   {:sessionId session-id
+                                    :configId  (:id option)
+                                    :value     (str value)}
+                                   opts)]
+            (recur (if (contains? response :configOptions)
+                     (config-options response)
+                     options)
+                   (next settings))))
+        (if (:strict-config? opts)
           (throw (ex-info "ACP agent did not advertise requested config option"
                           {:config-id id
-                           :available (mapv :id options)})))))))
+                           :available (mapv :id options)}))
+          (recur options (next settings)))))))
 
 (defn connect!
   "Start an ACP agent process and initialize the protocol once. Returns a
@@ -392,15 +525,21 @@
   Prompt turns on one connection are serialized; for parallel branches, give
   each worker its own connection."
   [opts]
-  (let [conn  (start-process opts)
+  (let [status (atom nil)
+        auth-state (atom nil)
+        conn  (assoc (start-process opts) :status status)
         ids   (atom 0)
         state (atom {:responses {}})]
     (try
-      {:karcarthy/type :acp-connection
-       :conn conn
-       :ids  ids
-       :init (initialize! conn ids state opts)
-       :lock (Object.)}
+      (let [init (initialize! conn ids state opts)]
+        (reset! auth-state (authenticate! conn ids state init opts))
+        {:karcarthy/type :acp-connection
+         :conn conn
+         :ids  ids
+         :init init
+         :status status
+         :auth-state auth-state
+         :lock (Object.)})
       (catch Throwable t
         (close-process! conn)
         (throw t)))))
@@ -411,35 +550,64 @@
   (close-process! conn))
 
 (defn- run-on-connection!
-  [{:keys [conn ids init lock]} agent input opts]
+  [{:keys [conn ids init lock status auth-state]} agent input opts]
+  (when-let [failure (and status @status)]
+    (throw (ex-info "ACP connection is not usable"
+                    {:connection failure})))
   (locking lock
-    (let [state          (atom {:responses {} :updates [] :text []})
+    (let [state          (atom {:responses {} :updates [] :text []
+                                :terminals (terminal/service)})
+          requested-auth (selected-auth-method init opts)
+          _               (when requested-auth
+                            (if-let [authenticated (and auth-state @auth-state)]
+                              (when-not (= authenticated requested-auth)
+                                (throw (ex-info "ACP connection is already authenticated with another method"
+                                                {:authenticated authenticated
+                                                 :requested requested-auth})))
+                              (when auth-state
+                                (reset! auth-state
+                                        (authenticate! conn ids state init opts)))))
           session-result (session! conn ids state init agent opts)
           session-id     (:sessionId session-result)]
-      (set-config! conn ids state session-id session-result agent opts)
-      ;; session/load replays the prior conversation as agent_message_chunk
-      ;; updates before responding, so only chunks streamed during the prompt
-      ;; turn belong in :text; replayed history stays in :raw :updates.
-      (swap! state assoc :text [])
-      (let [prompt-result (request! conn ids state "session/prompt"
-                                    (prompt-params session-id agent input opts)
-                                    opts)
-            stop-reason   (:stopReason prompt-result)
-            text          (str/join "" (:text @state))]
-        (k/result
-         (cond-> {:agent      (:name agent)
-                  :ok?        (stop-reason-ok? stop-reason)
-                  :text       text
-                  :session-id session-id
-                  :stop-reason stop-reason
-                  :raw        {:runner :acp
-                               :session-id session-id
-                               :stop-reason stop-reason
-                               :agent-info (:agentInfo init)
-                               :updates (:updates @state)
-                               :stderr (stderr conn)}}
-           (not (stop-reason-ok? stop-reason))
-           (assoc :error (str "ACP prompt turn stopped: " stop-reason))))))))
+      (swap! state assoc :session-id session-id)
+      (try
+        (set-config! conn ids state session-id session-result agent opts)
+        ;; session/load replays the prior conversation as agent_message_chunk
+        ;; updates before responding, so only chunks streamed during the prompt
+        ;; turn belong in :text; replayed history stays in :raw :updates.
+        (swap! state assoc :text [])
+        (check-prompt-content! init (:prompt-content opts))
+        (let [prompt-result (request! conn ids state "session/prompt"
+                                      (prompt-params session-id agent input opts)
+                                      opts)
+              stop-reason   (:stopReason prompt-result)
+              timed-out?    (:timed-out? @state)
+              text          (str/join "" (:text @state))]
+          (k/result
+           (cond-> {:agent      (:name agent)
+                    :ok?        (and (not timed-out?) (stop-reason-ok? stop-reason))
+                    :text       text
+                    :session-id session-id
+                    :stop-reason stop-reason
+                    :raw        {:runner :acp
+                                 :session-id session-id
+                                 :stop-reason stop-reason
+                                 :agent-info (:agentInfo init)
+                                 :updates (:updates @state)
+                                 :stderr (stderr conn)}}
+             timed-out?
+             (assoc :error "ACP prompt turn timed out and was cancelled")
+
+             (and (not timed-out?) (not (stop-reason-ok? stop-reason)))
+             (assoc :error (str "ACP prompt turn stopped: " stop-reason)))))
+        (finally
+          (try
+            (when (and session-id
+                       (session-capability? init :close)
+                       (or (nil? status) (nil? @status)))
+              (request! conn ids state "session/close" {:sessionId session-id} opts))
+            (finally
+              (terminal/close! (:terminals @state)))))))))
 
 (defn- run-acp! [agent input opts]
   (if-let [connection (:connection opts)]
@@ -471,13 +639,17 @@
     :cwd / :dir               working directory for the ACP session
     :mcp-servers              ACP MCP server specs
     :client-capabilities      advertised ACP client capabilities
+    :auth-method              advertised authentication method id to use
+    :auth-method-selector     fn of advertised auth methods -> method id
+    :prompt-content           additional ACP content blocks appended to the text prompt
     :config-options           map of ACP session config option ids/categories to values
     :strict-config?           throw when a requested config option is unavailable
     :permission-policy        :reject (default), :allow, or :cancel
     :permission-handler       fn of the permission request -> option id or ACP outcome map
     :request-handler          fn for custom ACP agent->client requests
     :on-event                 fn called with every ACP JSON-RPC message received
-    :timeout-ms               max wait per ACP message"
+    :timeout-ms               max wait per ACP message before `session/cancel`
+    :cancel-grace-ms          wait after cancellation before force-killing"
   ([config]
    (reify k/Runner
      (-run [_ agent input opts]

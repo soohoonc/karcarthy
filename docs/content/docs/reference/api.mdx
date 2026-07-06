@@ -644,14 +644,18 @@ Common options:
 | `:cwd` / `:dir` | working directory for `session/new`. |
 | `:resume` | session id to resume, via ACP `session/resume` or `session/load` depending on agent capabilities; throws when the agent supports neither. Replayed history from `session/load` stays in `:raw :updates`; the returned `:text` is only the new turn. |
 | `:mcp-servers` | ACP MCP server specs passed during session setup. `http`/`sse` specs require the agent's matching `mcpCapabilities` flag; stdio specs need no capability. |
-| `:client-capabilities` | ACP client capabilities to advertise. Defaults to none. `fs/read_text_file` and `fs/write_text_file` are served only when the corresponding `:fs` flag (`:readTextFile`, `:writeTextFile`) is advertised. |
-| `:config-options` | session config option id/category to value map. |
+| `:client-capabilities` | ACP client capabilities to advertise. Defaults to none. File reads/writes and terminals are served only when their corresponding capability is enabled. |
+| `:auth-method` | id of an authentication method advertised during initialization; authentication runs before session creation. |
+| `:auth-method-selector` | fn of the advertised authentication method vector, returning an id. |
+| `:prompt-content` | vector of additional ACP content blocks appended to the text prompt; image, audio, and embedded resource blocks are capability-gated. |
+| `:config-options` | session config option id/category to advertised value map; refreshed options are used after each change. |
 | `:strict-config?` | throw if a requested config option is unavailable. |
 | `:permission-policy` | `:reject` default, `:allow`, or `:cancel`. |
 | `:permission-handler` | fn for ACP `session/request_permission`. |
 | `:request-handler` | fn for custom agent-to-client JSON-RPC requests. |
 | `:on-event` | fn called with each ACP message received. |
-| `:timeout-ms` | max wait per ACP message. |
+| `:timeout-ms` | max wait per ACP message before sending `session/cancel` for an active session. |
+| `:cancel-grace-ms` | wait after cancellation before force-killing; defaults to 1000 ms. |
 
 Session config: agents can carry ACP config under
 `{:config {:acp {:config-options {...}}}}`, merged beneath the runner's
@@ -660,9 +664,12 @@ Session config: agents can carry ACP config under
 option, unless the merged config options already include a model entry.
 `:strict-config?` applies to all of these.
 
-Results map the ACP `stopReason` onto `:ok?`: `end_turn` (or absent) is
-success; `refusal`, `cancelled`, `max_tokens`, and `max_turn_requests` yield
-`{:ok? false}` with an `:error`, keeping `:stop-reason` and partial `:text`.
+Results map the ACP `stopReason` onto `:ok?`: only an explicit `end_turn` is
+success; a missing reason, `refusal`, `cancelled`, `max_tokens`, and
+`max_turn_requests` yield `{:ok? false}` with an `:error`, keeping
+`:stop-reason` and partial `:text`. A timeout first requests `session/cancel`;
+any permission request received while cancellation is in flight is answered
+with `cancelled`.
 
 #### Connection reuse: `connect!` and `close!`
 
@@ -681,7 +688,15 @@ a process spawn plus `initialize`. `close!` shuts the connection down.
 ```
 
 Prompt turns on one connection are serialized; for parallel branches, give each
-worker its own connection.
+worker its own connection. When the agent advertises
+`sessionCapabilities.close`, each run closes its session after the prompt turn.
+Malformed wire messages mark a reused connection unusable so a later run fails
+immediately instead of reading a desynchronized stream.
+
+Advertising `{:terminal true}` opts into running agent-requested commands on
+the client machine. Karcarthy implements the full ACP terminal lifecycle,
+bounds captured output by `outputByteLimit`, preserves valid UTF-8 when
+truncating, and kills unreleased processes when the prompt turn ends.
 
 ### `process-runner`
 

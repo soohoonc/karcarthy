@@ -69,3 +69,16 @@
         (is (re-find #"exited with status 9" (:error r)))
         (is (= "looks good" (:text r))))
       (finally (.delete script)))))
+
+(deftest ^:live live-openai-roundtrip
+  (when (and (System/getenv "KARCARTHY_LIVE")
+             (System/getenv "OPENAI_API_KEY"))
+    (testing "the bundled Agents SDK bridge completes a real model call"
+      (let [result (k/run-agent (oa/openai-runner {:timeout-ms 120000})
+                                (k/agent {:name "ponger"
+                                          :instructions "Reply with exactly: pong"})
+                                "ping")]
+        (is (k/result? result))
+        (is (= :openai (get-in result [:raw :runner])))
+        (when (k/ok? result)
+          (is (re-find #"(?i)pong" (:text result))))))))

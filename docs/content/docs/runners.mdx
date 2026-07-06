@@ -312,14 +312,18 @@ Options:
 | `:connection` | - | a connection from `connect!` to reuse across runs |
 | `:cwd` / `:dir` | `"."` | working directory for the ACP session |
 | `:mcp-servers` | - | ACP MCP server specs; falls back to the agent's `:config :mcp-servers`, then `[]`. `http`/`sse` specs require the agent to advertise the matching `mcpCapabilities` flag; stdio specs always work |
-| `:client-capabilities` | `{}` | advertised ACP client capabilities. Advertise `{:fs {:readTextFile true :writeTextFile true}}` and karcarthy serves the agent's mid-run file reads/writes; each method is gated on its own flag |
-| `:config-options` | - | map of ACP session config option ids/categories to values |
+| `:client-capabilities` | `{}` | advertised ACP client capabilities. File reads/writes and terminals are served only when their corresponding capability is enabled |
+| `:auth-method` | - | id of an authentication method advertised during initialization; authentication runs before session creation |
+| `:auth-method-selector` | - | function of the advertised authentication method vector, returning an id |
+| `:prompt-content` | - | vector of additional ACP content blocks appended to the text prompt; image, audio, and embedded resource blocks are capability-gated |
+| `:config-options` | - | map of ACP session config option ids/categories to advertised values; refreshed option lists are used after each change |
 | `:strict-config?` | - | throw when a requested config option is unavailable |
 | `:permission-policy` | `:reject` | `:reject`, `:allow`, or `:cancel` |
 | `:permission-handler` | - | function of the permission request, returning an option id or ACP outcome map |
 | `:request-handler` | - | function handling custom ACP agent-to-client requests |
 | `:on-event` | - | function called with every ACP JSON-RPC message received |
-| `:timeout-ms` | - | max wait per ACP message |
+| `:timeout-ms` | - | max wait per ACP message before sending `session/cancel` for an active session |
+| `:cancel-grace-ms` | `1000` | wait after cancellation before force-killing an unresponsive ACP process |
 
 Without further configuration each run spawns its own agent process. ACP is
 designed for long-lived connections, so for repeated runs create one with
@@ -337,7 +341,16 @@ designed for long-lived connections, so for repeated runs create one with
 ```
 
 Prompt turns on one connection are serialized; give parallel branches their
-own connections.
+own connections. When the agent advertises `sessionCapabilities.close`, each
+run closes its session after the prompt turn so long-lived connections do not
+accumulate agent-side resources. A malformed wire message marks a reused
+connection unusable instead of risking a desynchronized second run.
+
+Terminal execution is deliberately opt-in because it runs agent-requested
+commands on the client machine. Advertise `{:terminal true}` only when that is
+appropriate. Karcarthy implements `terminal/create`, `output`, `wait_for_exit`,
+`kill`, and `release`; output is UTF-8-safe and bounded by the request's
+`outputByteLimit`, and unreleased processes are killed when the run ends.
 
 ## OpenAI Runner
 
