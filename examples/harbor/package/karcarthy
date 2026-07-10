@@ -6,6 +6,5 @@ java_bin="$script_dir/../jre/bin/java"
 if [ ! -x "$java_bin" ]; then
   java_bin=java
 fi
-KARCARTHY_CANDIDATE_PATH="$script_dir/candidate.clj" \
-  exec "$java_bin" -jar "$script_dir/karcarthy-example-standalone.jar" \
+exec "$java_bin" -jar "$script_dir/karcarthy-example-standalone.jar" \
   acp main/harbor-agent

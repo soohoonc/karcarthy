@@ -35,9 +35,8 @@ All notable changes are documented here, following
 - A minimal REPL chat example built from an Agent, `run!`, and a Session.
 - A live Coding Agent that inspects repositories with local Tools, chooses its
   own strategy, edits code, and verifies the result.
-- A packaged Harbor and GEPA search that evolves complete executable Clojure
-  Agent programs from verifier feedback and ATIF trajectories, selects by mean
-  validation reward, and reports performance on an untouched test split.
+- A packaged Harbor evaluation that runs the fixed Coding Agent on an isolated
+  repository task and records its verifier reward and ATIF trajectory.
 
 ### Changed
 

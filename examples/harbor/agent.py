@@ -1,4 +1,4 @@
-"""Local-development Harbor adapter for a packaged karcarthy Agent candidate.
+"""Local-development Harbor adapter for the packaged karcarthy Coding Agent.
 
 Harbor's public ACP registry intentionally requires HTTPS distribution URLs.
 This adapter changes only the installation step: it uploads a locally built
@@ -33,7 +33,6 @@ class Agent(AcpAgent):
     def __init__(
         self,
         archive_path: str,
-        candidate_path: str,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -42,21 +41,15 @@ class Agent(AcpAgent):
             raise ValueError(
                 f"karcarthy ACP archive does not exist: {self._local_archive_path}"
             )
-        self._candidate_path = Path(candidate_path).resolve()
-        if not self._candidate_path.is_file():
-            raise ValueError(
-                f"karcarthy candidate does not exist: {self._candidate_path}"
-            )
-
         target = {
             "archive": "https://example.invalid/karcarthy-harbor.tgz",
             "cmd": "./karcarthy",
         }
         registry_entry = {
-            "id": "karcarthy-candidate-agent",
-            "name": "karcarthy Candidate Agent",
+            "id": "karcarthy-coding-agent",
+            "name": "karcarthy Coding Agent",
             "version": "0.0.3",
-            "description": "Locally packaged candidate Clojure Agent program",
+            "description": "Locally packaged Clojure Coding Agent",
             "distribution": {
                 "binary": {
                     "linux-aarch64": target,
@@ -91,7 +84,6 @@ class Agent(AcpAgent):
 
     async def _install_binary_target(self, environment: Any, target: Any) -> None:
         remote_archive = "/tmp/karcarthy-harbor.tgz"
-        remote_candidate = "/tmp/karcarthy-candidate.clj"
         remote_jre = "/tmp/karcarthy-jre.tar.gz"
         jre_archive = await asyncio.to_thread(
             self._jre_archive, self._platform_id
@@ -99,10 +91,6 @@ class Agent(AcpAgent):
         await environment.upload_file(
             source_path=self._local_archive_path,
             target_path=remote_archive,
-        )
-        await environment.upload_file(
-            source_path=self._candidate_path,
-            target_path=remote_candidate,
         )
         await environment.upload_file(
             source_path=jre_archive,
@@ -115,7 +103,6 @@ set -euo pipefail
 rm -rf {self._BINARY_INSTALL_DIR}
 mkdir -p {self._BINARY_INSTALL_DIR}/dist
 tar -xzf {remote_archive} -C {self._BINARY_INSTALL_DIR}/dist
-cp {remote_candidate} {self._BINARY_INSTALL_DIR}/dist/candidate.clj
 mkdir -p {self._BINARY_INSTALL_DIR}/jre
 tar -xzf {remote_jre} -C {self._BINARY_INSTALL_DIR}/jre --strip-components=1
 chmod -R a+rX {self._BINARY_INSTALL_DIR}
@@ -123,7 +110,7 @@ chmod -R a+rX {self._BINARY_INSTALL_DIR}
         )
 
     async def install(self, environment: Any) -> None:
-        """Install ACP runtime dependencies, the candidate, and a Java runtime."""
+        """Install ACP runtime dependencies, the application, and a Java runtime."""
         await self._ensure_registry_entry()
         platform_id = await self._detect_platform(environment)
         self._platform_id = platform_id

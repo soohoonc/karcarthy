@@ -1,14 +1,17 @@
 ---
 title: Home
-description: Build, compose, observe, and evaluate Agents with ordinary Clojure.
+description: Build Agents that can write and run new Clojure Agents.
 ---
 
-karcarthy is a small Clojure agent harness inspired by Lisp's homoiconicity.
+karcarthy is a native, homoiconic Clojure agent harness. Agents are executable
+Clojure values and forms. A model can write a new `(agent ...)` form while its
+Agent is running, and the same kernel reads, expands, checks, evaluates, and
+runs it immediately.
 
-Most agent libraries add a workflow graph or orchestration DSL beside the host
-language. karcarthy uses Clojure itself. An Agent is a Clojure value; ordinary
-functions, macros, conditionals, recursion, and concurrency are the workflow
-engine.
+There is no workflow graph or second orchestration language. Humans, macros,
+and models all author the same Agent program.
+
+## Run an Agent
 
 ```clojure
 (require '[karcarthy :as k])
@@ -24,14 +27,98 @@ engine.
 (:output run) ;=> "..."
 ```
 
-`run!` sends the Agent's instructions and the prompt to the model. If the model
-calls a Tool, karcarthy runs it and returns its result to the model. When the
-model answers, `run!` returns a Run containing the final output, usage, events,
-and any failure.
+`run!` owns one bounded model/Tool loop and returns a Run containing the output,
+usage, events, and any failure.
+
+## The Clojure aha: an Agent can write an Agent
+
+Every model Agent automatically receives a Tool named `agent`. No generation
+flag or manually registered Tool is required:
+
+```clojure
+(k/defagent architect
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions
+   "Solve the task. Create and run a skeptical reviewer before answering."
+   :output string?})
+
+(def run
+  (k/run! architect
+          "Review this API migration for hidden risks."
+          {:limits {:agent-forms 4
+                    :depth 3}}))
+```
+
+During that Run, the architect's model can call `agent` with two fields. The
+`source` field is a complete Clojure program:
+
+```clojure
+(agent
+ {:name "risk-reviewer"
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Find hidden assumptions and concrete failure modes."
+  :input string?
+  :output string?})
+```
+
+The `input` field is the complete value given to that new Agent:
+
+```text
+Review this API migration for hidden risks.
+```
+
+karcarthy executes one path:
+
+```text
+parent Agent
+  -> model calls the built-in agent Tool
+  -> read one `(agent ...)` form
+  -> macroexpand, evaluate, and verify it
+  -> run the new Agent on `input`
+  -> return its output to the parent model
+  -> parent continues to its final answer
+```
+
+The child is an ordinary Agent, not a workflow node or serialized substitute.
+It can use Tools, call known Agents, contain Clojure control flow, or generate
+another Agent. Its source is both program and data: a developer can write it, a
+macro can transform it, and a model can produce it at runtime. That is why
+karcarthy is built in Clojure. Homoiconicity is doing runtime work here, not
+just providing Lisp syntax.
+
+The generated Agent receives only the explicit `input`, not the parent's hidden
+conversation. Parent and child still share the current Run's limits, usage,
+cancellation, approvals, and event lineage.
+
+## Three composition choices
+
+| Need | Mechanism | Who chooses |
+| --- | --- | --- |
+| Call a specialist known ahead of time | Put it in `:agents` | Parent model |
+| Run a fixed topology | Write an Agent body with ordinary Clojure and `run!` | Application program |
+| Create a role or workflow after seeing the task | Use the automatic `agent` Tool | Parent model at runtime |
+
+For example, `:agents` makes an existing Agent callable:
+
+```clojure
+(k/defagent researcher
+  {:description "Research one question."
+   :model {:transport :responses :id "gpt-5.6"}
+   :instructions "Research the assigned question."
+   :output string?})
+
+(k/defagent editor
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Write the answer. Ask researcher when useful."
+   :agents [researcher]
+   :output string?})
+```
+
+This is different from the built-in `agent` Tool: `researcher` already exists,
+while `agent` accepts new Clojure source and constructs a new Agent during the
+Run.
 
 ## The mental model
-
-karcarthy has a small set of runtime concepts:
 
 | Concept | Role |
 | --- | --- |
@@ -45,51 +132,6 @@ karcarthy has a small set of runtime concepts:
 The harness owns the model/Tool loop. Clojure owns control flow. Sessions own
 conversation history. Transports only translate model I/O.
 
-## Tools and available Agents
-
-Tools are Clojure functions the model may call. Agents can also make other
-Agents available by listing them in `:agents`:
-
-```clojure
-(k/defagent researcher
-  {:description "Research one question and return sourced findings."
-   :model {:transport :responses :id "gpt-5.6"}
-   :instructions "Research the assigned question."
-   :output string?})
-
-(k/defagent editor
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Write the final answer. Ask the researcher when needed."
-   :agents [researcher]
-   :output string?})
-```
-
-The editor's model sees `researcher` with its description and input schema. If
-it calls `researcher`, that Agent runs, its result is returned to the
-editor's model, and the editor continues. This conversion to a model Tool is an
-implementation detail; users declare the relationship as `:agents
-[researcher]`.
-
-## Why homoiconicity matters
-
-An Agent can also be a Clojure program that calls other Agents:
-
-```clojure
-(k/defagent review-team
-  {:input string? :output vector?}
-  [change]
-  (->> [security-reviewer api-reviewer]
-       (mapv #(future (k/run! % change)))
-       (mapv deref)
-       (mapv :output)))
-```
-
-That `agent` form is executable code and Clojure data. A developer can write
-it, a macro can transform it, or a model can write a new form through the
-built-in `agent` capability. karcarthy reads, expands, evaluates, verifies, and
-runs the new Agent. Authored and generated orchestration therefore share one
-language and one representation; there is no second workflow format.
-
 ## Choose a path
 
 <Cards>
@@ -97,6 +139,11 @@ language and one representation; there is no second workflow format.
     title="Run your first Agent"
     description="Install karcarthy, call a model, and add a Tool."
     href="/docs/quickstart"
+  />
+  <Card
+    title="Author Agents at runtime"
+    description="See the exact source, input boundary, compilation path, recursion, and limits."
+    href="/docs/reference/agent-forms"
   />
   <Card
     title="Understand Agents"
@@ -114,8 +161,8 @@ language and one representation; there is no second workflow format.
     href="/docs/protocols/mcp"
   />
   <Card
-    title="Run research evaluations"
-    description="Search executable Agent programs with Harbor rewards and trajectories."
+    title="Evaluate with Harbor"
+    description="Run a fixed Agent with a verifier reward and trajectory."
     href="/docs/guides/harbor"
   />
   <Card

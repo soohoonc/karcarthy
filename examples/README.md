@@ -10,7 +10,7 @@ folder and `main.clj`; none of them are part of published library artifacts.
 | Chat | [`chat/main.clj`](chat/main.clj) | Sessions and a terminal application |
 | Agent composition | [`composition/main.clj`](composition/main.clj) | Predefined Agents coordinated with Clojure |
 | Coding Agent | [`coding/main.clj`](coding/main.clj) | Open-ended repository work with optional Agent generation |
-| Harbor | [`harbor`](harbor) | Reflective search over executable Agent programs |
+| Harbor | [`harbor`](harbor) | Evaluate the Coding Agent with a verifier and trajectory |
 
 Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running an example. Use
 `KARCARTHY_OPENAI_MODEL` to override the default model.
@@ -57,14 +57,12 @@ KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 
 ## Harbor
 
-The Harbor example starts from the Coding Agent, then uses Harbor rewards,
-verifier feedback, ATIF trajectories, and GEPA reflection to evolve complete
-Clojure Agent programs on a real multi-task dataset:
+The Harbor example packages the fixed Coding Agent, runs it on an isolated
+repository task, invokes a behavioral verifier, and records an ATIF trajectory:
 
 ```bash
-KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/hillclimb.sh
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh
 ```
 
-Candidate selection uses mean validation reward; the selected Agent is evaluated
-once on an untouched test split. See [`harbor/README.md`](harbor/README.md) for
-the search loop, metrics, artifacts, and limitations.
+See [`harbor/README.md`](harbor/README.md) for the task, metric, and result
+artifacts.
