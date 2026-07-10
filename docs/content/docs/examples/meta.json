@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "repl",
+    "chat",
     "clojure"
   ]
 }
