@@ -1,24 +1,29 @@
 ---
 title: Examples
-description: Runnable examples for REPL development and multi-Agent composition.
+description: Examples for REPL development, chat, and Agent composition.
 ---
 
 <Cards>
   <Card title="REPL development" href="/docs/examples/repl" />
-  <Card title="Multi-Agent review" href="/docs/examples/clojure" />
+  <Card title="Chat from the REPL" href="/docs/examples/chat" />
+  <Card title="Agent composition" href="/docs/examples/clojure" />
 </Cards>
 
 ## REPL development
 
 The [REPL example](/docs/examples/repl) uses the included deterministic model,
 so it runs without a network connection or API key. It covers Agent execution,
-Run inspection, source inspection, redefinition, and the correct way to test an
-ACP server without giving it the REPL's own standard input.
+Run inspection, source inspection, and redefinition.
 
-## Multi-Agent review
+## Chat from the REPL
 
-The [Clojure example](/docs/examples/clojure) builds a coding review system from
-local Tools, model-backed reviewer Runs, an editor, and
-an optional architect that can create new Agents through the `agent` Tool.
+The [chat example](/docs/examples/chat) adds a small `read-line` loop and a
+Session around `run!`. It keeps the interface in application code while making
+conversation history, Run inspection, reset, and exit behavior explicit.
+
+## Agent composition
+
+The [Clojure example](/docs/examples/clojure) contrasts independent `run!`
+composition with a model-created Agent tree that shares one Run.
 
 All examples use the public `(require '[karcarthy :as k])` API.

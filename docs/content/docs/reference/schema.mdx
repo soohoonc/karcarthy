@@ -28,7 +28,7 @@ The public configuration surface is:
 | `:model` | Model identifier and adapter-specific options, or a resolver function. |
 | `:instructions` | Model-visible string or resolver function returning a string. |
 | `:context` | Contract for the local, non-model-visible context value. |
-| `:input` | Agent input contract. |
+| `:input` | Optional contract for the value passed to the Agent. Usually `string?` for a model-backed Agent; arbitrary for a Clojure body. |
 | `:tools` | Tool values or a resolver function. |
 | `:output` | Agent output contract. |
 | `:output-schema` | Explicit model-facing JSON Schema. |
@@ -104,8 +104,9 @@ vector in an atom; durable implementations choose their own storage.
  :deadline-ms 300000}
 ```
 
-Limits and usage counters are shared across the root run tree. A child may
-lower inherited ceilings but cannot raise them.
+Limits and usage counters are shared by Agents entered through `as-tool` or the
+model-facing `(agent)` Tool. A separate `run!` call starts a separate Run. A
+child inside a Run may lower inherited ceilings but cannot raise them.
 
 ## Run
 

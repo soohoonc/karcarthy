@@ -16,12 +16,13 @@ The Tool is named `agent` and accepts:
 ```json
 {
   "source": "(agent {:name \"reviewer\" ...})",
-  "input": {"change": "..."}
+  "input": "Review the proposed change."
 }
 ```
 
-`source` must be a string containing exactly one top-level form. Evaluating the
-form must return an Agent. `input` is passed to that Agent.
+`source` must contain exactly one top-level Clojure form whose evaluation
+returns an Agent. `input` is passed to that Agent unchanged. Use a prompt string
+for a model-backed Agent or any value accepted by a Clojure-body Agent.
 
 ## Accepted Agent forms
 
@@ -32,7 +33,7 @@ A standard model-backed Agent:
  {:name "generated-reviewer"
   :model {:transport :responses :id "gpt-5.6"}
   :instructions "Review the change and return concrete findings."
-  :input map?
+  :input string?
   :output string?})
 ```
 
@@ -63,19 +64,16 @@ source string
 read-agent-form
     │ Clojure form
     ▼
-macroexpand
-    │ expanded form
-    ▼
 check-agent-form!
-    │ checked representation
+    │ macroexpanded, checked representation
     ▼
 eval-agent-form!
-    │ executable value
+    │ Agent value
     ▼
 agent?
     │
     ▼
-nested Agent
+verified Agent
 ```
 
 ### Read
@@ -86,9 +84,9 @@ than one top-level form.
 ### Expand and check
 
 `check-agent-form!` macroexpands executable positions in the current Run's
-evaluation namespace. It preserves quoted forms and records both original and
-expanded forms. Agent configuration and referenced contracts are checked as
-the form is evaluated.
+evaluation namespace. It preserves quoted forms and records the original and
+expanded forms. Agent configuration and referenced contracts are validated
+when the checked form is evaluated.
 
 Clojure is dynamically typed. Boundary contracts validate Agent input/output,
 Tool input/output, and local context; they are not a whole-program static type

@@ -1,29 +1,21 @@
 ---
 title: Quickstart
-description: Install karcarthy, define a Tool and Agent, run it from a REPL, and enable recursive Agent creation.
+description: Install karcarthy, define one Tool and Agent, and run them from a REPL.
 ---
 
-This guide starts with a conventional model-backed Agent, then uses
-karcarthy's homoiconic step: exposing the same Agent form as a Tool so the model
-can create a child.
+## Install
 
-## Requirements
-
-- JDK 21 or newer
-- Clojure CLI
-- an API key for the model endpoint you use
-
-Add karcarthy to `deps.edn`:
+karcarthy requires JDK 21 and the Clojure CLI. Add it to `deps.edn`:
 
 ```clojure
 {:deps
  {io.github.soohoonc/karcarthy
   {:git/url "https://github.com/soohoonc/karcarthy"
-   :git/sha "<commit-sha>"}}}
+   :git/sha "<commit-sha>"}}
  :paths ["src"]}
 ```
 
-The built-in Responses transport reads `OPENAI_API_KEY` by default.
+The Responses transport reads `RESPONSES_API_KEY` or `OPENAI_API_KEY`.
 
 ## Define a Tool
 
@@ -34,50 +26,37 @@ Create `src/example.clj`:
   (:require [karcarthy :as k]))
 
 (k/deftool word-count
-  {:description "Count the words in a string."
+  {:description "Count the words in text."
    :input {:type "object"
            :properties {:text {:type "string"}}
            :required ["text"]
            :additionalProperties false}
    :output integer?}
-  [_ {:keys [text]}]
+  [{:keys [text]}]
   (count (re-seq #"\S+" text)))
 ```
 
-`deftool` defines a var containing a Tool. Its input is validated before the
-call, and its output is validated before being returned to the model.
+A Tool body receives one input value. Its schema tells the model what to send;
+karcarthy validates the input before the call and the output afterward.
 
 ## Define an Agent
 
-Add this to the same namespace:
+Add this to the same file:
 
 ```clojure
 (k/defagent editor
   {:model {:transport :responses
            :id "gpt-5.6"}
    :instructions
-   "Edit the supplied text. Use word-count when the user asks about length."
+   "Edit the user's text. Use word-count when the user asks about length."
    :tools [word-count]
    :output string?})
 ```
 
-An Agent without a Clojure body uses karcarthy's model/Tool loop. `defagent`
-defines a named var and supplies the default Agent name (`"editor"` here).
+An Agent without a Clojure body uses karcarthy's model and Tool loop.
+`defagent` defines a var containing that Agent.
 
-Use `agent` when you want an Agent value as an expression:
-
-```clojure
-(def concise-editor
-  (k/agent
-   {:name "concise-editor"
-    :model {:transport :responses :id "gpt-5.6"}
-    :instructions "Rewrite the input in at most 50 words."
-    :output string?}))
-```
-
-Both forms create the same kind of Agent.
-
-## Run from the REPL
+## Run it
 
 Start a REPL in the project directory:
 
@@ -97,61 +76,17 @@ clojure -M
 (k/events run)
 ```
 
-After editing `example.clj`, evaluate the changed form or reload the namespace
-and run it again. See the [REPL example](/docs/examples/repl) for an entirely
-offline setup using `fake-model`.
+`run!` returns a Run even when execution fails or is cancelled. Check
+`:status` before using `:output`.
 
-## Enable recursive Agent creation
+After changing `example.clj`, reload the namespace and run the Agent again.
 
-Because an Agent definition is Clojure data, karcarthy can expose that
-definition as a model-callable capability. Zero-arity `(k/agent)` returns a
-Tool named `agent`; add it when the model should be able to define and run a
-specialized child:
+## Continue
 
-```clojure
-(k/defagent architect
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions
-   (str "Complete the task. When a specialist would help, call the agent "
-        "Tool with a focused Agent definition and its input.")
-   :tools [word-count (k/agent)]
-   :output string?})
-
-(k/run! architect "Analyze and improve this document: ..."
-        {:limits {:agent-depth 4
-                  :generated-forms 8
-                  :model-calls 30}})
-```
-
-The Tool accepts one `(agent ...)` source form plus its input. The generated
-Agent is checked, evaluated, and run inside the current Run. It
-retains the same source and expanded forms as a developer-authored Agent. The
-[Agents guide](/docs/agents) covers known Agent Tools, generated Agents,
-recursion, and source inspection.
-
-## Add conversation history
-
-Runs are independent unless you pass a Session:
-
-```clojure
-(def session (k/memory-session))
-
-(k/run! editor "Remember that the target length is 80 words."
-        {:session session})
-
-(k/run! editor "Now revise the draft I sent earlier."
-        {:session session})
-```
-
-`memory-session` is process-local. Applications can implement the small
-`karcarthy.session/Session` protocol with their own durable store.
-
-## Next
-
-- [Agents](/docs/agents): configuration, composition, and recursive generation
-- [Running agents](/docs/running-agents): `run!`, results, and limits
-- [Tools](/docs/tools): contracts, approvals, local Tools, and Agents as Tools
-- [Sessions](/docs/sessions): conversation history across Runs
-- [Streaming and events](/docs/streaming): live model text and lifecycle events
-- [Integrations](/docs/integrations): model endpoints, MCP, ACP, and Harbor
-- [Library API](/docs/reference/api): complete function and macro reference
+- [Agents](/docs/agents) explains Agent configuration, inputs, Clojure bodies,
+  and Agents as Tools.
+- [Tools](/docs/tools) explains schemas, contracts, approvals, and local Tools.
+- [Running agents](/docs/running-agents) explains Run results, context, limits,
+  and composition.
+- [Chat from the REPL](/docs/examples/chat) adds conversation history with a
+  Session.

@@ -7,7 +7,7 @@ Pass `:observe` to `run!` to receive events as they occur:
 
 ```clojure
 (def run
-  (k/run! agent input
+  (k/run! agent prompt
           {:observe
            (fn [{:keys [type delta] :as event}]
              (if (= type :model/text-delta)
@@ -30,7 +30,7 @@ Tool, model, Session, and generated-program activity.
 :model/requested      :model/text-delta    :model/tool-call-delta
 :model/stream-event   :model/completed     :model/failed
 
-:tool/approval-requested  :tool/approval-resolved
+:tool/approval-requested  :tool/approval-resolved  :tool/approval-reused
 :tool/started         :tool/completed      :tool/failed
 
 :session/updated
@@ -64,10 +64,5 @@ Agent bodies and Tools may add application events with `emit!`:
 `emit!` adds the current Run and Agent lineage before recording and publishing
 the event.
 
-## Next
-
-- [Running agents](/docs/running-agents) covers results, limits, and cancellation.
-- [Generated Agents](/docs/reference/generated-agents) documents program
-  lifecycle events.
-- [Integrations](/docs/integrations#acp-serving) explains how ACP streams Agent
-  activity.
+Generated-Agent compilation uses the `:program/*` family. See [Generated
+Agents](/docs/reference/generated-agents) for those events.

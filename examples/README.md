@@ -1,5 +1,14 @@
 # Examples
 
+[`clojure/chat.clj`](clojure/chat.clj) is a minimal terminal chat built from an
+Agent, `run!`, and a Session. With `OPENAI_API_KEY` available, load it from a
+REPL and start the loop:
+
+```clojure
+(load-file "examples/clojure/chat.clj")
+(example.chat/chat!)
+```
+
 [`clojure/generated_calculator.clj`](clojure/generated_calculator.clj) runs
 entirely offline and demonstrates:
 

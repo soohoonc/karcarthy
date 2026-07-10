@@ -27,12 +27,13 @@ All notable changes are documented here, following
   aggregate prompt usage compatible with Harbor's ACP-to-ATIF conversion.
 - An explicit paid live test that asks GPT-5.6 to author and run a child Agent.
 - A paid Agent test that inspects and edits a temporary directory.
+- A minimal REPL chat example built from an Agent, `run!`, and a Session.
 
 ### Changed
 
-- Documentation now leads with the homoiconic motivation, derives the recursive
-  `agent` Tool from code-as-data, and separates Agents, Tools, Running agents,
-  Integrations, runnable examples, and reference material.
+- Documentation now introduces the harness from ordinary Agent use outward,
+  separates prompt input from local context and Tool schemas, and presents the
+  homoiconic motivation after the programming model.
 - The harness now owns the model/tool loop; provider transports only translate
   model I/O.
 - Orchestration is normal Clojure control flow plus `run!`, rather than a
