@@ -1,190 +1,104 @@
 ---
-title: Homoiconic agents
-description: In karcarthy, an Agent is executable Clojure and inspectable data—and the Agent definition itself is a Tool a model can call.
+title: Home
+description: A small Clojure agent harness with a model and Tool loop, streaming, Sessions, MCP, ACP, and model-authored Agents.
 ---
 
-karcarthy is a homoiconic agent harness.
+karcarthy is a small agent harness for Clojure. It runs model-backed Agents,
+executes their Tools, streams their output, and returns a structured record of
+each Run.
 
-In Lisp, code is data. karcarthy applies that property to the harness itself:
-an Agent is an executable Clojure value that retains the Clojure form that
-created it. The same form can be written by a developer, inspected as data,
-rewritten by a program, emitted by a model, macroexpanded, evaluated, and run.
+Agents and Tools are ordinary Clojure values. Define them in a namespace, run
+them from a REPL or an application, and use normal Clojure when you need to
+compose them. The library namespace is `karcarthy`.
 
-That identity is the motivation for karcarthy. It makes a new capability
-possible without introducing a second orchestration language: the Agent
-definition itself can be exposed as a Tool.
-
-Most agent harnesses give a model a fixed set of capabilities. The application
-chooses the model, prompt, Tools, and control flow; the model decides which of
-those Tools to call.
-
-That works until the useful structure is not known in advance. A research task
-might need three independent investigators. A code change might need a
-security reviewer only after the first inspection finds an authentication
-boundary. A support request might reveal a specialist that was not worth
-hard-coding into every run.
-
-The usual answer is to add another representation: a planner emits a JSON
-graph, a workflow schema, or a list of roles, and the harness interprets it.
-Now human-authored agents and model-authored workflows are different things
-with different limits.
-
-karcarthy uses homoiconicity to make the Agent definition itself callable.
-
-## From homoiconicity to the `agent` Tool
-
-The form that defines an Agent is data in the same language that executes it.
-karcarthy uses that same `agent` form in two places:
+## Define and run an Agent
 
 ```clojure
-;; A developer constructs an Agent value.
-(k/agent
- {:name "reviewer"
-  :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Review the proposed change."
-  :output string?})
+(ns example
+  (:require [karcarthy :as k]))
 
-;; A developer gives a model the ability to construct an Agent.
-(k/agent)
+(k/defagent assistant
+  {:model {:transport :responses
+           :id "gpt-5.6"}
+   :instructions "Answer clearly and concisely."
+   :output string?})
+
+(def run
+  (k/run! assistant "Explain continuation-passing style."))
+
+(:output run)
+(select-keys run [:status :usage])
 ```
 
-The first expression returns an executable Agent. The zero-argument expression
-returns a Tool named `agent`.
+That is the basic programming model: `agent` constructs an Agent, `defagent`
+gives one a name, and `run!` starts a Run. A model-backed Agent uses karcarthy's
+model and Tool loop; an Agent can also have a Clojure body when its coordination
+should be deterministic.
 
-Give that Tool to a model-backed Agent:
+The [Quickstart](/docs/quickstart) covers installation, a typed Tool, REPL use,
+conversation history, and recursive Agent creation.
+
+## What the harness provides
+
+- a streaming model and Tool loop;
+- typed local Tools and provider-hosted Tools;
+- MCP Tool discovery;
+- optional Sessions for conversation history;
+- limits, cancellation, approvals, events, and structured Run results;
+- ACP serving for editors and evaluation systems such as Harbor;
+- an `agent` Tool that lets a model define and run another Agent.
+
+karcarthy does not introduce a workflow language. Sequential, conditional, and
+parallel composition use ordinary Clojure and the same `run!` function used for
+any other Agent.
+
+## Agents can be Tools
+
+Known Agents can be exposed to a model with `as-tool`. karcarthy also provides a
+zero-argument `(agent)` form that creates a model-facing Tool:
 
 ```clojure
 (k/defagent architect
-  {:model {:transport :responses :id "gpt-5.6"}
+  {:model {:transport :responses
+           :id "gpt-5.6"}
    :instructions
-   "Solve the task. Create a focused child Agent when specialization helps."
+   "Complete the task. Create a focused Agent when specialization helps."
    :tools [(k/agent)]
    :output string?})
+
+(k/run! architect "Review this authentication design.")
 ```
 
-The model can make this Tool call:
+When the model calls that Tool, it supplies an `(agent ...)` form and an input.
+karcarthy checks the form, evaluates it as Clojure, verifies that it produced an
+Agent, and runs it inside the current Run. The generated Agent uses the same
+configuration model, execution path, limits, and events as one written by a
+developer.
 
-```json
-{
-  "source": "(agent {:name \"security-reviewer\" :model ...})",
-  "input": {"change": "..."}
-}
-```
+Read [Agents](/docs/agents) for Agent configuration, Clojure composition,
+Agents as Tools, generated Agents, and recursive use.
 
-karcarthy reads the form, macroexpands and checks it, evaluates it, verifies
-that it produced an Agent, and runs it:
+## Why homoiconicity
+
+karcarthy is inspired by Lisp's simplest idea: code is data. An Agent definition
+is both executable Clojure and an inspectable Clojure form. A developer can
+write it, a macro can transform it, or a model can produce it through the
+`agent` Tool without crossing into a separate workflow representation.
 
 ```text
-Tool call → Clojure form → Agent value → nested Agent → Tool result
+developer or model → Clojure form → Agent → Run
 ```
 
-The generated child is not a second-class workflow node. It is the same value
-a developer would create with `agent`, running through the same model loop,
-Tool validation, approvals, limits, cancellation, and event recording.
+Generated Agents retain their source and macroexpanded forms, so experiments
+can inspect and compare the behavior that actually ran. Homoiconicity is the
+reason model-authored orchestration fits the normal programming model; it is
+not another API layered on top of it.
 
-## Homoiconicity is the through-line
-
-The point is larger than generating source code. The representation stays the
-same across the whole lifecycle:
-
-```text
-developer form ─┐
-                ├─→ Clojure form as data ─→ macroexpand ─→ Agent ─→ Run
-model Tool call ┘
-```
-
-Because the intermediate value is an ordinary Clojure form:
-
-- developers and models author the same Agent language;
-- macros can extend that language without changing the harness;
-- `source-form` and `expanded-form` make behavior inspectable;
-- structural transformations can use `clojure.walk` and normal functions;
-- search procedures can mutate Agent programs rather than a separate graph
-  schema;
-- a generated Agent can receive `(agent)` and repeat the process recursively.
-
-The Tool boundary is serialized, so a model submits the form as a string. The
-harness immediately reads it back into Clojure data, expands it, checks it,
-evaluates it, and runs the resulting Agent.
-
-## Why this is useful
-
-### The model can choose structure
-
-A parent may create one specialist, a parallel review team, or a deterministic
-Clojure coordinator. The useful decomposition can depend on evidence found
-during the run rather than on a graph fixed before the run starts.
-
-### Authored and generated Agents share one abstraction
-
-Known specialists can be exposed with `as-tool`. New specialists can be
-created with the `agent` Tool. Clojure code uses the same `run!` function for
-every Agent it runs.
-
-### Generated behavior stays inspectable
-
-Agents retain their source and macroexpanded forms. Runs record the exact
-generated source, compilation phases, model calls, Tool calls, child lineage,
-usage, output, and failures. An experiment can compare behavior without
-inventing another workflow format.
-
-### Clojure remains the composition language
-
-An Agent may have a normal Clojure body:
-
-```clojure
-(k/defagent review-team
-  {:input map?
-   :output string?}
-  [change]
-  (let [reviews [(:output (k/run! security-reviewer change))
-                 (:output (k/run! api-reviewer change))]]
-    (:output (k/run! editor {:change change :reviews reviews}))))
-```
-
-The model can author the same form. `let`, `if`, functions, macros, and
-`loop/recur` already express the control flow; `run!` is the only operation
-needed to run an Agent.
-
-## The programming model
-
-| Value | Role |
-| --- | --- |
-| Agent | Model-backed loop or Clojure body with input/output contracts. |
-| Tool | Model-callable capability with contracts and approval policy. |
-| Run | One root Agent call with output, usage, events, and failure data. |
-| Session | Optional conversation history across root Runs. |
-
-The everyday entry points are:
-
-```clojure
-(k/agent config)       ; construct an Agent value
-(k/defagent name ...)  ; define that value in a var
-(k/agent)              ; construct the model-facing Agent Tool
-(k/run! agent input)   ; start a root Run
-```
-
-The practical `agent`/`defagent` relationship is like `fn`/`defn`: expression
-versus named definition. `defagent` does not create a different Agent type.
-
-## What is included
-
-- a streaming model/Tool loop;
-- typed local Tools and provider-hosted Tools;
-- recursive Agent creation with shared limits;
-- optional conversation Sessions;
-- source retention and generated-Agent evaluation;
-- MCP Tool discovery over stdio;
-- ACP serving for editors and evaluation systems such as Harbor.
+## Continue
 
 <Cards>
   <Card title="Quickstart" href="/docs/quickstart" />
   <Card title="Agents" href="/docs/agents" />
-  <Card title="Running agents" href="/docs/running-agents" />
-  <Card title="Streaming and events" href="/docs/streaming" />
   <Card title="Integrations" href="/docs/integrations" />
+  <Card title="Library API" href="/docs/reference/api" />
 </Cards>
-
-Start with the [Quickstart](/docs/quickstart). Read [Agents](/docs/agents) for
-the full recursive model and [Running agents](/docs/running-agents) for
-`run!`, results, limits, and cancellation.
