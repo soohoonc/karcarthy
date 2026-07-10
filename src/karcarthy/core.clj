@@ -4,7 +4,8 @@
   (:refer-clojure :exclude [agent await run!])
   (:require [clojure.data.json :as json]
             [clojure.spec.alpha :as s]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [karcarthy.session :as session])
   (:import [java.util UUID]
            [java.util.concurrent Callable ExecutionException Executors Future
             Semaphore TimeUnit TimeoutException]))
@@ -199,10 +200,8 @@
 ;; ---------------------------------------------------------------------------
 
 (def ^:private agent-config-keys
-  #{:name :description :model :context :environment :input :tools :output
-    :output-schema :loop :guardrails :limits :hooks :metadata})
-
-(def ^:private loop-config-keys #{:max-turns :stop?})
+  #{:name :description :model :instructions :context :input :tools :output
+    :output-schema :max-turns :stop-when :guardrails :limits :metadata})
 
 (def ^:private tool-config-keys
   #{:name :description :input :input-schema :output :output-schema :approval
@@ -225,18 +224,13 @@
      (fail! :contract :configuration "Agent configuration must be a map"
             {:value config}))
    (reject-unknown! "Agent" agent-config-keys config)
-   (when-let [loop-config (:loop config)]
-     (when-not (map? loop-config)
-       (fail! :contract :configuration "Agent :loop must be a map"
-              {:value loop-config}))
-     (reject-unknown! "Agent :loop" loop-config-keys loop-config))
    (when-not (and (string? (:name config)) (seq (:name config)))
      (fail! :contract :configuration "Agent :name must be a non-empty string"
             {:config config}))
    (when (and (nil? program)
-              (or (nil? (:model config)) (nil? (:context config))))
+              (or (nil? (:model config)) (nil? (:instructions config))))
      (fail! :contract :configuration
-            "A model-backed Agent requires :model and :context"
+            "A model-backed Agent requires :model and :instructions"
             {:name (:name config)}))
    {:karcarthy/type :agent
     :name (:name config)
@@ -422,10 +416,10 @@
    :deadline-ms nil})
 
 (def ^:private run-option-keys
-  #{:environment :state :limits :observe :approval :cancel :metadata
+  #{:context :session :limits :observe :approval :cancel :metadata
     :model-transports :evaluation-namespace})
 
-(def ^:private invocation-option-keys #{:environment :limits})
+(def ^:private invocation-option-keys #{:context :limits})
 
 (defn- validate-limits!
   [limits]
@@ -455,10 +449,10 @@
 (defn- id [prefix]
   (str prefix (UUID/randomUUID)))
 
-(defn environment
-  "Return the local, non-model-visible dependency value for a Runtime."
+(defn context
+  "Return the local, non-model-visible context value for a Runtime."
   [rt]
-  (:environment rt))
+  (:context rt))
 
 (defn runtime-view
   "Public, immutable view passed to resolver functions."
@@ -468,13 +462,13 @@
    :agent-id (:agent-id rt)
    :parent-id (:parent-id rt)
    :depth (:depth rt)
-   :environment (:environment rt)
+   :context (:context rt)
    :limits (:limits rt)
    :usage @(:usage rt)
    :agent (:agent rt)})
 
 (defn emit!
-  "Record one observation event and notify the run observer and Agent hooks."
+  "Record one observation event and notify the run observer."
   [rt event]
   (let [event (merge {:karcarthy/type :event
                       :time-ms (System/currentTimeMillis)
@@ -482,8 +476,7 @@
                      (select-keys rt [:agent-id :parent-id :depth])
                      event)]
     (swap! (:events rt) conj event)
-    (doseq [observer (concat (when-let [f (:observe rt)] [f])
-                             (get-in rt [:agent :config :hooks]))]
+    (doseq [observer (when-let [f (:observe rt)] [f])]
       (try (observer event) (catch Throwable _ nil)))
     event))
 
@@ -551,30 +544,13 @@
 ;; Model transport
 ;; ---------------------------------------------------------------------------
 
-(defn model-transport
-  "Construct a narrow model-I/O transport.
-
-  A function is a non-streaming `complete` implementation. A map may provide
-  `:complete` and/or `:stream`; stream receives `[request emit-delta!]` and
-  returns the same authoritative final response as complete."
-  [implementation]
-  (let [{:keys [complete stream]}
-        (if (fn? implementation)
-          {:complete implementation}
-          implementation)]
-    (when-not (or (fn? implementation)
-                  (and (map? implementation)
-                       (or (fn? complete) (fn? stream))))
-      (throw (IllegalArgumentException.
-              "model transport requires a function or {:complete f :stream f}")))
-    {:karcarthy/type :model-transport
-     :complete complete
-     :stream stream}))
-
 (defn fake-model
   "Deterministic in-process model transport for tests and examples."
   [respond]
-  (model-transport respond))
+  (when-not (fn? respond)
+    (throw (IllegalArgumentException. "fake-model requires a function")))
+  {:karcarthy/type :model-transport
+   :complete respond})
 
 (defn- resolve-value [value rt]
   (if (fn? value) (value (runtime-view rt)) value))
@@ -847,116 +823,90 @@
          (catch Throwable _ output))
     output))
 
-(defn conversation-state?
-  "Return true for a provider-neutral, persistable root conversation snapshot."
-  [value]
-  (and (map? value)
-       (= :conversation-state (:karcarthy/type value))
-       (= 1 (:version value))
-       (vector? (:messages value))
-       (or (nil? (:provider-state value))
-           (map? (:provider-state value)))
-       (map? (:model value))))
+(def ^:private message-roles #{:system :user :assistant :tool})
 
-(def ^:private context-output-keys #{:system :messages})
+(defn- valid-message? [message]
+  (and (map? message)
+       (contains? message-roles (:role message))))
 
-(defn- assemble-context
-  [rt agent context-spec {:keys [pending] :as turn-context}]
-  (let [view (assoc turn-context
-                    :runtime (runtime-view rt)
-                    :environment (:environment rt)
-                    :agent agent)
-        value (try
-                (if (fn? context-spec) (context-spec view) context-spec)
-                (catch clojure.lang.ExceptionInfo error
-                  (if (= :failure (:karcarthy/type (ex-data error)))
-                    (throw error)
-                    (fail! :context :assembly
-                           (or (ex-message error) "Context assembly failed")
-                           nil error)))
-                (catch Throwable error
-                  (fail! :context :assembly
-                         (or (ex-message error) "Context assembly failed")
-                         nil error)))
-        assembled
-        (cond
-          (string? value) {:system value :messages pending}
-          (map? value) (do
-                         (reject-unknown! "Model context"
-                                          context-output-keys value)
-                         (merge {:messages pending} value))
-          :else
-          (fail! :context :assembly
-                 "Agent :context must resolve to a string or context map"
-                 {:value value}))]
-    (when-not (or (nil? (:system assembled))
-                  (string? (:system assembled)))
-      (fail! :context :assembly
-             "Model context :system must be a string or nil"
-             {:value (:system assembled)}))
-    (when-not (sequential? (:messages assembled))
-      (fail! :context :assembly
-             "Model context :messages must be a sequence"
-             {:value (:messages assembled)}))
-    (update assembled :messages vec)))
+(defn- session-items! [active-session]
+  (if-not active-session
+    []
+    (let [items (try
+                  (session/get-items active-session)
+                  (catch Throwable error
+                    (fail! :session :read
+                           (or (ex-message error) "Session read failed")
+                           nil error)))]
+      (when-not (sequential? items)
+        (fail! :session :read "Session items must be sequential"
+               {:value items}))
+      (doseq [item items]
+        (when-not (valid-message? item)
+          (fail! :session :read "Session contains an invalid message"
+                 {:value item})))
+      (vec items))))
 
-(defn- model-identity [model]
-  (cond-> {:id (:id model)
-           :transport (if (keyword? (:transport model))
-                        (:transport model)
-                        :custom)}
-    (:provider model) (assoc :provider (:provider model))))
+(defn- append-session-items! [rt items]
+  (let [items (vec items)]
+    (when (and (:session rt) (seq items))
+      (try
+        (session/add-items! (:session rt) items)
+        (catch Throwable error
+          (fail! :session :write
+                 (or (ex-message error) "Session write failed")
+                 nil error)))
+      (emit! rt {:type :session/updated
+                 :session-id (session/session-id (:session rt))
+                 :items (count items)})))
+  nil)
 
-(defn- conversation-snapshot [model messages provider-state]
-  {:karcarthy/type :conversation-state
-   :version 1
-   :model (model-identity model)
-   :messages (vec messages)
-   :provider-state provider-state})
-
-(defn- checkpoint-conversation! [rt state]
-  (reset! (:conversation-state rt) state)
-  (emit! rt {:type :state/checkpointed
-             :messages (count (:messages state))
-             :provider-state? (some? (:provider-state state))})
-  state)
+(defn- instructions! [rt value]
+  (let [resolved
+        (try
+          (resolve-value value rt)
+          (catch clojure.lang.ExceptionInfo error
+            (if (= :failure (:karcarthy/type (ex-data error)))
+              (throw error)
+              (fail! :instructions :resolve
+                     (or (ex-message error) "Instructions resolution failed")
+                     nil error)))
+          (catch Throwable error
+            (fail! :instructions :resolve
+                   (or (ex-message error) "Instructions resolution failed")
+                   nil error)))]
+    (when-not (string? resolved)
+      (fail! :instructions :resolve
+             "Agent :instructions must resolve to a string"
+             {:value resolved}))
+    resolved))
 
 (defn- default-loop!
   [rt agent input]
   (let [config (:config agent)
-        loop-config (:loop config)
-        max-turns (or (:max-turns loop-config) 20)
+        max-turns (or (:max-turns config) 20)
         tools-value (:tools config)
         tools (vec (or (resolve-value tools-value rt) []))
         tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
-        context-spec (:context config)
+        instructions (instructions! rt (:instructions config))
         model (resolve-value (:model config) rt)
-        identity (model-identity model)
-        saved @(:conversation-state rt)
-        saved-provider-state (when (= identity (:model saved))
-                               (:provider-state saved))
-        prior (vec (or (:messages saved) []))
+        prior (session-items! (:session rt))
         user-message {:role :user :content input}
-        messages (conj prior user-message)
-        pending (if saved-provider-state [user-message] messages)]
+        messages (conj prior user-message)]
     (loop [turn 1
            messages messages
-           pending pending
-           provider-state saved-provider-state]
+           pending messages
+           provider-state nil
+           unpersisted [user-message]]
       (check-runtime! rt)
       (when (> turn max-turns)
         (fail! :budget :model-loop "Agent exceeded :max-turns"
                {:agent (:name agent) :max-turns max-turns}))
-      (let [model-context
-            (assemble-context rt agent context-spec
-                              {:history messages
-                               :pending pending
-                               :state provider-state
-                               :turn turn})
-            request {:agent agent
+      (let [request {:agent agent
                      :model model
-                     :context model-context
-                     :state provider-state
+                     :instructions instructions
+                     :messages pending
+                     :provider-state provider-state
                      :tools (mapv tool-descriptor tools)
                      :output-schema (or (:output-schema config)
                                         (contract->json-schema
@@ -966,17 +916,15 @@
         (case (:type response)
           :final
           (let [output (maybe-json-output (:output response) (:output config))]
-            (when-let [stop? (:stop? loop-config)]
-              (when-not (stop? (runtime-view rt)
-                               {:response response :messages messages})
+            (when-let [stop-when (:stop-when config)]
+              (when-not (stop-when (runtime-view rt)
+                                   {:response response :messages messages})
                 (fail! :model :stop-condition
                        "Model returned final output before the stop condition"
                        {:agent (:name agent)})))
-            (reset! (:pending-conversation-state rt)
-                    (conversation-snapshot
-                     model
-                     (conj messages {:role :assistant :content output})
-                     (:state response)))
+            (reset! (:pending-session-items rt)
+                    (conj (vec unpersisted)
+                          {:role :assistant :content output}))
             output)
 
           :tool-calls
@@ -997,15 +945,15 @@
                          :tool-call-id id
                          :name name
                          :content model-output})
-                      results)]
-            (let [messages (into messages
-                                 (cons assistant-message result-messages))]
-              (checkpoint-conversation!
-               rt (conversation-snapshot model messages (:state response)))
+                      results)
+                new-items (into [assistant-message] result-messages)]
+            (let [messages (into messages new-items)]
+              (append-session-items! rt (into (vec unpersisted) new-items))
               (recur (inc turn)
                      messages
                      result-messages
-                     (:state response))))
+                     (:provider-state response)
+                     [])))
 
           (fail! :model :response "Unsupported model response type"
                  {:response response}))))))
@@ -1035,24 +983,22 @@
               (nil? parent-deadline) local-deadline-ns
               (nil? local-deadline-ns) parent-deadline
               :else (min parent-deadline local-deadline-ns)))
-          conversation-state (if (zero? depth)
-                               (:root-state parent-rt)
-                               (atom nil))
+          active-session (when (zero? depth) (:root-session parent-rt))
           rt (assoc parent-rt
                     :agent-id (id "agent_")
                     :parent-id (:agent-id parent-rt)
                     :depth depth
                     :agent agent
-                    :environment (if (contains? options :environment)
-                                   (:environment options)
-                                   (:environment parent-rt))
-                    :conversation-state conversation-state
-                    :pending-conversation-state (atom nil)
+                    :context (if (contains? options :context)
+                               (:context options)
+                               (:context parent-rt))
+                    :session active-session
+                    :pending-session-items (atom nil)
                     :limits limits
                     :deadline-ns deadline-ns)
           config (:config agent)
           started (System/nanoTime)]
-      (check-contract! :environment (:environment config) (:environment rt))
+      (check-contract! :context (:context config) (:context rt))
       (check-contract! :agent-input (:input config) input)
       (run-guardrails! rt :agent-input
                        (get-in config [:guardrails :input]) input)
@@ -1066,8 +1012,8 @@
           (check-contract! :agent-output (:output config) output)
           (run-guardrails! rt :agent-output
                            (get-in config [:guardrails :output]) output)
-          (when-let [state @(:pending-conversation-state rt)]
-            (checkpoint-conversation! rt state))
+          (when-let [items @(:pending-session-items rt)]
+            (append-session-items! rt items))
           (emit! rt {:type :agent/completed :agent (:name agent)
                      :duration-ms (/ (double (- (System/nanoTime) started)) 1000000.0)
                      :output output})
@@ -1099,16 +1045,12 @@
    (check-runtime! rt)
    (submit-limited! rt #(invoke! rt agent input options))))
 
-(defn handoff!
-  "Transfer control to another Agent while retaining Runtime lineage."
-  [rt agent input]
-  (emit! rt {:type :agent/handoff
-             :from (get-in rt [:agent :name])
-             :to (:name agent)})
-  (invoke! rt agent input))
-
 (defn as-tool
-  "Project an Agent as a Tool while the parent remains active."
+  "Project an Agent as a Tool while the parent remains active.
+
+  Options may override `:name`, `:description`, `:input`, `:output`, and
+  `:approval`. A `:context` function receives `[parent-context tool-input]`
+  and returns the local context for the child invocation."
   ([agent] (as-tool agent {}))
   ([agent options]
    (when-not (agent? agent)
@@ -1127,9 +1069,9 @@
                 (fn [rt input]
                   (invoke! rt agent input
                            (cond-> {}
-                             (:environment options)
-                             (assoc :environment ((:environment options)
-                                                  (environment rt) input)))))))))
+                             (:context options)
+                             (assoc :context ((:context options)
+                                              (context rt) input)))))))))
 
 (defn run!
   "Create a root Runtime, execute an Agent, and return a complete Run record."
@@ -1138,11 +1080,11 @@
   ([agent input options]
    (let [options (or options {})
          _ (reject-unknown! "Run options" run-option-keys options)
-         _ (when (and (some? (:state options))
-                      (not (conversation-state? (:state options))))
-             (fail! :contract :state
-                    "Run :state must be a conversation state returned by run!"
-                    {:value (:state options)}))
+         _ (when (and (some? (:session options))
+                      (not (session/session? (:session options))))
+             (fail! :contract :session
+                    "Run :session must implement karcarthy.session/Session"
+                    {:value (:session options)}))
          limits (validate-limits! (merge default-limits (:limits options)))
          executor (Executors/newVirtualThreadPerTaskExecutor)
          events* (atom [])
@@ -1151,7 +1093,6 @@
                        :output-tokens 0
                        :generated-forms 0})
          run-id (id "run_")
-         state* (atom (:state options))
          started (System/nanoTime)
          deadline-ns (when-let [ms (:deadline-ms limits)]
                        (+ started (* 1000000 (long ms))))
@@ -1161,11 +1102,11 @@
              :parent-id nil
              :depth -1
              :agent nil
-             :environment (:environment options)
+             :context (:context options)
              :limits limits
              :usage usage*
              :events events*
-             :root-state state*
+             :root-session (:session options)
              :observe (:observe options)
              :approval (:approval options)
              :approvals (atom #{})
@@ -1192,8 +1133,6 @@
                      :usage (assoc @usage*
                                    :duration-ms
                                    (/ (double (- (System/nanoTime) started)) 1000000.0))
-                     :trace-id run-id
-                     :state @state*
                      :events @events*
                      :error nil}]
          (emit! rt {:type :run/completed :agent (:name agent)
@@ -1210,8 +1149,6 @@
                        :usage (assoc @usage*
                                      :duration-ms
                                      (/ (double (- (System/nanoTime) started)) 1000000.0))
-                       :trace-id run-id
-                       :state @state*
                        :error (throwable->failure t)}]
            (emit! rt {:type (if cancelled? :run/cancelled :run/failed)
                       :agent (:name agent) :error (:error result)})

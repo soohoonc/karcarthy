@@ -15,7 +15,7 @@ orchestration are executable Clojure values and forms.
 
 (k/defagent researcher
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Research carefully and cite evidence."
+   :instructions "Research carefully and cite evidence."
    :tools [web-search]
    :output ::report})
 
@@ -38,7 +38,7 @@ explicitly:
 ```clojure
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Design and run the smallest useful child Agent."
+   :instructions "Design and run the smallest useful child Agent."
    :tools [(k/agent)]})
 ```
 
@@ -57,10 +57,10 @@ generated, evaluated, diffed, and studied with ordinary Clojure.
 
 This is useful for engineering and research:
 
-- applications get typed tools, model-visible context, local environments,
-  explicit conversation state, streaming, approvals, limits, cancellation,
+- applications get typed tools, dynamic instructions, local context, optional
+  Sessions, streaming, approvals, limits, cancellation,
   and observable child agents;
-- experiments get exact program forms, model/tool traces, token usage, latency,
+- experiments get exact program forms, model/Tool events, token usage, latency,
   lineage, and failures;
 - optimizers can search over actual Clojure programs rather than a closed
   workflow grammar;
@@ -76,16 +76,16 @@ This is useful for engineering and research:
 - `compile-agent!`
 - `emit!`
 
-Conveniences such as `spawn!`, `await-all!`, `as-tool`, and `handoff!` build on
-those primitives. A model provider is a narrow model-I/O transport; it does not
-own tools or orchestration and is not a Runner.
+Conveniences such as `spawn!`, `await-all!`, and `as-tool` build on those
+primitives. A model provider is narrow model I/O; it does not own tools or
+orchestration and is not a Runner.
 
 ## Minimal local tools
 
 Following Pi's small-kernel design, karcarthy provides five orthogonal local
 tools—`read`, `write`, `edit`, `bash`, and `search`. The readable base prompt
 lives in [`resources/karcarthy/system.md`](resources/karcarthy/system.md).
-`prompt`, `prompt-file`, and `system-prompt` compose ordinary model context;
+`prompt`, `prompt-file`, and `system-prompt` compose ordinary instructions;
 there is no directory-specific prompt builder or special coding Agent.
 
 ```clojure
@@ -97,9 +97,9 @@ there is no directory-specific prompt builder or special coding Agent.
   (k/agent
    {:name "coder"
     :model {:transport :responses :id "gpt-5.6"}
-    :context (k/prompt
-              (k/system-prompt)
-              "Follow the repository instructions supplied by the caller.")
+    :instructions (k/prompt
+                   (k/system-prompt)
+                   "Follow the repository instructions supplied by the caller.")
     :tools tools
     :output string?}))
 
@@ -111,12 +111,20 @@ or care whether a function tool was authored locally or discovered from an MCP
 server. The ACP server exposes an Agent or per-session Agent factory to editors
 and evaluation clients such as Harbor.
 
-Agent `:context` is either a system-prompt string or a turn function returning
-the provider-neutral shape `{:system ... :messages [...]}`. Local handles,
-credentials, and user metadata are passed separately as `:environment` and are
-never shown to the model automatically. A completed Run returns `:state`; pass
-that plain-data snapshot into the next `run!` call to continue a conversation.
-Applications decide whether and where to persist it.
+Agent `:instructions` is either a string or a function of the Runtime view.
+Local handles, credentials, and user metadata are passed separately as
+`:context` and are never shown to the model automatically. Runs are stateless
+unless the caller supplies a `Session`:
+
+```clojure
+(def session (k/memory-session))
+(k/run! coder "Inspect the failure." {:session session})
+(k/run! coder "Now fix it." {:session session})
+```
+
+`memory-session` is process-local. Applications that need durability implement
+the small `karcarthy.session/Session` protocol with their own database or
+storage layer.
 
 Streaming transports emit normalized text and tool-call deltas. `run!` exposes
 them through `:observe`, and the ACP server forwards text deltas immediately as
@@ -136,8 +144,8 @@ ID can target a compatible gateway without adding a provider implementation:
 
 ## Status
 
-The native kernel, context/environment split, explicit conversation state,
-streaming model/tool loop, local tools, structured child execution,
+The native kernel, instructions/context split, explicit Sessions, streaming
+model/tool loop, local tools, structured child execution,
 generated-form evaluation, Responses-compatible HTTP/SSE transport, hosted
 web search, stdio MCP client, and ACP v1 server are implemented. The former
 Runner/EDN workflow implementation and JSON workflow bridge have been removed.

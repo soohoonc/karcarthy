@@ -39,7 +39,7 @@ its input and output boundaries:
    :input ::search-input
    :output ::search-output}
   [rt {:keys [query]}]
-  (search! (:http (k/environment rt)) query))
+  (search! (:http (k/context rt)) query))
 ```
 
 The harness validates tool arguments before execution and validates the return
@@ -61,15 +61,15 @@ sees.
    :model {:transport :responses
            :id "gpt-5.6"
            :reasoning :high}
-   :context
-   (fn [{:keys [environment]}]
-     (str "Research carefully for user " (:user-id environment)
+   :instructions
+   (fn [{:keys [context]}]
+     (str "Research carefully for user " (:user-id context)
           ". Distinguish evidence from inference."))
-   :environment map?
+   :context map?
    :input ::request
    :tools [web-search]
    :output ::report
-   :loop {:max-turns 20}})
+   :max-turns 20})
 ```
 
 With no body after the configuration map, `defagent` installs the standard
@@ -92,8 +92,8 @@ gateway, keep the Agent unchanged and configure its model boundary:
 (def run
   (k/run! researcher
           {:question "What makes Lisp homoiconic?"}
-          {:environment {:user-id "u_123"
-                         :http http-client}
+          {:context {:user-id "u_123"
+                     :http http-client}
            :limits {:model-calls 20
                     :deadline-ms 120000}
            :observe println}))
@@ -103,16 +103,21 @@ gateway, keep the Agent unchanged and configure its model boundary:
 ```
 
 `run!` returns the complete run record. Tools and parent programs normally use
-`invoke!`, which returns the child output while attaching the child's run to
-the same trace tree.
+`invoke!`, which returns the child output while recording the child in the same
+Run's event tree.
 
-To continue the same model conversation later, persist the plain-data snapshot
-and pass it back explicitly:
+To continue the same model conversation, supply a Session to each Run:
 
 ```clojure
+(def session (k/memory-session))
+(def first-run
+  (k/run! researcher request {:session session}))
 (def next-run
-  (k/run! researcher next-request {:state (:state run)}))
+  (k/run! researcher next-request {:session session}))
 ```
+
+`memory-session` is process-local. Durable applications implement
+`karcarthy.session/Session` with their normal storage.
 
 ## Add local tools
 
@@ -130,7 +135,7 @@ prompt explicitly:
     :model {:transport :responses
             :id "gpt-5.6"
             :reasoning :high}
-    :context
+    :instructions
     (k/prompt
      (k/system-prompt)
      (k/prompt-file "/workspace/project/AGENTS.md"))
@@ -165,7 +170,7 @@ MCP is an adapter into ordinary Tools:
         coder (k/agent
                {:name "coder"
                 :model {:transport :responses :id "gpt-5.6"}
-                :context
+                :instructions
                 (k/prompt
                  (k/system-prompt)
                  (k/prompt-file "/workspace/project/AGENTS.md"))
@@ -191,7 +196,7 @@ session:
     (k/agent
      {:name "local-agent"
       :model {:transport :responses :id "gpt-5.6"}
-      :context (k/system-prompt)
+      :instructions (k/system-prompt)
       :tools tools
       :output string?})))
 ```
@@ -230,14 +235,14 @@ Add the expansion capability to its tool set:
 ```clojure
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Design and run the smallest useful child Agent."
+   :instructions "Design and run the smallest useful child Agent."
    :tools [(k/agent)]})
 ```
 
 The same `agent` form is both constructor and capability. With a config it
 constructs an Agent; with no arguments it returns the model-facing `agent`
 Tool. That Tool accepts `{:source <one agent form> :input <value>}` and reads,
-expands, checks, evaluates, and invokes the child inside the same trace and
+expands, checks, evaluates, and invokes the child inside the same Run and
 budgets.
 
 The source may contain a normal agent form with arbitrary Clojure control

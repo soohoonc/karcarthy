@@ -17,8 +17,8 @@
                        :verbosity :low
                        :parallel-tool-calls false
                        :temperature 0.2}
-               :context {:system "help"
-                         :messages [{:role :user :content {:question "hi"}}]}
+               :instructions "help"
+               :messages [{:role :user :content {:question "hi"}}]
                :tools [{:kind :function
                         :name "lookup"
                         :description "Look up a value."
@@ -38,11 +38,11 @@
 (deftest lowers-function-results-with-response-state
   (let [body (responses/request
               {:model {:id "gpt-5.6"}
-               :state {:previous-response-id "resp_1"}
-               :context {:system "help"
-                         :messages [{:role :tool
-                                    :tool-call-id "call_1"
-                                    :content {:value 3}}]}
+               :provider-state {:previous-response-id "resp_1"}
+               :instructions "help"
+               :messages [{:role :tool
+                           :tool-call-id "call_1"
+                           :content {:value 3}}]
                :tools []})]
     (is (= "resp_1" (:previous_response_id body)))
     (is (= "function_call_output" (get-in body [:input 0 :type])))
@@ -52,15 +52,14 @@
 (deftest lowers-hosted-tools-and-replayed-tool-call-history
   (let [body (responses/request
               {:model {:id "gpt-5.6"}
-               :context
-               {:system "help"
-                :messages [{:role :assistant
-                            :tool-calls [{:id "call_1"
-                                          :name "lookup"
-                                          :input {:id "a"}}]}
-                        {:role :tool
-                         :tool-call-id "call_1"
-                         :content {:value 3}}]}
+               :instructions "help"
+               :messages [{:role :assistant
+                           :tool-calls [{:id "call_1"
+                                         :name "lookup"
+                                         :input {:id "a"}}]}
+                          {:role :tool
+                           :tool-call-id "call_1"
+                           :content {:value 3}}]
                :tools [{:kind :hosted
                         :transport :responses
                         :spec {:type "web_search"
@@ -76,8 +75,8 @@
        clojure.lang.ExceptionInfo #"different transport"
        (responses/request
         {:model {:id "model"}
-         :context {:system "help"
-                   :messages [{:role :user :content "hello"}]}
+         :instructions "help"
+         :messages [{:role :user :content "hello"}]
          :tools [{:kind :hosted
                   :transport :another-transport
                   :spec {:type "special"}}]}))))
@@ -85,8 +84,8 @@
 (deftest primitive-output-contracts-are-validated-locally
   (let [body (responses/request
               {:model {:id "gpt-5.6"}
-               :context {:system "Return text."
-                         :messages [{:role :user :content "hello"}]}
+               :instructions "Return text."
+               :messages [{:role :user :content "hello"}]
                :tools []
                :output-schema {:type "string"}})]
     (is (nil? (:text body)))))
@@ -104,7 +103,7 @@
     (is (= :tool-calls (:type response)))
     (is (= [{:id "call_1" :name "lookup" :input {:id "a"}}]
            (:calls response)))
-    (is (= {:previous-response-id "resp_1"} (:state response)))
+    (is (= {:previous-response-id "resp_1"} (:provider-state response)))
     (is (= 5 (get-in response [:usage :input-tokens])))))
 
 (deftest normalizes-final-text
@@ -179,8 +178,8 @@
                       :base-url (str "http://127.0.0.1:" port "/v1")
                       :api-key "test-key"
                       :headers {"X-Gateway" "karcarthy-test"}}
-              :context {:system "Answer briefly."
-                        :messages [{:role :user :content "hello"}]}
+              :instructions "Answer briefly."
+              :messages [{:role :user :content "hello"}]
               :tools []})
             request (deref seen 5000 ::timeout)]
         (is (= :final (:type result)))
@@ -233,8 +232,8 @@
                       :id "stream-model"
                       :base-url (str "http://127.0.0.1:" port "/v1")
                       :auth? false}
-              :context {:system "Answer."
-                        :messages [{:role :user :content "hello"}]}
+              :instructions "Answer."
+              :messages [{:role :user :content "hello"}]
               :tools []}
              #(swap! deltas conj %))
             request (deref seen 5000 ::timeout)]

@@ -26,8 +26,9 @@ cd docs && npm run lint && npm run types:check && npm run build
 | File | Role |
 | --- | --- |
 | `src/karcarthy.clj` | Public facade under one alias: `(require '[karcarthy :as k])`. |
-| `src/karcarthy/core.clj` | Recursive Agent/Tool macros and values, contracts, context assembly, Runtime, model/tool loop, conversation state, child execution, limits, streaming events, approvals, and Runs. |
-| `src/karcarthy/context.clj` | Generic prompt composition, prompt-file loading, and access to the packaged `system.md`. |
+| `src/karcarthy/core.clj` | Recursive Agent/Tool macros and values, contracts, Runtime, model/tool loop, Session integration, child execution, limits, streaming events, approvals, and Runs. |
+| `src/karcarthy/prompt.clj` | Generic instruction composition, prompt-file loading, and access to the packaged `system.md`. |
+| `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `memory-session`. |
 | `src/karcarthy/eval.clj` | Model-authored source reading, macroexpansion, evaluation, verification, and program events. |
 | `src/karcarthy/model/responses.clj` | Complete and SSE-streaming Responses-compatible HTTP transport. It translates model I/O only. |
 | `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a local directory. |
@@ -36,7 +37,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
 | `src/karcarthy/demo.clj` | Offline fake-model/tool-loop demonstration. |
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
-| `test/karcarthy/core_test.clj` | Kernel, model loop, context/environment, conversation state, streaming, composition, limits, and events. |
+| `test/karcarthy/core_test.clj` | Kernel, model loop, instructions/context, Sessions, streaming, composition, limits, and events. |
 | `test/karcarthy/eval_test.clj` | Generated-form lifecycle and recursion. |
 | `test/karcarthy/responses_test.clj` | Pure translation plus offline complete and SSE endpoint integration tests. |
 | `test/karcarthy/tools_test.clj` | Local tools and generic prompt composition. |
@@ -49,7 +50,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 - **The harness owns semantics.** A model transport accepts one normalized
   request and returns `{:type :final ...}` or `{:type :tool-calls ...}`. A
   streaming transport may emit deltas before returning that authoritative
-  response. It never executes tools, manages agents, or owns state.
+  response. It never executes tools, manages agents, or owns Sessions.
 - **Keep the inner loop small.** Coding capabilities, hosted provider tools,
   MCP discovery, and ACP serving adapt to ordinary Tools around the kernel.
   Prompts must describe the capabilities actually installed.
@@ -60,12 +61,15 @@ cd docs && npm run lint && npm run types:check && npm run build
 - **`agent` is recursive.** `(agent config ...)` constructs an Agent;
   zero-arity `(agent)` is the model-facing tool that accepts and runs another
   ordinary Agent form. Do not create a separate dynamic/expansion primitive.
-- **Context is model-visible.** Its normalized shape is `{:system string-or-nil
-  :messages [...]}`. Local dependencies belong in `:environment` and are never
-  exposed automatically. Do not add request-mutation hooks like `prepare-step`.
-- **State is data.** Root conversation snapshots enter through the `:state`
-  run option and leave on the Run. Storage belongs outside the kernel.
-- **Contracts fail closed.** Validate environment, Agent input/output, and Tool
+- **Instructions are model-visible; context is local.** `:instructions` is a
+  string or Runtime-view function. `:context` is dependency injection and is
+  never exposed automatically. Do not add request-mutation hooks such as
+  `prepare-step`.
+- **Conversation history belongs to a Session.** Runs are stateless unless the
+  caller supplies `:session`. `memory-session` is process-local; durable stores
+  implement `karcarthy.session/Session` outside the kernel. Do not call a
+  conversation store a checkpoint or general workflow state.
+- **Contracts fail closed.** Validate context, Agent input/output, and Tool
   input/output. Model/tool/protocol failures become structured failed Runs.
 - **Generated code is intentionally evaluated.** Reader evaluation is disabled
   during the read phase, but checked forms are later evaluated as JVM Clojure.

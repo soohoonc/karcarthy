@@ -22,8 +22,8 @@ Use `let` when one result feeds another agent:
                           :outline outline})))
 ```
 
-Every `invoke!` creates a child span and enforces the child's input, environment,
-output, budget, and guardrail contracts.
+Every `invoke!` creates a child execution and enforces the child's input,
+context, output, budget, and guardrail contracts.
 
 ## Branching and routing
 
@@ -43,7 +43,7 @@ harness.
 ## Parallel work
 
 `spawn!` creates a child agent execution and `await-all!` joins children while
-preserving cancellation, budgets, and trace lineage:
+preserving cancellation, budgets, and event lineage:
 
 ```clojure
 (let [jobs (for [reviewer reviewers]
@@ -90,7 +90,7 @@ Expose a child agent to a model-backed parent with `as-tool`:
 ```clojure
 (k/defagent support-manager
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Help the user. Delegate specialized work when useful."
+   :instructions "Help the user. Delegate specialized work when useful."
    :tools [(k/as-tool billing-agent
                       {:name "billing"
                        :description "Handle billing questions."})
@@ -99,9 +99,9 @@ Expose a child agent to a model-backed parent with `as-tool`:
                        :description "Evaluate refund requests."})]})
 ```
 
-The manager retains control. `handoff!` records an `:agent/handoff` event and
-invokes the selected child with the same Runtime lineage. Full conversational
-state transfer is still roadmap work.
+The manager retains control. karcarthy does not expose a handoff operation:
+`invoke!` and `as-tool` both return control to the caller. A future handoff API
+must first define real control and Session-history transfer semantics.
 
 ## Generated programs
 

@@ -1,5 +1,5 @@
-(ns karcarthy.context
-  "Small prompt values for constructing model-visible context."
+(ns karcarthy.prompt
+  "Small prompt values for constructing Agent instructions."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -17,14 +17,13 @@
   @packaged-system-prompt)
 
 (defn prompt-file
-  "Read a UTF-8 prompt from a file. The returned string is ordinary Agent
-  context and carries no filesystem or working-directory semantics."
+  "Read a UTF-8 prompt from a file."
   [path]
   (with-open [reader (io/reader (io/file path) :encoding "UTF-8")]
     (slurp reader)))
 
-(defn- resolve-part [part turn]
-  (let [value (if (fn? part) (part turn) part)]
+(defn- resolve-part [part run-context]
+  (let [value (if (fn? part) (part run-context) part)]
     (cond
       (nil? value) nil
       (string? value) value
@@ -32,13 +31,12 @@
                             {:value value})))))
 
 (defn prompt
-  "Compose prompt strings and turn-dependent prompt functions.
+  "Compose strings and functions into dynamic Agent instructions.
 
-  Returns a context function suitable for Agent `:context`. Each function
-  receives the context assembly view and must return a string or nil."
+  Each function receives the Runtime context view and returns a string or nil."
   [& parts]
-  (fn [turn]
+  (fn [run-context]
     (->> parts
-         (map #(resolve-part % turn))
+         (map #(resolve-part % run-context))
          (remove str/blank?)
          (str/join "\n\n"))))

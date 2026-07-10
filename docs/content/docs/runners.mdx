@@ -1,207 +1,154 @@
 ---
 title: Harness
-description: The in-process model/tool loop, context, environment, state, streaming, limits, approvals, and observability.
+description: The in-process model/tool loop, instructions, context, Sessions, streaming, limits, approvals, and events.
 ---
 
-karcarthy is the harness. It owns model calls, context assembly, tool calls,
-conversation state, child agents, streaming events, guardrails, approvals,
-limits, cancellation, and traces.
-
-There is no Runner protocol. A provider integration is only a model transport:
-it accepts a normalized model request and returns one authoritative response.
-A streaming transport may emit normalized deltas while producing that response.
-It does not execute tools or decide how an agent proceeds.
+karcarthy owns model calls, tool calls, child Agents, streaming events,
+guardrails, approvals, limits, and cancellation. A provider integration only
+translates model I/O; it does not execute tools or decide how an Agent proceeds.
 
 ## Minimal kernel
 
 | Primitive | Responsibility |
 | --- | --- |
-| `agent` | Construct an Agent, or expose the same form as a recursive model tool with `(agent)`. |
+| `agent` | Construct an Agent, or expose the same form to a model with `(agent)`. |
 | `tool` | Construct a contracted capability backed by Clojure code. |
-| `run!` | Create a root runtime and execute an agent. |
-| `invoke!` | Execute a child agent in an existing runtime tree. |
-| `compile-agent!` | Read, expand, check, evaluate, and return an agent form. |
-| `emit!` | Record an observation event. |
+| `run!` | Create a root Runtime and execute an Agent. |
+| `invoke!` | Execute a child Agent in an existing Runtime tree. |
+| `compile-agent!` | Read, expand, check, evaluate, and return an Agent form. |
+| `emit!` | Record an event. |
 
-`defagent` and `deftool` are naming macros over `agent` and `tool`. Functions
-such as `spawn!`, `await-all!`, `as-tool`, and `handoff!` are conveniences built
-from the kernel.
+`defagent` and `deftool` name Agent and Tool values. `spawn!`, `await-all!`,
+and `as-tool` are small composition helpers. There is no Runner protocol,
+workflow interpreter, or placeholder handoff operation.
 
-This separation follows the most useful part of Pi's design: one small loop and
-a small tool surface. Product integrations and protocol clients remain outside
-the loop. Structured tool definitions are authoritative; prompts explain policy
-without duplicating tool schemas.
+## Default model loop
 
-## The default loop
+An Agent without a custom Clojure body uses this loop:
 
-An agent without a custom body uses this loop:
+1. Validate its input and local Runtime context.
+2. Resolve its model, instructions, and tools.
+3. Load root conversation history from an optional Session.
+4. Send instructions, messages, tool schemas, and output schema to the model.
+5. Record streaming deltas when the model adapter supports them.
+6. If the model requests tools, validate, authorize, execute, and append their
+   results before the next model turn.
+7. If the model returns a final value, validate guardrails and the output
+   contract, append accepted history to the Session, and complete.
 
-1. Validate input and the local Runtime environment.
-2. Resolve model options and enabled tools.
-3. Load an optional root conversation-state snapshot.
-4. Assemble provider-neutral model context as `{:system ... :messages [...]}`.
-5. Call the model transport, recording streaming deltas when available.
-6. If the model returned a final value, checkpoint state, validate, and complete.
-7. If it requested tools, validate, authorize, and execute them.
-8. Append tool results, checkpoint state, and repeat.
-9. Stop on completion, cancellation, failure, deadline, or another configured
-   stop condition.
-
-This loop is implemented in Clojure and used by every provider.
+The loop stops on completion, failure, cancellation, deadline, or
+`:max-turns`. A `:stop-when` predicate can reject a premature final response.
 
 ## Agent configuration
 
 ```clojure
 (k/agent
-  {:name "researcher"
-   :description "Research one question."
-   :model {:transport :responses
-           :id "gpt-5.6"
-           :reasoning :high
-           :temperature 0.2}
-   :context
-   (fn [{:keys [environment pending turn]}]
-     {:system (str "Research carefully for " (:user-id environment)
-                   "; turn " turn ".")
-      :messages pending})
-   :environment ::research-environment
-   :input ::request
-   :tools [web-search fetch-page]
-   :output ::report
-   :loop {:max-turns 20
-          :stop? stop?}
-   :guardrails {:input [safe-input?]
-                :output [grounded?]}
-   :hooks [trace-hook]})
+ {:name "researcher"
+  :description "Research one question."
+  :model {:transport :responses
+          :id "gpt-5.6"
+          :reasoning {:effort :high}}
+  :instructions
+  (fn [{:keys [context]}]
+    (str "Research carefully for " (:user-id context) "."))
+  :context ::research-context
+  :input ::request
+  :tools [web-search fetch-page]
+  :output ::report
+  :max-turns 20
+  :stop-when accepted-final?
+  :guardrails {:input [safe-input?]
+               :output [grounded?]}
+  :limits {:model-calls 30}})
 ```
 
-Model and tool resolvers receive an immutable Runtime view. A context function
-runs once per model turn with `:environment`, complete `:history`, current
-`:pending` messages, provider `:state`, and `:turn`. It may return only
-`{:system string-or-nil :messages [...]}`. There is no request-wide
-`prepare-step` mutation hook.
+`:model`, `:instructions`, and `:tools` may be functions of the immutable
+Runtime view. Instructions must resolve to a string. A custom-body Agent may
+omit `:model` and `:instructions` entirely.
 
-## Context and environment
+## Instructions and context
 
-Context is exactly what enters the model. For the common case it is a string:
+The names follow the established split used by current Agent SDKs:
 
-```clojure
-{:context "Research carefully and cite sources."}
-```
+- `:instructions` is model-visible policy and prompt text;
+- `:context` is local dependency injection and is never exposed to the model
+  automatically.
 
-For retrieval, compaction, or dynamic prompting, use the per-turn function
-shown above. `prompt`, `prompt-file`, and `system-prompt` compose prompt text;
-they do not infer directories, tools, or project policy.
-
-Environment is local dependency injection. It may contain database handles,
-authenticated user metadata, feature flags, HTTP clients, clocks, or helper
-functions. It is available to tools, guardrails, hooks, Agent programs, and
-context assembly but is never shown to the model automatically.
+Context may contain database handles, authenticated user data, clocks, or
+helper functions. The Agent's `:context` value is its contract; the concrete
+value enters through `run!` or a child invocation:
 
 ```clojure
 (k/run! agent input
-        {:environment {:user-id "u_123"
-                       :db db
-                       :http http-client}})
+        {:context {:user-id "u_123"
+                   :db db
+                   :http http-client}})
 ```
 
-## Tools
+Programs and Tools read it with `(k/context rt)`. Dynamic instructions receive
+it in the Runtime view. `prompt`, `prompt-file`, and `system-prompt` compose
+instruction text without inferring a directory or hidden policy source.
 
-A tool declares:
+## Sessions
 
-- model-facing name and description;
-- input and output contracts;
-- its Clojure implementation;
-- an optional `:enabled?` resolver;
-- approval and guardrail policies;
-- timeout and retry metadata;
-- an optional model-output projection.
-
-Zero-arity `(agent)` is itself a Tool. Its arguments contain one ordinary
-`(agent ...)` source form and the value on which to run it.
-
-Independent tool calls from one model response may execute concurrently within
-the run's parallelism limit. Results are committed in a deterministic order to
-make replay and comparison easier.
-
-Provider-hosted capabilities are represented as hosted Tools. They are lowered
-only by their matching model transport and never placed in the local execution
-map. For example, `responses-web-search` becomes the Responses API's native
-`web_search` tool.
-
-## Local tools and prompts
-
-`local-tools` constructs five local Tools:
-
-| Tool | Responsibility |
-| --- | --- |
-| `read` | Bounded UTF-8 file reads inside the configured directory. |
-| `write` | Create or replace a UTF-8 file. |
-| `edit` | Exact, uniqueness-checked text replacement. |
-| `bash` | Bounded subprocess execution starting in that directory. |
-| `search` | Bounded ripgrep content search. |
-
-The file and search tools reject paths outside the configured root. `bash` is
-not a sandbox and retains the process's OS authority. Prompt composition is
-independent: `system-prompt` reads the packaged `resources/karcarthy/system.md`,
-`prompt-file` reads a caller-selected file, and `prompt` joins static or
-turn-dependent fragments. No API assumes a “workspace.”
-
-## MCP boundary
-
-`connect-mcp!` performs the MCP `2025-11-25` stdio lifecycle: start the process,
-initialize, send `notifications/initialized`, discover paginated tools, and
-execute `tools/call`. `mcp-tools` adapts each discovered definition into an
-ordinary contracted Tool. Tool-list change notifications invalidate the local
-definition cache.
-
-The current client deliberately omits Streamable HTTP. An MCP server process is
-trusted code; approval controls model-requested tool calls after startup.
-
-## Agent composition
-
-There are two built-in projections:
-
-- `as-tool` makes an agent callable while the parent retains control;
-- `handoff!` records a transfer event and invokes the selected child. Durable
-  conversational state transfer remains roadmap work.
-
-Arbitrary orchestration belongs in custom agent bodies using `invoke!`,
-`spawn!`, and ordinary Clojure control flow.
-
-## Conversation state
-
-State is explicit data, not a hidden memory atom:
+Runs are stateless unless the caller supplies a Session:
 
 ```clojure
-(def first-run (k/run! agent "first"))
-(def second-run (k/run! agent "second" {:state (:state first-run)}))
+(def session (k/memory-session))
+
+(k/run! researcher first-request {:session session})
+(k/run! researcher next-request {:session session})
 ```
 
-The versioned snapshot contains normalized message history, model identity, and
-provider continuation state. The Runtime checkpoints it after tool results and
-after a final response. Applications may persist the Run's `:state` in any
-database or file and supply it to a later root Run.
+A Session is only an ordered conversation store. Its protocol consists of
+`session-id`, `get-items`, `add-items!`, `pop-item!`, and `clear-session!`.
+`memory-session` is thread-safe and process-local. Applications that need
+durability implement `karcarthy.session/Session` with their normal database.
 
-The snapshot belongs to the root model-backed Agent. A custom Clojure
-orchestrator owns its own durable domain state; child invocation trees are not
-silently serialized into the root conversation.
+The Session belongs to the root model-backed Agent. Child Agents do not
+silently share it, and custom Clojure programs remain responsible for their own
+domain data. This is not a workflow checkpoint: Clojure stacks, closures, and
+arbitrary effects are not serialized or resumed.
 
-This is conversation resumption, not general durable workflow execution.
-Arbitrary Clojure stacks and closures are not serializable. A crash after a
-side-effecting Tool completes but before its checkpoint may repeat that effect.
-Crash-safe suspension therefore still requires explicit continuation points,
-an effect journal, and idempotency keys; the harness does not pretend otherwise.
+Provider continuation identifiers are an internal optimization within one
+model/tool loop. Portable Session history remains normalized messages.
+
+## Tools and Agent composition
+
+A Tool declares a model-facing name and description, input/output contracts,
+a Clojure implementation, and optional approval, guardrail, timeout, retry,
+enablement, and model-output projection policies.
+
+Zero-arity `(agent)` is itself a Tool. It accepts one ordinary `(agent ...)`
+source form and input, then reads, expands, checks, evaluates, and invokes it in
+the current run tree.
+
+`as-tool` exposes a known Agent to a model-backed parent while the parent keeps
+control. Arbitrary orchestration uses `invoke!`, `spawn!`, and ordinary Clojure
+control flow. karcarthy does not claim handoff semantics until it can define
+actual control and conversation transfer.
+
+## Local tools, MCP, and hosted tools
+
+`local-tools` returns `read`, `write`, `edit`, `bash`, and `search` Tools rooted
+at a caller-selected directory. File operations reject paths outside that
+root. `bash` is bounded but is not a sandbox.
+
+`mcp-tools` adapts discovered MCP definitions into the same Tool values. The
+current MCP client implements the `2025-11-25` stdio lifecycle. Provider-hosted
+capabilities such as `responses-web-search` are lowered only by their matching
+model adapter and are never pretended to be local functions.
 
 ## Streaming
 
-`model-transport` accepts `{:complete f :stream f}`. A stream function receives
-the normalized request plus `emit-delta!`, emits values such as
-`{:type :text-delta :delta "..."}`, and returns the same final response shape
-as a non-streaming transport. The Runtime records `:model/text-delta` and
-`:model/tool-call-delta` events. Responses uses
-[typed SSE events](https://developers.openai.com/api/docs/guides/streaming-responses),
-while ACP maps text deltas to immediate `agent_message_chunk` updates.
+Streaming model adapters emit normalized text and tool-call deltas before
+returning an authoritative final response. The Runtime records
+`:model/text-delta` and `:model/tool-call-delta` events. The Responses adapter
+uses typed SSE events; ACP forwards text deltas as `agent_message_chunk`
+updates.
+
+Model-adapter construction is internal. Applications select the built-in
+Responses adapter with `:transport :responses`; tests use `fake-model`.
 
 ## Limits
 
@@ -218,58 +165,40 @@ grant:
  :deadline-ms 300000}
 ```
 
-All descendants debit the same root usage counters. A child may lower the
-effective ceilings inherited from its parent but cannot raise them. This
-permits recursive agent generation without a separate recursion prohibition.
+All descendants debit the same usage counters. A child may lower inherited
+ceilings but cannot raise them.
 
-## Approval and suspension
+## Approval
 
-Approval is evaluated after tool-input validation and before the effect. A
-policy may always approve, always deny, ask once per tool per run, or inspect
-the tool, arguments, environment, and lineage.
+Approval is evaluated after Tool-input validation and before the effect. The
+Run's `:approval` handler receives the Runtime view, Tool, and arguments.
+Missing or denied approval fails before execution. Durable approval suspension
+and resumption remain roadmap work.
 
-When approval is required, the configured handler returns an allow/deny
-decision. Missing or denied approval fails before the effect. Durable
-suspension and resumption remain roadmap work.
+## Events
 
-## Events and traces
-
-The harness emits stable events such as:
+`run!` retains emitted events and can send each event to an `:observe`
+callback. Stable families include:
 
 ```clojure
-{:type :run/started ...}
-{:type :agent/started ...}
-{:type :model/requested ...}
-{:type :model/text-delta :delta "..." ...}
-{:type :model/completed ...}
-{:type :tool/started ...}
-{:type :tool/completed ...}
-{:type :state/checkpointed ...}
-{:type :program/read ...}
-{:type :program/expanded ...}
-{:type :program/evaluated ...}
-{:type :agent/completed ...}
-{:type :run/completed ...}
+:run/started          :run/completed       :run/failed
+:agent/started        :agent/completed     :agent/failed
+:model/requested      :model/text-delta    :model/completed
+:tool/started         :tool/completed      :tool/failed
+:session/updated
+:program/read         :program/expanded    :program/evaluated
 ```
 
-Events include run, parent, Agent, and tool-call identifiers where applicable.
-Sensitive payload recording is controlled independently from event emission.
+Events carry a Run ID and Agent parent/child identifiers where applicable.
+There is no separate hook system or synthetic trace ID.
 
-## Provider integrations
+## ACP boundary
 
-karcarthy includes a Responses-compatible HTTP/SSE transport and an in-process
-fake transport. The adapter defaults to OpenAI but can target compatible
-gateways without changing the model loop. Native provider adapters may
-implement the same narrow request boundary when their semantics cannot be
-represented by Responses. This is not runner portability: the harness
-semantics remain fixed, and adapters only translate model I/O.
-
-ACP sits outside this boundary. `serve-acp!` and the `karcarthy.acp` entry point
-expose an Agent or per-session Agent factory over ACP v1 stdio. The server maps
-session prompts to `run!`, session cancellation to the Runtime cancellation
-token, approvals to `session/request_permission`, and tool lifecycle events to
-`session/update`. ACP-provided stdio MCP servers are discovered and merged into
-the session Agent's normal tools. ACP does not replace the harness.
+`serve-acp!` exposes an Agent or per-session Agent factory over ACP v1 stdio.
+The server maps ACP prompts to `run!`, creates one in-memory Session per ACP
+session, forwards cancellation and permission requests, publishes Tool events,
+and merges session-provided MCP Tools. ACP is an external client boundary, not
+the harness underneath karcarthy.
 
 ## Next
 

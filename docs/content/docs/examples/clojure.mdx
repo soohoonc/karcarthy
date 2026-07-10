@@ -33,14 +33,14 @@ provider and search functions are application dependencies.
    :output ::sources
    :approval :never}
   [rt {:keys [question]}]
-  (search-web! (:http (k/environment rt)) question))
+  (search-web! (:http (k/context rt)) question))
 
 (k/deftool fetch-page
   {:description "Fetch a page selected from search results."
    :input ::url-request
    :output string?}
   [rt {:keys [url]}]
-  (fetch! (:http (k/environment rt)) url))
+  (fetch! (:http (k/context rt)) url))
 ```
 
 ## Leaf agents
@@ -49,28 +49,28 @@ provider and search functions are application dependencies.
 (k/defagent researcher
   {:description "Produce one evidence-backed report."
    :model {:transport :responses :id "gpt-5.6" :reasoning :high}
-   :context "Research carefully. Separate evidence from inference."
+   :instructions "Research carefully. Separate evidence from inference."
    :input ::request
    :tools [web-search fetch-page]
    :output ::report})
 
 (k/defagent fact-checker
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Check every factual claim against the supplied sources."
+   :instructions "Check every factual claim against the supplied sources."
    :input ::report
    :tools [fetch-page]
    :output ::review})
 
 (k/defagent citation-checker
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Check that each citation supports its associated claim."
+   :instructions "Check that each citation supports its associated claim."
    :input ::report
    :tools [fetch-page]
    :output ::review})
 
 (k/defagent editor
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Revise the report using the reviews without inventing evidence."
+   :instructions "Revise the report using the reviews without inventing evidence."
    :input ::edit-request
    :output ::report})
 ```
@@ -104,7 +104,7 @@ An architect agent may return a Clojure source string:
 (agent
   {:name "domain-specialist"
    :model {:transport :responses :id "gpt-5.6"}
-   :context "Analyze the domain terminology before answering."
+   :instructions "Analyze the domain terminology before answering."
    :tools [web-search fetch-page]
    :input ::request
    :output ::report})
@@ -129,7 +129,7 @@ contain a custom body, macros, nested agent forms, or structural transformations
 (def result
   (k/run! research-team
           {:question "How do language models use tool feedback?"}
-          {:environment {:http http-client}
+          {:context {:http http-client}
            :limits {:model-calls 40
                     :parallelism 2
                     :agent-depth 5
@@ -142,7 +142,7 @@ contain a custom body, macros, nested agent forms, or structural transformations
 
 The event stream contains model calls, tool calls, child lineage, usage, and
 any `:program/read`, `:program/expanded`, and `:program/evaluated` events from
-generated agents. A research harness can compare these traces without changing
+generated agents. A research harness can compare these events without changing
 the application program.
 
 ## Next

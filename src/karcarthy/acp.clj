@@ -4,7 +4,8 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [karcarthy.core :as core]
-            [karcarthy.mcp :as mcp])
+            [karcarthy.mcp :as mcp]
+            [karcarthy.session :as session])
   (:import [java.io BufferedReader BufferedWriter InputStreamReader OutputStreamWriter]
            [java.nio.charset StandardCharsets]
            [java.nio.file Files Paths LinkOption]
@@ -117,10 +118,10 @@
 
 (defn- materialize-agent [server session]
   (let [source (:agent server)
-        environment {:cwd (:cwd session)
-                     :mcp-tools (:mcp-tools session)
-                     :session-id (:id session)}
-        agent (if (core/agent? source) source (source environment))]
+        context {:cwd (:cwd session)
+                 :mcp-tools (:mcp-tools session)
+                 :session-id (:id session)}
+        agent (if (core/agent? source) source (source context))]
     (when-not (core/agent? agent)
       (core/fail! :acp :configuration
                   "ACP :agent must be an Agent or a function returning one"
@@ -239,15 +240,14 @@
               base-options (or (:run-options server) {})
               run-options
               (merge base-options
-                     {:state @(:state session)
+                     {:session (:agent-session session)
                       :cancel (:cancel session)
                       :observe (observer server session message-id streamed?)
                       :approval (approval-handler server session)
-                      :environment (merge (:environment base-options)
-                                          {:cwd (:cwd session)
-                                           :session-id sessionId})})
+                      :context (merge (:context base-options)
+                                      {:cwd (:cwd session)
+                                       :session-id sessionId})})
               run (core/run! agent (prompt-text prompt) run-options)
-              _ (reset! (:state session) (:state run))
               text (if (= :completed (:status run))
                      (if (string? (:output run))
                        (:output run)
@@ -310,7 +310,7 @@
                          :cwd cwd
                          :mcp-connections connections
                          :mcp-tools (vec mcp-tools)
-                         :state (atom nil)
+                         :agent-session (session/memory-session {:id session-id})
                          :cancel (atom false)
                          :running? (atom false)
                          :always-allowed (atom #{})}]

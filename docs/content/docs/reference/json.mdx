@@ -15,7 +15,7 @@ The source must contain one top-level form whose evaluation returns an Agent:
 (agent
   {:name "generated-reviewer"
    :model {:transport :responses :id "gpt-5.6"}
-   :context "Review the change and return concrete findings."
+   :instructions "Review the change and return concrete findings."
    :tools [read-file search-code]
    :input ::change
    :output ::review})
@@ -79,12 +79,12 @@ Checking and evaluation include:
 - valid Clojure syntax and symbol resolution;
 - macro argument contracts;
 - agent and tool configuration contracts;
-- input/output/environment contract references;
+- input/output/context contract references;
 - policy checks selected by the Runtime;
 - compiler analysis during evaluation.
 
 Clojure is dynamically typed. “Type checking” here means compiler analysis and
-explicit contracts at Agent, Tool, model, and environment boundaries. A static
+explicit contracts at Agent, Tool, model, and local-context boundaries. A static
 analyzer can add stronger checks without changing the source language.
 
 ### Evaluate
@@ -99,8 +99,8 @@ workflow language.
 
 The resulting value must satisfy `agent?`. It then runs through `invoke!` like
 an authored Agent, inheriting Runtime lineage, cancellation, budgets,
-observation, and approval handling. Root conversation state is explicit Run
-input/output rather than an inherited hidden store.
+observation, and approval handling. Child Agents do not inherit the root
+Session implicitly.
 
 ## Recursive generation
 
@@ -129,25 +129,25 @@ Compilation failures are structured data:
  :column 19}
 ```
 
-When compilation is exposed as a model tool, that failure becomes the normal
-tool result. The model may submit corrected source on its next turn. Repair is
-therefore ordinary tool-loop behavior, not a special dynamic protocol.
+Compilation fails closed. The zero-arity `agent` Tool propagates that Tool
+failure, so the Run fails rather than silently executing or repairing invalid
+code. An application that wants model-driven repair can implement an explicit
+retrying Agent program that catches the structured failure and asks for a new
+candidate.
 
 ## Recording and replay
 
-Every compilation records:
+Compilation events record:
 
-- exact source text and a content hash;
-- the read form;
-- macroexpanded form;
-- expansion and contract results;
-- evaluation namespace and available capability set;
-- parent Agent and run lineage;
-- result or structured failure;
-- timing and resource usage.
+- exact source text;
+- the read and macroexpanded forms;
+- the evaluation namespace;
+- parent Agent and Run lineage;
+- successful Agent identity or structured failure.
 
-These records allow experiments to compare source mutations, reproduce a
-candidate, or verify that two runs evaluated the same program.
+These events allow experiments to compare source mutations, reproduce a
+candidate, or verify that two Runs evaluated the same program. Content hashes
+and replay storage remain application-level research tooling.
 
 ## What JSON is still for
 

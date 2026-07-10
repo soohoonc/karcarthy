@@ -1,46 +1,43 @@
 ---
 title: Contracts
-description: Agent, tool, runtime, run, event, limit, and failure values.
+description: Agent, Tool, Runtime, Session, Run, event, limit, and failure values.
 ---
 
-karcarthy values are ordinary Clojure values. Some contain functions, closures,
-protocol implementations, or compiled code and are intentionally not EDN/JSON
-portable.
-
-The shapes here describe the native harness. Some implementation maps carry
-additional internal fields.
+karcarthy values are ordinary Clojure values. Some contain functions, protocol
+implementations, or compiled code and are intentionally not EDN/JSON portable.
 
 ## Agent
-
-An Agent is a self-describing executable value:
 
 ```clojure
 {:karcarthy/type :agent
  :name "researcher"
  :config {...}
+ :definition-ns 'example.research
  :source-form '(agent {...})
  :expanded-form '(...)
- :invoke #object[clojure.lang.IFn ...]}
+ :invoke nil}
 ```
 
 The public configuration surface is:
 
 | Key | Meaning |
 | --- | --- |
-| `:name` | Stable identifier. Supplied from the symbol by `defagent`. |
-| `:description` | Model- and human-facing description used in delegation. |
-| `:model` | Transport, optional provider metadata, model identifier, reasoning, sampling, and endpoint options. May be a resolver. |
-| `:context` | System-prompt string or per-turn function producing `{:system ... :messages [...]}`. |
-| `:environment` | Contract for the local, non-model-visible dependency value. |
-| `:input` | Input contract. |
-| `:tools` | Tool values or a Runtime-dependent tool resolver. |
-| `:output` | Output contract. Text is the default. |
-| `:loop` | Turn limit and stop predicate. |
-| `:guardrails` | Input and output guardrails. |
+| `:name` | Stable identifier; `defagent` supplies it from the symbol. |
+| `:description` | Human- and model-facing description. |
+| `:model` | Model identifier and adapter-specific options, or a Runtime-view function. |
+| `:instructions` | Model-visible string or Runtime-view function returning a string. |
+| `:context` | Contract for the local, non-model-visible context value. |
+| `:input` | Agent input contract. |
+| `:tools` | Tool values or a Runtime-view function. |
+| `:output` | Agent output contract. |
+| `:output-schema` | Explicit model-facing JSON Schema. |
+| `:max-turns` | Maximum model turns; defaults to 20. |
+| `:stop-when` | Predicate accepting the Runtime view and final-response data. |
+| `:guardrails` | Input and output guardrail functions. |
 | `:limits` | Limits narrower than the current Runtime grant. |
-| `:hooks` | Agent lifecycle observers. |
+| `:metadata` | Application metadata retained in configuration. |
 
-A custom-body Agent may omit `:model` and `:context`.
+A custom-body Agent may omit `:model` and `:instructions`.
 
 ## Tool
 
@@ -48,56 +45,53 @@ A custom-body Agent may omit `:model` and `:context`.
 {:karcarthy/type :tool
  :name "web-search"
  :description "Search the web."
- :input ::search-input
- :output ::search-output
- :approval :never
- :enabled? #object[clojure.lang.IFn ...]
- :execute #object[clojure.lang.IFn ...]
- :source-form '(tool {...} [rt input] ...)}
+ :config {...}
+ :source-form '(tool {...} [rt input] ...)
+ :expanded-form '(...)
+ :execute #object[clojure.lang.IFn ...]}
 ```
 
-Tool inputs are validated before approval. Tool outputs are validated before
-they enter conversation state or become visible to the model. `:to-model-output` may
+Tool input is validated before approval and execution. Tool output is
+validated before it becomes visible to the model. `:to-model-output` may
 project a rich application result into a smaller model-visible value.
 
-## Runtime
+## Runtime view
 
-A Runtime is passed to agent programs, tools, resolvers, guardrails, and hooks:
+Dynamic instructions, model and Tool resolvers, and guardrails receive an
+immutable view:
 
 ```clojure
-{:karcarthy/type :runtime
+{:runtime rt
  :run-id "run_..."
  :agent-id "agent_..."
  :parent-id "agent_..."
- :environment {...}
+ :depth 1
+ :context {...}
  :limits {...}
  :usage {...}
- :conversation-state state-atom
- :model-transports {:transport-name transport}
- :cancel token
- :approval handler
- :evaluation-namespace 'karcarthy.eval.run_...}
+ :agent agent}
 ```
 
-The Runtime is an internal map. Public access goes through functions such as
-`environment`, `emit!`, `invoke!`, and
-`compile-agent!`, not direct mutation of this representation.
+Agent programs and Tools receive the internal Runtime as `rt`. Use public
+functions such as `context`, `emit!`, `invoke!`, `model!`, and
+`compile-agent!` rather than mutating its internal fields.
 
-## Conversation state
+## Session
 
-The root model conversation is an explicit, versioned, plain-data snapshot:
+A Session implements `karcarthy.session/Session`:
 
 ```clojure
-{:karcarthy/type :conversation-state
- :version 1
- :model {:transport :responses :provider :openai :id "gpt-5.6"}
- :messages [{:role :user :content "..."}
-            {:role :assistant :content "..."}]
- :provider-state {:previous-response-id "resp_..."}}
+(session-id session)       ; stable string
+(get-items session)        ; chronological messages
+(add-items! session items) ; append
+(pop-item! session)        ; remove newest
+(clear-session! session)   ; remove all
 ```
 
-`conversation-state?` recognizes this shape. A caller supplies it as the
-`:state` Run option and receives the current snapshot in the Run result.
+Stored items are normalized message maps with roles such as `:user`,
+`:assistant`, and `:tool`. A Session is conversation history, not a serialized
+Runtime or workflow checkpoint. `memory-session` stores a vector in an atom;
+durable implementations choose their own storage.
 
 ## Limits
 
@@ -116,8 +110,6 @@ lower inherited ceilings but cannot raise them.
 
 ## Run
 
-`run!` returns:
-
 ```clojure
 {:karcarthy/type :run
  :id "run_..."
@@ -128,56 +120,48 @@ lower inherited ceilings but cannot raise them.
  :usage {:model-calls 7
          :input-tokens 42000
          :output-tokens 3900
+         :generated-forms 1
          :duration-ms 12800}
- :trace-id "trace_..."
- :state {:karcarthy/type :conversation-state ...}
  :events [...]
  :error nil}
 ```
 
-Statuses:
+`status` is `:completed`, `:failed`, or `:cancelled`. Completion means the
+output passed the harness contracts and guardrails; an external evaluator may
+still score it poorly.
 
-| Status | Meaning |
-| --- | --- |
-| `:completed` | Output satisfied the Agent's contract. |
-| `:cancelled` | Root or ancestor cancellation propagated to the run. |
-| `:failed` | Compilation, model, tool, contract, policy, or program failure. |
-
-Completion is distinct from evaluation quality. An evaluator may score a
-completed output poorly without treating the harness run as a protocol failure.
+The Run does not contain a synthetic trace ID or conversation snapshot. Its
+`id` joins its events, while a caller-owned Session holds conversation history.
 
 ## Events
 
-Every event contains `:type`, `:time-ms`, `:run-id`, and trace lineage. Events for
-specific steps add `:agent-id`, `:parent-id`, `:depth`, or
+Every event contains `:type`, `:time-ms`, and `:run-id`. Agent-specific events
+also carry `:agent-id`, `:parent-id`, and `:depth`; Tool events may carry a
 `:tool-call-id`.
 
-Stable event families:
+Stable event families include:
 
 ```clojure
-:run/started          :run/completed
-:run/failed           :run/cancelled
+:run/started          :run/completed       :run/failed
+:run/cancelled
 
-:agent/started        :agent/completed
-:agent/failed         :agent/handoff
+:agent/started        :agent/completed     :agent/failed
 
-:model/requested
-:model/text-delta    :model/tool-call-delta
-:model/completed      :model/failed
+:model/requested      :model/text-delta    :model/tool-call-delta
+:model/stream-event   :model/completed     :model/failed
 
-:state/checkpointed
+:tool/approval-requested  :tool/approval-resolved
+:tool/approval-reused
+:tool/started         :tool/completed      :tool/failed
 
-:tool/approval-requested
-:tool/started         :tool/completed
-:tool/failed
+:session/updated
 
-:program/read         :program/expanded
-:program/checked      :program/evaluated
-:program/failed
+:program/read         :program/expanded    :program/checked
+:program/evaluated    :program/failed
 ```
 
-Observers may redact or export events as they are emitted. Configurable
-in-runtime payload retention remains roadmap work.
+The Run's `:observe` callback receives events as they occur. There is no
+separate Agent-hook abstraction.
 
 ## Failure
 
@@ -185,36 +169,36 @@ in-runtime payload retention remains roadmap work.
 {:karcarthy/type :failure
  :kind :contract
  :phase :tool-output
- :message "Tool output did not satisfy ::search-output"
+ :message "Value does not satisfy contract for tool-output"
  :data {...}
- :cause exception
  :recoverable? false}
 ```
 
-Failure kinds include `:read`, `:expand`, `:evaluation`, `:context`,
-`:contract`, `:model`, `:tool`, `:guardrail`, `:approval`, `:budget`,
-`:deadline`, `:cancellation`, and `:program`.
+Failures cover reading, expansion, evaluation, instructions, Sessions,
+contracts, models, Tools, guardrails, approvals, budgets, deadlines,
+cancellation, and custom programs. Failed and cancelled Runs retain failure
+data and events but have no output.
 
 ## Mathematical view
 
-Let a Clojure Agent program be `p`, a task be `τ`, and its stochastic execution
-trace be:
+Let `p` be a Clojure Agent program, `τ` a task, `c` local context, `h` Session
+history, and `ξ` the stochastic event sequence:
 
 ```text
-ξ ~ Exec(p, τ)
+(y, h', ξ) ~ Exec(p, τ, c, h)
 ```
 
-An optimizer may search program forms under resource constraints:
+For an evaluation distribution `D`, an optimizer may search program forms:
 
 ```text
-p* = argmaxₚ E[R(τ, ξ) - λ·cost(ξ) - μ·latency(ξ)]
+p* = argmaxₚ E_{τ~D, ξ}[R(τ, y, ξ) - λ C(ξ) - μ L(ξ)]
 ```
 
-The trace and program forms are first-class experimental data. Research can
-measure behavior, invariants, or regressions without assuming that a candidate
-program is an improvement.
+Optimization is optional. The same representation supports invariant checks,
+behavioral comparisons, negative results, and exact inspection of generated
+programs.
 
 ## Next
 
 - [Generated Code](/docs/reference/json) specifies form compilation.
-- [Harness](/docs/runners) explains how these values interact during a run.
+- [Harness](/docs/runners) explains how these values interact during a Run.

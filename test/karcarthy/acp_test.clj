@@ -51,19 +51,18 @@
       :model
       {:id "fake"
        :transport
-       (k/model-transport
-        {:stream
-         (fn [_ emit!]
-           (if (= 1 (swap! turn inc))
-             {:type :tool-calls
-              :calls [{:id "call_1"
-                       :name remote-tool
-                       :input {:text "hello from ACP"}}]}
-             (do
-               (emit! {:type :text-delta :delta "MCP "})
-               (emit! {:type :text-delta :delta "completed"})
-               {:type :final :output "MCP completed"})))})}
-      :context "Exercise the session MCP tool."
+       {:stream
+        (fn [_ emit!]
+          (if (= 1 (swap! turn inc))
+            {:type :tool-calls
+             :calls [{:id "call_1"
+                      :name remote-tool
+                      :input {:text "hello from ACP"}}]}
+            (do
+              (emit! {:type :text-delta :delta "MCP "})
+              (emit! {:type :text-delta :delta "completed"})
+              {:type :final :output "MCP completed"})))}}
+      :instructions "Exercise the session MCP tool."
       :tools mcp-tools
       :output string?})))
 

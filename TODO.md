@@ -6,22 +6,23 @@ follow-ups:
 ## Runtime
 
 - Durable suspension/resumption for approvals and human input.
-- Observable context compaction.
+- Observable Session-history compaction.
 - Streaming transport events.
 - Retry/backoff and effect idempotency policy.
-- Conversational state transfer for `handoff!`.
+- Define true handoff control and history-transfer semantics before adding an
+  API.
 
 ## Evaluation
 
 - Harbor smoke evaluation.
 - ACP session loading/resumption and incremental model streaming.
 - MCP Streamable HTTP transport.
-- Trace export containing program hashes, forms, usage, latency, and scores.
+- Event export containing program hashes, forms, usage, latency, and scores.
 
 ## Research
 
 - Form mutation helpers.
-- Replay and differential trace comparison.
+- Replay and differential event comparison.
 - Search drivers over program variants.
 
 Direction and sequencing live in [ROADMAP.md](ROADMAP.md).

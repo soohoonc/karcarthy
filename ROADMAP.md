@@ -18,39 +18,37 @@ bridge, and legacy examples have been removed without a compatibility layer.
   ordinary Tools.
 - ACP v1 stdio serving for an Agent or per-session Agent factory, including
   session-provided stdio MCP, tool updates, permissions, and cancellation.
-- `run!`, `invoke!`, `spawn!`, `await!`, `await-all!`, `as-tool`, and
-  `handoff!`.
-- Provider-neutral `{:system :messages}` context assembly, separate local
-  environments, explicit conversation-state snapshots, Clojure specs, JSON
-  Schema derivation, guardrails, approval checks, cancellation, deadlines,
-  hierarchical limits, events, and traces.
+- `run!`, `invoke!`, `spawn!`, `await!`, `await-all!`, and `as-tool`.
+- Dynamic model instructions, separate local Runtime context, optional
+  conversation Sessions, Clojure specs, JSON Schema derivation, guardrails,
+  approval checks, cancellation, deadlines, hierarchical limits, and events.
 - Complete and SSE Responses transport paths, normalized runtime deltas, and
   incremental ACP Agent-message chunks.
 - `read-agent-form`, macroexpansion, evaluation, Agent verification, structured
-  failures, recursive generation limits, and trace lineage.
+  failures, recursive generation limits, and event lineage.
 
 ## Complete harness semantics
 
 - Add durable approval/input suspension and resumption.
-- Add observable context compaction policies over conversation snapshots.
-- Provide documented database/file persistence adapters for state snapshots.
+- Add observable compaction policies over Session history.
+- Provide documented database-backed Session implementations.
 - Add richer retry/backoff and idempotency policy for effects.
-- Add true conversational handoff state transfer beyond the current traced
-  child invocation.
+- Add true conversational handoffs only with defined history and control
+  transfer semantics.
 
 ## Serve and evaluate
 
 - Add ACP session loading/resumption and richer incremental child events.
 - Add MCP Streamable HTTP after the stdio surface is proven in evaluation.
 - Connect Harbor tasks and scorers.
-- Store program hashes, source/expanded forms, trace metrics, and evaluator
+- Store program hashes, source/expanded forms, event metrics, and evaluator
   results together.
 
 ## Research tooling
 
 - Provide structural Clojure-form mutation helpers without creating a workflow
   DSL.
-- Add replay and differential trace comparison.
+- Add replay and differential event comparison.
 - Add search loops over program variants: random/evolutionary search, bandits,
   Bayesian optimization, or model-proposed rewrites.
 - Treat behavioral verification and negative results as first-class outcomes.

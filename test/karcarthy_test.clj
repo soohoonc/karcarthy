@@ -4,9 +4,10 @@
 
 (deftest facade-exposes-only-the-native-harness
   (doseq [sym '[agent defagent tool deftool agent? tool?
-                run! invoke! spawn! await! await-all! handoff! as-tool
-                environment conversation-state?
-                model! emit! events model-transport fake-model
+                run! invoke! spawn! await! await-all! as-tool context
+                memory-session session? session-id get-items add-items!
+                pop-item! clear-session!
+                model! emit! events fake-model
                 hosted-tool hosted-tool?
                 local-tools prompt prompt-file system-prompt
                 responses-web-search connect-mcp! mcp-tools close-mcp!
@@ -17,7 +18,8 @@
   (doseq [removed '[run pipe branch delegate reduce revise route continue
                     dynamic evolve mock-runner fn-runner process-runner
                     claude-runner codex-runner openai-runner acp-runner
-                    context workspace-tools workspace-prompt]]
+                    handoff! environment conversation-state? model-transport
+                    workspace-tools workspace-prompt]]
     (is (nil? (get (ns-publics 'karcarthy) removed))
         (str "still exports " removed))))
 

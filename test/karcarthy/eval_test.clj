@@ -96,11 +96,11 @@
                  "(agent {:name \"increment\" :input int? :output int?} [_ n] (inc n))"
                  :input 41}}]}
              {:type :final
-              :output (get-in request [:context :messages 0 :content])})))
+              :output (get-in request [:messages 0 :content])})))
         parent
         (k/agent {:name "architect"
                   :model {:id "fake" :transport model}
-                  :context "Write and run an Agent."
+                  :instructions "Write and run an Agent."
                   :tools [agent-tool]
                   :output int?})
         run (k/run! parent nil)]

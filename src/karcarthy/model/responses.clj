@@ -86,9 +86,8 @@
 
 (defn request
   "Pure: lower a normalized karcarthy model request to a Responses API body."
-  [{:keys [model context state tools output-schema]}]
-  (let [{:keys [system messages]} context
-        text-config
+  [{:keys [model instructions messages provider-state tools output-schema]}]
+  (let [text-config
         (cond-> {}
           (:verbosity model)
           (assoc :verbosity (api-value (:verbosity model)))
@@ -99,7 +98,7 @@
                           :schema output-schema
                           :strict true}))
         body {:model (:id model)
-              :instructions system
+              :instructions instructions
               :input (vec (mapcat input-items messages))
               :tools (mapv request-tool tools)
               :tool_choice (or (:tool-choice model) "auto")
@@ -109,8 +108,9 @@
                 true)
               :store (if (contains? model :store) (boolean (:store model)) true)}
         body (cond-> body
-               (get state :previous-response-id)
-               (assoc :previous_response_id (get state :previous-response-id))
+               (get provider-state :previous-response-id)
+               (assoc :previous_response_id
+                      (get provider-state :previous-response-id))
 
                (:reasoning model)
                (assoc :reasoning (reasoning-config (:reasoning model)))
@@ -165,16 +165,16 @@
         usage {:input-tokens (get-in payload [:usage :input_tokens] 0)
                :output-tokens (get-in payload [:usage :output_tokens] 0)
                :total-tokens (get-in payload [:usage :total_tokens] 0)}
-        state {:previous-response-id (:id payload)}]
+        provider-state {:previous-response-id (:id payload)}]
     (if (seq calls)
       {:type :tool-calls
        :calls calls
-       :state state
+       :provider-state provider-state
        :usage usage
        :raw payload}
       {:type :final
        :output (output-text (:output payload))
-       :state state
+       :provider-state provider-state
        :usage usage
        :raw payload})))
 
@@ -339,4 +339,6 @@
 
 (def transport
   "Built-in Responses transport with complete and streaming HTTP paths."
-  (core/model-transport {:complete complete! :stream stream!}))
+  {:karcarthy/type :model-transport
+   :complete complete!
+   :stream stream!})

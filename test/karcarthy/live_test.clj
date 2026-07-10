@@ -37,7 +37,7 @@
                     :id (configured-model)
                     :reasoning :low
                     :timeout-ms 180000}
-            :context
+            :instructions
             (str
              "This is an end-to-end harness test. Call the agent tool exactly "
              "once. Its source argument must be exactly: "
@@ -47,7 +47,7 @@
              "the decimal result, with no explanation.")
             :tools [agent-tool]
             :output string?
-            :loop {:max-turns 3}})
+            :max-turns 3})
           run (k/run! architect nil
                       {:limits {:model-calls 3
                                 :generated-forms 1
@@ -84,14 +84,14 @@
                         :id (configured-model)
                         :reasoning :low
                         :timeout-ms 180000}
-                :context
+                :instructions
                 (k/prompt
                  (k/system-prompt)
                  "For this test, inspect the target before changing it and use the edit tool for the change.")
                 :tools tools
                 :input any?
                 :output string?
-                :loop {:max-turns 6}})
+                :max-turns 6})
               run
               (k/run! coder
                       (str "In greeting.txt, replace the exact text PLACEHOLDER "

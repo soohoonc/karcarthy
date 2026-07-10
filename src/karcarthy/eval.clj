@@ -60,8 +60,8 @@
           (ns-unmap ns-obj 'agent)))
       (clojure.core/refer
       'karcarthy.core
-      :only '[agent tool invoke! spawn! await! await-all! handoff!
-               as-tool environment model! emit! source-form expanded-form])
+      :only '[agent tool invoke! spawn! await! await-all!
+               as-tool context model! emit! source-form expanded-form])
       (clojure.core/refer
        'karcarthy.eval
        :only '[read-agent-form check-agent-form! eval-agent-form!

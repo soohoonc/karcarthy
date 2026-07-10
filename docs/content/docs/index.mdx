@@ -11,25 +11,25 @@ loop, and its orchestration language is Clojure itself.
 
 (k/defagent researcher
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Research carefully and cite evidence."
+   :instructions "Research carefully and cite evidence."
    :tools [web-search]
    :output ::report})
 
 (k/run! researcher
         {:question "Why are Lisp programs represented as lists?"}
-        {:environment {:user-id "u_123"}})
+        {:context {:user-id "u_123"}})
 ```
 
-The native Agent/Tool kernel, context/environment split, explicit conversation
-state, streaming model loop, child execution, generated-form evaluation,
+The native Agent/Tool kernel, instructions/context split, optional Sessions,
+streaming model loop, child execution, generated-form evaluation,
 contracts, limits, events, Responses HTTP/SSE transport, local tools, stdio MCP
 client, and ACP v1 server are implemented. Crash-safe suspension remains on the
 roadmap.
 
 ## The premise
 
-An agent is an executable Clojure value. It carries model configuration,
-model-visible context, an optional local-environment contract, tools, output
+An Agent is an executable Clojure value. It carries model configuration,
+model-visible instructions, an optional local-context contract, tools, output
 contracts, loop policy, and optionally an arbitrary Clojure body.
 
 ```clojure
@@ -58,7 +58,7 @@ Tool that accepts another configured `agent` form.
 ```clojure
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Design and run the smallest useful child Agent."
+   :instructions "Design and run the smallest useful child Agent."
    :tools [(k/agent)]})
 ```
 
@@ -72,8 +72,9 @@ token, concurrency, and time budgets.
 | --- | --- |
 | Agent | Configuration plus an executable body. Without a custom body, the harness supplies its model/tool loop. |
 | Tool | A described, contracted Clojure function the model may invoke. |
-| Runtime | Local environment, budgets, cancellation, model access, state checkpoints, and observation for one run tree. |
-| Run | Status, typed output, conversation state, usage, events, and the source/expanded forms involved in execution. |
+| Runtime | Local context, budgets, cancellation, model access, and event recording for one run tree. |
+| Session | Optional ordered conversation history shared across root Agent runs. |
+| Run | Status, typed output, usage, events, and failure data for one execution. |
 
 Agent and tool values retain their source forms. Programs are therefore
 executable behavior and inspectable research artifacts at the same time.
@@ -82,26 +83,26 @@ executable behavior and inspectable research artifacts at the same time.
 
 For a model-backed agent, karcarthy:
 
-1. resolves tools and model options from the local Runtime environment;
-2. assembles `{:system ... :messages [...]}` context for the current turn;
+1. resolves tools, instructions, and model options from the Runtime;
+2. loads messages from an optional Session;
 3. calls the configured model and emits streaming deltas;
 4. validates and executes requested tools;
-5. checkpoints explicit conversation state and enforces budgets;
+5. appends accepted conversation items to the Session and enforces budgets;
 6. repeats until a typed output, failure, cancellation, deadline, or stop condition;
-7. emits a trace for every decision and effect.
+7. emits events for model, Tool, Agent, Session, and generated-code effects.
 
 The model-provider boundary only performs model I/O. It is not a runner and
-does not own tools, delegation, conversation state, or orchestration.
+does not own tools, delegation, Sessions, or orchestration.
 
 ## Engineering and research
 
-Agents retain original and macroexpanded forms; generated programs also place
-both forms in the trace. Every run records model and tool events, child-agent
+Agents retain original and macroexpanded forms; generated programs also emit
+events for both forms. Every run records model and Tool events, child-Agent
 lineage, token usage, latency, approvals, failures, and final output. That makes
 the same system suitable for applications and behavioral experiments.
 
 Harbor can evaluate the stable ACP surface. Experiments may compare quality,
-cost, failure modes, trace structure, or invariants; they do not need to claim
+cost, failure modes, event structure, or invariants; they do not need to claim
 that a generated program improves anything.
 
 ## A small toolset, not a second harness

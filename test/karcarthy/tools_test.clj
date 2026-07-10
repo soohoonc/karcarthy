@@ -83,7 +83,7 @@
             agent (k/agent
                    {:name "local-agent"
                     :model {:id "fake" :transport model}
-                    :context
+                    :instructions
                     (k/prompt
                      (k/system-prompt)
                      (k/prompt-file (str (.resolve root "AGENTS.md")))
@@ -94,9 +94,9 @@
             run (k/run! agent "inspect")]
         (is (= :completed (:status run)))
         (is (re-find #"Run the smallest relevant test"
-                     (get-in @seen [:context :system])))
+                     (:instructions @seen)))
         (is (re-find #"Do not commit changes"
-                     (get-in @seen [:context :system])))
+                     (:instructions @seen)))
         (is (= #{"read" "write" "edit" "bash" "search"}
                (->> (:tools @seen)
                     (filter #(= :function (:kind %)))

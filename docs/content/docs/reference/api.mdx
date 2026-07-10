@@ -1,9 +1,9 @@
 ---
 title: Library API
-description: Macros and functions for the native Clojure agent harness.
+description: Macros and functions for the native Clojure Agent harness.
 ---
 
-The public API is intentionally small.
+The common API is exposed from `(require '[karcarthy :as k])`.
 
 ## Agents
 
@@ -15,23 +15,37 @@ The public API is intentionally small.
 (k/agent config [rt input] body ...)
 ```
 
-With no arguments, returns the model-facing `agent` Tool: the recursive
-homoiconic capability. Its input is `{:source <one (agent ...) form> :input
-<value>}`; it reads, expands, checks, evaluates, and invokes the resulting
-Agent in the current run tree.
+With no arguments, returns the model-facing `agent` Tool. That Tool accepts
+`{:source <one (agent ...) form> :input <value>}`, compiles the form, verifies
+that it produced an Agent, and invokes it in the current run tree.
 
-With a config, constructs an Agent and retains the original and macroexpanded
-forms. With no body, the Agent uses the harness's standard model/tool loop.
-With a body, the body is the Agent's program and must return a value satisfying
-`:output`.
+With a config, constructs an Agent and retains its original and expanded
+forms. Without a body, the Agent uses the standard model/Tool loop. A
+model-backed Agent requires `:name`, `:model`, and `:instructions`. A
+custom-body Agent requires `:name` but may omit model configuration.
 
-Required configuration:
+Supported configuration keys are:
 
-- `:name` when using `agent` directly;
-- `:model` and `:context` when using the default loop.
+```clojure
+{:name "researcher"
+ :description "Research one question."
+ :model {:transport :responses :id "gpt-5.6"}
+ :instructions "Research carefully."
+ :context map?
+ :input ::request
+ :tools [search-tool]
+ :output ::report
+ :output-schema {...}
+ :max-turns 20
+ :stop-when final-acceptable?
+ :guardrails {:input [safe?] :output [grounded?]}
+ :limits {:model-calls 30}
+ :metadata {...}}
+```
 
-Optional configuration includes `:description`, `:environment`, `:input`,
-`:tools`, `:output`, `:loop`, `:guardrails`, `:limits`, and `:hooks`.
+`:model`, `:instructions`, and `:tools` may be functions of the Runtime view.
+Instructions must resolve to a string. `:context` is a contract for the local
+context value, not model-visible prompt text.
 
 ### `defagent`
 
@@ -42,53 +56,33 @@ Optional configuration includes `:description`, `:environment`, `:input`,
 
 Defines a var containing an Agent. The symbol supplies the default `:name`.
 
-### `agent?`
+### Inspection
 
 ```clojure
 (k/agent? value)
-```
-
-Returns true when the value satisfies the Agent contract.
-
-### `source-form` and `expanded-form`
-
-```clojure
 (k/source-form agent)
 (k/expanded-form agent)
 ```
 
-Return the form captured before and after macroexpansion.
-
 ## Tools
 
-### `tool`
+### `tool` and `deftool`
 
 ```clojure
 (k/tool config [rt input] body ...)
-```
-
-Constructs a Tool. The config requires `:name`, `:description`, and `:input`.
-`:output`, `:approval`, `:enabled?`, `:guardrails`, `:timeout-ms`, `:retry`, and
-`:to-model-output` are optional.
-
-### `deftool`
-
-```clojure
 (k/deftool name config [rt input] body ...)
 ```
 
-Defines a var containing a Tool. The symbol supplies the default model-facing
-name.
+A Tool requires `:name`, `:description`, and `:input`. `deftool` supplies the
+name from its symbol. Optional keys are `:input-schema`, `:output`,
+`:output-schema`, `:approval`, `:enabled?`, `:guardrails`, `:timeout-ms`,
+`:retry`, `:to-model-output`, and `:metadata`.
 
-### `tool?`
+Tool arguments are validated before approval and execution. Tool results are
+validated before they are returned to the model. `tool?` identifies Tool
+values.
 
-```clojure
-(k/tool? value)
-```
-
-Returns true when the value satisfies the Tool contract.
-
-### `hosted-tool` and `responses-web-search`
+### Hosted tools
 
 ```clojure
 (k/hosted-tool :responses {:type "web_search"})
@@ -96,9 +90,8 @@ Returns true when the value satisfies the Tool contract.
 (k/responses-web-search {:search_context_size "low"})
 ```
 
-A hosted Tool is executed by its matching transport rather than by karcarthy.
-The selected transport rejects hosted specifications it does not own.
-`hosted-tool?` identifies this value type.
+A hosted Tool is executed by its matching provider endpoint, not by local
+Clojure code. `hosted-tool?` identifies this value.
 
 ### `as-tool`
 
@@ -107,9 +100,10 @@ The selected transport rejects hosted specifications it does not own.
 (k/as-tool agent options)
 ```
 
-Projects an Agent as a Tool. Options may override its tool name, description,
-input contract, output contract, approval policy, and environment projection. The
-parent remains active after the child returns.
+Projects an Agent as a Tool while the parent retains control. Options may
+override `:name`, `:description`, `:input`, `:output`, and `:approval`. A
+`:context` function receives the parent context and Tool input and returns the
+local context for the child invocation.
 
 ## Execution
 
@@ -120,14 +114,12 @@ parent remains active after the child returns.
 (k/run! agent input options)
 ```
 
-Creates a root Runtime, validates input and environment, executes the Agent,
-and returns a Run record containing the latest conversation state.
-
-Options:
+Creates a root Runtime, validates local context and Agent input, executes the
+Agent, and returns a Run record.
 
 ```clojure
-{:environment {...}
- :state previous-conversation-state
+{:context {...}
+ :session session
  :limits {...}
  :observe event-fn
  :approval approval-handler
@@ -135,168 +127,111 @@ Options:
  :metadata {...}}
 ```
 
+Runs are stateless unless `:session` is supplied.
+
 ### `invoke!`
 
 ```clojure
 (k/invoke! rt agent input)
-(k/invoke! rt agent input options)
+(k/invoke! rt agent input {:context {...} :limits {...}})
 ```
 
-Runs a child Agent inside an existing Runtime tree and returns its typed output.
-The child remains visible through its lineage and lifecycle events in the root
-Run trace.
+Executes a child Agent inside an existing Runtime tree and returns its typed
+output. Limits may only narrow inherited limits. A child invocation does not
+implicitly share the root Session.
 
-### `spawn!`
-
-```clojure
-(k/spawn! rt agent input)
-(k/spawn! rt agent input options)
-```
-
-Starts a child invocation under structured concurrency and returns a child
-handle. The child inherits cancellation and receives a budget grant from the
-parent.
-
-### `await!` and `await-all!`
+### Structured child execution
 
 ```clojure
+(def child (k/spawn! rt agent input))
 (k/await! child)
 (k/await-all! children)
 ```
 
-Wait for one or several child handles. Failure and cancellation propagate as
-structured exceptions unless the program catches them.
+Children share cancellation, usage counters, deadlines, and bounded
+parallelism with the root run tree.
 
-### `handoff!`
+### `context`
 
 ```clojure
-(k/handoff! rt agent input)
+(k/context rt)
 ```
 
-Records an `:agent/handoff` event and invokes another Agent while retaining
-runtime, budget, and trace lineage. Durable conversation transfer remains
-roadmap work.
+Returns the local, non-model-visible context value for a Runtime.
 
-### `environment`
+## Sessions
 
 ```clojure
-(k/environment rt)
+(def session (k/memory-session))
+(def named (k/memory-session {:id "session_123" :items []}))
+
+(k/session? session)
+(k/session-id session)
+(k/get-items session)
+(k/add-items! session messages)
+(k/pop-item! session)
+(k/clear-session! session)
 ```
 
-Returns the local dependency-injection value. It is not automatically exposed
-to the model.
+A Session is an ordered conversation store shared across root Agent runs.
+`memory-session` is thread-safe and process-local. Durable stores implement the
+`karcarthy.session/Session` protocol; karcarthy does not impose a file or
+database format.
 
-## Context and prompts
-
-Agent `:context` is a string or a function called for every model turn. The
-function receives `:runtime`, `:environment`, `:agent`, complete `:history`,
-current `:pending` messages, provider `:state`, and `:turn`. It returns either a
-string or the provider-neutral map `{:system string-or-nil :messages [...]}`.
-Unknown keys fail closed.
-
-### `prompt`, `prompt-file`, and `system-prompt`
+## Instructions and prompts
 
 ```clojure
-(def context
+(def instructions
   (k/prompt
    (k/system-prompt)
    (k/prompt-file "AGENTS.md")
-   (fn [{:keys [environment]}]
-     (str "Current user: " (:user-id environment)))))
+   (fn [{:keys [context]}]
+     (str "Current user: " (:user-id context)))))
 ```
 
-`prompt` joins strings and turn-dependent string functions. `prompt-file`
-reads exactly the named UTF-8 file. `system-prompt` reads the packaged
-`resources/karcarthy/system.md`. None of them infer a directory, project, tool
-set, date, or hidden context source.
-
-## Conversation state
-
-### `conversation-state?`
-
-```clojure
-(def first-run (k/run! agent "first"))
-(k/conversation-state? (:state first-run)) ;=> true
-(def next-run (k/run! agent "next" {:state (:state first-run)}))
-```
-
-The snapshot is ordinary versioned data containing messages, model identity,
-and provider continuation state. The harness does not choose a persistence
-backend. It resumes the root model-backed Agent only; custom orchestration must
-model and persist its own domain state explicitly.
+`prompt` joins strings and Runtime-view functions. Each function returns a
+string or nil. `prompt-file` reads exactly the named UTF-8 file.
+`system-prompt` reads the packaged `resources/karcarthy/system.md`. These
+functions do not infer a directory, Tool set, date, or hidden prompt source.
 
 ## Generated code
 
-### `read-agent-form`
-
 ```clojure
-(k/read-agent-form source)
+(def form (k/read-agent-form source))
+(def checked (k/check-agent-form! rt form))
+(def agent (k/eval-agent-form! rt checked))
+(def agent (k/compile-agent! rt source))
 ```
 
-Reads one Clojure form from a source string with reader evaluation disabled.
-Returns the form as data.
-
-### `check-agent-form!`
-
-```clojure
-(k/check-agent-form! rt form)
-```
-
-Fully macroexpands executable positions in the evaluation namespace while
-preserving quoted source as data, then returns the checked
-representation or throws a structured expansion exception. Compiler symbol and
-arity failures are reported by `eval-agent-form!`.
-
-### `eval-agent-form!`
-
-```clojure
-(k/eval-agent-form! rt checked-form)
-```
-
-Evaluates a checked form in the Runtime's evaluation namespace and verifies
-that the result is an Agent.
-
-### `compile-agent!`
-
-```clojure
-(k/compile-agent! rt source)
-```
-
-Convenience composition of `read-agent-form`, `check-agent-form!`, and
-`eval-agent-form!`. Emits source, expanded-form, analysis, evaluation, and
-failure events.
+`read-agent-form` reads one form with reader evaluation disabled.
+`check-agent-form!` macroexpands executable positions in the Runtime's
+evaluation namespace. `eval-agent-form!` intentionally evaluates the checked
+form as JVM Clojure and verifies the resulting Agent. `compile-agent!` composes
+the three phases and emits program lifecycle events.
 
 ## Model access
 
 ### `model!`
 
 ```clojure
-(k/model! rt request)
+(k/model! rt normalized-request)
 ```
 
-Low-level access to the active model transport for custom Agent programs. Most
-agents should use the standard loop or invoke a model-backed child instead.
+Calls the active model adapter for a custom Agent program. Most Agents should
+use the standard loop or invoke a model-backed child. Provider-adapter
+construction is internal; it is not a public extension abstraction.
 
-Provider transports implement only the normalized model request boundary. They
-never execute tools or child agents.
-
-### `model-transport`
+### `fake-model`
 
 ```clojure
-(k/model-transport complete-fn)
-(k/model-transport {:complete complete-fn
-                    :stream (fn [request emit-delta!] ...)})
+(k/fake-model (fn [request] {:type :final :output "done"}))
 ```
 
-A streaming implementation emits normalized `:text-delta` or
-`:tool-call-delta` values and returns the same final response required from
-`complete-fn`. Set model option `:stream false` to force the complete path when
-both are available.
+Creates a deterministic in-process model for tests and examples.
 
-### Responses-compatible transport
+### Responses-compatible model
 
-`:transport :responses` selects the built-in HTTP adapter. Direct OpenAI needs
-only a model ID and `OPENAI_API_KEY`:
+`:transport :responses` selects the built-in HTTP/SSE adapter:
 
 ```clojure
 {:transport :responses
@@ -304,7 +239,8 @@ only a model ID and `OPENAI_API_KEY`:
  :id "gpt-5.6"}
 ```
 
-A compatible gateway changes endpoint and credentials, not harness semantics:
+A Responses-compatible gateway changes endpoint and credentials without
+changing harness semantics:
 
 ```clojure
 {:transport :responses
@@ -315,46 +251,22 @@ A compatible gateway changes endpoint and credentials, not harness semantics:
  :headers {"X-Application" "karcarthy"}}
 ```
 
-Transport options:
-
-- `:base-url` — API root; defaults to `https://api.openai.com/v1`;
-- `:path` — endpoint path; defaults to `/responses`;
-- `:url` — complete URL override;
-- `:api-key` or `:api-key-env` — explicit credentials;
-- `RESPONSES_API_KEY`, then `OPENAI_API_KEY` — environment fallbacks;
-- `:headers` — additional or replacement HTTP headers;
-- `:auth? false` — omit automatic Bearer authentication for a trusted local
-  endpoint;
-- `:timeout-ms` — complete request timeout;
-- `:stream false` — use the non-streaming HTTP response path;
-- `:provider-options` — additional Responses request-body fields.
-
-Model IDs pass through unchanged. Endpoint-specific hosted Tools work only
-when the selected endpoint and model implement their specifications. `:provider`
-is optional descriptive metadata; `:transport` selects executable model I/O.
+Supported endpoint options include `:base-url`, `:path`, `:url`, `:api-key`,
+`:api-key-env`, `:headers`, `:auth?`, `:timeout-ms`, `:stream`, and
+`:provider-options`. Direct OpenAI uses `RESPONSES_API_KEY` or
+`OPENAI_API_KEY` when no credential option is supplied.
 
 ## Local capabilities
 
-### `local-tools`
-
 ```clojure
 (def tools (k/local-tools {:cwd "/workspace"}))
-
-(k/agent {:name "local-agent"
-          :model {:transport :responses :id "gpt-5.6"}
-          :context (k/system-prompt)
-          :tools tools
-          :output string?})
 ```
 
-`local-tools` returns `read`, `write`, `edit`, `bash`, and `search` rooted
-at an existing directory. Its options configure approval and output/time
-bounds. Tool schemas travel through the model request independently from
-context. `local-tools` constructs ordinary Tools, not a special Agent type.
+Returns ordinary `read`, `write`, `edit`, `bash`, and `search` Tools. Options
+configure approval and output/time bounds. `search` requires ripgrep. `bash`
+is not a sandbox.
 
 ## MCP
-
-### `connect-mcp!`, `mcp-tools`, and `close-mcp!`
 
 ```clojure
 (def connection
@@ -366,54 +278,41 @@ context. `local-tools` constructs ordinary Tools, not a special Agent type.
 (k/close-mcp! connection)
 ```
 
-The connection implements MCP `2025-11-25` over stdio. `mcp-tools` accepts
-`:prefix` and `:approval`; approval defaults to `:always`. Always close the
-connection. Commands are executed directly rather than through a shell. ACP
-session MCP processes start in the session `cwd`.
+The client implements MCP `2025-11-25` over stdio. `mcp-tools` accepts
+`:prefix` and `:approval`; approval defaults to `:always`. Commands execute
+directly rather than through a shell. Always close the connection.
 
 ## ACP
-
-### `serve-acp!`
 
 ```clojure
 (k/serve-acp! {:agent agent-or-factory})
 ```
 
-Serves ACP v1 JSON-RPC over `System/in` and `System/out`, or `:in` / `:out`
-streams supplied in the options. A factory receives `{:cwd ... :mcp-tools ...
-:session-id ...}` and returns an Agent. `:run-options` supplies base Run
-options; `:client-request-timeout-ms` bounds permission requests.
-
-The executable entry point resolves a var and serves its Agent value or
-factory:
+Serves ACP v1 over stdio or supplied `:in` and `:out` streams. A factory
+receives `{:cwd ... :mcp-tools ... :session-id ...}` and returns an Agent.
+`:run-options` supplies base Run options.
 
 ```bash
 clojure -M -m karcarthy.acp your.namespace/agent-var
 ```
 
-## Observation
-
-### `emit!`
+## Events
 
 ```clojure
-(k/emit! rt event)
-```
-
-Adds runtime identity and lineage to an event, appends it to the Run trace, and
-passes it to the configured observer.
-
-### `events`
-
-```clojure
+(k/emit! rt {:type :application/decision :value value})
 (k/events run)
 ```
 
-Returns the recorded observation events from a Run or Runtime.
+`emit!` adds Run and Agent lineage, records the event, and calls the Run's
+`:observe` function. `events` returns recorded events from a Run or Runtime.
 
 ## Contracts
 
-Agent, tool, environment, input, and output contracts initially use
-`clojure.spec`. A contract adapter may support other Clojure schema systems
-later, but the harness exposes one validation result shape.
+```clojure
+(k/contract-valid? contract value)
+(k/explain-contract contract value)
+(k/contract->json-schema contract)
+```
 
-See [Contracts](/docs/reference/schema) for exact values and failure data.
+Contracts support Clojure specs, predicates, classes, sets, and basic JSON
+Schema. See [Contracts](/docs/reference/schema) for the runtime shapes.

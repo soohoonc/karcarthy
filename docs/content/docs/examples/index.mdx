@@ -4,14 +4,14 @@ description: Complete examples of authored programs, generated agents, and ACP c
 ---
 
 The examples use one rule throughout: orchestration is Clojure code. Agents may
-write more Clojure code, and the harness records both source and expanded forms
-alongside the execution trace.
+write more Clojure code, and the harness records source, expanded forms, and
+execution events together.
 
 ## Examples
 
 | Page | Shows |
 | --- | --- |
-| [Clojure](/docs/examples/clojure) | Tools, model-backed agents, a custom orchestration body, parallel children, generated agents, and trace capture. |
+| [Clojure](/docs/examples/clojure) | Tools, model-backed agents, a custom orchestration body, parallel children, generated agents, and event capture. |
 | [Python](/docs/examples/python) | The ACP client boundary for driving a running Clojure harness from Python or Harbor. |
 | [TypeScript](/docs/examples/typescript) | The same ACP boundary from a TypeScript application. |
 
@@ -24,7 +24,7 @@ events, approvals, and results across the process boundary.
 ```clojure
 (k/defagent researcher
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Research carefully and cite evidence."
+   :instructions "Research carefully and cite evidence."
    :tools [web-search fetch-page]
    :output ::report})
 ```
@@ -48,7 +48,7 @@ events, approvals, and results across the process boundary.
 ```clojure
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
-   :context "Design and run a child Agent for the task."
+   :instructions "Design and run a child Agent for the task."
    :tools [(k/agent)]})
 ```
 
