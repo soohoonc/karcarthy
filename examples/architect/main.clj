@@ -3,18 +3,24 @@
   (:require [clojure.string :as str]
             [karcarthy :as k]))
 
-(def instructions
+(defn model-id []
+  (or (System/getenv "KARCARTHY_OPENAI_MODEL") "gpt-5.6"))
+
+(defn instructions []
   (str
    "You are the parent Agent in a live demonstration. "
    "Before answering, you must call the built-in agent Tool exactly twice. "
    "Submit both calls together so the Agents can run concurrently. "
    "Create one failure analyst that finds a non-obvious risk and one rollout "
    "planner that proposes a concrete safe plan. Give each Agent the complete "
-   "user task as its explicit input. Keep each Agent definition focused and "
-   "concise, then synthesize both results in a concise final answer."))
-
-(defn model-id []
-  (or (System/getenv "KARCARTHY_OPENAI_MODEL") "gpt-5.6"))
+   "user task string as its explicit input. Keep each definition concise and "
+   "use exactly this outer source shape, including the closing } before ): "
+   "(agent {:name \"descriptive-name\" "
+   ":model {:transport :responses :provider :openai :id \"" (model-id) "\" "
+   ":reasoning :low} :instructions \"Do not create or call other Agents. "
+   "ROLE-SPECIFIC TASK.\" "
+   ":input string? :output string?}). "
+   "After both Agents return, synthesize their results concisely."))
 
 (defn architect []
   (k/agent
@@ -24,7 +30,7 @@
             :id (model-id)
             :reasoning :low
             :timeout-ms 180000}
-    :instructions instructions
+    :instructions (instructions)
     :input string?
     :output string?
     :max-turns 4}))
