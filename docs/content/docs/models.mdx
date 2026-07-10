@@ -1,0 +1,72 @@
+---
+title: Models
+description: Configure model endpoints and provider-hosted capabilities.
+---
+
+An Agent's `:model` selects a model and the transport used to call it:
+
+```clojure
+{:transport :responses
+ :provider :openai
+ :id "gpt-5.6"}
+```
+
+The built-in Responses transport reads `RESPONSES_API_KEY` or
+`OPENAI_API_KEY`. It supports complete responses and server-sent streaming;
+streaming is enabled by default.
+
+## Responses-compatible endpoints
+
+Use the same transport with a different endpoint and credential source:
+
+```clojure
+{:transport :responses
+ :provider :anthropic
+ :id "anthropic/claude-model"
+ :base-url "https://ai-gateway.vercel.sh/v1"
+ :api-key-env "AI_GATEWAY_API_KEY"}
+```
+
+The endpoint options are `:base-url`, `:path`, `:url`, `:api-key`,
+`:api-key-env`, `:headers`, `:auth?`, `:timeout-ms`, `:stream`, and
+`:provider-options`. The endpoint must implement the Responses request and
+event shapes used by the selected capabilities.
+
+## Provider-hosted Tools
+
+Some capabilities execute at the model provider rather than inside
+karcarthy. For example:
+
+```clojure
+(k/defagent researcher
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Research current information and cite sources."
+   :tools [(k/responses-web-search)]
+   :output string?})
+```
+
+The selected endpoint and model must support the hosted Tool. karcarthy passes
+its declaration through the transport; it does not execute that Tool locally.
+
+## Models in tests
+
+`fake-model` is a deterministic transport function:
+
+```clojure
+(def model
+  (k/fake-model
+   (fn [request]
+     {:type :final
+      :output "deterministic response"
+      :usage {:input-tokens 4 :output-tokens 2}})))
+
+(k/agent
+ {:name "test-agent"
+  :model {:id "fake" :transport model}
+  :instructions "Return the configured response."
+  :output string?})
+```
+
+Use it for Tool-loop, prompt, Session, and event tests without a network call.
+The [Library API](/docs/reference/api#models) documents the normalized model
+interface.

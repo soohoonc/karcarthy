@@ -5,10 +5,12 @@
     "quickstart",
     "agents",
     "tools",
-    "running-agents",
+    "models",
+    "mcp",
+    "acp",
+    "harbor",
     "sessions",
     "streaming",
-    "integrations",
     "examples",
     "reference"
   ]

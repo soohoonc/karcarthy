@@ -164,7 +164,7 @@
 (defn ^:no-doc compile-agent-in-run!
   "Read, expand, check, evaluate, and return an Agent."
   [rt source]
-  (core/consume! rt :generated-forms 1)
+  (core/consume! rt :agent-forms 1)
   (let [ordinal (swap! (:evaluation-counter rt) inc)
         rt (assoc rt :evaluation-namespace
                   (symbol (str (:evaluation-namespace rt)

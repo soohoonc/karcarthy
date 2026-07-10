@@ -94,6 +94,7 @@
 (deftest serves-acp-v1-and-bridges-session-mcp-tools
   (let [root (temp-directory)
         seen-models (atom [])
+        observed (atom [])
         factory (fn [{:keys [model-id] :as context}]
                   (swap! seen-models conj model-id)
                   (agent-factory context))
@@ -104,6 +105,9 @@
          #(with-open [socket (.accept server-socket)]
             (acp/serve! {:agent factory
                          :models ["fake" "fake-2"]
+                         :run-options
+                         {:observe (fn [event]
+                                     (swap! observed conj (:type event)))}
                          :in (.getInputStream socket)
                          :out (.getOutputStream socket)
                          :client-request-timeout-ms 10000})))
@@ -204,7 +208,8 @@
                             (filter #(= "agent_message_chunk"
                                         (:sessionUpdate %)))
                             (map #(get-in % [:content :text]))
-                            (apply str)))))
+                            (apply str))))
+                (is (contains? (set @observed) :tool/started)))
 
               :else (recur updates permission?))))
 

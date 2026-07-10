@@ -376,10 +376,10 @@
                                               {:type :tool-calls :calls []})}
                           :instructions "loop"
                           :max-turns 1})
-        depth-run (k/run! parent nil {:limits {:agent-depth 0}})
+        depth-run (k/run! parent nil {:limits {:depth 0}})
         budget-run (k/run! looping nil {:limits {:model-calls 0}})]
     (is (= :failed (:status depth-run)))
-    (is (= :agent-depth
+    (is (= :depth
            (get-in depth-run [:error :phase])))
     (is (= :failed (:status budget-run)))
     (is (= :budget (get-in budget-run [:error :kind])))))

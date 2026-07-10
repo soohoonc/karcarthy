@@ -1,0 +1,139 @@
+---
+title: ACP
+description: Expose a karcarthy Agent as an ACP v1 stdio server.
+---
+
+karcarthy can act as the Agent side of the Agent Client Protocol. An editor,
+evaluation harness, or other ACP client launches the process and communicates
+with it over newline-delimited JSON-RPC on standard input and output.
+
+ACP is the process boundary. The object being served is still an ordinary
+karcarthy Agent.
+
+## Serve one Agent
+
+Given a namespace containing an Agent:
+
+```clojure
+(ns example.acp
+  (:require [karcarthy :as k]))
+
+(k/defagent assistant
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Complete the coding request."
+   :output string?})
+```
+
+start the stdio server with its qualified var:
+
+```bash
+clojure -M -m karcarthy.acp example.acp/assistant
+```
+
+The Agent namespace must be present on the process classpath. A deployed
+application therefore packages its Agent definitions alongside karcarthy.
+
+## Build the Agent per session
+
+A coding Agent normally depends on the directory, selected model, and MCP
+servers supplied by the ACP client. Serve a factory in that case:
+
+```clojure
+(ns example.coding-agent
+  (:require [karcarthy :as k]))
+
+(defn coding-agent [{:keys [cwd model-id]}]
+  (k/agent
+   {:name "coding-agent"
+    :model {:transport :responses
+            :id (or model-id "gpt-5.6")}
+    :instructions "Inspect the repository, make focused changes, and verify them."
+    :tools (k/local-tools {:cwd cwd})
+    :output string?}))
+
+(defn -main [& _]
+  (k/serve-acp!
+   {:agent coding-agent
+    :models ["gpt-5.6" "gpt-5.5"]}))
+```
+
+Run it with:
+
+```bash
+clojure -M -m example.coding-agent
+```
+
+The factory receives:
+
+```clojure
+{:cwd "/absolute/session/directory"
+ :mcp-tools [...]
+ :session-id "sess_..."
+ :model-id "gpt-5.6"}
+```
+
+Client-provided MCP Tools are appended to the Agent's own `:tools`
+automatically. The factory may inspect them but does not need to merge them.
+
+## Session behavior
+
+Each ACP session owns:
+
+- its working directory and conversation Session;
+- its selected model;
+- client-provided stdio MCP processes;
+- cancellation and permission state; and
+- at most one active prompt turn.
+
+Prompt text and embedded resource blocks become the input to `run!`. Agent
+text deltas become ACP `agent_message_chunk` updates. Tool starts, results, and
+failures become `tool_call` and `tool_call_update` messages with raw input and
+output. A Tool requiring approval becomes `session/request_permission`.
+
+Token usage is returned only when every model call in the Run reports input
+and output tokens. This avoids presenting a partial total as complete.
+
+## Implemented protocol surface
+
+| ACP operation | Support |
+| --- | --- |
+| `initialize` with protocol version 1 | Yes |
+| `session/new` | Yes |
+| `session/prompt` | Yes |
+| `session/cancel` | Yes |
+| `session/close` | Yes |
+| model selection through `session/set_config_option` | Yes |
+| compatibility `session/set_model` | Yes |
+| streamed Agent messages and Tool updates | Yes |
+| client permission requests | Yes |
+| client-provided stdio MCP servers | Yes |
+| session resume/load | No |
+| HTTP or SSE MCP supplied by the client | No |
+| authentication methods | No |
+
+See the [official ACP architecture](https://agentclientprotocol.com/get-started/architecture)
+and [protocol repository](https://github.com/agentclientprotocol/agent-client-protocol)
+for the wider protocol.
+
+## Server options
+
+`serve-acp!` accepts `:agent`, `:models`, `:run-options`,
+`:client-request-timeout-ms`, and optional `:in`/`:out` streams for embedding
+or tests. A static Agent's configured model ID is advertised automatically.
+
+An `:observe` callback inside `:run-options` receives the complete karcarthy
+event stream in addition to the ACP updates sent to the client. This is the
+hook for retaining harness-internal events during an evaluation.
+
+The default server owns standard input and output. Do not print logs or
+application output to stdout while serving ACP; it would corrupt the JSON-RPC
+stream. Write diagnostics to stderr or another sink.
+
+## Security
+
+ACP is designed for a trusted client launching a local Agent process. The
+client chooses the session directory and may provide commands for stdio MCP
+servers. Do not expose this stdio boundary to an untrusted remote party without
+an isolation and authentication layer.
+
+See [Harbor](/docs/harbor) for evaluation through Harbor's generic ACP runner.

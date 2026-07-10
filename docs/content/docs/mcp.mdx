@@ -1,0 +1,106 @@
+---
+title: MCP
+description: Connect an Agent to Tools exposed by a stdio MCP server.
+---
+
+karcarthy is an MCP client. It starts an MCP server as a child process,
+discovers the server's Tools, and adapts them into ordinary karcarthy Tool
+values. The Agent and model loop do not need a separate MCP execution path.
+
+## Connect and run
+
+```clojure
+(def connection
+  (k/connect-mcp!
+   {:name "project"
+    :command "npx"
+    :args ["-y" "@example/project-mcp"]
+    :cwd "/workspace/project"}))
+
+(try
+  (let [tools (k/mcp-tools connection)
+        agent (k/agent
+               {:name "project-agent"
+                :model {:transport :responses :id "gpt-5.6"}
+                :instructions "Inspect the project and answer the request."
+                :tools tools
+                :output string?})]
+    (k/run! agent "Summarize the open work."
+            {:approval (fn [{:keys [tool input]}]
+                         (approve? (:name tool) input))}))
+  (finally
+    (k/close-mcp! connection)))
+```
+
+`connect-mcp!` executes `:command` directly, never through a shell. Its config
+accepts:
+
+| Key | Meaning |
+| --- | --- |
+| `:name` | Stable local name used in generated Tool names. Defaults to the command. |
+| `:command` | Executable to start. Required. |
+| `:args` | String arguments passed to the executable. |
+| `:env` | Environment additions as a map or ACP-style name/value entries. |
+| `:cwd` | Existing directory used as the child process working directory. |
+| `:timeout-ms` | Per-request timeout. Defaults to 30 seconds. |
+
+Always close the connection. Closing it ends the child process and releases
+pending requests.
+
+## What karcarthy does
+
+The client negotiates MCP `2025-11-25`, sends `notifications/initialized`,
+paginates `tools/list`, and executes calls with `tools/call`. A
+`notifications/tools/list_changed` notification marks the definitions stale;
+the next call to `mcp-tools` or the underlying definitions API refreshes them.
+
+Each remote definition becomes a normal Tool containing its input schema,
+description, annotations, and MCP source metadata. The default name is:
+
+```text
+mcp_<server>__<remote-tool>
+```
+
+Names are normalized, bounded to 64 characters, and disambiguated when remote
+names collide. Pass `{:prefix "project__"}` to `mcp-tools` to select another
+prefix.
+
+## Approval and trust
+
+MCP Tools default to `:approval :always`. Pass an approval handler to `run!`,
+as above, or set a different policy when adapting the Tools:
+
+```clojure
+(k/mcp-tools connection {:approval :never})
+```
+
+Use `:never` only for a server and Tool implementation you trust. Tool-call
+approval does not sandbox the MCP server process: the process starts before a
+model requests a Tool and has the operating-system authority of karcarthy.
+
+## Supported boundary
+
+| MCP capability | Support |
+| --- | --- |
+| stdio transport | Yes |
+| Tool discovery and calls | Yes |
+| paginated Tool lists | Yes |
+| Tool-list change notifications | Yes |
+| server `ping` requests | Yes |
+| resources and prompts | No |
+| sampling and elicitation | No |
+| MCP tasks | No |
+| Streamable HTTP | No |
+
+This is deliberately a Tool adapter, not a complete MCP host. See the
+[official MCP specification](https://modelcontextprotocol.io/specification/2025-11-25)
+for the protocol beyond karcarthy's implemented boundary.
+
+## MCP supplied through ACP
+
+An ACP client may provide stdio MCP server configurations when it creates a
+session. karcarthy starts those servers in the ACP session working directory,
+adapts their Tools with approval enabled, and makes the Tools available to the
+session Agent. They are closed with the ACP session.
+
+See [ACP](/docs/acp) for the session factory interface and security boundary.

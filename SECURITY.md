@@ -59,5 +59,5 @@ credentials and must not be recorded in events or logs.
 
 ## Denial of service
 
-Always configure appropriate model-call, token, generated-form, Agent-depth,
-parallelism, cancellation, and deadline limits for recursively generated code.
+Always configure appropriate model-call, token, Agent-form, depth, parallelism,
+cancellation, and deadline limits for recursively generated code.

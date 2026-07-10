@@ -95,7 +95,9 @@ This executes model-authored JVM Clojure and is not a sandbox.
 - [Quickstart](docs/content/docs/quickstart.mdx)
 - [Agents](docs/content/docs/agents.mdx)
 - [Tools](docs/content/docs/tools.mdx)
-- [Running Agents](docs/content/docs/running-agents.mdx)
+- [MCP](docs/content/docs/mcp.mdx)
+- [ACP](docs/content/docs/acp.mdx)
+- [Harbor](docs/content/docs/harbor.mdx)
 - [Chat from the REPL](docs/content/docs/examples/chat.mdx)
 - [Reference](docs/content/docs/reference/index.mdx)
 

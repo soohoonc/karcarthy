@@ -100,7 +100,17 @@ For a Tool with `:approval :always` or `:once`, pass an approval function:
 
 Without a handler, approval fails closed.
 
-## Local, hosted, and MCP Tools
+## Where Tools come from
+
+All callable functions enter an Agent through `:tools`, but they may execute
+in different places:
+
+| Source | Execution |
+| --- | --- |
+| `tool` / `deftool` | A Clojure function in the karcarthy process. |
+| `local-tools` | Built-in filesystem, shell, and search functions in the karcarthy process. |
+| provider-hosted Tool | The selected model endpoint executes it. |
+| MCP Tool | An external MCP server process executes it. |
 
 `local-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
 `search` Tools:
@@ -116,8 +126,16 @@ Without a handler, approval fails closed.
                :bash :always}}))
 ```
 
-Hosted provider capabilities and MCP capabilities also become values placed in
-`:tools`. See [Integrations](/docs/integrations).
+File Tools remain under `:cwd`, including after resolving symlinks. `bash` is
+bounded by timeout and output size but is not a sandbox.
+
+Provider-hosted capabilities are declared as Tool values but executed by the
+model endpoint; see [Models](/docs/models#provider-hosted-tools).
+
+For MCP, karcarthy starts a stdio MCP server, discovers its remote Tool
+definitions, and turns each one into an ordinary Tool value. Connection
+lifecycle, approval defaults, naming, supported protocol features, and
+ACP-provided MCP servers are documented on the dedicated [MCP page](/docs/mcp).
 
 Agents are declared separately with `:agents`; see [Make specialists
 available](/docs/agents#make-specialists-available).

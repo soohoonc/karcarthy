@@ -131,8 +131,8 @@ A generated model Agent receives the same built-in `agent` Tool and can write
 another Agent. Bound recursive programs with Run limits:
 
 ```clojure
-{:agent-depth 4
- :generated-forms 10
+{:depth 4
+ :agent-forms 10
  :model-calls 50
  :input-tokens 500000
  :output-tokens 50000
@@ -141,8 +141,8 @@ another Agent. Bound recursive programs with Run limits:
 ```
 
 Compilation emits `:program/read`, `:program/expanded`, `:program/checked`,
-`:program/evaluated`, or `:program/failed` events. `:generated-forms` is charged
-before compilation, including failed attempts.
+`:program/evaluated`, or `:program/failed` events. `:agent-forms` counts each
+submitted top-level Agent form, including failed attempts.
 
 ## Direct compilation
 

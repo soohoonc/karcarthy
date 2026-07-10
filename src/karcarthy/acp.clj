@@ -258,6 +258,12 @@
            (some? error) (assoc :content (tool-output-content error)))))
       nil)))
 
+(defn- combine-observers [& callbacks]
+  (let [callbacks (remove nil? callbacks)]
+    (fn [event]
+      (doseq [callback callbacks]
+        (try (callback event) (catch Throwable _ nil))))))
+
 (defn- approval-handler [server session]
   (fn [{:keys [tool input]}]
     (if (contains? @(:always-allowed session) (:name tool))
@@ -322,7 +328,9 @@
               (merge base-options
                      {:session (:agent-session session)
                       :cancel (:cancel session)
-                      :observe (observer server session message-id streamed?)
+                      :observe (combine-observers
+                                (:observe base-options)
+                                (observer server session message-id streamed?))
                       :approval (approval-handler server session)
                       :context (merge (:context base-options)
                                       {:cwd (:cwd session)

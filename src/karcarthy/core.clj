@@ -572,9 +572,9 @@
   {:model-calls 100
    :input-tokens Long/MAX_VALUE
    :output-tokens Long/MAX_VALUE
-   :agent-depth 8
+   :depth 8
    :parallelism 16
-   :generated-forms 20
+   :agent-forms 20
    :deadline-ms nil})
 
 (def ^:private run-option-keys
@@ -590,7 +590,7 @@
            {:value limits}))
   (reject-unknown! "Limits" (set (keys default-limits)) limits)
   (doseq [resource [:model-calls :input-tokens :output-tokens
-                    :agent-depth :generated-forms]]
+                    :depth :agent-forms]]
     (let [value (get limits resource)]
       (when-not (and (integer? value) (not (neg? value)))
         (fail! :contract :configuration
@@ -1170,9 +1170,9 @@
                 (narrower-limits (:limits parent-rt)
                                  (merge (get-in agent [:config :limits])
                                         (:limits options))))]
-    (when (> depth (:agent-depth limits))
-      (fail! :budget :agent-depth "Agent depth limit was reached"
-             {:depth depth :limit (:agent-depth limits)}))
+    (when (> depth (:depth limits))
+      (fail! :budget :depth "Agent depth limit was reached"
+             {:depth depth :limit (:depth limits)}))
     (let [local-deadline-ns
           (when-let [ms (:deadline-ms limits)]
             (+ (System/nanoTime) (* 1000000 (long ms))))
@@ -1245,7 +1245,7 @@
          usage* (atom {:model-calls 0
                        :input-tokens 0
                        :output-tokens 0
-                       :generated-forms 0})
+                       :agent-forms 0})
          run-id (id "run_")
          started (System/nanoTime)
          deadline-ns (when-let [ms (:deadline-ms limits)]
