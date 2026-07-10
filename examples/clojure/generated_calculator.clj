@@ -1,4 +1,4 @@
-;; An offline Agent that constructs and invokes a generated calculator Agent.
+;; An offline Agent that constructs and runs a generated calculator Agent.
 (require '[karcarthy :as k])
 
 (k/deftool add
@@ -9,7 +9,7 @@
                                "b" {:type "integer"}}
                   :required ["a" "b"]}
    :output int?}
-  [_ {:keys [a b]}]
+  [{:keys [a b]}]
   (+ a b))
 
 (def calculator-model
@@ -30,13 +30,13 @@
   {:description "Construct and run a new Agent as ordinary Clojure code."
    :input any?
    :output int?}
-  [rt input]
+  [input]
   (let [source
         "(agent {:name \"generated-calculator\" :input any? :output int?}
-                [rt input]
-                (invoke! rt calculator input))"
-        child (k/compile-agent! rt source)]
-    (k/invoke! rt child input)))
+                [input]
+                (:output (run! calculator input)))"
+        generated (k/compile-agent! source)]
+    (:output (k/run! generated input))))
 
 (let [run (k/run! architect {:question "What is 20 + 22?"}
                   {:observe #(println (:type %) (or (:agent %) ""))})]

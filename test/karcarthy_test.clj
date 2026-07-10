@@ -4,7 +4,7 @@
 
 (deftest facade-exposes-only-the-native-harness
   (doseq [sym '[agent defagent tool deftool agent? tool?
-                run! invoke! spawn! await! await-all! as-tool context
+                run! as-tool context
                 memory-session session? session-id get-items add-items!
                 pop-item! clear-session!
                 model! emit! events fake-model
@@ -18,6 +18,7 @@
   (doseq [removed '[run pipe branch delegate reduce revise route continue
                     dynamic evolve mock-runner fn-runner process-runner
                     claude-runner codex-runner openai-runner acp-runner
+                    invoke! spawn! await! await-all!
                     handoff! environment conversation-state? model-transport
                     workspace-tools workspace-prompt]]
     (is (nil? (get (ns-publics 'karcarthy) removed))
@@ -25,6 +26,6 @@
 
 (deftest forwarding-macros-capture-source
   (let [agent (k/agent {:name "facade" :output string?}
-                       [_ x] (str x))]
+                       [x] (str x))]
     (is (k/agent? agent))
     (is (seq (k/source-form agent)))))

@@ -124,7 +124,7 @@ specialized child:
 ```
 
 The Tool accepts one `(agent ...)` source form plus its input. The generated
-Agent is checked, evaluated, and invoked as a child of the current Run. It
+Agent is checked, evaluated, and run inside the current Run. It
 retains the same source and expanded forms as a developer-authored Agent. The
 [Agents guide](/docs/agents) covers known Agent Tools, generated Agents,
 recursion, and source inspection.
@@ -149,7 +149,7 @@ Runs are independent unless you pass a Session:
 ## Next
 
 - [Agents](/docs/agents): configuration, composition, and recursive generation
-- [Running agents](/docs/running-agents): `run!`, results, child Agents, and limits
+- [Running agents](/docs/running-agents): `run!`, results, and limits
 - [Tools](/docs/tools): contracts, approvals, local Tools, and Agents as Tools
 - [Sessions](/docs/sessions): conversation history across Runs
 - [Streaming and events](/docs/streaming): live model text and lifecycle events

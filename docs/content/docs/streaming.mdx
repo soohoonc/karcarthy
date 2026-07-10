@@ -57,8 +57,8 @@ result directly:
 Agent bodies and Tools may add application events with `emit!`:
 
 ```clojure
-(k/emit! rt {:type :application/decision
-             :value decision})
+(k/emit! {:type :application/decision
+          :value decision})
 ```
 
 `emit!` adds the current Run and Agent lineage before recording and publishing

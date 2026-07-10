@@ -72,10 +72,10 @@ The model can make this Tool call:
 ```
 
 karcarthy reads the form, macroexpands and checks it, evaluates it, verifies
-that it produced an Agent, and invokes the child:
+that it produced an Agent, and runs it:
 
 ```text
-Tool call → Clojure form → Agent value → child Run → Tool result
+Tool call → Clojure form → Agent value → nested Agent → Tool result
 ```
 
 The generated child is not a second-class workflow node. It is the same value
@@ -118,8 +118,8 @@ during the run rather than on a graph fixed before the run starts.
 ### Authored and generated Agents share one abstraction
 
 Known specialists can be exposed with `as-tool`. New specialists can be
-created with the `agent` Tool. Direct child calls use `invoke!`. All three paths
-produce ordinary child Agents in the same Run tree.
+created with the `agent` Tool. Clojure code uses the same `run!` function for
+every Agent it runs.
 
 ### Generated behavior stays inspectable
 
@@ -136,16 +136,15 @@ An Agent may have a normal Clojure body:
 (k/defagent review-team
   {:input map?
    :output string?}
-  [rt change]
-  (let [reviews (k/await-all!
-                 [(k/spawn! rt security-reviewer change)
-                  (k/spawn! rt api-reviewer change)])]
-    (k/invoke! rt editor {:change change :reviews reviews})))
+  [change]
+  (let [reviews [(:output (k/run! security-reviewer change))
+                 (:output (k/run! api-reviewer change))]]
+    (:output (k/run! editor {:change change :reviews reviews}))))
 ```
 
 The model can author the same form. `let`, `if`, functions, macros, and
-`loop/recur` already express the control flow; karcarthy adds Agent calls,
-shared limits, and observation.
+`loop/recur` already express the control flow; `run!` is the only operation
+needed to run an Agent.
 
 ## The programming model
 
@@ -163,7 +162,6 @@ The everyday entry points are:
 (k/defagent name ...)  ; define that value in a var
 (k/agent)              ; construct the model-facing Agent Tool
 (k/run! agent input)   ; start a root Run
-(k/invoke! rt agent x) ; call a child from an Agent body
 ```
 
 The practical `agent`/`defagent` relationship is like `fn`/`defn`: expression
@@ -173,7 +171,7 @@ versus named definition. `defagent` does not create a different Agent type.
 
 - a streaming model/Tool loop;
 - typed local Tools and provider-hosted Tools;
-- structured child Agents and shared limits;
+- recursive Agent creation with shared limits;
 - optional conversation Sessions;
 - source retention and generated-Agent evaluation;
 - MCP Tool discovery over stdio;

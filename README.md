@@ -12,10 +12,10 @@ transformed, evaluated, and run.
 
 That homoiconic representation powers the central capability: add the built-in
 `agent` Tool to let a model submit a new Agent definition that karcarthy checks,
-evaluates, and runs as a child of the current Run.
+evaluates, and runs inside the current Run.
 
 The harness also provides a model/Tool loop, typed Tools, conversation Sessions,
-streaming events, structured child Agents, MCP, and ACP.
+streaming events, recursive Agent creation, MCP, and ACP.
 
 ## Install
 
@@ -79,7 +79,7 @@ The model calls the Tool with:
 ```
 
 karcarthy reads one Clojure form, macroexpands and checks it, evaluates it,
-verifies that it produced an Agent, and invokes the child. Generated Agents may
+verifies that it produced an Agent, and runs it. Generated Agents may
 receive the same Tool and create more Agents within shared limits.
 
 ## `agent` and `defagent`
@@ -107,11 +107,10 @@ Agents can also have a Clojure body for deterministic coordination:
 ```clojure
 (k/defagent review-team
   {:input map? :output string?}
-  [rt change]
-  (let [reviews (k/await-all!
-                 [(k/spawn! rt security-reviewer change)
-                  (k/spawn! rt api-reviewer change)])]
-    (k/invoke! rt editor {:change change :reviews reviews})))
+  [change]
+  (let [reviews [(:output (k/run! security-reviewer change))
+                 (:output (k/run! api-reviewer change))]]
+    (:output (k/run! editor {:change change :reviews reviews}))))
 ```
 
 ## Local and remote Tools

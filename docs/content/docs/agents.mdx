@@ -71,17 +71,17 @@ That Tool is covered in [Model-created Agents](#model-created-agents).
 | --- | --- |
 | `:name` | Stable Agent name. Required by `agent`; supplied by `defagent`. |
 | `:model` | Model ID, transport, and inference options. |
-| `:instructions` | Model-visible string or function of the current run context. |
+| `:instructions` | Model-visible string or function of the current call metadata. |
 | `:context` | Contract for local, non-model-visible dependencies. |
 | `:input`, `:output` | Boundary contracts. |
-| `:tools` | Tool values or a function of the current run context. |
+| `:tools` | Tool values or a function of the current call metadata. |
 | `:max-turns` | Maximum model turns for the Agent. |
 | `:stop-when` | Predicate that can reject a premature final response. |
 | `:guardrails` | Input and output validation functions. |
 | `:limits` | Limits narrower than the current Run's grant. |
 
-`:model`, `:instructions`, and `:tools` may be functions of the immutable run
-context, allowing per-request model routing and capability selection.
+`:model`, `:instructions`, and `:tools` may be functions of immutable call
+metadata, allowing per-request model routing and capability selection.
 
 ## Model-backed Agents
 
@@ -104,23 +104,22 @@ final output or the Run fails, is cancelled, or reaches a limit.
 
 ## Agents with a Clojure body
 
-Add `[rt input]` and a body when coordination should be explicit code:
+Add `[input]` and a body when coordination should be explicit code:
 
 ```clojure
 (k/defagent review-team
   {:input map?
    :output map?}
-  [rt change]
-  (let [reviews (k/await-all!
-                 [(k/spawn! rt security-reviewer change)
-                  (k/spawn! rt api-reviewer change)])]
-    (k/invoke! rt editor {:change change :reviews reviews})))
+  [change]
+  (let [reviews [(:output (k/run! security-reviewer change))
+                 (:output (k/run! api-reviewer change))]]
+    (:output (k/run! editor {:change change :reviews reviews}))))
 ```
 
-A custom-body Agent may omit `:model` and `:instructions`. `invoke!` calls a
-child in the current Run; `spawn!` and `await-all!` provide bounded parallel
-child calls. Normal Clojure supplies sequencing, branching, iteration, and
-error handling.
+A custom-body Agent may omit `:model` and `:instructions`. `run!` always returns
+a Run value, so Clojure code reads `:output` after checking `:status`. Normal
+Clojure supplies sequencing, branching, iteration, concurrency, and error
+handling.
 
 ## Expose a known Agent as a Tool
 
@@ -186,11 +185,12 @@ Or it can define an Agent with a Clojure body:
  {:name "parallel-review"
   :input map?
   :output map?}
- [rt change]
- (let [reviews (await-all!
-                [(spawn! rt security-reviewer change)
-                 (spawn! rt api-reviewer change)])]
-   (invoke! rt editor {:change change :reviews reviews})))
+ [change]
+ (let [reviews (->> [security-reviewer api-reviewer]
+                    (mapv #(future (run! % change)))
+                    (mapv deref)
+                    (mapv :output))]
+   (:output (run! editor {:change change :reviews reviews}))))
 ```
 
 For each Tool call, karcarthy performs this pipeline:
@@ -238,7 +238,7 @@ Generated-Agent compilation also emits `:program/read`, `:program/expanded`,
 ## Next
 
 - [Tools](/docs/tools) explains Tool contracts, approvals, and local Tools.
-- [Running agents](/docs/running-agents) covers `run!`, child Agents, and limits.
+- [Running agents](/docs/running-agents) covers `run!`, results, and limits.
 - [Streaming and events](/docs/streaming) covers live observation and Run events.
 - [Integrations](/docs/integrations) covers model endpoints, MCP, ACP, and Harbor.
 - [Clojure example](/docs/examples/clojure) shows a complete multi-Agent system.

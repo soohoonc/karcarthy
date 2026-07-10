@@ -21,10 +21,10 @@ pure and offline-testable.
 
 ## Architectural rules
 
-- Add Agent and Tool behavior to the native Runtime in
+- Add Agent and Tool behavior to the small harness kernel in
   `src/karcarthy/core.clj`.
 - A provider integration is a narrow normalized model transport. It must not
-  run tools or child Agents.
+  run Tools or Agents.
 - Use normal Clojure for orchestration. Do not add workflow node constructors
   or an interpreter.
 - Generated behavior goes through `karcarthy.eval`: read with reader evaluation

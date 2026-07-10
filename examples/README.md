@@ -7,7 +7,7 @@ entirely offline and demonstrates:
 - a model-backed Agent using the native model/tool loop;
 - a custom Agent body;
 - model-authored Clojure read, expansion, checking, and evaluation;
-- recursive child invocation;
+- recursive Agent creation;
 - run events and generated-form usage.
 
 Run it from the repository root:

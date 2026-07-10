@@ -2,8 +2,8 @@
 
 karcarthy is a native, homoiconic Clojure agent harness. It owns the model/tool
 loop. Agents, tools, and orchestration are executable Clojure values and forms;
-model-authored Agents are read, expanded, checked, evaluated, and invoked by
-the same Runtime.
+model-authored Agents are read, expanded, checked, evaluated, and run by the
+same kernel.
 
 There is no Runner protocol, EDN/JSON workflow DSL, or separate dynamic system.
 Do not reintroduce `pipe`, `branch`, workflow nodes, runner adapters, or a JSON
@@ -26,7 +26,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | File | Role |
 | --- | --- |
 | `src/karcarthy.clj` | Public facade under one alias: `(require '[karcarthy :as k])`. |
-| `src/karcarthy/core.clj` | Recursive Agent/Tool macros and values, contracts, Runtime, model/tool loop, Session integration, child execution, limits, streaming events, approvals, and Runs. |
+| `src/karcarthy/core.clj` | Agent/Tool macros and values, contracts, model/tool loop, Session integration, limits, streaming events, approvals, and Runs. |
 | `src/karcarthy/prompt.clj` | Generic instruction composition, prompt-file loading, and access to the packaged `system.md`. |
 | `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `memory-session`. |
 | `src/karcarthy/eval.clj` | Model-authored source reading, macroexpansion, evaluation, verification, and program events. |
@@ -55,14 +55,17 @@ cd docs && npm run lint && npm run types:check && npm run build
   MCP discovery, and ACP serving adapt to ordinary Tools around the kernel.
   Prompts must describe the capabilities actually installed.
 - **Clojure is the orchestration language.** Use `let`, `if`, `case`,
-  `loop/recur`, functions, macros, `invoke!`, and structured child execution.
+  `loop/recur`, functions, macros, `future`, `deref`, and `run!`. Do not add a
+  separate child-call or workflow API.
+- **Bodies receive only input.** Agent and Tool bodies use `[input]`; internal
+  Run machinery is dynamically scoped and must not become a public argument.
 - **Agents and Tools retain code.** Preserve `:source-form` and
   `:expanded-form` when changing macros or evaluation.
 - **`agent` is recursive.** `(agent config ...)` constructs an Agent;
   zero-arity `(agent)` is the model-facing tool that accepts and runs another
   ordinary Agent form. Do not create a separate dynamic/expansion primitive.
 - **Instructions are model-visible; context is local.** `:instructions` is a
-  string or Runtime-view function. `:context` is dependency injection and is
+  string or call-metadata function. `:context` is dependency injection and is
   never exposed automatically. Do not add request-mutation hooks such as
   `prepare-step`.
 - **Conversation history belongs to a Session.** Runs are stateless unless the
@@ -75,8 +78,9 @@ cd docs && npm run lint && npm run types:check && npm run build
   during the read phase, but checked forms are later evaluated as JVM Clojure.
   Full-trust evaluation is the default; do not replace it with an EDN
   interpreter in the name of safety.
-- **Limits are shared.** Recursive children consume root model, token,
-  generated-form, depth, concurrency, cancellation, and deadline budgets.
+- **Limits belong to a Run.** Agents entered through `as-tool` or the
+  model-facing `(agent)` Tool consume that Run's budgets. A separate `run!`
+  call creates a separate Run with separate limits and events.
 - **Observation is part of the product.** New effects need stable event types
   and lineage.
 - **Dependencies: Maven Central only.** HTTP uses Java's built-in client.

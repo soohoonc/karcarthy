@@ -6,7 +6,7 @@
   {:description "Uppercase text."
    :input map?
    :output string?}
-  [_ {:keys [text]}]
+  [{:keys [text]}]
   (.toUpperCase ^String text))
 
 (def demo-model

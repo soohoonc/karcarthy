@@ -1,6 +1,6 @@
 ---
 title: Running agents
-description: Start a Run, call child Agents, inspect results, and control limits and cancellation.
+description: Start a Run, inspect its result, and control limits and cancellation.
 ---
 
 Use `run!` to ask an Agent to do work:
@@ -58,30 +58,27 @@ The loop stops on valid output, failure, cancellation, a Run limit, or the
 Agent's `:max-turns`. `:stop-when` can reject a final response and continue the
 loop when an application-specific condition is not satisfied.
 
-## Run an Agent from another Agent
+## Run Agents from Clojure
 
-`run!` starts a new root Run. Inside an Agent body, use `invoke!` to call a
-child in the current Run:
+Agent bodies use the same `run!` function as application code:
 
 ```clojure
 (k/defagent reviewer-team
   {:input map? :output vector?}
-  [rt change]
-  [(k/invoke! rt security-reviewer change)
-   (k/invoke! rt api-reviewer change)])
+  [change]
+  [(:output (k/run! security-reviewer change))
+   (:output (k/run! api-reviewer change))])
 ```
 
-Use `spawn!` when independent children should run concurrently:
+Each call returns a Run. Use ordinary Clojure when runs should overlap:
 
 ```clojure
-(let [children [(k/spawn! rt security-reviewer change)
-                (k/spawn! rt api-reviewer change)]]
-  (k/await-all! children))
+(->> [security-reviewer api-reviewer]
+     (mapv #(future (k/run! % change)))
+     (mapv deref))
 ```
 
-Agents exposed with `as-tool` and Agents created through `(agent)` also run as
-children. Every path records the same parent/child lineage and contributes to
-the root Run's limits and usage.
+No separate workflow or child-call API is required.
 
 ## Pass application context
 
@@ -94,7 +91,7 @@ into the model prompt automatically:
                    :db db}})
 ```
 
-Agent bodies and Tools read it with `(k/context rt)`. An Agent's `:context`
+Agent bodies and Tools read it with `(k/context)`. An Agent's `:context`
 contract validates the value at its boundary. Instructions that should be
 model-visible belong in `:instructions`.
 
@@ -111,10 +108,11 @@ model-visible belong in `:instructions`.
                   :deadline-ms 300000}})
 ```
 
-Limits apply to the complete Run tree. A child can lower an inherited limit
-but cannot raise it. `:agent-depth` bounds recursion, `:generated-forms` bounds
-model-authored Agent compilation, and `:parallelism` bounds concurrently
-running children and timed Tools.
+Limits apply to one Run, including Agents entered through `as-tool` or the
+model-facing `(agent)` Tool. Separate `run!` calls have separate limits and
+events. `:agent-depth` bounds nested Agent Tools, `:generated-forms` bounds
+model-authored Agent compilation, and `:parallelism` bounds concurrent Tool
+work within the Run.
 
 ## Cancel a Run
 
@@ -129,7 +127,7 @@ Pass a Boolean, predicate, atom, or other dereferenceable value as `:cancel`:
 (reset! cancelled? true)
 ```
 
-Cancellation is checked around Agent, model, Tool, and child calls.
+Cancellation is checked around Agent, model, and Tool calls.
 
 ## Next
 

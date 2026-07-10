@@ -6,7 +6,7 @@ description: Source format, compilation pipeline, evaluation namespace, limits, 
 The zero-arity `(k/agent)` Tool is the model-facing use of karcarthy's
 homoiconic representation. It accepts the same Clojure Agent form a developer
 would write, treats that form as data through reading and macroexpansion, then
-evaluates and invokes the resulting Agent. Applications can use the same
+evaluates and runs the resulting Agent. Applications can use the same
 compilation path directly with `compile-agent!`.
 
 ## Tool input
@@ -43,11 +43,12 @@ An Agent with a Clojure body:
  {:name "generated-review-team"
   :input map?
   :output string?}
- [rt change]
- (let [reviews (await-all!
-                [(spawn! rt security-reviewer change)
-                 (spawn! rt api-reviewer change)])]
-   (invoke! rt editor {:change change :reviews reviews})))
+ [change]
+ (let [reviews (->> [security-reviewer api-reviewer]
+                    (mapv #(future (run! % change)))
+                    (mapv deref)
+                    (mapv :output))]
+   (:output (run! editor {:change change :reviews reviews}))))
 ```
 
 Symbols such as `security-reviewer` and `editor` must resolve in the evaluation
@@ -74,7 +75,7 @@ eval-agent-form!
 agent?
     │
     ▼
-invoke!
+nested Agent
 ```
 
 ### Read
@@ -99,9 +100,9 @@ system.
 `agent?`. The resulting Agent retains its source form, expanded form, and
 definition namespace.
 
-### Invoke
+### Run the Agent
 
-The `agent` Tool invokes the generated Agent as a child in the current Run. It
+The `agent` Tool runs the generated Agent inside the current Run. It
 inherits shared usage, deadline, cancellation, approvals, event recording, and
 parallelism policy.
 
@@ -116,8 +117,8 @@ Agent. A root Run may select another namespace:
 ```
 
 The namespace receives Clojure core plus the public Agent-program forms needed
-for composition, including `agent`, `tool`, `invoke!`, `spawn!`, `await!`, and
-`await-all!`. Application Agents, Tools, macros, and contracts must be referred
+for composition, including `agent`, `tool`, `run!`, `context`, `model!`, and
+`emit!`. Application Agents, Tools, macros, and contracts must be referred
 or interned in that namespace before generated code can use them.
 
 ## Recursion and limits
@@ -172,15 +173,15 @@ expose only the namespaces and Tools the task requires.
 
 ## Direct compilation API
 
-Custom Agent bodies can invoke the same phases directly:
+Custom Agent bodies can use the same phases directly:
 
 ```clojure
 (def form (k/read-agent-form source))
-(def checked (k/check-agent-form! rt form))
-(def child (k/eval-agent-form! rt checked))
+(def checked (k/check-agent-form! form))
+(def generated (k/eval-agent-form! checked))
 
 ;; Equivalent convenience function:
-(def child (k/compile-agent! rt source))
+(def generated (k/compile-agent! source))
 ```
 
 Use the zero-arity `agent` Tool for normal model-driven creation and the direct

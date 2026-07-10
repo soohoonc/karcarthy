@@ -20,8 +20,8 @@ Use `tool` to construct a value:
             :required ["user_id"]
             :additionalProperties false}
     :output map?}
-   [rt {:keys [user_id]}]
-   (lookup! (:db (k/context rt)) user_id)))
+   [{:keys [user_id]}]
+   (lookup! (:db (k/context)) user_id)))
 ```
 
 Use `deftool` to define a var and derive its default name from the symbol:
@@ -31,8 +31,8 @@ Use `deftool` to define a var and derive its default name from the symbol:
   {:description "Look up a user by ID."
    :input map?
    :output map?}
-  [rt {:keys [user-id]}]
-  (lookup! (:db (k/context rt)) user-id))
+  [{:keys [user-id]}]
+  (lookup! (:db (k/context)) user-id))
 ```
 
 As with `agent` and `defagent`, these forms produce the same kind of Tool.
@@ -46,8 +46,8 @@ As with `agent` and `defagent`, these forms produce the same kind of Tool.
 | `:input` | Tool input contract. |
 | `:input-schema` | Explicit model-facing JSON Schema when different. |
 | `:output` | Tool output contract. |
-| `:approval` | Approval policy or function of the current run context. |
-| `:enabled?` | Predicate of the current run context controlling availability. |
+| `:approval` | Approval policy or function of the current call metadata. |
+| `:enabled?` | Predicate of the current call metadata controlling availability. |
 | `:guardrails` | Input and output guardrail functions. |
 | `:timeout-ms` | Tool-call timeout. |
 | `:retry` | Retry count or retry options. |
@@ -66,8 +66,8 @@ Set `:approval` to request authorization before execution:
    :input map?
    :output map?
    :approval :always}
-  [rt request]
-  (delete! (:db (k/context rt)) request))
+  [request]
+  (delete! (:db (k/context)) request))
 ```
 
 Supply an approval handler to `run!`:

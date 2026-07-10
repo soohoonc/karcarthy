@@ -207,6 +207,17 @@
   #{:name :description :input :input-schema :output :output-schema :approval
     :enabled? :guardrails :timeout-ms :retry :to-model-output :metadata})
 
+(declare run-agent!)
+
+(def ^:dynamic ^:no-doc *run-context* nil)
+
+(defn ^:no-doc current-run-context
+  "Return the internal context for the Agent or Tool currently running."
+  []
+  (or *run-context*
+      (fail! :program :agent
+             "This operation is only available while an Agent is running")))
+
 (defn- reject-unknown!
   [label supported m]
   (when-let [unknown (seq (remove supported (keys m)))]
@@ -238,31 +249,38 @@
     :definition-ns definition-ns
     :source-form source-form
     :expanded-form expanded-form
-    :invoke program}))
+    :body program}))
+
+(defn- body-function-form [label bindings body]
+  (when-not (and (vector? bindings) (= 1 (count bindings)))
+    (throw (IllegalArgumentException.
+            (str label " body requires [input]"))))
+  (when-not (seq body)
+    (throw (IllegalArgumentException.
+            (str label " body cannot be empty"))))
+  `(fn [run-context# input#]
+     (let [~(first bindings) input#]
+       ~@body)))
 
 (defmacro agent
   "With no arguments, return the model-facing Agent capability. With a config,
   construct an executable Agent. A configured Agent with no body uses the
-  native model/tool loop; `[rt input] body ...` supplies a Clojure program."
+  native model/tool loop; `[input] body ...` supplies a Clojure program."
   ([]
    `(karcarthy.core/agent-capability))
   ([config & body]
-   (when (and (seq body) (not (vector? (first body))))
-     (throw (IllegalArgumentException.
-             "agent body must begin with a binding vector [rt input]")))
    (let [source &form
-         program (when (seq body) `(fn ~(first body) ~@(next body)))
+         program (when (seq body)
+                   (body-function-form "agent" (first body) (next body)))
          expansion `(karcarthy.core/make-agent ~config '~source nil ~program '~(ns-name *ns*))]
      `(karcarthy.core/make-agent ~config '~source '~expansion ~program '~(ns-name *ns*)))))
 
 (defmacro defagent
   "Define a var containing an Agent. The symbol supplies the default :name."
   [sym config & body]
-  (when (and (seq body) (not (vector? (first body))))
-    (throw (IllegalArgumentException.
-            "defagent body must begin with a binding vector [rt input]")))
   (let [source &form
-        program (when (seq body) `(fn ~(first body) ~@(next body)))
+        program (when (seq body)
+                  (body-function-form "defagent" (first body) (next body)))
         expansion `(def ~sym
                      (karcarthy.core/make-agent
                       (assoc ~config :name ~(name sym)) '~source nil ~program '~(ns-name *ns*)))]
@@ -280,7 +298,7 @@
        (= :agent (:karcarthy/type x))
        (string? (:name x))
        (map? (:config x))
-       (or (nil? (:invoke x)) (fn? (:invoke x)))))
+       (or (nil? (:body x)) (fn? (:body x)))))
 
 (defn source-form [agent-or-tool]
   (:source-form agent-or-tool))
@@ -315,22 +333,16 @@
 (defmacro tool
   "Construct a contracted Tool backed by Clojure code."
   [config bindings & body]
-  (when-not (vector? bindings)
-    (throw (IllegalArgumentException.
-            "tool requires a binding vector [rt input]")))
   (let [source &form
-        execute `(fn ~bindings ~@body)
+        execute (body-function-form "tool" bindings body)
         expansion `(karcarthy.core/make-tool ~config '~source nil ~execute)]
     `(karcarthy.core/make-tool ~config '~source '~expansion ~execute)))
 
 (defmacro deftool
   "Define a var containing a Tool. The symbol supplies the default :name."
   [sym config bindings & body]
-  (when-not (vector? bindings)
-    (throw (IllegalArgumentException.
-            "deftool requires a binding vector [rt input]")))
   (let [source &form
-        execute `(fn ~bindings ~@body)
+        execute (body-function-form "deftool" bindings body)
         expansion `(def ~sym
                      (karcarthy.core/make-tool
                       (assoc ~config :name ~(name sym)) '~source nil ~execute))]
@@ -371,8 +383,6 @@
        (keyword? (:transport x))
        (map? (:spec x))))
 
-(declare invoke!)
-
 (def ^:private agent-request-schema
   {:type "object"
    :properties
@@ -383,7 +393,7 @@
    :additionalProperties false})
 
 (defn ^:no-doc agent-capability
-  "Implementation of zero-arity `(agent)`: a Tool that evaluates and invokes
+  "Implementation of zero-arity `(agent)`: a Tool that evaluates and runs
   another ordinary Agent form in the current run tree."
   []
   (make-tool
@@ -398,9 +408,10 @@
    '(agent)
    '(karcarthy.core/agent-capability)
    (fn [rt {:keys [source input]}]
-     (let [compile-agent! (requiring-resolve 'karcarthy.eval/compile-agent!)
+     (let [compile-agent! (requiring-resolve
+                           'karcarthy.eval/compile-agent-in-run!)
            child (compile-agent! rt source)]
-       (invoke! rt child input)))))
+       (run-agent! rt child input {})))))
 
 ;; ---------------------------------------------------------------------------
 ;; Run context, limits, and observation
@@ -419,7 +430,7 @@
   #{:context :session :limits :observe :approval :cancel :metadata
     :model-transports :evaluation-namespace})
 
-(def ^:private invocation-option-keys #{:context :limits})
+(def ^:private child-option-keys #{:context :limits})
 
 (defn- validate-limits!
   [limits]
@@ -451,14 +462,14 @@
 
 (defn context
   "Return the local, non-model-visible context for the current Agent call."
-  [rt]
-  (:context rt))
+  ([]
+   (context (current-run-context)))
+  ([run-context]
+   (:context run-context)))
 
-(defn runtime-view
-  "Public, immutable run-context view passed to resolver functions."
+(defn- call-metadata
   [rt]
-  {:runtime rt
-   :run-id (:run-id rt)
+  {:run-id (:run-id rt)
    :agent-id (:agent-id rt)
    :parent-id (:parent-id rt)
    :depth (:depth rt)
@@ -469,21 +480,23 @@
 
 (defn emit!
   "Record one observation event and notify the run observer."
-  [rt event]
-  (let [event (merge {:karcarthy/type :event
-                      :time-ms (System/currentTimeMillis)
-                      :run-id (:run-id rt)}
-                     (select-keys rt [:agent-id :parent-id :depth])
-                     event)]
-    (swap! (:events rt) conj event)
-    (doseq [observer (when-let [f (:observe rt)] [f])]
-      (try (observer event) (catch Throwable _ nil)))
-    event))
+  ([event]
+   (emit! (current-run-context) event))
+  ([rt event]
+   (let [event (merge {:karcarthy/type :event
+                       :time-ms (System/currentTimeMillis)
+                       :run-id (:run-id rt)}
+                      (select-keys rt [:agent-id :parent-id :depth])
+                      event)]
+     (swap! (:events rt) conj event)
+     (doseq [observer (when-let [f (:observe rt)] [f])]
+       (try (observer event) (catch Throwable _ nil)))
+     event)))
 
 (defn events
-  "Return recorded events from a Run or Agent run context."
-  [run-or-runtime]
-  (let [v (:events run-or-runtime)]
+  "Return the events recorded by a Run."
+  [run]
+  (let [v (:events run)]
     (if (instance? clojure.lang.IDeref v) @v (vec v))))
 
 (defn- cancellation-requested? [cancel]
@@ -493,13 +506,13 @@
     (instance? clojure.lang.IDeref cancel) (boolean @cancel)
     :else (boolean cancel)))
 
-(defn check-runtime!
+(defn ^:no-doc check-run!
   [rt]
   (when (cancellation-requested? (:cancel rt))
-    (fail! :cancellation :runtime "Run was cancelled"))
+    (fail! :cancellation :run "Run was cancelled"))
   (when-let [deadline (:deadline-ns rt)]
     (when (>= (System/nanoTime) deadline)
-      (fail! :deadline :runtime "Run deadline was exceeded")))
+      (fail! :deadline :run "Run deadline was exceeded")))
   rt)
 
 (defn- limit-value [rt k]
@@ -508,13 +521,13 @@
 (defn consume!
   "Atomically consume a run-tree resource budget."
   [rt k n]
-  (check-runtime! rt)
+  (check-run! rt)
   (loop []
     (let [before @(:usage rt)
           after (update before k (fnil + 0) n)
           limit (limit-value rt k)]
       (when (and limit (> (get after k) limit))
-        (fail! :budget :runtime
+        (fail! :budget :run
                (str "Run limit exceeded: " (name k))
                {:resource k :used (get before k) :requested n :limit limit}))
       (if (compare-and-set! (:usage rt) before after)
@@ -532,7 +545,7 @@
 (defn- run-guardrails!
   [rt phase guards value]
   (doseq [guard (or guards [])]
-    (let [result (guard (runtime-view rt) value)]
+    (let [result (guard (call-metadata rt) value)]
       (when (or (false? result)
                 (and (map? result) (false? (:ok? result))))
         (fail! :guardrail phase
@@ -553,7 +566,7 @@
    :complete respond})
 
 (defn- resolve-value [value rt]
-  (if (fn? value) (value (runtime-view rt)) value))
+  (if (fn? value) (value (call-metadata rt)) value))
 
 (defn- resolve-transport [rt model]
   (let [configured (:transport model)
@@ -586,7 +599,7 @@
            {:transport transport})))
 
 (defn- record-model-delta! [rt delta]
-  (check-runtime! rt)
+  (check-run! rt)
   (case (:type delta)
     :text-delta
     (emit! rt {:type :model/text-delta :delta (:delta delta)})
@@ -610,36 +623,38 @@
 
 (defn model!
   "Call the active model transport with one normalized request."
-  [rt request]
-  (check-runtime! rt)
-  (consume! rt :model-calls 1)
-  (let [model (resolve-value (:model request) rt)
-        transport (resolve-transport rt model)
-        request (assoc request :model model)
-        started (System/nanoTime)]
-    (emit! rt {:type :model/requested
-               :model (select-keys model [:provider :transport :id])})
-    (try
-      (let [response (normalize-model-response
-                      (call-transport transport request
-                                      #(record-model-delta! rt %)))
-            usage (:usage response)]
-        (when-let [n (or (:input-tokens usage) (:input_tokens usage))]
-          (consume! rt :input-tokens n))
-        (when-let [n (or (:output-tokens usage) (:output_tokens usage))]
-          (consume! rt :output-tokens n))
-        (emit! rt {:type :model/completed
-                   :duration-ms (/ (double (- (System/nanoTime) started)) 1000000.0)
-                   :response-type (:type response)
-                   :usage usage})
-        response)
-      (catch Throwable t
-        (emit! rt {:type :model/failed
-                   :duration-ms (/ (double (- (System/nanoTime) started)) 1000000.0)
-                   :error (throwable->failure t)})
-        (if (= :failure (:karcarthy/type (ex-data t)))
-          (throw t)
-          (fail! :model :request (or (ex-message t) (str t)) nil t))))))
+  ([request]
+   (model! (current-run-context) request))
+  ([rt request]
+   (check-run! rt)
+   (consume! rt :model-calls 1)
+   (let [model (resolve-value (:model request) rt)
+         transport (resolve-transport rt model)
+         request (assoc request :model model)
+         started (System/nanoTime)]
+     (emit! rt {:type :model/requested
+                :model (select-keys model [:provider :transport :id])})
+     (try
+       (let [response (normalize-model-response
+                       (call-transport transport request
+                                       #(record-model-delta! rt %)))
+             usage (:usage response)]
+         (when-let [n (or (:input-tokens usage) (:input_tokens usage))]
+           (consume! rt :input-tokens n))
+         (when-let [n (or (:output-tokens usage) (:output_tokens usage))]
+           (consume! rt :output-tokens n))
+         (emit! rt {:type :model/completed
+                    :duration-ms (/ (double (- (System/nanoTime) started)) 1000000.0)
+                    :response-type (:type response)
+                    :usage usage})
+         response)
+       (catch Throwable t
+         (emit! rt {:type :model/failed
+                    :duration-ms (/ (double (- (System/nanoTime) started)) 1000000.0)
+                    :error (throwable->failure t)})
+         (if (= :failure (:karcarthy/type (ex-data t)))
+           (throw t)
+           (fail! :model :request (or (ex-message t) (str t)) nil t)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Tool execution and the native model loop
@@ -671,7 +686,7 @@
 
 (defn- approval-policy
   [policy rt input]
-  (if (fn? policy) (policy (runtime-view rt) input) policy))
+  (if (fn? policy) (policy (call-metadata rt) input) policy))
 
 (defn- request-approval!
   [rt tool input policy]
@@ -679,9 +694,9 @@
              :tool (:name tool) :input input :policy policy})
   (let [allowed?
         (if-let [handler (:approval rt)]
-          (boolean (handler {:runtime (runtime-view rt)
-                             :tool tool
-                             :input input}))
+          (boolean (handler (assoc (call-metadata rt)
+                                   :tool tool
+                                   :input input)))
           false)]
     (emit! rt {:type :tool/approval-resolved
                :tool (:name tool) :approved? allowed? :policy policy})
@@ -717,7 +732,8 @@
 (defn- execute-tool-body! [rt tool input]
   (loop [attempt 0]
     (let [outcome (try
-                    {:value ((:execute tool) rt input)}
+                    {:value (binding [*run-context* rt]
+                              ((:execute tool) rt input))}
                     (catch Throwable t {:error t}))]
       (if-let [error (:error outcome)]
         (if (< attempt (retry-count tool))
@@ -748,7 +764,7 @@
         input (:input call)
         call-id (or (:id call) (id "tool_"))
         enabled? (:enabled? config)]
-    (when (and enabled? (not (enabled? (runtime-view rt))))
+    (when (and enabled? (not (enabled? (call-metadata rt))))
       (fail! :tool :disabled "Tool is disabled in the current Run"
              {:tool (:name tool)}))
     (check-contract! :tool-input (:input config) input)
@@ -803,18 +819,16 @@
         (.release semaphore)
         (throw t)))))
 
-(defn await!
-  "Wait for a structured child/task handle and propagate its failure."
+(defn- await-future!
   [^Future child]
   (try
     (.get child)
     (catch ExecutionException e
       (throw (or (.getCause e) e)))))
 
-(defn await-all!
-  "Wait for child handles in input order."
+(defn- await-futures!
   [children]
-  (mapv await! children))
+  (mapv await-future! children))
 
 (defn- maybe-json-output [output contract]
   (if (and contract (string? output)
@@ -898,7 +912,7 @@
            pending messages
            provider-state nil
            unpersisted [user-message]]
-      (check-runtime! rt)
+      (check-run! rt)
       (when (> turn max-turns)
         (fail! :budget :model-loop "Agent exceeded :max-turns"
                {:agent (:name agent) :max-turns max-turns}))
@@ -917,7 +931,7 @@
           :final
           (let [output (maybe-json-output (:output response) (:output config))]
             (when-let [stop-when (:stop-when config)]
-              (when-not (stop-when (runtime-view rt)
+              (when-not (stop-when (call-metadata rt)
                                    {:response response :messages messages})
                 (fail! :model :stop-condition
                        "Model returned final output before the stop condition"
@@ -937,7 +951,7 @@
                                         {:known (vec (keys tool-map))}))
                                (submit-limited! rt #(run-tool! rt tool call))))
                            calls)
-                results (await-all! jobs)
+                results (await-futures! jobs)
                 assistant-message {:role :assistant :tool-calls calls}
                 result-messages
                 (mapv (fn [{:keys [id name model-output]}]
@@ -962,10 +976,12 @@
 ;; Agent execution and composition
 ;; ---------------------------------------------------------------------------
 
-(defn- invoke-agent!
+(defn- run-agent!
   [parent-rt agent input options]
   (when-not (agent? agent)
-    (fail! :contract :agent "invoke! requires an Agent" {:value agent}))
+    (fail! :contract :agent "run! requires an Agent" {:value agent}))
+  (let [options (or options {})]
+    (reject-unknown! "Child Agent options" child-option-keys options))
   (let [depth (inc (:depth parent-rt))
         limits (validate-limits!
                 (narrower-limits (:limits parent-rt)
@@ -1004,11 +1020,12 @@
                        (get-in config [:guardrails :input]) input)
       (emit! rt {:type :agent/started :agent (:name agent) :input input})
       (try
-        (let [output (if-let [program (:invoke agent)]
-                       (program rt input)
-                       (default-loop! rt agent input))
+        (let [output (binding [*run-context* rt]
+                       (if-let [program (:body agent)]
+                         (program rt input)
+                         (default-loop! rt agent input)))
               output (maybe-json-output output (:output config))]
-          (check-runtime! rt)
+          (check-run! rt)
           (check-contract! :agent-output (:output config) output)
           (run-guardrails! rt :agent-output
                            (get-in config [:guardrails :output]) output)
@@ -1027,30 +1044,12 @@
             (fail! :program :execute (or (ex-message t) (str t))
                    {:agent (:name agent)} t)))))))
 
-(defn invoke!
-  "Call a child Agent in an existing Run and return its typed output."
-  ([rt agent input]
-   (invoke! rt agent input {}))
-  ([rt agent input options]
-   (check-runtime! rt)
-   (let [options (or options {})]
-     (reject-unknown! "Invocation options" invocation-option-keys options)
-     (invoke-agent! rt agent input options))))
-
-(defn spawn!
-  "Start a structured child invocation and return a Future handle."
-  ([rt agent input]
-   (spawn! rt agent input {}))
-  ([rt agent input options]
-   (check-runtime! rt)
-   (submit-limited! rt #(invoke! rt agent input options))))
-
 (defn as-tool
   "Project an Agent as a Tool while the parent remains active.
 
   Options may override `:name`, `:description`, `:input`, `:output`, and
   `:approval`. A `:context` function receives `[parent-context tool-input]`
-  and returns the local context for the child invocation."
+  and returns the local context for the nested Agent."
   ([agent] (as-tool agent {}))
   ([agent options]
    (when-not (agent? agent)
@@ -1067,11 +1066,11 @@
                 `(as-tool ~(source-form agent) ~options)
                 nil
                 (fn [rt input]
-                  (invoke! rt agent input
-                           (cond-> {}
-                             (:context options)
-                             (assoc :context ((:context options)
-                                              (context rt) input)))))))))
+                  (run-agent! rt agent input
+                              (cond-> {}
+                                (:context options)
+                                (assoc :context ((:context options)
+                                                 (context rt) input)))))))))
 
 (defn run!
   "Start a root Run, call an Agent, and return the complete Run value."
@@ -1096,7 +1095,7 @@
          started (System/nanoTime)
          deadline-ns (when-let [ms (:deadline-ms limits)]
                        (+ started (* 1000000 (long ms))))
-         rt {:karcarthy/type :runtime
+         rt {:karcarthy/type :run-context
              :run-id run-id
              :agent-id nil
              :parent-id nil
@@ -1123,7 +1122,7 @@
                               (str/replace run-id "-" "_"))))}]
      (emit! rt {:type :run/started :agent (:name agent) :input input})
      (try
-       (let [output (invoke! rt agent input)
+       (let [output (run-agent! rt agent input {})
              result {:karcarthy/type :run
                      :id run-id
                      :status :completed

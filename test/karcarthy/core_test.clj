@@ -22,7 +22,7 @@
   {:description "Uppercase text."
    :input ::tool-input
    :output string?}
-  [_ {:keys [text]}]
+  [{:keys [text]}]
   (.toUpperCase ^String text))
 
 (deftest agent-and-tool-values
@@ -30,7 +30,7 @@
                        :model {:id "fake" :transport (scripted-model "ok")}
                        :instructions "answer"})
         program (k/agent {:name "program" :input string? :output string?}
-                         [_ input] (str input "!"))]
+                         [input] (str input "!"))]
     (is (k/agent? leaf))
     (is (k/agent? program))
     (is (k/tool? uppercase))
@@ -54,12 +54,12 @@
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown configuration"
                         (k/agent {:name "old-context-name"
                                   :environment map?}
-                                 [_ _] nil)))
+                                 [_] nil)))
   (is (thrown-with-msg? IllegalArgumentException #"requires a function"
                         (k/fake-model :not-a-function)))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input contract"
                         (k/tool {:name "x" :description "x"}
-                                [rt input] input))))
+                                [input] input))))
 
 (deftest model-backed-agent-final-output
   (let [agent (k/agent {:name "answer"
@@ -78,7 +78,7 @@
     (is (= 3 (get-in run [:usage :input-tokens])))
     (is (= 2 (get-in run [:usage :output-tokens])))))
 
-(deftest model-stream-deltas-are-runtime-events
+(deftest model-stream-deltas-are-run-events
   (let [transport
         {:stream (fn [_ emit!]
                    (emit! {:type :text-delta :delta "hel"})
@@ -173,7 +173,7 @@
     (is (empty? (k/get-items session)))))
 
 (deftest run-requires-a-session-implementation
-  (let [agent (k/agent {:name "program"} [_ input] input)]
+  (let [agent (k/agent {:name "program"} [input] input)]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must implement"
                           (k/run! agent nil {:session {}})))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown configuration"
@@ -254,11 +254,11 @@
   (let [bad-input (k/agent {:name "input"
                             :input string?
                             :output string?}
-                           [_ x] x)
+                           [x] x)
         bad-output (k/agent {:name "output"
                              :input any?
                              :output string?}
-                            [_ _] 42)]
+                            [_] 42)]
     (is (= :contract (get-in (k/run! bad-input 42) [:error :kind])))
     (is (= :agent-input (get-in (k/run! bad-input 42) [:error :phase])))
     (is (= :contract (get-in (k/run! bad-output nil) [:error :kind])))
@@ -281,8 +281,8 @@
                         :context ::context
                         :input any?
                         :output int?}
-                       [rt _]
-                       (:value (k/context rt)))]
+                       [_]
+                       (:value (k/context)))]
     (is (= 7 (:output (k/run! agent nil {:context {:value 7}
                                          :observe #(reset! seen %)}))))
     (is (= :run/completed (:type @seen)))
@@ -322,58 +322,67 @@
 
 (deftest custom-program-composes-agents
   (let [writer (k/agent {:name "writer" :input string? :output string?}
-                        [_ x] (str x " draft"))
+                        [x] (str x " draft"))
         editor (k/agent {:name "editor" :input string? :output string?}
-                        [_ x] (str x " edited"))
+                        [x] (str x " edited"))
         team (k/agent {:name "team" :input string? :output string?}
-                      [rt x]
-                      (k/invoke! rt editor (k/invoke! rt writer x)))
+                      [x]
+                      (let [draft (:output (k/run! writer x))]
+                        (:output (k/run! editor draft))))
         run (k/run! team "memo")]
     (is (= "memo draft edited" (:output run)))
-    (is (= ["team" "writer" "editor"]
+    (is (= ["team"]
            (->> (:events run)
                 (filter #(= :agent/started (:type %)))
                 (map :agent)
                 vec)))))
 
-(deftest structured-parallel-children-preserve-order
+(deftest ordinary-clojure-parallelism-preserves-order
   (let [child (fn [name delay-ms]
                 (k/agent {:name name :input int? :output int?}
-                         [_ x] (Thread/sleep delay-ms) x))
+                         [x] (Thread/sleep delay-ms) x))
         slow (child "slow" 30)
         fast (child "fast" 1)
         team (k/agent {:name "parallel" :output vector?}
-                      [rt _]
-                      (k/await-all! [(k/spawn! rt slow 1)
-                                     (k/spawn! rt fast 2)]))
-        run (k/run! team nil {:limits {:parallelism 2}})]
+                      [_]
+                      (->> [(future (k/run! slow 1))
+                            (future (k/run! fast 2))]
+                           (mapv deref)
+                           (mapv :output)))
+        run (k/run! team nil)]
     (is (= :completed (:status run)))
     (is (= [1 2] (:output run)))))
 
 (deftest depth-and-call-budgets
-  (let [leaf (k/agent {:name "leaf" :output string?} [_ _] "ok")
-        parent (k/agent {:name "parent" :output string?}
-                        [rt _] (k/invoke! rt leaf nil))
+  (let [leaf (k/agent {:name "leaf" :input any? :output string?} [_] "ok")
+        parent (k/agent {:name "parent"
+                         :model {:id "fake"
+                                 :transport
+                                 (scripted-model
+                                  {:type :tool-calls
+                                   :calls [{:id "child"
+                                            :name "leaf"
+                                            :input nil}]})}
+                         :instructions "Call leaf."
+                         :tools [(k/as-tool leaf)]
+                         :output string?})
         looping (k/agent {:name "looping"
                           :model {:id "fake"
                                   :transport (scripted-model
                                               {:type :tool-calls :calls []})}
                           :instructions "loop"
-                          :max-turns 1})]
-    (is (= :failed (:status (k/run! parent nil
-                                    {:limits {:agent-depth 0}}))))
+                          :max-turns 1})
+        depth-run (k/run! parent nil {:limits {:agent-depth 0}})
+        budget-run (k/run! looping nil {:limits {:model-calls 0}})]
+    (is (= :failed (:status depth-run)))
     (is (= :agent-depth
-           (get-in (k/run! parent nil {:limits {:agent-depth 0}})
-                   [:error :phase])))
-    (is (= :failed (:status (k/run! looping nil
-                                     {:limits {:model-calls 0}}))))
-    (is (= :budget
-           (get-in (k/run! looping nil {:limits {:model-calls 0}})
-                   [:error :kind])))))
+           (get-in depth-run [:error :phase])))
+    (is (= :failed (:status budget-run)))
+    (is (= :budget (get-in budget-run [:error :kind])))))
 
 (deftest cancellation-and-deadline
   (let [agent (k/agent {:name "work" :output string?}
-                       [_ _] (Thread/sleep 20) "done")]
+                       [_] (Thread/sleep 20) "done")]
     (is (= :cancelled (:status (k/run! agent nil {:cancel (atom true)}))))
     (is (= :failed (:status (k/run! agent nil
                                      {:limits {:deadline-ms 1}}))))))
@@ -384,7 +393,7 @@
                            :input map?
                            :output string?
                            :approval :always}
-                          [_ _] "done")
+                          [_] "done")
         model #(k/fake-model
                 (let [n (atom 0)]
                   (fn [request]
@@ -408,7 +417,7 @@
                         :input map?
                         :output string?
                         :approval :once}
-                       [_ _] "ok")
+                       [_] "ok")
         turn (atom 0)
         approvals (atom 0)
         model (k/fake-model
@@ -433,7 +442,7 @@
 
 (deftest agents-as-tools
   (let [child (k/agent {:name "child" :input string? :output string?}
-                       [_ x] (str x "!"))
+                       [x] (str x "!"))
         child-tool (k/as-tool child {:name "delegate"})
         n (atom 0)
         parent (k/agent {:name "parent"
@@ -459,6 +468,6 @@
                         :output string?
                         :guardrails {:input [(fn [_ value]
                                                (not= value "blocked"))]}}
-                       [_ x] x)]
+                       [x] x)]
     (is (= :completed (:status (k/run! agent "ok"))))
     (is (= :guardrail (get-in (k/run! agent "blocked") [:error :kind])))))
