@@ -22,7 +22,7 @@ security sandbox.
 
 ## Tools and context
 
-Tools execute application Clojure with access to the local Runtime context.
+Tools execute application Clojure with access to the current Run's local context.
 Use narrow context values, input/output contracts, `:enabled?`, guardrails,
 approval, timeouts, and least-privilege credentials. Approval is currently a
 synchronous allow/deny decision; durable suspension is not implemented.
@@ -30,10 +30,10 @@ synchronous allow/deny decision; durable suspension is not implemented.
 Tool output and event payloads may contain sensitive data. Redact them in the
 observer before external export.
 
-The workspace `read`, `write`, `edit`, and `search` tools reject paths
-that resolve outside their configured workspace, including existing symlink
+The local `read`, `write`, `edit`, and `search` Tools reject paths
+that resolve outside their configured `:cwd`, including existing symlink
 ancestors. This is a correctness boundary for those tools, not a process
-sandbox. `bash` starts in the workspace but can access anything allowed to the
+sandbox. `bash` starts in `:cwd` but can access anything allowed to the
 karcarthy process. Run untrusted coding tasks inside an OS sandbox or VM.
 
 ## MCP and ACP

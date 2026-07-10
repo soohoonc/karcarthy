@@ -77,7 +77,7 @@ For Agents in `src/example.clj`:
 
 ```clojure
 (require '[example :as example] :reload)
-(k/run! example/agent "try the new definition")
+(k/run! example/editor "try the new definition")
 ```
 
 `defagent` is useful in source files because it defines the var directly. At
@@ -129,24 +129,9 @@ Add the Agent Tool to any live model-backed Agent:
                (:type %))))
 ```
 
-## ACP and the REPL
-
-`serve-acp!` uses standard input and output by default. Do not call it with
-those defaults in the same terminal REPL: the server and REPL would compete for
-input.
-
-For normal ACP testing, put the Agent or factory in a namespace and launch a
-separate process:
-
-```bash
-clojure -M -m karcarthy.acp example/acp-agent
-```
-
-From a REPL, pass dedicated `:in` and `:out` streams to `serve-acp!` when an
-in-process protocol test is required. The ACP test suite uses this pattern.
-
 ## Next
 
+- [Chat from the REPL](/docs/examples/chat) adds conversation history.
 - [Agents](/docs/agents) covers recursive and generated Agents.
 - [Running agents](/docs/running-agents) documents Run results and limits.
-- [Streaming and events](/docs/streaming) documents Run events.
+- [Integrations](/docs/integrations#acp) documents ACP serving.

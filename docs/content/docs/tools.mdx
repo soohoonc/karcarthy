@@ -1,41 +1,52 @@
 ---
 title: Tools
-description: Define typed Tools, configure approvals, use local capabilities, and expose Agents as Tools.
+description: Define typed capabilities that a model can call.
 ---
 
-Tools are the capabilities a model may call. A Tool has a name, model-facing
-description, input contract, optional output contract, and an implementation.
+A Tool is a model-callable function. Unlike an Agent prompt, a Tool input is
+intentionally structured: its schema tells the model which arguments to
+produce and lets karcarthy validate them before execution.
 
-## `tool` and `deftool`
-
-Use `tool` to construct a value:
-
-```clojure
-(def lookup-user
-  (k/tool
-   {:name "lookup-user"
-    :description "Look up a user by ID."
-    :input {:type "object"
-            :properties {:user_id {:type "string"}}
-            :required ["user_id"]
-            :additionalProperties false}
-    :output map?}
-   [{:keys [user_id]}]
-   (lookup! (:db (k/context)) user_id)))
-```
-
-Use `deftool` to define a var and derive its default name from the symbol:
+## Define a Tool
 
 ```clojure
 (k/deftool lookup-user
   {:description "Look up a user by ID."
-   :input map?
+   :input {:type "object"
+           :properties {:user-id {:type "string"}}
+           :required ["user-id"]
+           :additionalProperties false}
    :output map?}
   [{:keys [user-id]}]
   (lookup! (:db (k/context)) user-id))
 ```
 
-As with `agent` and `defagent`, these forms produce the same kind of Tool.
+A Tool body has exactly one binding. Here the model supplies a map and the body
+destructures it.
+
+Use `tool` inside an expression and `deftool` for a named top-level definition.
+They create the same Tool value; `deftool` supplies the default Tool name from
+the var name.
+
+## Schemas and contracts
+
+`:input` is both the execution contract and, when it is JSON Schema, the schema
+shown to the model. Use an object with named properties for a model-facing
+function Tool. Local contracts may accept other values, but model providers may
+reject non-object function schemas.
+
+Clojure predicates and specs can also validate input. If a contract cannot be
+translated into a useful model schema, provide the two separately:
+
+```clojure
+{:input request?
+ :input-schema {:type "object"
+                :properties {:query {:type "string"}}
+                :required ["query"]
+                :additionalProperties false}}
+```
+
+The same distinction exists for `:output` and `:output-schema`.
 
 ## Tool configuration
 
@@ -43,46 +54,54 @@ As with `agent` and `defagent`, these forms produce the same kind of Tool.
 | --- | --- |
 | `:name` | Model-visible function name. |
 | `:description` | When and how the model should use the Tool. |
-| `:input` | Tool input contract. |
-| `:input-schema` | Explicit model-facing JSON Schema when different. |
-| `:output` | Tool output contract. |
-| `:approval` | Approval policy or function of the current call metadata. |
-| `:enabled?` | Predicate of the current call metadata controlling availability. |
-| `:guardrails` | Input and output guardrail functions. |
-| `:timeout-ms` | Tool-call timeout. |
-| `:retry` | Retry count or retry options. |
-| `:to-model-output` | Project a rich result into the value shown to the model. |
+| `:input` | Input contract. Required. |
+| `:input-schema` | Explicit model-facing schema. |
+| `:output` | Optional output contract. |
+| `:output-schema` | Explicit output schema. |
+| `:approval` | Approval policy. |
+| `:timeout-ms` | Execution timeout. |
+| `:retry` | Retry count or options. |
+| `:to-model-output` | Projection of a rich result into what the model sees. |
 
-Tool input is validated before approval and the call. Tool output is validated
-before it becomes model-visible.
+The [Library API](/docs/reference/api#tool-and-deftool) lists dynamic enablement,
+guardrails, and metadata.
+
+## Local context
+
+Tools read local application dependencies with `context`:
+
+```clojure
+(k/run! support-agent "Look up account 123."
+        {:context {:db db}})
+```
+
+```clojure
+(k/deftool lookup-account
+  {:description "Look up an account."
+   :input {:type "object"
+           :properties {:id {:type "string"}}
+           :required ["id"]}
+   :output map?}
+  [{:keys [id]}]
+  (lookup! (:db (k/context)) id))
+```
+
+Context is not sent to the model automatically.
 
 ## Approval
 
-Set `:approval` to request authorization before execution:
+Set `:approval` to `:always` or `:once`, then supply a handler to `run!`:
 
 ```clojure
-(k/deftool delete-record
-  {:description "Delete one record permanently."
-   :input map?
-   :output map?
-   :approval :always}
-  [request]
-  (delete! (:db (k/context)) request))
-```
-
-Supply an approval handler to `run!`:
-
-```clojure
-(k/run! agent input
+(k/run! agent prompt
         {:approval
          (fn [{:keys [tool input]}]
            (confirm? (:name tool) input))})
 ```
 
-`:once` reuses an approval for the same Tool within a Run. `:always` requests
-approval for each call. `:never` executes without a request.
+Without a handler, a Tool requiring approval fails closed.
 
-## Local Tools
+## Built-in local Tools
 
 ```clojure
 (def tools
@@ -95,56 +114,14 @@ approval for each call. `:never` executes without a request.
                :bash :always}}))
 ```
 
-`local-tools` returns:
+`local-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
+`search`. File Tools stay inside `:cwd`, including through symlinks. `bash` is
+bounded but is not a sandbox.
 
-| Tool | Operation |
-| --- | --- |
-| `read` | Read bounded UTF-8 file content. |
-| `write` | Create or replace a file. |
-| `edit` | Replace exact text in a file. |
-| `bash` | Run a bounded shell command. |
-| `search` | Search file contents with ripgrep. |
-
-File Tools reject paths outside `:cwd`, including symlink escapes. `bash` runs
-inside `:cwd` with time and output bounds, but it is not a sandbox. `search`
-requires `rg` on `PATH`.
-
-## External Tool sources
-
-Provider-hosted capabilities and MCP definitions enter the same `:tools`
-vector. Once adapted, they participate in the same Agent loop and event model:
-
-```clojure
-{:tools [(k/responses-web-search)
-         known-local-tool
-         discovered-mcp-tool]}
-```
-
-[Integrations](/docs/integrations) covers hosted Tool configuration and the MCP
-connection lifecycle.
+Hosted provider Tools and MCP Tools enter the same `:tools` vector. See
+[Integrations](/docs/integrations).
 
 ## Agents as Tools
 
-There are two Agent-related Tool patterns:
-
-```clojure
-;; The child Agent is already known.
-(k/as-tool billing-agent
-           {:name "billing"
-            :description "Handle billing questions."})
-
-;; The model supplies a new Agent definition at call time.
-(k/agent)
-```
-
-`as-tool` invokes the known Agent and returns control to the parent model.
-Zero-arity `(agent)` compiles and invokes the Agent supplied in the Tool call.
-See [Agents](/docs/agents) for both patterns.
-
-## Next
-
-- [Agents](/docs/agents) covers model-created and recursive Agents.
-- [Running agents](/docs/running-agents) covers context, results, and limits.
-- [Streaming and events](/docs/streaming) covers live Run observation.
-- [Integrations](/docs/integrations) covers model endpoints, MCP, ACP, and Harbor.
-- [Library API](/docs/reference/api) lists all Tool options.
+`as-tool` exposes an existing Agent. Zero-arity `(agent)` lets the model supply
+a new Agent definition. Both are covered in [Agents](/docs/agents#expose-a-known-agent-as-a-tool).

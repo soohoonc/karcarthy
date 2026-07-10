@@ -16,7 +16,8 @@ Runs are independent unless you pass a Session:
 ```
 
 A Session stores normalized conversation items from root model-backed Agents.
-Child Agent conversations are not added implicitly.
+An independent `run!` call must receive the Session explicitly. Conversations
+inside Agents entered through `as-tool` or `(agent)` are not added implicitly.
 
 ## In-memory Sessions
 
@@ -56,9 +57,5 @@ A Session is conversation history, not a snapshot of a Run. It does not store
 Tool side effects, Clojure stacks, Agent definitions, or arbitrary application
 state.
 
-## Next
-
-- [Running agents](/docs/running-agents) covers `run!`, results, and limits.
-- [Streaming and events](/docs/streaming) covers live observation and recorded
-  events.
-- [Data model](/docs/reference/schema#session) specifies Session items.
+See the [chat example](/docs/examples/chat) for a small terminal interface and
+the [Data model](/docs/reference/schema#session) for Session item shapes.

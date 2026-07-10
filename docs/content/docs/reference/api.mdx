@@ -23,7 +23,7 @@ Agent requires `:name` but may omit model configuration.
 With no arguments, returns the model-facing `agent` Tool. That Tool accepts
 `{:source <one (agent ...) form> :input <value>}`, compiles the form, verifies
 that it produced an Agent, and runs it in the current Run. See
-[Model-created Agents](/docs/agents#model-created-agents).
+[Let the model define an Agent](/docs/agents#let-the-model-define-an-agent).
 
 Supported configuration keys are:
 
@@ -33,7 +33,7 @@ Supported configuration keys are:
  :model {:transport :responses :id "gpt-5.6"}
  :instructions "Research carefully."
  :context map?
- :input ::request
+ :input string?
  :tools [search-tool]
  :output ::report
  :output-schema {...}
@@ -45,9 +45,12 @@ Supported configuration keys are:
 ```
 
 `:model`, `:instructions`, and `:tools` may be functions of immutable call
-metadata.
-Instructions must resolve to a string. `:context` is a contract for the local
-context value, not model-visible prompt text.
+metadata. Instructions must resolve to a string. `:context` validates the local
+context value; it is not model-visible prompt text.
+
+For a model-backed Agent, the `run!` input is normally a prompt string. A
+Clojure-body Agent receives its input unchanged. `:input` optionally validates
+that boundary in either case.
 
 ### `defagent`
 
@@ -84,7 +87,7 @@ name from its symbol. Optional keys are `:input-schema`, `:output`,
 
 Tool arguments are validated before approval and the call. Tool results are
 validated before they are returned to the model. `tool?` identifies Tool
-values.
+values. Tool bodies have exactly one `[input]` binding.
 
 ### Hosted tools
 
@@ -128,7 +131,9 @@ and returns a Run value.
  :observe event-fn
  :approval approval-handler
  :cancel cancellation-token
- :metadata {...}}
+ :metadata {...}
+ :model-transports {...}
+ :evaluation-namespace 'example.generated}
 ```
 
 Runs are stateless unless `:session` is supplied.
@@ -136,13 +141,15 @@ Runs are stateless unless `:session` is supplied.
 ### Run from an Agent body
 
 ```clojure
-(def child-run (k/run! child input))
-(:output child-run)
+(def other-run (k/run! other-agent input))
+(:output other-run)
 ```
 
-Agent bodies use the same `run!` function as application code. Each call
-returns a complete, independent Run value. Clojure's normal functions,
-conditionals, `future`, and `deref` provide composition.
+Agent bodies use the same `run!` function as application code. Each call starts
+a complete, independent Run with separate limits, events, context, Session, and
+cancellation. Clojure's normal functions, conditionals, `future`, and `deref`
+provide composition. Agents entered through `as-tool` or `(agent)` instead
+remain inside the current Run.
 
 ### `context`
 

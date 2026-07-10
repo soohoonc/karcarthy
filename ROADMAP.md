@@ -1,65 +1,37 @@
 # Roadmap
 
-karcarthy now implements the native Clojure harness described in the docs. The
-Runner protocol, EDN/JSON workflow interpreter, workflow nodes, schemas, JSON
-bridge, and legacy examples have been removed without a compatibility layer.
+karcarthy is a native Clojure agent harness. The implemented kernel includes:
 
-## Implemented kernel
+- Agent and Tool values that retain source and expanded forms;
+- a model and Tool loop with typed inputs, outputs, approvals, and events;
+- Clojure-body Agents and ordinary `run!` composition;
+- the model-facing `agent` Tool for recursive Agent creation;
+- Responses-compatible complete and streaming inference;
+- local, hosted, and MCP Tools;
+- conversation Sessions;
+- ACP serving for editors and evaluation systems.
 
-- Executable Agent and Tool values retaining source and expanded forms.
-- Recursive `agent`—constructor with a config, model-facing Agent capability
-  with no arguments—plus `defagent`, `tool`, and `deftool`.
-- Native model/tool loop with local tool execution and repair through ordinary
-  model turns.
-- Responses-compatible HTTP transport and an offline fake transport.
-- Bounded local file/search/process tools, generic prompt composition, a
-  readable packaged system prompt, and hosted Responses tools.
-- MCP 2025-11-25 stdio initialization, tool discovery, calls, and adaptation to
-  ordinary Tools.
-- ACP v1 stdio serving for an Agent or per-session Agent factory, including
-  session-provided stdio MCP, model selection, aggregate prompt usage, tool
-  updates, permissions, and cancellation.
-- Harbor's generic ACP adapter converts karcarthy sessions to schema-valid ATIF
-  with model, Tool-call, observation, and prompt-usage data.
-- `run!`, `invoke!`, `spawn!`, `await!`, `await-all!`, and `as-tool`.
-- Dynamic model instructions, separate local Runtime context, optional
-  conversation Sessions, Clojure specs, JSON Schema derivation, guardrails,
-  approval checks, cancellation, deadlines, hierarchical limits, and events.
-- Complete and SSE Responses transport paths, normalized runtime deltas, and
-  incremental ACP Agent-message chunks.
-- `read-agent-form`, macroexpansion, evaluation, Agent verification, structured
-  failures, recursive generation limits, and event lineage.
+## Next
 
-## Complete harness semantics
-
-- Add durable approval/input suspension and resumption.
-- Add observable compaction policies over Session history.
-- Provide documented database-backed Session implementations.
-- Add richer retry/backoff and idempotency policy for effects.
-- Add true conversational handoffs only with defined history and control
-  transfer semantics.
-
-## Serve and evaluate
-
-- Add ACP session loading/resumption and richer incremental child events.
-- Add MCP Streamable HTTP after the stdio surface is proven in evaluation.
-- Package and register the ACP launcher, then run Harbor tasks and scorers.
-- Store program hashes, source/expanded forms, event metrics, and evaluator
-  results together.
+- durable suspension and resumption for approval and human-input boundaries;
+- observable Session-history compaction;
+- richer retry, backoff, and effect-idempotency policy;
+- ACP session loading and resumption;
+- MCP Streamable HTTP transport;
+- packaging and evaluation of the ACP launcher with Harbor tasks and scorers;
+- program hashes and exportable event records for experiments.
 
 ## Research tooling
 
-- Provide structural Clojure-form mutation helpers without creating a workflow
-  DSL.
-- Add replay and differential event comparison.
-- Add search loops over program variants: random/evolutionary search, bandits,
-  Bayesian optimization, or model-proposed rewrites.
-- Treat behavioral verification and negative results as first-class outcomes.
+- structural Clojure-form mutation helpers;
+- replay and differential event comparison;
+- search over program variants;
+- behavioral verification and negative-result reporting.
 
 ## Non-goals
 
-- No Runner compatibility layer.
-- No EDN or JSON orchestration language.
-- No separate dynamic-workflow feature.
-- No reimplementation of Clojure control flow as node constructors.
-- No requirement that a research experiment demonstrate improvement.
+- no EDN or JSON orchestration language;
+- no workflow-node interpreter;
+- no separate dynamic-workflow feature;
+- no second child-call API alongside `run!` and Agent Tools;
+- no requirement that an experiment demonstrate improvement.

@@ -1,21 +1,19 @@
 ---
 title: Home
-description: A small Clojure agent harness with a model and Tool loop, streaming, Sessions, MCP, ACP, and model-authored Agents.
+description: A small Clojure library for building model-backed agents with tools.
 ---
 
-karcarthy is a small agent harness for Clojure. It runs model-backed Agents,
-executes their Tools, streams their output, and returns a structured record of
-each Run.
+karcarthy is a small Clojure agent harness. An Agent combines a model,
+instructions, and Tools. `run!` gives the Agent a task and returns a complete
+record of what happened.
 
-Agents and Tools are ordinary Clojure values. Define them in a namespace, run
-them from a REPL or an application, and use normal Clojure when you need to
-compose them. The library namespace is `karcarthy`.
+karcarthy owns the model and Tool loop. Model transports only translate model
+I/O, so the same Agent semantics apply to local Tools, hosted Tools, and MCP.
 
-## Define and run an Agent
+## A first Agent
 
 ```clojure
-(ns example
-  (:require [karcarthy :as k]))
+(require '[karcarthy :as k])
 
 (k/defagent assistant
   {:model {:transport :responses
@@ -26,79 +24,58 @@ compose them. The library namespace is `karcarthy`.
 (def run
   (k/run! assistant "Explain continuation-passing style."))
 
-(:output run)
-(select-keys run [:status :usage])
+(:status run) ;=> :completed
+(:output run) ;=> "..."
 ```
 
-That is the basic programming model: `agent` constructs an Agent, `defagent`
-gives one a name, and `run!` starts a Run. A model-backed Agent uses karcarthy's
-model and Tool loop; an Agent can also have a Clojure body when its coordination
-should be deterministic.
+The input to a model-backed Agent is normally a user prompt. A Run contains the
+output, usage, events, and structured failure information.
 
-The [Quickstart](/docs/quickstart) covers installation, a typed Tool, REPL use,
-conversation history, and recursive Agent creation.
+## The library in four values
 
-## What the harness provides
+| Value | Purpose |
+| --- | --- |
+| Agent | A model and Tool loop, or a Clojure function body. |
+| Tool | A typed capability that a model may call. |
+| Run | The result of one `run!` call. |
+| Session | Optional conversation history shared across Runs. |
 
-- a streaming model and Tool loop;
-- typed local Tools and provider-hosted Tools;
-- MCP Tool discovery;
-- optional Sessions for conversation history;
-- limits, cancellation, approvals, events, and structured Run results;
-- ACP serving for editors and evaluation systems such as Harbor;
-- an `agent` Tool that lets a model define and run another Agent.
+Agents and Tools are ordinary Clojure values. Applications use normal Clojure
+for sequencing, branching, concurrency, and error handling.
 
-karcarthy does not introduce a workflow language. Sequential, conditional, and
-parallel composition use ordinary Clojure and the same `run!` function used for
-any other Agent.
+## Agents as Tools
 
-## Agents can be Tools
-
-Known Agents can be exposed to a model with `as-tool`. karcarthy also provides a
-zero-argument `(agent)` form that creates a model-facing Tool:
+A known Agent can be exposed with `as-tool`. karcarthy also provides a Tool
+that lets a model define a new Agent during a Run:
 
 ```clojure
 (k/defagent architect
-  {:model {:transport :responses
-           :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions
    "Complete the task. Create a focused Agent when specialization helps."
    :tools [(k/agent)]
    :output string?})
-
-(k/run! architect "Review this authentication design.")
 ```
 
-When the model calls that Tool, it supplies an `(agent ...)` form and an input.
-karcarthy checks the form, evaluates it as Clojure, verifies that it produced an
-Agent, and runs it inside the current Run. The generated Agent uses the same
-configuration model, execution path, limits, and events as one written by a
-developer.
+The zero-argument `(k/agent)` form returns a Tool named `agent`. A model calls
+it with a Clojure Agent form and an input. karcarthy checks the form, evaluates
+it, and runs the resulting Agent inside the current Run.
 
-Read [Agents](/docs/agents) for Agent configuration, Clojure composition,
-Agents as Tools, generated Agents, and recursive use.
+## Why Clojure forms matter
 
-## Why homoiconicity
-
-karcarthy is inspired by Lisp's simplest idea: code is data. An Agent definition
-is both executable Clojure and an inspectable Clojure form. A developer can
+An Agent definition is executable code and inspectable data. A developer can
 write it, a macro can transform it, or a model can produce it through the
-`agent` Tool without crossing into a separate workflow representation.
+`agent` Tool. Authored and generated Agents therefore use one representation
+instead of separate code and workflow formats.
 
-```text
-developer or model → Clojure form → Agent → Run
-```
+That is the homoiconic motivation behind karcarthy. It enables model-authored
+orchestration without adding a workflow language.
 
-Generated Agents retain their source and macroexpanded forms, so experiments
-can inspect and compare the behavior that actually ran. Homoiconicity is the
-reason model-authored orchestration fits the normal programming model; it is
-not another API layered on top of it.
-
-## Continue
+## Start here
 
 <Cards>
   <Card title="Quickstart" href="/docs/quickstart" />
   <Card title="Agents" href="/docs/agents" />
-  <Card title="Integrations" href="/docs/integrations" />
-  <Card title="Library API" href="/docs/reference/api" />
+  <Card title="Tools" href="/docs/tools" />
+  <Card title="Running agents" href="/docs/running-agents" />
 </Cards>

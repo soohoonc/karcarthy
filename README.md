@@ -1,55 +1,82 @@
 # karcarthy
 
-> A homoiconic Clojure agent harness where models can create and run new Agents
-> through a Tool call.
+karcarthy is a small Clojure agent harness. It runs model-backed Agents,
+executes their Tools, and returns a structured Run containing output, usage,
+events, and failures.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-In karcarthy, an Agent is both executable Clojure and inspectable Clojure data.
-The same form can be authored by a developer, emitted by a model, macroexpanded,
-transformed, evaluated, and run.
-
-That homoiconic representation powers the central capability: add the built-in
-`agent` Tool to let a model submit a new Agent definition that karcarthy checks,
-evaluates, and runs inside the current Run.
-
-The harness also provides a model/Tool loop, typed Tools, conversation Sessions,
-streaming events, recursive Agent creation, MCP, and ACP.
-
 ## Install
 
-JDK 21 and Clojure CLI are required.
+JDK 21 and the Clojure CLI are required.
 
 ```clojure
-;; deps.edn
 {:deps
  {io.github.soohoonc/karcarthy
   {:git/url "https://github.com/soohoonc/karcarthy"
-   :git/sha "<commit-sha>"}}}
+   :git/sha "<commit-sha>"}}
  :paths ["src"]}
 ```
+
+The built-in Responses transport reads `RESPONSES_API_KEY` or
+`OPENAI_API_KEY`.
 
 ## Define and run an Agent
 
 ```clojure
 (require '[karcarthy :as k])
 
-(k/defagent researcher
+(k/defagent assistant
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Answer accurately. Search the web for current facts."
-   :tools [(k/responses-web-search)]
+   :instructions "Answer clearly and concisely."
    :output string?})
 
 (def run
-  (k/run! researcher "What changed in the latest Java release?"))
+  (k/run! assistant "Explain continuation-passing style."))
 
 (:status run) ;=> :completed
 (:output run) ;=> "..."
 ```
 
-The Responses transport reads `OPENAI_API_KEY` by default. `run!` returns
-status, typed output, usage, events, and structured failure data.
+A model-backed Agent normally receives a prompt string. Local dependencies and
+request data belong in the Run's `:context`; they are not sent to the model
+automatically.
+
+## Add a Tool
+
+Tool inputs are structured because the model must know which arguments to
+produce:
+
+```clojure
+(k/deftool word-count
+  {:description "Count the words in text."
+   :input {:type "object"
+           :properties {:text {:type "string"}}
+           :required ["text"]
+           :additionalProperties false}
+   :output integer?}
+  [{:keys [text]}]
+  (count (re-seq #"\S+" text)))
+```
+
+Add the Tool to an Agent with `:tools [word-count]`. Tool input and output are
+validated around every call.
+
+## Use Clojure for composition
+
+An Agent may have a Clojure body. Its one input value is passed through
+unchanged:
+
+```clojure
+(k/defagent select-request-fields
+  {:input map? :output map?}
+  [request]
+  (select-keys request [:task :repository]))
+```
+
+Calls to `run!` start independent Runs. Use ordinary Clojure functions,
+conditionals, `future`, and `deref` to coordinate them.
 
 ## Let a model create an Agent
 
@@ -59,80 +86,17 @@ Zero-arity `(k/agent)` returns a Tool named `agent`:
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
    :instructions
-   "Solve the task. Create a focused child Agent when specialization helps."
+   "Complete the task. Create a focused Agent when specialization helps."
    :tools [(k/agent)]
    :output string?})
-
-(k/run! architect task
-        {:limits {:agent-depth 4
-                  :generated-forms 8
-                  :model-calls 40}})
 ```
 
-The model calls the Tool with:
+The model supplies a Clojure Agent form and an input. karcarthy reads,
+macroexpands, checks, evaluates, verifies, and runs the Agent inside the current
+Run. Authored and generated Agents use the same representation; this is the
+homoiconic motivation for the library.
 
-```json
-{
-  "source": "(agent {:name \"specialist\" ...})",
-  "input": {"task": "..."}
-}
-```
-
-karcarthy reads one Clojure form, macroexpands and checks it, evaluates it,
-verifies that it produced an Agent, and runs it. Generated Agents may
-receive the same Tool and create more Agents within shared limits.
-
-## `agent` and `defagent`
-
-```clojure
-;; Construct an Agent value.
-(def reviewer
-  (k/agent {:name "reviewer"
-            :model {:transport :responses :id "gpt-5.6"}
-            :instructions "Review the change."
-            :output string?}))
-
-;; Define a var containing the same kind of Agent.
-(k/defagent reviewer
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Review the change."
-   :output string?})
-```
-
-`defagent` supplies the default Agent name from the var name. It does not
-create a separate Agent type.
-
-Agents can also have a Clojure body for deterministic coordination:
-
-```clojure
-(k/defagent review-team
-  {:input map? :output string?}
-  [change]
-  (let [reviews [(:output (k/run! security-reviewer change))
-                 (:output (k/run! api-reviewer change))]]
-    (:output (k/run! editor {:change change :reviews reviews}))))
-```
-
-## Local and remote Tools
-
-```clojure
-(def tools
-  (conj (k/local-tools {:cwd "/workspace/project"})
-        (k/responses-web-search)))
-```
-
-`local-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
-`search`. MCP definitions are adapted into the same Tool values with
-`connect-mcp!` and `mcp-tools`.
-
-ACP v1 serving exposes a static Agent or per-session Agent factory to editors
-and evaluation systems such as Harbor:
-
-```bash
-clojure -M -m karcarthy.acp your.namespace/agent-var
-```
-
-## Documentation
+## More
 
 - [Quickstart](docs/content/docs/quickstart.mdx)
 - [Agents](docs/content/docs/agents.mdx)
