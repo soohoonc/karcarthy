@@ -7,7 +7,7 @@
                 run! invoke! spawn! await! await-all! handoff! as-tool
                 context model! emit! events model-transport fake-model
                 hosted-tool hosted-tool?
-                coding-tools coding-instructions coding-agent
+                workspace-tools workspace-prompt
                 openai-web-search connect-mcp! mcp-tools close-mcp!
                 serve-acp!
                 read-agent-form check-agent-form! eval-agent-form!

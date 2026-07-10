@@ -65,7 +65,7 @@
                   (map :agent)
                   vec))))))
 
-(deftest openai-coding-agent-inspects-and-edits-a-workspace
+(deftest openai-agent-inspects-and-edits-a-workspace
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set OPENAI_API_KEY in the process environment.")
   (when (and (live?) (credentials?))
@@ -74,16 +74,23 @@
       (try
         (Files/writeString file "hello PLACEHOLDER\n" StandardCharsets/UTF_8
                            (make-array java.nio.file.OpenOption 0))
-        (let [coder
-              (k/coding-agent
-               {:name "live-coder"
-                :cwd (str root)
+        (let [tools (k/workspace-tools {:cwd (str root)})
+              coder
+              (k/agent
+               {:name "live-workspace-agent"
                 :model {:provider :openai
                         :id (configured-model)
                         :reasoning :low
                         :timeout-ms 180000}
                 :instructions
-                "For this test, inspect the target before changing it and use the edit tool for the change."
+                (k/workspace-prompt
+                 {:cwd (str root)
+                  :tools tools
+                  :append
+                  "For this test, inspect the target before changing it and use the edit tool for the change."})
+                :tools tools
+                :input any?
+                :output string?
                 :loop {:max-turns 6}})
               run
               (k/run! coder

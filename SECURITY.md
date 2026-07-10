@@ -30,7 +30,7 @@ synchronous allow/deny decision; durable suspension is not implemented.
 Tool output and event payloads may contain sensitive data. Redact them in the
 observer before external export.
 
-The coding profile's `read`, `write`, `edit`, and `search` tools reject paths
+The workspace `read`, `write`, `edit`, and `search` tools reject paths
 that resolve outside their configured workspace, including existing symlink
 ancestors. This is a correctness boundary for those tools, not a process
 sandbox. `bash` starts in the workspace but can access anything allowed to the

@@ -241,23 +241,26 @@ agents should use the standard loop or invoke a model-backed child instead.
 Provider transports implement only the normalized model request boundary. They
 never execute tools or child agents.
 
-## Coding harness
+## Workspace capabilities
 
-### `coding-tools`, `coding-instructions`, and `coding-agent`
+### `workspace-tools` and `workspace-prompt`
 
 ```clojure
-(k/coding-tools {:cwd "/workspace"})
-(k/coding-instructions {:cwd "/workspace" :tools tools})
-(k/coding-agent {:name "coder"
-                 :cwd "/workspace"
-                 :model {:provider :openai :id "gpt-5.6"}
-                 :web-search? true})
+(def tools (k/workspace-tools {:cwd "/workspace"}))
+(def instructions
+  (k/workspace-prompt {:cwd "/workspace" :tools tools}))
+
+(k/agent {:name "workspace-agent"
+          :model {:provider :openai :id "gpt-5.6"}
+          :instructions instructions
+          :tools tools
+          :output string?})
 ```
 
-`coding-tools` returns `read`, `write`, `edit`, `bash`, and `search` rooted at
-an existing directory. `coding-agent` installs those tools, appends caller
-tools, derives the instructions, and optionally installs OpenAI hosted web
-search. `:coding-options` configures approval and output/time bounds.
+`workspace-tools` returns `read`, `write`, `edit`, `bash`, and `search` rooted
+at an existing directory. Its options configure approval and output/time
+bounds. `workspace-prompt` describes whatever local, hosted, or MCP Tools the
+caller supplies. Neither function constructs a special Agent type.
 
 ## MCP
 

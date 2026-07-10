@@ -29,7 +29,8 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy/core.clj` | Recursive Agent/Tool macros and values, contracts, Runtime, native model/tool loop, child execution, limits, memory, approvals, events, and Runs. |
 | `src/karcarthy/eval.clj` | Model-authored source reading, macroexpansion, evaluation, verification, and program events. |
 | `src/karcarthy/model/openai.clj` | Direct OpenAI Responses API model transport. It translates model I/O only. |
-| `src/karcarthy/coding.clj` | Capability-derived coding prompt and the minimal `read` / `write` / `edit` / `bash` / `search` tool profile. |
+| `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a workspace. |
+| `src/karcarthy/prompt.clj` | Capability-derived workspace system instructions. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
 | `src/karcarthy/demo.clj` | Offline fake-model/tool-loop demonstration. |
@@ -37,7 +38,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `test/karcarthy/core_test.clj` | Kernel, model loop, tools, contracts, composition, limits, memory, and events. |
 | `test/karcarthy/eval_test.clj` | Generated-form lifecycle and recursion. |
 | `test/karcarthy/openai_test.clj` | Pure Responses request/response translation. |
-| `test/karcarthy/coding_test.clj` | Local coding tools and capability-derived prompt. |
+| `test/karcarthy/tools_test.clj` | Workspace tools and capability-derived prompt. |
 | `test/karcarthy/mcp_test.clj` | MCP initialization, discovery, execution, and shutdown. |
 | `test/karcarthy/acp_test.clj` | ACP session lifecycle, permissions, updates, and MCP bridging. |
 | `test/karcarthy/live_test.clj` | Opt-in paid OpenAI test of recursive `(agent)` generation. |

@@ -118,9 +118,9 @@ only by their matching model transport and never placed in the local execution
 map. For example, `openai-web-search` becomes the Responses API's native
 `web_search` tool.
 
-## Coding profile
+## Workspace tools and prompt
 
-`coding-agent` composes the standard loop with five local Tools:
+`workspace-tools` constructs five local Tools:
 
 | Tool | Responsibility |
 | --- | --- |
@@ -131,11 +131,12 @@ map. For example, `openai-web-search` becomes the Responses API's native
 | `search` | Bounded ripgrep content search. |
 
 The file and search tools reject paths outside the workspace. `bash` is not a
-sandbox and retains the process's OS authority. The generated instructions list
-the actual Tool values, load project guidance, and contain compact inspection,
-editing, verification, and safe-version-control invariants. They are original
-instructions informed by public behavior and open-source implementations, not
-a copied private product prompt.
+sandbox and retains the process's OS authority. `workspace-prompt` is a
+separate function: it lists the actual Tool values, loads project guidance, and
+adds compact inspection, editing, verification, and safe-version-control
+invariants. Callers pass both values to an ordinary `agent`. The instructions
+are informed by public behavior and open-source implementations, not copied
+from a private product prompt.
 
 ## MCP boundary
 

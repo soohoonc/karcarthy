@@ -21,8 +21,8 @@ loop, and its orchestration language is Clojure itself.
 ```
 
 The native Agent/Tool kernel, model loop, child execution, generated-form
-evaluation, contracts, limits, memory, events, direct OpenAI transport, minimal
-coding profile, stdio MCP client, and ACP v1 server are implemented. Durable
+evaluation, contracts, limits, memory, events, direct OpenAI transport,
+workspace tools, stdio MCP client, and ACP v1 server are implemented. Durable
 suspension and richer incremental streaming remain on the roadmap.
 
 ## The premise
@@ -103,14 +103,16 @@ Harbor can evaluate the stable ACP surface. Experiments may compare quality,
 cost, failure modes, trace structure, or invariants; they do not need to claim
 that a generated program improves anything.
 
-## A small coding profile, not a second harness
+## A small toolset, not a second harness
 
-`coding-agent` installs `read`, `write`, `edit`, `bash`, and `search`. Its
-instructions are assembled from the capabilities actually present plus the
-workspace's `AGENTS.md` or `CLAUDE.md`. This follows the small-kernel pattern
-used by [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent):
-keep the loop fixed and make capabilities explicit. Hosted web search and MCP
-tools use the same Tool boundary; ACP remains outside the loop.
+`workspace-tools` returns `read`, `write`, `edit`, `bash`, and `search` as
+ordinary Tool values. `workspace-prompt` separately assembles instructions from
+the capabilities actually present plus the workspace's `AGENTS.md` or
+`CLAUDE.md`. This follows the small-kernel pattern used by
+[Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent): keep
+the loop fixed and make capabilities explicit. There is no special coding
+Agent type. Hosted web search and MCP tools use the same Tool boundary; ACP
+remains outside the loop.
 
 ## Start here
 

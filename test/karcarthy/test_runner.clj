@@ -5,7 +5,7 @@
   '[karcarthy-test
     karcarthy.core-test
     karcarthy.cli-test
-    karcarthy.coding-test
+    karcarthy.tools-test
     karcarthy.eval-test
     karcarthy.openai-test
     karcarthy.mcp-test

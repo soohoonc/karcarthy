@@ -1,14 +1,11 @@
-(ns karcarthy.coding
-  "A deliberately small coding-agent profile: Pi's four orthogonal local
-  tools, a ripgrep search tool, and a prompt derived from actual capabilities."
-  (:refer-clojure :exclude [agent read])
+(ns karcarthy.tools
+  "Small, orthogonal tools for agents operating on a local workspace."
+  (:refer-clojure :exclude [read])
   (:require [clojure.string :as str]
-            [karcarthy.core :as core]
-            [karcarthy.model.openai :as openai])
+            [karcarthy.core :as core])
   (:import [java.io ByteArrayOutputStream]
            [java.nio.charset StandardCharsets]
            [java.nio.file Files LinkOption Path Paths StandardOpenOption]
-           [java.time LocalDate]
            [java.util.concurrent TimeUnit]))
 
 (def ^:private no-link-options (make-array LinkOption 0))
@@ -263,9 +260,9 @@
                   :truncated? truncated?))
          (core/fail! :tool :search "ripgrep failed" result))))))
 
-(defn tools
-  "Build the minimal local coding toolset for one workspace."
-  ([] (tools {}))
+(defn workspace
+  "Build the minimal local toolset for one workspace."
+  ([] (workspace {}))
   ([options]
    (let [root (absolute-path (or (:cwd options) "."))]
      (when-not (Files/isDirectory root no-link-options)
@@ -277,71 +274,3 @@
       (edit-tool root options)
       (bash-tool root options)
       (search-tool root options)])))
-
-(defn- tool-summary [tool]
-  (cond
-    (core/tool? tool) (str "- " (:name tool) ": " (:description tool))
-    (core/hosted-tool? tool)
-    (str "- " (or (get-in tool [:spec :name])
-                   (get-in tool [:spec :type])
-                   "hosted-tool")
-         ": provider-executed capability")
-    :else "- unknown tool"))
-
-(defn- project-guidance [root]
-  (let [agent-file (.resolve root "AGENTS.md")
-        claude-file (.resolve root "CLAUDE.md")
-        file (cond
-               (Files/isRegularFile agent-file no-link-options) agent-file
-               (Files/isRegularFile claude-file no-link-options) claude-file)]
-    (when file
-      (:text (bounded-string (Files/readString file StandardCharsets/UTF_8)
-                             30000)))))
-
-(defn instructions
-  "Build a compact coding prompt from the capabilities actually exposed."
-  [{:keys [cwd tools append]}]
-  (let [root (absolute-path (or cwd "."))
-        guidance (project-guidance root)]
-    (str
-     "You are a coding agent operating inside the karcarthy harness. Work on "
-     "the user's request until it is resolved, using the capabilities listed "
-     "below. Tool schemas are authoritative; never invent a capability.\n\n"
-     "Available tools:\n"
-     (str/join "\n" (map tool-summary tools))
-     "\n\nGuidelines:\n"
-     "- Inspect relevant files before editing and preserve unrelated changes.\n"
-     "- Prefer read/search/edit/write over shell equivalents when they fit.\n"
-     "- Use bash for tests, builds, version control, and commands without a dedicated tool.\n"
-     "- Make focused changes, avoid destructive operations, and verify proportionally to risk.\n"
-     "- Lead the final response with the outcome, evidence, and any remaining caveat.\n"
-     (when guidance
-       (str "\nProject instructions from AGENTS.md or CLAUDE.md:\n" guidance "\n"))
-     (when (seq append) (str "\nAdditional instructions:\n" append "\n"))
-     "\nCurrent date: " (LocalDate/now)
-     "\nCurrent working directory: " root)))
-
-(def ^:private coding-config-keys
-  #{:cwd :coding-options :web-search?})
-
-(defn agent
-  "Construct a model-backed coding Agent with the minimal local tool profile.
-  Set `:web-search? true` for OpenAI's hosted web-search tool and add arbitrary
-  local or MCP Tools through normal `:tools`."
-  [config]
-  (let [cwd (or (:cwd config) ".")
-        local-tools (tools (merge (:coding-options config) {:cwd cwd}))
-        extra-tools (vec (or (:tools config) []))
-        all-tools (cond-> (into local-tools extra-tools)
-                    (:web-search? config) (conj (openai/web-search)))
-        prompt (instructions {:cwd cwd
-                              :tools all-tools
-                              :append (:instructions config)})
-        agent-config (-> (apply dissoc config coding-config-keys)
-                         (assoc :instructions prompt
-                                :tools all-tools
-                                :input (or (:input config) any?)
-                                :output (or (:output config) string?)))]
-    (core/make-agent agent-config
-                     `(karcarthy.coding/agent ~config)
-                     nil nil)))

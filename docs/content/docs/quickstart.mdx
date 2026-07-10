@@ -94,28 +94,35 @@ model/tool loop.
 `invoke!`, which returns the child output while attaching the child's run to
 the same trace tree.
 
-## Use the minimal coding profile
+## Add workspace tools
 
-For a Codex/Pi/Claude-Code-shaped local agent, use the provided profile instead
-of rebuilding its prompt and file tools:
+For a Codex/Pi/Claude-Code-shaped local Agent, compose the provided workspace
+Tools and prompt explicitly:
 
 ```clojure
+(def tools
+  (conj (k/workspace-tools {:cwd "/workspace/project"})
+        (k/openai-web-search)))
+
 (def coder
-  (k/coding-agent
+  (k/agent
    {:name "coder"
-    :cwd "/workspace/project"
     :model {:provider :openai
             :id "gpt-5.6"
             :reasoning :high}
-    :web-search? true}))
+    :instructions
+    (k/workspace-prompt {:cwd "/workspace/project"
+                         :tools tools})
+    :tools tools
+    :output string?}))
 
 (k/run! coder "Fix the failing test and verify the smallest relevant target.")
 ```
 
-The profile exposes `read`, `write`, `edit`, `bash`, and ripgrep-backed
-`search`. The prompt lists only installed tools, includes root `AGENTS.md` or
-`CLAUDE.md`, and appends any caller-supplied `:instructions`. OpenAI web search
-is provider-hosted and is added only with `:web-search? true`.
+`workspace-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
+`search`. `workspace-prompt` lists only the supplied capabilities, includes
+root `AGENTS.md` or `CLAUDE.md`, and can append caller instructions. OpenAI web
+search is an explicit hosted Tool. Neither function introduces a special Agent.
 
 ## Add MCP tools
 
@@ -129,12 +136,17 @@ MCP is an adapter into ordinary Tools:
     :args ["-y" "@example/project-mcp"]}))
 
 (try
-  (let [coder (k/coding-agent
+  (let [tools (into (k/workspace-tools {:cwd "/workspace/project"})
+                    ;; :never means this MCP server is explicitly trusted.
+                    (k/mcp-tools server {:approval :never}))
+        coder (k/agent
                {:name "coder"
-                :cwd "/workspace/project"
                 :model {:provider :openai :id "gpt-5.6"}
-                ;; :never means this MCP server is explicitly trusted.
-                :tools (k/mcp-tools server {:approval :never})})]
+                :instructions
+                (k/workspace-prompt {:cwd "/workspace/project"
+                                     :tools tools})
+                :tools tools
+                :output string?})]
     (k/run! coder "Inspect the project service."))
   (finally
     (k/close-mcp! server)))
@@ -150,16 +162,18 @@ Use a factory when the Agent's workspace and MCP tools depend on the ACP
 session:
 
 ```clojure
-(defn acp-coder [{:keys [cwd mcp-tools]}]
-  (k/coding-agent
-   {:name "coder"
-    :cwd cwd
-    :model {:provider :openai :id "gpt-5.6"}
-    :tools mcp-tools}))
+(defn acp-agent [{:keys [cwd mcp-tools]}]
+  (let [tools (into (k/workspace-tools {:cwd cwd}) mcp-tools)]
+    (k/agent
+     {:name "workspace-agent"
+      :model {:provider :openai :id "gpt-5.6"}
+      :instructions (k/workspace-prompt {:cwd cwd :tools tools})
+      :tools tools
+      :output string?})))
 ```
 
 ```bash
-clojure -M -m karcarthy.acp your.namespace/acp-coder
+clojure -M -m karcarthy.acp your.namespace/acp-agent
 ```
 
 The ACP v1 stdio server supports initialization, new/prompt/close sessions,

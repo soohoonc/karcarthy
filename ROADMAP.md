@@ -12,8 +12,8 @@ bridge, and legacy examples have been removed without a compatibility layer.
 - Native model/tool loop with local tool execution and repair through ordinary
   model turns.
 - Direct OpenAI Responses API transport and an offline fake transport.
-- Capability-derived coding profile with bounded local file/search/process
-  tools and OpenAI hosted web search.
+- Bounded workspace file/search/process tools, capability-derived instructions,
+  and OpenAI hosted web search.
 - MCP 2025-11-25 stdio initialization, tool discovery, calls, and adaptation to
   ordinary Tools.
 - ACP v1 stdio serving for an Agent or per-session Agent factory, including

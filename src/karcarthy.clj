@@ -2,11 +2,12 @@
   "The public karcarthy API: a native, homoiconic Clojure agent harness."
   (:refer-clojure :exclude [agent await run!])
   (:require [karcarthy.acp :as acp]
-            [karcarthy.coding :as coding]
             [karcarthy.core :as core]
             [karcarthy.eval :as keval]
             [karcarthy.mcp :as mcp]
-            [karcarthy.model.openai :as openai]))
+            [karcarthy.model.openai :as openai]
+            [karcarthy.prompt :as prompt]
+            [karcarthy.tools :as tools]))
 
 ;; Agent and Tool macros are forwarding macros so callers need one alias.
 (defmacro agent
@@ -46,9 +47,8 @@
 
 (def model-transport core/model-transport)
 (def fake-model core/fake-model)
-(def coding-tools coding/tools)
-(def coding-instructions coding/instructions)
-(def coding-agent coding/agent)
+(def workspace-tools tools/workspace)
+(def workspace-prompt prompt/workspace)
 (def openai-web-search openai/web-search)
 (def connect-mcp! mcp/connect!)
 (def mcp-tools mcp/tools)

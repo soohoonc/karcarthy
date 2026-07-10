@@ -79,20 +79,26 @@ Conveniences such as `spawn!`, `await-all!`, `as-tool`, and `handoff!` build on
 those primitives. A model provider is a narrow model-I/O transport; it does not
 own tools or orchestration and is not a Runner.
 
-## Minimal coding harness
+## Minimal workspace tools
 
-`coding-agent` is the batteries-included profile. Following Pi's small-kernel
-design, it adds five orthogonal local tools—`read`, `write`, `edit`, `bash`, and
-`search`—and generates its prompt from the tools actually present. OpenAI web
-search is an explicit hosted capability, not a pretend local function.
+Following Pi's small-kernel design, karcarthy provides five orthogonal local
+tools—`read`, `write`, `edit`, `bash`, and `search`—plus a prompt function that
+describes the capabilities actually present. They are inputs to an ordinary
+Agent, not a separate kind of coding Agent.
 
 ```clojure
+(def tools
+  (conj (k/workspace-tools {:cwd "/workspace/project"})
+        (k/openai-web-search)))
+
 (def coder
-  (k/coding-agent
+  (k/agent
    {:name "coder"
-    :cwd "/workspace/project"
     :model {:provider :openai :id "gpt-5.6"}
-    :web-search? true}))
+    :instructions (k/workspace-prompt
+                   {:cwd "/workspace/project" :tools tools})
+    :tools tools
+    :output string?}))
 
 (k/run! coder "Fix the failing test and verify it.")
 ```
@@ -104,7 +110,7 @@ and evaluation clients such as Harbor.
 
 ## Status
 
-The native kernel, model/tool loop, coding profile, structured child execution,
+The native kernel, model/tool loop, workspace tools, structured child execution,
 generated-form evaluation, direct OpenAI Responses transport, hosted web
 search, stdio MCP client, and ACP v1 server are implemented. The former
 Runner/EDN workflow implementation and JSON workflow bridge have been removed.

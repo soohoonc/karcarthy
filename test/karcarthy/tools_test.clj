@@ -1,7 +1,8 @@
-(ns karcarthy.coding-test
+(ns karcarthy.tools-test
   (:require [clojure.test :refer [deftest is testing]]
             [karcarthy :as k]
-            [karcarthy.coding :as coding])
+            [karcarthy.prompt :as prompt]
+            [karcarthy.tools :as tools])
   (:import [java.nio.file Files Path]
            [java.nio.file.attribute FileAttribute]))
 
@@ -16,10 +17,10 @@
 (defn- by-name [tools name]
   (first (filter #(= name (:name %)) tools)))
 
-(deftest minimal-coding-tools-work-together
+(deftest minimal-workspace-tools-work-together
   (let [root (temp-directory)]
     (try
-      (let [tools (coding/tools {:cwd (str root)})
+      (let [tools (tools/workspace {:cwd (str root)})
             read (by-name tools "read")
             write (by-name tools "write")
             edit (by-name tools "edit")
@@ -68,12 +69,19 @@
                    (fn [request]
                      (reset! seen request)
                      {:type :final :output "ok"}))
-            agent (coding/agent
-                   {:name "coder"
-                    :cwd (str root)
+            local-tools (tools/workspace {:cwd (str root)})
+            all-tools (conj local-tools (k/openai-web-search))
+            agent (k/agent
+                   {:name "workspace-agent"
                     :model {:provider :openai :id "fake" :transport model}
-                    :instructions "Do not commit changes."
-                    :web-search? true})
+                    :instructions
+                    (prompt/workspace
+                     {:cwd (str root)
+                      :tools all-tools
+                      :append "Do not commit changes."})
+                    :tools all-tools
+                    :input any?
+                    :output string?})
             run (k/run! agent "inspect")]
         (is (= :completed (:status run)))
         (is (re-find #"Available tools" (get-in agent [:config :instructions])))
