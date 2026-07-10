@@ -6,6 +6,9 @@
            [java.net InetSocketAddress]
            [java.nio.charset StandardCharsets]))
 
+(defn- sse-body [& events]
+  (apply str (map #(str "data: " (json/write-str %) "\n\n") events)))
+
 (deftest lowers-normalized-request
   (let [body (responses/request
               {:model {:id "gpt-5.6"
@@ -14,8 +17,8 @@
                        :verbosity :low
                        :parallel-tool-calls false
                        :temperature 0.2}
-               :instructions "help"
-               :input [{:role :user :content {:question "hi"}}]
+               :context {:system "help"
+                         :messages [{:role :user :content {:question "hi"}}]}
                :tools [{:kind :function
                         :name "lookup"
                         :description "Look up a value."
@@ -35,11 +38,11 @@
 (deftest lowers-function-results-with-response-state
   (let [body (responses/request
               {:model {:id "gpt-5.6"}
-               :instructions "help"
                :state {:previous-response-id "resp_1"}
-               :input [{:role :tool
-                        :tool-call-id "call_1"
-                        :content {:value 3}}]
+               :context {:system "help"
+                         :messages [{:role :tool
+                                    :tool-call-id "call_1"
+                                    :content {:value 3}}]}
                :tools []})]
     (is (= "resp_1" (:previous_response_id body)))
     (is (= "function_call_output" (get-in body [:input 0 :type])))
@@ -49,14 +52,15 @@
 (deftest lowers-hosted-tools-and-replayed-tool-call-history
   (let [body (responses/request
               {:model {:id "gpt-5.6"}
-               :instructions "help"
-               :input [{:role :assistant
-                        :tool-calls [{:id "call_1"
-                                      :name "lookup"
-                                      :input {:id "a"}}]}
-                       {:role :tool
-                        :tool-call-id "call_1"
-                        :content {:value 3}}]
+               :context
+               {:system "help"
+                :messages [{:role :assistant
+                            :tool-calls [{:id "call_1"
+                                          :name "lookup"
+                                          :input {:id "a"}}]}
+                        {:role :tool
+                         :tool-call-id "call_1"
+                         :content {:value 3}}]}
                :tools [{:kind :hosted
                         :transport :responses
                         :spec {:type "web_search"
@@ -72,8 +76,8 @@
        clojure.lang.ExceptionInfo #"different transport"
        (responses/request
         {:model {:id "model"}
-         :instructions "help"
-         :input [{:role :user :content "hello"}]
+         :context {:system "help"
+                   :messages [{:role :user :content "hello"}]}
          :tools [{:kind :hosted
                   :transport :another-transport
                   :spec {:type "special"}}]}))))
@@ -81,8 +85,8 @@
 (deftest primitive-output-contracts-are-validated-locally
   (let [body (responses/request
               {:model {:id "gpt-5.6"}
-               :instructions "Return text."
-               :input [{:role :user :content "hello"}]
+               :context {:system "Return text."
+                         :messages [{:role :user :content "hello"}]}
                :tools []
                :output-schema {:type "string"}})]
     (is (nil? (:text body)))))
@@ -175,8 +179,8 @@
                       :base-url (str "http://127.0.0.1:" port "/v1")
                       :api-key "test-key"
                       :headers {"X-Gateway" "karcarthy-test"}}
-              :instructions "Answer briefly."
-              :input [{:role :user :content "hello"}]
+              :context {:system "Answer briefly."
+                        :messages [{:role :user :content "hello"}]}
               :tools []})
             request (deref seen 5000 ::timeout)]
         (is (= :final (:type result)))
@@ -186,5 +190,60 @@
         (is (= "Bearer test-key" (:authorization request)))
         (is (= "karcarthy-test" (:gateway-header request)))
         (is (= "anthropic/claude-test" (get-in request [:body :model]))))
+      (finally
+        (.stop server 0)))))
+
+(deftest streams-a-responses-compatible-endpoint
+  (let [seen (promise)
+        server (HttpServer/create (InetSocketAddress. "127.0.0.1" 0) 0)
+        response-payload
+        {:id "resp_stream"
+         :status "completed"
+         :output [{:type "message"
+                   :content [{:type "output_text" :text "hello"}]}]
+         :usage {:input_tokens 2 :output_tokens 1 :total_tokens 3}}
+        response-bytes
+        (.getBytes
+         (sse-body
+          {:type "response.created" :response {:id "resp_stream"}}
+          {:type "response.output_text.delta" :delta "hel"}
+          {:type "response.output_text.delta" :delta "lo"}
+          {:type "response.completed" :response response-payload})
+         StandardCharsets/UTF_8)]
+    (.createContext
+     server "/v1/responses"
+     (reify HttpHandler
+       (handle [_ exchange]
+         (with-open [input (.getRequestBody exchange)]
+           (deliver seen
+                    {:accept (.getFirst (.getRequestHeaders exchange) "Accept")
+                     :body (json/read-str (slurp input) :key-fn keyword)}))
+         (.add (.getResponseHeaders exchange)
+               "Content-Type" "text/event-stream")
+         (.sendResponseHeaders exchange 200 (alength response-bytes))
+         (with-open [output (.getResponseBody exchange)]
+           (.write output response-bytes)))))
+    (.start server)
+    (try
+      (let [port (.getPort (.getAddress server))
+            deltas (atom [])
+            result
+            (responses/stream!
+             {:model {:transport :responses
+                      :id "stream-model"
+                      :base-url (str "http://127.0.0.1:" port "/v1")
+                      :auth? false}
+              :context {:system "Answer."
+                        :messages [{:role :user :content "hello"}]}
+              :tools []}
+             #(swap! deltas conj %))
+            request (deref seen 5000 ::timeout)]
+        (is (= :final (:type result)))
+        (is (= "hello" (:output result)))
+        (is (= [{:type :text-delta :delta "hel"}
+                {:type :text-delta :delta "lo"}]
+               @deltas))
+        (is (= "text/event-stream" (:accept request)))
+        (is (true? (get-in request [:body :stream]))))
       (finally
         (.stop server 0)))))

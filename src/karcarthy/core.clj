@@ -199,8 +199,10 @@
 ;; ---------------------------------------------------------------------------
 
 (def ^:private agent-config-keys
-  #{:name :description :model :instructions :context :input :tools :output
-    :output-schema :loop :memory :guardrails :limits :hooks :metadata})
+  #{:name :description :model :context :environment :input :tools :output
+    :output-schema :loop :guardrails :limits :hooks :metadata})
+
+(def ^:private loop-config-keys #{:max-turns :stop?})
 
 (def ^:private tool-config-keys
   #{:name :description :input :input-schema :output :output-schema :approval
@@ -223,13 +225,18 @@
      (fail! :contract :configuration "Agent configuration must be a map"
             {:value config}))
    (reject-unknown! "Agent" agent-config-keys config)
+   (when-let [loop-config (:loop config)]
+     (when-not (map? loop-config)
+       (fail! :contract :configuration "Agent :loop must be a map"
+              {:value loop-config}))
+     (reject-unknown! "Agent :loop" loop-config-keys loop-config))
    (when-not (and (string? (:name config)) (seq (:name config)))
      (fail! :contract :configuration "Agent :name must be a non-empty string"
             {:config config}))
    (when (and (nil? program)
-              (or (nil? (:model config)) (nil? (:instructions config))))
+              (or (nil? (:model config)) (nil? (:context config))))
      (fail! :contract :configuration
-            "A model-backed Agent requires :model and :instructions"
+            "A model-backed Agent requires :model and :context"
             {:name (:name config)}))
    {:karcarthy/type :agent
     :name (:name config)
@@ -415,10 +422,10 @@
    :deadline-ms nil})
 
 (def ^:private run-option-keys
-  #{:context :limits :memory :observe :approval :cancel :metadata
+  #{:environment :state :limits :observe :approval :cancel :metadata
     :model-transports :evaluation-namespace})
 
-(def ^:private invocation-option-keys #{:context :limits})
+(def ^:private invocation-option-keys #{:environment :limits})
 
 (defn- validate-limits!
   [limits]
@@ -448,10 +455,10 @@
 (defn- id [prefix]
   (str prefix (UUID/randomUUID)))
 
-(defn context
-  "Return the local dependency-injection value for a Runtime."
+(defn environment
+  "Return the local, non-model-visible dependency value for a Runtime."
   [rt]
-  (:context rt))
+  (:environment rt))
 
 (defn runtime-view
   "Public, immutable view passed to resolver functions."
@@ -461,7 +468,7 @@
    :agent-id (:agent-id rt)
    :parent-id (:parent-id rt)
    :depth (:depth rt)
-   :context (:context rt)
+   :environment (:environment rt)
    :limits (:limits rt)
    :usage @(:usage rt)
    :agent (:agent rt)})
@@ -545,11 +552,24 @@
 ;; ---------------------------------------------------------------------------
 
 (defn model-transport
-  "Construct a narrow model-I/O transport from a request function."
-  [complete]
-  (when-not (fn? complete)
-    (throw (IllegalArgumentException. "model transport requires a function")))
-  {:karcarthy/type :model-transport :complete complete})
+  "Construct a narrow model-I/O transport.
+
+  A function is a non-streaming `complete` implementation. A map may provide
+  `:complete` and/or `:stream`; stream receives `[request emit-delta!]` and
+  returns the same authoritative final response as complete."
+  [implementation]
+  (let [{:keys [complete stream]}
+        (if (fn? implementation)
+          {:complete implementation}
+          implementation)]
+    (when-not (or (fn? implementation)
+                  (and (map? implementation)
+                       (or (fn? complete) (fn? stream))))
+      (throw (IllegalArgumentException.
+              "model transport requires a function or {:complete f :stream f}")))
+    {:karcarthy/type :model-transport
+     :complete complete
+     :stream stream}))
 
 (defn fake-model
   "Deterministic in-process model transport for tests and examples."
@@ -565,21 +585,40 @@
         (if (keyword? configured)
           (or (get (:model-transports rt) configured)
               (when (= :responses configured)
-                (requiring-resolve 'karcarthy.model.responses/complete!)))
+                (deref (requiring-resolve
+                        'karcarthy.model.responses/transport))))
           configured)]
     (or transport
         (fail! :model :configuration
                "No model transport is configured"
                {:transport configured :model model}))))
 
-(defn- call-transport [transport request]
+(defn- call-transport [transport request emit-delta!]
   (cond
+    (and (map? transport)
+         (not= false (get-in request [:model :stream]))
+         (fn? (:stream transport)))
+    ((:stream transport) request emit-delta!)
+
     (and (map? transport) (fn? (:complete transport)))
     ((:complete transport) request)
+
     (ifn? transport) (transport request)
+
     :else
     (fail! :model :configuration "Invalid model transport"
            {:transport transport})))
+
+(defn- record-model-delta! [rt delta]
+  (check-runtime! rt)
+  (case (:type delta)
+    :text-delta
+    (emit! rt {:type :model/text-delta :delta (:delta delta)})
+
+    :tool-call-delta
+    (emit! rt (assoc (dissoc delta :type) :type :model/tool-call-delta))
+
+    (emit! rt {:type :model/stream-event :event delta})))
 
 (defn- normalize-model-response [response]
   (cond
@@ -605,7 +644,9 @@
     (emit! rt {:type :model/requested
                :model (select-keys model [:provider :transport :id])})
     (try
-      (let [response (normalize-model-response (call-transport transport request))
+      (let [response (normalize-model-response
+                      (call-transport transport request
+                                      #(record-model-delta! rt %)))
             usage (:usage response)]
         (when-let [n (or (:input-tokens usage) (:input_tokens usage))]
           (consume! rt :input-tokens n))
@@ -806,6 +847,80 @@
          (catch Throwable _ output))
     output))
 
+(defn conversation-state?
+  "Return true for a provider-neutral, persistable root conversation snapshot."
+  [value]
+  (and (map? value)
+       (= :conversation-state (:karcarthy/type value))
+       (= 1 (:version value))
+       (vector? (:messages value))
+       (or (nil? (:provider-state value))
+           (map? (:provider-state value)))
+       (map? (:model value))))
+
+(def ^:private context-output-keys #{:system :messages})
+
+(defn- assemble-context
+  [rt agent context-spec {:keys [pending] :as turn-context}]
+  (let [view (assoc turn-context
+                    :runtime (runtime-view rt)
+                    :environment (:environment rt)
+                    :agent agent)
+        value (try
+                (if (fn? context-spec) (context-spec view) context-spec)
+                (catch clojure.lang.ExceptionInfo error
+                  (if (= :failure (:karcarthy/type (ex-data error)))
+                    (throw error)
+                    (fail! :context :assembly
+                           (or (ex-message error) "Context assembly failed")
+                           nil error)))
+                (catch Throwable error
+                  (fail! :context :assembly
+                         (or (ex-message error) "Context assembly failed")
+                         nil error)))
+        assembled
+        (cond
+          (string? value) {:system value :messages pending}
+          (map? value) (do
+                         (reject-unknown! "Model context"
+                                          context-output-keys value)
+                         (merge {:messages pending} value))
+          :else
+          (fail! :context :assembly
+                 "Agent :context must resolve to a string or context map"
+                 {:value value}))]
+    (when-not (or (nil? (:system assembled))
+                  (string? (:system assembled)))
+      (fail! :context :assembly
+             "Model context :system must be a string or nil"
+             {:value (:system assembled)}))
+    (when-not (sequential? (:messages assembled))
+      (fail! :context :assembly
+             "Model context :messages must be a sequence"
+             {:value (:messages assembled)}))
+    (update assembled :messages vec)))
+
+(defn- model-identity [model]
+  (cond-> {:id (:id model)
+           :transport (if (keyword? (:transport model))
+                        (:transport model)
+                        :custom)}
+    (:provider model) (assoc :provider (:provider model))))
+
+(defn- conversation-snapshot [model messages provider-state]
+  {:karcarthy/type :conversation-state
+   :version 1
+   :model (model-identity model)
+   :messages (vec messages)
+   :provider-state provider-state})
+
+(defn- checkpoint-conversation! [rt state]
+  (reset! (:conversation-state rt) state)
+  (emit! rt {:type :state/checkpointed
+             :messages (count (:messages state))
+             :provider-state? (some? (:provider-state state))})
+  state)
+
 (defn- default-loop!
   [rt agent input]
   (let [config (:config agent)
@@ -814,52 +929,54 @@
         tools-value (:tools config)
         tools (vec (or (resolve-value tools-value rt) []))
         tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
-        instructions (resolve-value (:instructions config) rt)
+        context-spec (:context config)
         model (resolve-value (:model config) rt)
+        identity (model-identity model)
+        saved @(:conversation-state rt)
+        saved-provider-state (when (= identity (:model saved))
+                               (:provider-state saved))
+        prior (vec (or (:messages saved) []))
         user-message {:role :user :content input}
-        memory (let [configured (:memory config)]
-                 (if (instance? clojure.lang.IAtom configured)
-                   configured
-                   (:memory rt)))
-        prior (if (instance? clojure.lang.IDeref memory)
-                (vec (get @memory (:name agent) []))
-                [])]
+        messages (conj prior user-message)
+        pending (if saved-provider-state [user-message] messages)]
     (loop [turn 1
-           messages (conj prior user-message)
-           pending (conj prior user-message)
-           provider-state nil]
+           messages messages
+           pending pending
+           provider-state saved-provider-state]
       (check-runtime! rt)
       (when (> turn max-turns)
         (fail! :budget :model-loop "Agent exceeded :max-turns"
                {:agent (:name agent) :max-turns max-turns}))
-      (let [base-request {:agent agent
-                          :model model
-                          :instructions instructions
-                          :messages messages
-                          :input pending
-                          :state provider-state
-                          :tools (mapv tool-descriptor tools)
-                          :output-schema (or (:output-schema config)
-                                             (contract->json-schema
-                                              (:output config)))
-                          :turn turn}
-            prepared (if-let [prepare (:prepare-step loop-config)]
-                       (merge base-request (or (prepare (runtime-view rt)
-                                                       base-request) {}))
-                       base-request)
-            response (model! rt prepared)]
+      (let [model-context
+            (assemble-context rt agent context-spec
+                              {:history messages
+                               :pending pending
+                               :state provider-state
+                               :turn turn})
+            request {:agent agent
+                     :model model
+                     :context model-context
+                     :state provider-state
+                     :tools (mapv tool-descriptor tools)
+                     :output-schema (or (:output-schema config)
+                                        (contract->json-schema
+                                         (:output config)))
+                     :turn turn}
+            response (model! rt request)]
         (case (:type response)
           :final
           (let [output (maybe-json-output (:output response) (:output config))]
-            (when (instance? clojure.lang.IAtom memory)
-              (swap! memory assoc (:name agent)
-                     (conj messages {:role :assistant :content output})))
             (when-let [stop? (:stop? loop-config)]
               (when-not (stop? (runtime-view rt)
                                {:response response :messages messages})
                 (fail! :model :stop-condition
                        "Model returned final output before the stop condition"
                        {:agent (:name agent)})))
+            (reset! (:pending-conversation-state rt)
+                    (conversation-snapshot
+                     model
+                     (conj messages {:role :assistant :content output})
+                     (:state response)))
             output)
 
           :tool-calls
@@ -881,13 +998,14 @@
                          :name name
                          :content model-output})
                       results)]
-            (when (instance? clojure.lang.IAtom memory)
-              (swap! memory assoc (:name agent)
-                     (into messages (cons assistant-message result-messages))))
-            (recur (inc turn)
-                   (into messages (cons assistant-message result-messages))
-                   result-messages
-                   (:state response)))
+            (let [messages (into messages
+                                 (cons assistant-message result-messages))]
+              (checkpoint-conversation!
+               rt (conversation-snapshot model messages (:state response)))
+              (recur (inc turn)
+                     messages
+                     result-messages
+                     (:state response))))
 
           (fail! :model :response "Unsupported model response type"
                  {:response response}))))))
@@ -917,19 +1035,24 @@
               (nil? parent-deadline) local-deadline-ns
               (nil? local-deadline-ns) parent-deadline
               :else (min parent-deadline local-deadline-ns)))
+          conversation-state (if (zero? depth)
+                               (:root-state parent-rt)
+                               (atom nil))
           rt (assoc parent-rt
                     :agent-id (id "agent_")
                     :parent-id (:agent-id parent-rt)
                     :depth depth
                     :agent agent
-                    :context (if (contains? options :context)
-                               (:context options)
-                               (:context parent-rt))
+                    :environment (if (contains? options :environment)
+                                   (:environment options)
+                                   (:environment parent-rt))
+                    :conversation-state conversation-state
+                    :pending-conversation-state (atom nil)
                     :limits limits
                     :deadline-ns deadline-ns)
           config (:config agent)
           started (System/nanoTime)]
-      (check-contract! :context (:context config) (:context rt))
+      (check-contract! :environment (:environment config) (:environment rt))
       (check-contract! :agent-input (:input config) input)
       (run-guardrails! rt :agent-input
                        (get-in config [:guardrails :input]) input)
@@ -943,6 +1066,8 @@
           (check-contract! :agent-output (:output config) output)
           (run-guardrails! rt :agent-output
                            (get-in config [:guardrails :output]) output)
+          (when-let [state @(:pending-conversation-state rt)]
+            (checkpoint-conversation! rt state))
           (emit! rt {:type :agent/completed :agent (:name agent)
                      :duration-ms (/ (double (- (System/nanoTime) started)) 1000000.0)
                      :output output})
@@ -1002,9 +1127,9 @@
                 (fn [rt input]
                   (invoke! rt agent input
                            (cond-> {}
-                             (:context options)
-                             (assoc :context ((:context options)
-                                              (context rt) input)))))))))
+                             (:environment options)
+                             (assoc :environment ((:environment options)
+                                                  (environment rt) input)))))))))
 
 (defn run!
   "Create a root Runtime, execute an Agent, and return a complete Run record."
@@ -1013,6 +1138,11 @@
   ([agent input options]
    (let [options (or options {})
          _ (reject-unknown! "Run options" run-option-keys options)
+         _ (when (and (some? (:state options))
+                      (not (conversation-state? (:state options))))
+             (fail! :contract :state
+                    "Run :state must be a conversation state returned by run!"
+                    {:value (:state options)}))
          limits (validate-limits! (merge default-limits (:limits options)))
          executor (Executors/newVirtualThreadPerTaskExecutor)
          events* (atom [])
@@ -1021,6 +1151,7 @@
                        :output-tokens 0
                        :generated-forms 0})
          run-id (id "run_")
+         state* (atom (:state options))
          started (System/nanoTime)
          deadline-ns (when-let [ms (:deadline-ms limits)]
                        (+ started (* 1000000 (long ms))))
@@ -1030,11 +1161,11 @@
              :parent-id nil
              :depth -1
              :agent nil
-             :context (:context options)
+             :environment (:environment options)
              :limits limits
              :usage usage*
              :events events*
-             :memory (or (:memory options) (atom {}))
+             :root-state state*
              :observe (:observe options)
              :approval (:approval options)
              :approvals (atom #{})
@@ -1062,6 +1193,7 @@
                                    :duration-ms
                                    (/ (double (- (System/nanoTime) started)) 1000000.0))
                      :trace-id run-id
+                     :state @state*
                      :events @events*
                      :error nil}]
          (emit! rt {:type :run/completed :agent (:name agent)
@@ -1079,6 +1211,7 @@
                                      :duration-ms
                                      (/ (double (- (System/nanoTime) started)) 1000000.0))
                        :trace-id run-id
+                       :state @state*
                        :error (throwable->failure t)}]
            (emit! rt {:type (if cancelled? :run/cancelled :run/failed)
                       :agent (:name agent) :error (:error result)})

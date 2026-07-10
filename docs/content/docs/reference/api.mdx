@@ -28,10 +28,10 @@ With a body, the body is the Agent's program and must return a value satisfying
 Required configuration:
 
 - `:name` when using `agent` directly;
-- `:model` and `:instructions` when using the default loop.
+- `:model` and `:context` when using the default loop.
 
-Optional configuration includes `:description`, `:context`, `:input`, `:tools`,
-`:output`, `:loop`, `:memory`, `:guardrails`, `:limits`, and `:hooks`.
+Optional configuration includes `:description`, `:environment`, `:input`,
+`:tools`, `:output`, `:loop`, `:guardrails`, `:limits`, and `:hooks`.
 
 ### `defagent`
 
@@ -108,7 +108,7 @@ The selected transport rejects hosted specifications it does not own.
 ```
 
 Projects an Agent as a Tool. Options may override its tool name, description,
-input contract, output contract, approval policy, and context projection. The
+input contract, output contract, approval policy, and environment projection. The
 parent remains active after the child returns.
 
 ## Execution
@@ -120,15 +120,15 @@ parent remains active after the child returns.
 (k/run! agent input options)
 ```
 
-Creates a root Runtime, validates input and context, executes the Agent, and
-returns a Run record.
+Creates a root Runtime, validates input and environment, executes the Agent,
+and returns a Run record containing the latest conversation state.
 
 Options:
 
 ```clojure
-{:context {...}
+{:environment {...}
+ :state previous-conversation-state
  :limits {...}
- :memory memory
  :observe event-fn
  :approval approval-handler
  :cancel cancellation-token
@@ -177,14 +177,53 @@ Records an `:agent/handoff` event and invokes another Agent while retaining
 runtime, budget, and trace lineage. Durable conversation transfer remains
 roadmap work.
 
-### `context`
+### `environment`
 
 ```clojure
-(k/context rt)
+(k/environment rt)
 ```
 
 Returns the local dependency-injection value. It is not automatically exposed
 to the model.
+
+## Context and prompts
+
+Agent `:context` is a string or a function called for every model turn. The
+function receives `:runtime`, `:environment`, `:agent`, complete `:history`,
+current `:pending` messages, provider `:state`, and `:turn`. It returns either a
+string or the provider-neutral map `{:system string-or-nil :messages [...]}`.
+Unknown keys fail closed.
+
+### `prompt`, `prompt-file`, and `system-prompt`
+
+```clojure
+(def context
+  (k/prompt
+   (k/system-prompt)
+   (k/prompt-file "AGENTS.md")
+   (fn [{:keys [environment]}]
+     (str "Current user: " (:user-id environment)))))
+```
+
+`prompt` joins strings and turn-dependent string functions. `prompt-file`
+reads exactly the named UTF-8 file. `system-prompt` reads the packaged
+`resources/karcarthy/system.md`. None of them infer a directory, project, tool
+set, date, or hidden context source.
+
+## Conversation state
+
+### `conversation-state?`
+
+```clojure
+(def first-run (k/run! agent "first"))
+(k/conversation-state? (:state first-run)) ;=> true
+(def next-run (k/run! agent "next" {:state (:state first-run)}))
+```
+
+The snapshot is ordinary versioned data containing messages, model identity,
+and provider continuation state. The harness does not choose a persistence
+backend. It resumes the root model-backed Agent only; custom orchestration must
+model and persist its own domain state explicitly.
 
 ## Generated code
 
@@ -241,6 +280,19 @@ agents should use the standard loop or invoke a model-backed child instead.
 Provider transports implement only the normalized model request boundary. They
 never execute tools or child agents.
 
+### `model-transport`
+
+```clojure
+(k/model-transport complete-fn)
+(k/model-transport {:complete complete-fn
+                    :stream (fn [request emit-delta!] ...)})
+```
+
+A streaming implementation emits normalized `:text-delta` or
+`:tool-call-delta` values and returns the same final response required from
+`complete-fn`. Set model option `:stream false` to force the complete path when
+both are available.
+
 ### Responses-compatible transport
 
 `:transport :responses` selects the built-in HTTP adapter. Direct OpenAI needs
@@ -274,35 +326,31 @@ Transport options:
 - `:auth? false` — omit automatic Bearer authentication for a trusted local
   endpoint;
 - `:timeout-ms` — complete request timeout;
+- `:stream false` — use the non-streaming HTTP response path;
 - `:provider-options` — additional Responses request-body fields.
 
 Model IDs pass through unchanged. Endpoint-specific hosted Tools work only
 when the selected endpoint and model implement their specifications. `:provider`
 is optional descriptive metadata; `:transport` selects executable model I/O.
 
-## Workspace capabilities
+## Local capabilities
 
-### `workspace-tools` and `workspace-prompt`
+### `local-tools`
 
 ```clojure
-(def tools (k/workspace-tools {:cwd "/workspace"}))
-(def instructions
-  (k/workspace-prompt {:cwd "/workspace" :tools tools}))
+(def tools (k/local-tools {:cwd "/workspace"}))
 
-(k/agent {:name "workspace-agent"
+(k/agent {:name "local-agent"
           :model {:transport :responses :id "gpt-5.6"}
-          :instructions instructions
+          :context (k/system-prompt)
           :tools tools
           :output string?})
 ```
 
-`workspace-tools` returns `read`, `write`, `edit`, `bash`, and `search` rooted
+`local-tools` returns `read`, `write`, `edit`, `bash`, and `search` rooted
 at an existing directory. Its options configure approval and output/time
-bounds. `workspace-prompt` describes whatever local, hosted, or MCP Tools the
-caller supplies. It renders the packaged, human-readable
-`resources/karcarthy/system.md` template with the actual tools, project
-instructions, date, working directory, and optional `:append` text. Neither
-function constructs a special Agent type.
+bounds. Tool schemas travel through the model request independently from
+context. `local-tools` constructs ordinary Tools, not a special Agent type.
 
 ## MCP
 
@@ -364,7 +412,7 @@ Returns the recorded observation events from a Run or Runtime.
 
 ## Contracts
 
-Agent, tool, context, input, and output contracts initially use
+Agent, tool, environment, input, and output contracts initially use
 `clojure.spec`. A contract adapter may support other Clojure schema systems
 later, but the harness exposes one validation result shape.
 

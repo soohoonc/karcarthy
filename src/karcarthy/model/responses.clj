@@ -86,8 +86,9 @@
 
 (defn request
   "Pure: lower a normalized karcarthy model request to a Responses API body."
-  [{:keys [model instructions input state tools output-schema]}]
-  (let [text-config
+  [{:keys [model context state tools output-schema]}]
+  (let [{:keys [system messages]} context
+        text-config
         (cond-> {}
           (:verbosity model)
           (assoc :verbosity (api-value (:verbosity model)))
@@ -98,8 +99,8 @@
                           :schema output-schema
                           :strict true}))
         body {:model (:id model)
-              :instructions instructions
-              :input (vec (mapcat input-items input))
+              :instructions system
+              :input (vec (mapcat input-items messages))
               :tools (mapv request-tool tools)
               :tool_choice (or (:tool-choice model) "auto")
               :parallel_tool_calls
@@ -199,15 +200,8 @@
       (System/getenv "RESPONSES_API_KEY")
       (System/getenv "OPENAI_API_KEY")))
 
-(defn complete!
-  "Execute one Responses-compatible HTTP request.
-
-  `:base-url` defaults to OpenAI. Gateways may set `:base-url`, `:api-key` or
-  `:api-key-env`, and `:headers`. Set `:auth? false` for a trusted endpoint
-  that requires no Authorization header. `:url` overrides the complete URL."
-  [normalized-request]
-  (let [model (:model normalized-request)
-        headers (configured-headers model)
+(defn- build-http-request [model body accept]
+  (let [headers (configured-headers model)
         key (api-key model)
         default-auth? (and (not= false (:auth? model))
                            (not (authorization-header? headers)))
@@ -221,36 +215,128 @@
       (core/fail! :model :configuration
                   "Responses model configuration requires :id"
                   {:model model}))
-    (let [body (json/write-str (request normalized-request))
-          builder (doto (HttpRequest/newBuilder)
+    (let [builder (doto (HttpRequest/newBuilder)
                     (.uri (URI/create (request-url model)))
                     (.timeout (Duration/ofMillis timeout-ms))
                     (.header "Content-Type" "application/json")
-                    (.header "Accept" "application/json")
-                    (.POST (HttpRequest$BodyPublishers/ofString body)))
-          _ (when default-auth?
-              (.header builder "Authorization" (str "Bearer " key)))
-          _ (doseq [[name value] headers]
-              (.setHeader builder name value))
-          http-request (.build builder)
-          http-response (.send ^HttpClient @http-client http-request
-                               (HttpResponse$BodyHandlers/ofString))
-          status (.statusCode http-response)
-          request-id (some-> (.firstValue (.headers http-response)
-                                          "x-request-id")
-                             (.orElse nil))
-          response-body (.body http-response)
-          payload (try
-                    (json/read-str response-body :key-fn keyword)
-                    (catch Throwable t
-                      (core/fail! :model :response
-                                  "Responses endpoint returned non-JSON content"
-                                  {:status status :body response-body} t)))]
-      (when-not (<= 200 status 299)
-                    (core/fail! :model :request
-                    (or (get-in payload [:error :message])
-                        (str "Responses request failed with HTTP " status))
-                    {:status status
-                     :request-id request-id
-                     :response payload}))
-      (response payload))))
+                    (.header "Accept" accept)
+                    (.POST (HttpRequest$BodyPublishers/ofString body)))]
+      (when default-auth?
+        (.header builder "Authorization" (str "Bearer " key)))
+      (doseq [[name value] headers]
+        (.setHeader builder name value))
+      (.build builder))))
+
+(defn- request-id [http-response]
+  (some-> (.firstValue (.headers http-response) "x-request-id")
+          (.orElse nil)))
+
+(defn- parse-json-body [status response-body]
+  (try
+    (json/read-str response-body :key-fn keyword)
+    (catch Throwable t
+      (core/fail! :model :response
+                  "Responses endpoint returned non-JSON content"
+                  {:status status :body response-body} t))))
+
+(defn- check-http-status! [status request-id payload]
+  (when-not (<= 200 status 299)
+    (core/fail! :model :request
+                (or (get-in payload [:error :message])
+                    (str "Responses request failed with HTTP " status))
+                {:status status
+                 :request-id request-id
+                 :response payload})))
+
+(defn complete!
+  "Execute one Responses-compatible HTTP request.
+
+  `:base-url` defaults to OpenAI. Gateways may set `:base-url`, `:api-key` or
+  `:api-key-env`, and `:headers`. Set `:auth? false` for a trusted endpoint
+  that requires no Authorization header. `:url` overrides the complete URL."
+  [normalized-request]
+  (let [model (:model normalized-request)
+        body (json/write-str (request normalized-request))
+        http-request (build-http-request model body "application/json")
+        http-response (.send ^HttpClient @http-client http-request
+                             (HttpResponse$BodyHandlers/ofString))
+        status (.statusCode http-response)
+        request-id (request-id http-response)
+        response-body (.body http-response)
+        payload (parse-json-body status response-body)]
+    (check-http-status! status request-id payload)
+    (response payload)))
+
+(defn- dispatch-sse-data! [data emit-event!]
+  (when (seq data)
+    (let [body (str/join "\n" data)]
+      (when-not (= "[DONE]" body)
+        (emit-event! (parse-json-body 200 body))))))
+
+(defn- read-sse! [lines emit-event!]
+  (let [iterator (.iterator lines)]
+    (loop [data []]
+      (if (.hasNext iterator)
+        (let [line (.next iterator)]
+          (cond
+            (str/blank? line)
+            (do (dispatch-sse-data! data emit-event!)
+                (recur []))
+
+            (str/starts-with? line "data:")
+            (recur (conj data (str/triml (subs line 5))))
+
+            :else
+            (recur data)))
+        (dispatch-sse-data! data emit-event!)))))
+
+(defn stream!
+  "Execute one Responses request over SSE, emitting normalized deltas as they
+  arrive and returning the authoritative completed response."
+  [normalized-request emit-delta!]
+  (let [model (:model normalized-request)
+        body (json/write-str (assoc (request normalized-request) :stream true))
+        http-request (build-http-request model body "text/event-stream")
+        http-response (.send ^HttpClient @http-client http-request
+                             (HttpResponse$BodyHandlers/ofLines))
+        status (.statusCode http-response)
+        request-id (request-id http-response)]
+    (with-open [lines (.body http-response)]
+      (if-not (<= 200 status 299)
+        (let [body (str/join "\n" (iterator-seq (.iterator lines)))
+              payload (parse-json-body status body)]
+          (check-http-status! status request-id payload))
+        (let [completed (volatile! nil)]
+          (read-sse!
+           lines
+           (fn [event]
+             (case (:type event)
+               "response.output_text.delta"
+               (emit-delta! {:type :text-delta :delta (:delta event)})
+
+               "response.function_call_arguments.delta"
+               (emit-delta! {:type :tool-call-delta
+                             :call-id (:item_id event)
+                             :output-index (:output_index event)
+                             :delta (:delta event)})
+
+               ("response.completed" "response.failed" "response.incomplete")
+               (vreset! completed (:response event))
+
+               "error"
+               (core/fail! :model :response
+                           (or (get-in event [:error :message])
+                               (:message event)
+                               "Responses stream failed")
+                           {:error (or (:error event) event)})
+
+               nil)))
+          (when-not @completed
+            (core/fail! :model :response
+                        "Responses stream ended without a terminal response"
+                        {:request-id request-id}))
+          (response @completed))))))
+
+(def transport
+  "Built-in Responses transport with complete and streaming HTTP paths."
+  (core/model-transport {:complete complete! :stream stream!}))

@@ -11,17 +11,18 @@
 
 (def demo-model
   (k/fake-model
-   (fn [{:keys [input]}]
-     (if (= :tool (:role (first input)))
-       {:type :final :output (:content (first input))}
-       {:type :tool-calls
-        :calls [{:id "call_1"
-                 :name "uppercase"
-                 :input {:text (get-in input [0 :content])}}]}))))
+   (fn [{:keys [context]}]
+     (let [input (:messages context)]
+       (if (= :tool (:role (first input)))
+         {:type :final :output (:content (first input))}
+         {:type :tool-calls
+          :calls [{:id "call_1"
+                   :name "uppercase"
+                   :input {:text (get-in input [0 :content])}}]})))))
 
 (k/defagent demo-agent
   {:model {:id "offline" :transport demo-model}
-   :instructions "Use the uppercase tool."
+   :context "Use the uppercase tool."
    :tools [uppercase]
    :output string?})
 

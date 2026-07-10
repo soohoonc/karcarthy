@@ -26,20 +26,20 @@ cd docs && npm run lint && npm run types:check && npm run build
 | File | Role |
 | --- | --- |
 | `src/karcarthy.clj` | Public facade under one alias: `(require '[karcarthy :as k])`. |
-| `src/karcarthy/core.clj` | Recursive Agent/Tool macros and values, contracts, Runtime, native model/tool loop, child execution, limits, memory, approvals, events, and Runs. |
+| `src/karcarthy/core.clj` | Recursive Agent/Tool macros and values, contracts, context assembly, Runtime, model/tool loop, conversation state, child execution, limits, streaming events, approvals, and Runs. |
+| `src/karcarthy/context.clj` | Generic prompt composition, prompt-file loading, and access to the packaged `system.md`. |
 | `src/karcarthy/eval.clj` | Model-authored source reading, macroexpansion, evaluation, verification, and program events. |
-| `src/karcarthy/model/responses.clj` | Responses-compatible HTTP transport for OpenAI or compatible gateways. It translates model I/O only. |
-| `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a workspace. |
-| `src/karcarthy/prompt.clj` | Renders capability-derived workspace system instructions. |
-| `resources/karcarthy/system.md` | Readable system-prompt template packaged in library and standalone jars. |
+| `src/karcarthy/model/responses.clj` | Complete and SSE-streaming Responses-compatible HTTP transport. It translates model I/O only. |
+| `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a local directory. |
+| `resources/karcarthy/system.md` | Readable system prompt packaged in library and standalone jars. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
 | `src/karcarthy/demo.clj` | Offline fake-model/tool-loop demonstration. |
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
-| `test/karcarthy/core_test.clj` | Kernel, model loop, tools, contracts, composition, limits, memory, and events. |
+| `test/karcarthy/core_test.clj` | Kernel, model loop, context/environment, conversation state, streaming, composition, limits, and events. |
 | `test/karcarthy/eval_test.clj` | Generated-form lifecycle and recursion. |
-| `test/karcarthy/responses_test.clj` | Pure translation plus an offline compatible-endpoint integration test. |
-| `test/karcarthy/tools_test.clj` | Workspace tools and capability-derived prompt. |
+| `test/karcarthy/responses_test.clj` | Pure translation plus offline complete and SSE endpoint integration tests. |
+| `test/karcarthy/tools_test.clj` | Local tools and generic prompt composition. |
 | `test/karcarthy/mcp_test.clj` | MCP initialization, discovery, execution, and shutdown. |
 | `test/karcarthy/acp_test.clj` | ACP session lifecycle, permissions, updates, and MCP bridging. |
 | `test/karcarthy/live_test.clj` | Opt-in paid OpenAI test of recursive `(agent)` generation. |
@@ -47,8 +47,9 @@ cd docs && npm run lint && npm run types:check && npm run build
 ## Conventions
 
 - **The harness owns semantics.** A model transport accepts one normalized
-  request and returns `{:type :final ...}` or `{:type :tool-calls ...}`. It
-  never executes tools, manages agents, or owns memory.
+  request and returns `{:type :final ...}` or `{:type :tool-calls ...}`. A
+  streaming transport may emit deltas before returning that authoritative
+  response. It never executes tools, manages agents, or owns state.
 - **Keep the inner loop small.** Coding capabilities, hosted provider tools,
   MCP discovery, and ACP serving adapt to ordinary Tools around the kernel.
   Prompts must describe the capabilities actually installed.
@@ -59,7 +60,12 @@ cd docs && npm run lint && npm run types:check && npm run build
 - **`agent` is recursive.** `(agent config ...)` constructs an Agent;
   zero-arity `(agent)` is the model-facing tool that accepts and runs another
   ordinary Agent form. Do not create a separate dynamic/expansion primitive.
-- **Contracts fail closed.** Validate context, Agent input/output, and Tool
+- **Context is model-visible.** Its normalized shape is `{:system string-or-nil
+  :messages [...]}`. Local dependencies belong in `:environment` and are never
+  exposed automatically. Do not add request-mutation hooks like `prepare-step`.
+- **State is data.** Root conversation snapshots enter through the `:state`
+  run option and leave on the Run. Storage belongs outside the kernel.
+- **Contracts fail closed.** Validate environment, Agent input/output, and Tool
   input/output. Model/tool/protocol failures become structured failed Runs.
 - **Generated code is intentionally evaluated.** Reader evaluation is disabled
   during the read phase, but checked forms are later evaluated as JVM Clojure.

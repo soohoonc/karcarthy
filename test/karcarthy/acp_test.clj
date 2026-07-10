@@ -51,15 +51,19 @@
       :model
       {:id "fake"
        :transport
-       (k/fake-model
-        (fn [_]
-          (if (= 1 (swap! turn inc))
-            {:type :tool-calls
-             :calls [{:id "call_1"
-                      :name remote-tool
-                      :input {:text "hello from ACP"}}]}
-            {:type :final :output "MCP completed"})))}
-      :instructions "Exercise the session MCP tool."
+       (k/model-transport
+        {:stream
+         (fn [_ emit!]
+           (if (= 1 (swap! turn inc))
+             {:type :tool-calls
+              :calls [{:id "call_1"
+                       :name remote-tool
+                       :input {:text "hello from ACP"}}]}
+             (do
+               (emit! {:type :text-delta :delta "MCP "})
+               (emit! {:type :text-delta :delta "completed"})
+               {:type :final :output "MCP completed"})))})}
+      :context "Exercise the session MCP tool."
       :tools mcp-tools
       :output string?})))
 
@@ -129,10 +133,11 @@
                                 (= "completed" (:status %)))
                           updates))
                 (is (= "MCP completed"
-                       (some #(when (= "agent_message_chunk"
-                                        (:sessionUpdate %))
-                                (get-in % [:content :text]))
-                             updates))))
+                       (->> updates
+                            (filter #(= "agent_message_chunk"
+                                        (:sessionUpdate %)))
+                            (map #(get-in % [:content :text]))
+                            (apply str)))))
 
               :else (recur updates permission?))))
 

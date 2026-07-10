@@ -2,11 +2,11 @@
   "The public karcarthy API: a native, homoiconic Clojure agent harness."
   (:refer-clojure :exclude [agent await run!])
   (:require [karcarthy.acp :as acp]
+            [karcarthy.context :as context]
             [karcarthy.core :as core]
             [karcarthy.eval :as keval]
             [karcarthy.mcp :as mcp]
             [karcarthy.model.responses :as responses]
-            [karcarthy.prompt :as prompt]
             [karcarthy.tools :as tools]))
 
 ;; Agent and Tool macros are forwarding macros so callers need one alias.
@@ -40,15 +40,18 @@
 (def await-all! core/await-all!)
 (def handoff! core/handoff!)
 (def as-tool core/as-tool)
-(def context core/context)
+(def environment core/environment)
+(def conversation-state? core/conversation-state?)
 (def model! core/model!)
 (def emit! core/emit!)
 (def events core/events)
 
 (def model-transport core/model-transport)
 (def fake-model core/fake-model)
-(def workspace-tools tools/workspace)
-(def workspace-prompt prompt/workspace)
+(def local-tools tools/local)
+(def prompt context/prompt)
+(def prompt-file context/prompt-file)
+(def system-prompt context/system-prompt)
 (def responses-web-search responses/web-search)
 (def connect-mcp! mcp/connect!)
 (def mcp-tools mcp/tools)

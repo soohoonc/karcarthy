@@ -7,7 +7,7 @@
 (s/def ::text string?)
 (s/def ::tool-input (s/keys :req-un [::text]))
 (s/def ::value int?)
-(s/def ::context (s/keys :req-un [::value]))
+(s/def ::environment (s/keys :req-un [::value]))
 
 (defn scripted-model
   [& responses]
@@ -28,7 +28,7 @@
 (deftest agent-and-tool-values
   (let [leaf (k/agent {:name "leaf"
                        :model {:id "fake" :transport (scripted-model "ok")}
-                       :instructions "answer"})
+                       :context "answer"})
         program (k/agent {:name "program" :input string? :output string?}
                          [_ input] (str input "!"))]
     (is (k/agent? leaf))
@@ -42,10 +42,15 @@
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown"
                         (k/agent {:name "bad"
                                   :model :x
-                                  :instructions "x"
+                                  :context "x"
                                   :wat true})))
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":model and :instructions"
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":model and :context"
                         (k/agent {:name "bad"})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown configuration"
+                        (k/agent {:name "bad-loop"
+                                  :model :x
+                                  :context "x"
+                                  :loop {:prepare-step identity}})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input contract"
                         (k/tool {:name "x" :description "x"}
                                 [rt input] input))))
@@ -57,7 +62,7 @@
                                             {:type :final :output "done"
                                              :usage {:input-tokens 3
                                                      :output-tokens 2}})}
-                        :instructions "answer"
+                        :context "answer"
                         :input string?
                         :output string?})
         run (k/run! agent "task")]
@@ -67,13 +72,54 @@
     (is (= 3 (get-in run [:usage :input-tokens])))
     (is (= 2 (get-in run [:usage :output-tokens])))))
 
+(deftest model-stream-deltas-are-runtime-events
+  (let [transport
+        (k/model-transport
+         {:stream (fn [_ emit!]
+                    (emit! {:type :text-delta :delta "hel"})
+                    (emit! {:type :text-delta :delta "lo"})
+                    {:type :final :output "hello"})})
+        agent (k/agent {:name "streaming"
+                        :model {:id "fake" :transport transport}
+                        :context "Answer."
+                        :output string?})
+        observed (atom [])
+        run (k/run! agent "hi" {:observe #(swap! observed conj %)})]
+    (is (= :completed (:status run)))
+    (is (= "hello" (:output run)))
+    (is (= ["hel" "lo"]
+           (->> @observed
+                (filter #(= :model/text-delta (:type %)))
+                (mapv :delta))))))
+
+(deftest model-streaming-can-be-disabled-per-model
+  (let [path (atom nil)
+        transport
+        (k/model-transport
+         {:complete (fn [_]
+                      (reset! path :complete)
+                      {:type :final :output "done"})
+          :stream (fn [_ _]
+                    (reset! path :stream)
+                    {:type :final :output "wrong"})})
+        agent (k/agent {:name "complete-only"
+                        :model {:id "fake"
+                                :transport transport
+                                :stream false}
+                        :context "Answer."
+                        :output string?})
+        run (k/run! agent "hi")]
+    (is (= :completed (:status run)))
+    (is (= "done" (:output run)))
+    (is (= :complete @path))))
+
 (deftest named-transport-is-resolved-independently-from-provider
   (let [transport (scripted-model "done")
         agent (k/agent {:name "routed"
                         :model {:id "provider/model"
                                 :provider :example-provider
                                 :transport :example-transport}
-                        :instructions "answer"
+                        :context "answer"
                         :output string?})
         run (k/run! agent nil
                     {:model-transports {:example-transport transport}})
@@ -86,24 +132,42 @@
             :id "provider/model"}
            (:model requested)))))
 
-(deftest memory-can-carry-conversation-between-runs
-  (let [memory (atom {})
-        seen (atom [])
+(deftest conversation-state-is-explicit-run-input-and-output
+  (let [seen (atom [])
         model (k/fake-model
                (fn [request]
-                 (swap! seen conj (:messages request))
+                 (swap! seen conj (get-in request [:context :messages]))
                  {:type :final :output "ok"}))
         agent (k/agent {:name "remembering"
                         :model {:id "fake" :transport model}
-                        :instructions "remember"
-                        :output string?})]
-    (k/run! agent "first" {:memory memory})
-    (k/run! agent "second" {:memory memory})
+                        :context "remember"
+                        :output string?})
+        first-run (k/run! agent "first")
+        second-run (k/run! agent "second" {:state (:state first-run)})]
+    (is (k/conversation-state? (:state first-run)))
+    (is (k/conversation-state? (:state second-run)))
     (is (= 1 (count (first @seen))))
     (is (= 3 (count (second @seen))))
     (is (= "first" (get-in @seen [1 0 :content])))
     (is (= "ok" (get-in @seen [1 1 :content])))
     (is (= "second" (get-in @seen [1 2 :content])))))
+
+(deftest provider-continuation-state-avoids-replaying-history
+  (let [seen (atom [])
+        model (k/fake-model
+               (fn [request]
+                 (swap! seen conj (:context request))
+                 {:type :final
+                  :output "ok"
+                  :state {:cursor "provider-state"}}))
+        agent (k/agent {:name "continued"
+                        :model {:id "fake" :transport model}
+                        :context "continue"
+                        :output string?})
+        first-run (k/run! agent "first")]
+    (k/run! agent "second" {:state (:state first-run)})
+    (is (= 1 (count (get-in @seen [1 :messages]))))
+    (is (= "second" (get-in @seen [1 :messages 0 :content])))))
 
 (deftest native-model-tool-loop
   (let [seen (atom [])
@@ -116,10 +180,10 @@
                              :name "uppercase"
                              :input {:text "hello"}}]}
                    {:type :final
-                    :output (get-in request [:input 0 :content])})))
+                    :output (get-in request [:context :messages 0 :content])})))
         agent (k/agent {:name "tool-user"
                         :model {:id "fake" :transport model}
-                        :instructions "use the tool"
+                        :context "use the tool"
                         :tools [uppercase]
                         :output string?})
         run (k/run! agent "hello")]
@@ -131,7 +195,7 @@
            (get-in @seen [0 :tools 0 :parameters :properties "text" :type])))
     (is (= ["text"]
            (get-in @seen [0 :tools 0 :parameters :required])))
-    (is (= :tool (get-in @seen [1 :input 0 :role])))
+    (is (= :tool (get-in @seen [1 :context :messages 0 :role])))
     (is (= [:model/requested :model/completed
             :tool/started :tool/completed
             :model/requested :model/completed]
@@ -148,7 +212,7 @@
                         :model {:id "fake"
                                 :transport (scripted-model
                                             "{\"answer\":\"yes\"}")}
-                        :instructions "json"
+                        :context "json"
                         :output ::report})
         run (k/run! agent nil)]
     (is (= :completed (:status run)))
@@ -168,19 +232,68 @@
     (is (= :contract (get-in (k/run! bad-output nil) [:error :kind])))
     (is (= :agent-output (get-in (k/run! bad-output nil) [:error :phase])))))
 
-(deftest context-and-resolvers
+(deftest rejected-model-output-is-not-checkpointed
+  (let [agent (k/agent {:name "bad-model-output"
+                        :model {:id "fake"
+                                :transport (scripted-model 42)}
+                        :context "Return text."
+                        :output string?})
+        run (k/run! agent "hello")]
+    (is (= :failed (:status run)))
+    (is (nil? (:state run)))))
+
+(deftest environment-is-local-and-contracted
   (let [seen (atom nil)
-        agent (k/agent {:name "context"
-                        :context ::context
+        agent (k/agent {:name "environment"
+                        :environment ::environment
                         :input any?
                         :output int?}
                        [rt _]
-                       (:value (k/context rt)))]
-    (is (= 7 (:output (k/run! agent nil {:context {:value 7}
+                       (:value (k/environment rt)))]
+    (is (= 7 (:output (k/run! agent nil {:environment {:value 7}
                                          :observe #(reset! seen %)}))))
     (is (= :run/completed (:type @seen)))
-    (is (= :contract (get-in (k/run! agent nil {:context {}})
+    (is (= :contract (get-in (k/run! agent nil {:environment {}})
                              [:error :kind])))))
+
+(deftest context-assembly-is-per-turn-and-model-visible-only
+  (let [views (atom [])
+        requests (atom [])
+        model (k/fake-model
+               (fn [request]
+                 (swap! requests conj request)
+                 {:type :final :output "ok"}))
+        agent (k/agent
+               {:name "assembled"
+                :model {:id "fake" :transport model}
+                :context
+                (fn [{:keys [environment history pending turn] :as view}]
+                  (swap! views conj view)
+                  {:system (str "user=" (:user-id environment)
+                                ";turn=" turn)
+                   :messages pending})
+                :environment map?
+                :output string?})
+        run (k/run! agent "hello" {:environment {:user-id "u1"}})]
+    (is (= :completed (:status run)))
+    (is (= "user=u1;turn=1"
+           (get-in @requests [0 :context :system])))
+    (is (= "hello"
+           (get-in @requests [0 :context :messages 0 :content])))
+    (is (= 1 (count (:history (first @views)))))
+    (is (nil? (get-in @requests [0 :environment])))))
+
+(deftest context-cannot-mutate-the-rest-of-the-model-request
+  (let [agent (k/agent
+               {:name "bad-context"
+                :model {:id "fake"
+                        :transport (scripted-model "unused")}
+                :context (fn [_] {:system "x" :messages [] :model :other})})
+        run (k/run! agent "hello")]
+    (is (= :failed (:status run)))
+    (is (= :contract (get-in run [:error :kind])))
+    (is (re-find #"unknown configuration"
+                 (get-in run [:error :message])))))
 
 (deftest custom-program-composes-agents
   (let [writer (k/agent {:name "writer" :input string? :output string?}
@@ -220,7 +333,7 @@
                           :model {:id "fake"
                                   :transport (scripted-model
                                               {:type :tool-calls :calls []})}
-                          :instructions "loop"
+                          :context "loop"
                           :loop {:max-turns 1}})]
     (is (= :failed (:status (k/run! parent nil
                                     {:limits {:agent-depth 0}}))))
@@ -253,10 +366,11 @@
                     (if (= 1 (swap! n inc))
                       {:type :tool-calls
                        :calls [{:id "c" :name "dangerous" :input {}}]}
-                      {:type :final :output (get-in request [:input 0 :content])}))))
+                      {:type :final
+                       :output (get-in request [:context :messages 0 :content])}))))
         make-agent #(k/agent {:name "approval"
                               :model {:id "fake" :transport (model)}
-                              :instructions "call"
+                              :context "call"
                               :tools [dangerous]
                               :output string?})]
     (is (= :failed (:status (k/run! (make-agent) nil))))
@@ -282,7 +396,7 @@
                    {:type :final :output "done"})))
         agent (k/agent {:name "once"
                         :model {:id "fake" :transport model}
-                        :instructions "Call twice."
+                        :context "Call twice."
                         :tools [effect]
                         :output string?})
         run (k/run! agent nil
@@ -308,8 +422,8 @@
                                                 :name "delegate"
                                                 :input "hi"}]}
                                       {:type :final
-                                       :output (get-in request [:input 0 :content])})))}
-                         :instructions "delegate"
+                                       :output (get-in request [:context :messages 0 :content])})))}
+                         :context "delegate"
                          :tools [child-tool]
                          :output string?})]
     (is (= "hi!" (:output (k/run! parent nil))))))

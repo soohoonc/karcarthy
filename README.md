@@ -15,7 +15,7 @@ orchestration are executable Clojure values and forms.
 
 (k/defagent researcher
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Research carefully and cite evidence."
+   :context "Research carefully and cite evidence."
    :tools [web-search]
    :output ::report})
 
@@ -38,7 +38,7 @@ explicitly:
 ```clojure
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Design and run the smallest useful child Agent."
+   :context "Design and run the smallest useful child Agent."
    :tools [(k/agent)]})
 ```
 
@@ -57,8 +57,9 @@ generated, evaluated, diffed, and studied with ordinary Clojure.
 
 This is useful for engineering and research:
 
-- applications get typed tools, context, memory, approvals, limits,
-  cancellation, and observable child agents;
+- applications get typed tools, model-visible context, local environments,
+  explicit conversation state, streaming, approvals, limits, cancellation,
+  and observable child agents;
 - experiments get exact program forms, model/tool traces, token usage, latency,
   lineage, and failures;
 - optimizers can search over actual Clojure programs rather than a closed
@@ -79,26 +80,26 @@ Conveniences such as `spawn!`, `await-all!`, `as-tool`, and `handoff!` build on
 those primitives. A model provider is a narrow model-I/O transport; it does not
 own tools or orchestration and is not a Runner.
 
-## Minimal workspace tools
+## Minimal local tools
 
 Following Pi's small-kernel design, karcarthy provides five orthogonal local
-tools—`read`, `write`, `edit`, `bash`, and `search`—plus a prompt function that
-describes the capabilities actually present. The readable base prompt lives in
-[`resources/karcarthy/system.md`](resources/karcarthy/system.md); the function
-fills in tools and runtime context. They are inputs to an ordinary Agent, not a
-separate kind of coding Agent.
+tools—`read`, `write`, `edit`, `bash`, and `search`. The readable base prompt
+lives in [`resources/karcarthy/system.md`](resources/karcarthy/system.md).
+`prompt`, `prompt-file`, and `system-prompt` compose ordinary model context;
+there is no directory-specific prompt builder or special coding Agent.
 
 ```clojure
 (def tools
-  (conj (k/workspace-tools {:cwd "/workspace/project"})
+  (conj (k/local-tools {:cwd "/workspace/project"})
         (k/responses-web-search)))
 
 (def coder
   (k/agent
    {:name "coder"
     :model {:transport :responses :id "gpt-5.6"}
-    :instructions (k/workspace-prompt
-                   {:cwd "/workspace/project" :tools tools})
+    :context (k/prompt
+              (k/system-prompt)
+              "Follow the repository instructions supplied by the caller.")
     :tools tools
     :output string?}))
 
@@ -109,6 +110,17 @@ MCP tools enter through the same `:tools` vector. The inner loop does not know
 or care whether a function tool was authored locally or discovered from an MCP
 server. The ACP server exposes an Agent or per-session Agent factory to editors
 and evaluation clients such as Harbor.
+
+Agent `:context` is either a system-prompt string or a turn function returning
+the provider-neutral shape `{:system ... :messages [...]}`. Local handles,
+credentials, and user metadata are passed separately as `:environment` and are
+never shown to the model automatically. A completed Run returns `:state`; pass
+that plain-data snapshot into the next `run!` call to continue a conversation.
+Applications decide whether and where to persist it.
+
+Streaming transports emit normalized text and tool-call deltas. `run!` exposes
+them through `:observe`, and the ACP server forwards text deltas immediately as
+`agent_message_chunk` updates.
 
 `:transport :responses` selects the built-in Responses-compatible transport. It
 defaults to OpenAI, while `:base-url`, `:api-key-env`, and the unchanged model
@@ -124,9 +136,10 @@ ID can target a compatible gateway without adding a provider implementation:
 
 ## Status
 
-The native kernel, model/tool loop, workspace tools, structured child execution,
-generated-form evaluation, a Responses-compatible HTTP transport, hosted web
-search, stdio MCP client, and ACP v1 server are implemented. The former
+The native kernel, context/environment split, explicit conversation state,
+streaming model/tool loop, local tools, structured child execution,
+generated-form evaluation, Responses-compatible HTTP/SSE transport, hosted
+web search, stdio MCP client, and ACP v1 server are implemented. The former
 Runner/EDN workflow implementation and JSON workflow bridge have been removed.
 
 The documentation site describes the implemented programming model:
@@ -137,7 +150,7 @@ The documentation site describes the implemented programming model:
 - [`docs/content/docs/runners.mdx`](docs/content/docs/runners.mdx) — the native harness
 - [`docs/content/docs/reference/`](docs/content/docs/reference/) — API, generated code, and contracts
 
-Remaining work, including durable suspension and richer streaming, lives in
+Remaining work, including crash-safe suspension and exactly-once effects, lives in
 [`ROADMAP.md`](ROADMAP.md).
 
 ## Development
@@ -150,4 +163,4 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 cd docs && npm ci && npm run build
 ```
 
-JDK 21+. MIT licensed.
+JDK 21+. `local-tools` search also requires ripgrep. MIT licensed.

@@ -37,7 +37,7 @@
                     :id (configured-model)
                     :reasoning :low
                     :timeout-ms 180000}
-            :instructions
+            :context
             (str
              "This is an end-to-end harness test. Call the agent tool exactly "
              "once. Its source argument must be exactly: "
@@ -66,7 +66,7 @@
                   (map :agent)
                   vec))))))
 
-(deftest responses-agent-inspects-and-edits-a-workspace
+(deftest responses-agent-inspects-and-edits-local-files
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set OPENAI_API_KEY in the process environment.")
   (when (and (live?) (credentials?))
@@ -75,21 +75,19 @@
       (try
         (Files/writeString file "hello PLACEHOLDER\n" StandardCharsets/UTF_8
                            (make-array java.nio.file.OpenOption 0))
-        (let [tools (k/workspace-tools {:cwd (str root)})
+        (let [tools (k/local-tools {:cwd (str root)})
               coder
               (k/agent
-               {:name "live-workspace-agent"
+               {:name "live-local-agent"
                 :model {:transport :responses
                         :provider :openai
                         :id (configured-model)
                         :reasoning :low
                         :timeout-ms 180000}
-                :instructions
-                (k/workspace-prompt
-                 {:cwd (str root)
-                  :tools tools
-                  :append
-                  "For this test, inspect the target before changing it and use the edit tool for the change."})
+                :context
+                (k/prompt
+                 (k/system-prompt)
+                 "For this test, inspect the target before changing it and use the edit tool for the change.")
                 :tools tools
                 :input any?
                 :output string?

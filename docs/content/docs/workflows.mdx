@@ -22,7 +22,7 @@ Use `let` when one result feeds another agent:
                           :outline outline})))
 ```
 
-Every `invoke!` creates a child span and enforces the child's input, context,
+Every `invoke!` creates a child span and enforces the child's input, environment,
 output, budget, and guardrail contracts.
 
 ## Branching and routing
@@ -90,7 +90,7 @@ Expose a child agent to a model-backed parent with `as-tool`:
 ```clojure
 (k/defagent support-manager
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Help the user. Delegate specialized work when useful."
+   :context "Help the user. Delegate specialized work when useful."
    :tools [(k/as-tool billing-agent
                       {:name "billing"
                        :description "Handle billing questions."})

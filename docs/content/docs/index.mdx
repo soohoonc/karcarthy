@@ -11,25 +11,26 @@ loop, and its orchestration language is Clojure itself.
 
 (k/defagent researcher
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Research carefully and cite evidence."
+   :context "Research carefully and cite evidence."
    :tools [web-search]
    :output ::report})
 
 (k/run! researcher
         {:question "Why are Lisp programs represented as lists?"}
-        {:context {:user-id "u_123"}})
+        {:environment {:user-id "u_123"}})
 ```
 
-The native Agent/Tool kernel, model loop, child execution, generated-form
-evaluation, contracts, limits, memory, events, a Responses-compatible transport,
-workspace tools, stdio MCP client, and ACP v1 server are implemented. Durable
-suspension and richer incremental streaming remain on the roadmap.
+The native Agent/Tool kernel, context/environment split, explicit conversation
+state, streaming model loop, child execution, generated-form evaluation,
+contracts, limits, events, Responses HTTP/SSE transport, local tools, stdio MCP
+client, and ACP v1 server are implemented. Crash-safe suspension remains on the
+roadmap.
 
 ## The premise
 
 An agent is an executable Clojure value. It carries model configuration,
-instructions, context contracts, tools, output contracts, loop policy, and
-optionally an arbitrary Clojure body.
+model-visible context, an optional local-environment contract, tools, output
+contracts, loop policy, and optionally an arbitrary Clojure body.
 
 ```clojure
 (k/defagent review-team
@@ -57,7 +58,7 @@ Tool that accepts another configured `agent` form.
 ```clojure
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Design and run the smallest useful child Agent."
+   :context "Design and run the smallest useful child Agent."
    :tools [(k/agent)]})
 ```
 
@@ -71,8 +72,8 @@ token, concurrency, and time budgets.
 | --- | --- |
 | Agent | Configuration plus an executable body. Without a custom body, the harness supplies its model/tool loop. |
 | Tool | A described, contracted Clojure function the model may invoke. |
-| Runtime | Context, budgets, cancellation, memory, model access, and observation for one run tree. |
-| Run | Status, typed output, usage, events, and the source/expanded forms involved in execution. |
+| Runtime | Local environment, budgets, cancellation, model access, state checkpoints, and observation for one run tree. |
+| Run | Status, typed output, conversation state, usage, events, and the source/expanded forms involved in execution. |
 
 Agent and tool values retain their source forms. Programs are therefore
 executable behavior and inspectable research artifacts at the same time.
@@ -81,16 +82,16 @@ executable behavior and inspectable research artifacts at the same time.
 
 For a model-backed agent, karcarthy:
 
-1. resolves dynamic instructions, tools, and model options from runtime context;
-2. calls the configured model;
-3. validates and executes requested tools;
-4. appends results to conversation state;
-5. stores conversation state and enforces budgets;
+1. resolves tools and model options from the local Runtime environment;
+2. assembles `{:system ... :messages [...]}` context for the current turn;
+3. calls the configured model and emits streaming deltas;
+4. validates and executes requested tools;
+5. checkpoints explicit conversation state and enforces budgets;
 6. repeats until a typed output, failure, cancellation, deadline, or stop condition;
 7. emits a trace for every decision and effect.
 
 The model-provider boundary only performs model I/O. It is not a runner and
-does not own tools, delegation, memory, or orchestration.
+does not own tools, delegation, conversation state, or orchestration.
 
 ## Engineering and research
 
@@ -105,10 +106,10 @@ that a generated program improves anything.
 
 ## A small toolset, not a second harness
 
-`workspace-tools` returns `read`, `write`, `edit`, `bash`, and `search` as
-ordinary Tool values. `workspace-prompt` separately assembles instructions from
-the capabilities actually present plus the workspace's `AGENTS.md` or
-`CLAUDE.md`. This follows the small-kernel pattern used by
+`local-tools` returns `read`, `write`, `edit`, `bash`, and `search` as
+ordinary Tool values. `system-prompt` reads the packaged Markdown prompt;
+`prompt-file` and `prompt` let the application explicitly compose any other
+prompt sources. This follows the small-kernel pattern used by
 [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent): keep
 the loop fixed and make capabilities explicit. There is no special coding
 Agent type. Hosted web search and MCP tools use the same Tool boundary; ACP

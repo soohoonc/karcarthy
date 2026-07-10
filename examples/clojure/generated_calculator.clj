@@ -14,15 +14,15 @@
 
 (def calculator-model
   (k/fake-model
-   (fn [{:keys [input]}]
-     (if (= :tool (:role (first input)))
-       {:type :final :output (:content (first input))}
+   (fn [{:keys [context]}]
+     (if (= :tool (:role (first (:messages context))))
+       {:type :final :output (:content (first (:messages context)))}
        {:type :tool-calls
         :calls [{:id "add_1" :name "add" :input {:a 20 :b 22}}]}))))
 
 (k/defagent calculator
   {:model {:id "offline" :transport calculator-model}
-   :instructions "Use add to calculate the answer."
+   :context "Use add to calculate the answer."
    :tools [add]
    :output int?})
 

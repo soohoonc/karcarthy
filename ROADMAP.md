@@ -12,31 +12,35 @@ bridge, and legacy examples have been removed without a compatibility layer.
 - Native model/tool loop with local tool execution and repair through ordinary
   model turns.
 - Responses-compatible HTTP transport and an offline fake transport.
-- Bounded workspace file/search/process tools, capability-derived instructions,
-  and hosted Responses tools.
+- Bounded local file/search/process tools, generic prompt composition, a
+  readable packaged system prompt, and hosted Responses tools.
 - MCP 2025-11-25 stdio initialization, tool discovery, calls, and adaptation to
   ordinary Tools.
 - ACP v1 stdio serving for an Agent or per-session Agent factory, including
   session-provided stdio MCP, tool updates, permissions, and cancellation.
 - `run!`, `invoke!`, `spawn!`, `await!`, `await-all!`, `as-tool`, and
   `handoff!`.
-- Context, Clojure specs, JSON Schema derivation, guardrails, approval checks,
-  cancellation, deadlines, hierarchical limits, memory, events, and traces.
+- Provider-neutral `{:system :messages}` context assembly, separate local
+  environments, explicit conversation-state snapshots, Clojure specs, JSON
+  Schema derivation, guardrails, approval checks, cancellation, deadlines,
+  hierarchical limits, events, and traces.
+- Complete and SSE Responses transport paths, normalized runtime deltas, and
+  incremental ACP Agent-message chunks.
 - `read-agent-form`, macroexpansion, evaluation, Agent verification, structured
   failures, recursive generation limits, and trace lineage.
 
 ## Complete harness semantics
 
 - Add durable approval/input suspension and resumption.
-- Add observable compaction policies to the in-memory conversation store.
+- Add observable context compaction policies over conversation snapshots.
+- Provide documented database/file persistence adapters for state snapshots.
 - Add richer retry/backoff and idempotency policy for effects.
 - Add true conversational handoff state transfer beyond the current traced
   child invocation.
-- Add streaming model events to the transport boundary.
 
 ## Serve and evaluate
 
-- Add ACP session loading/resumption and richer incremental model/child events.
+- Add ACP session loading/resumption and richer incremental child events.
 - Add MCP Streamable HTTP after the stdio surface is proven in evaluation.
 - Connect Harbor tasks and scorers.
 - Store program hashes, source/expanded forms, trace metrics, and evaluator

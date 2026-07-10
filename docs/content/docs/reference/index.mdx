@@ -13,7 +13,7 @@ and separate dynamic subsystem.
 | --- | --- |
 | [Library API](/docs/reference/api) | Macros and functions for agents, tools, execution, composition, generated code, and observation. |
 | [Generated Code](/docs/reference/json) | Reading, expanding, checking, evaluating, invoking, repairing, and recording model-authored Clojure. |
-| [Contracts](/docs/reference/schema) | Agent, tool, runtime, run, event, context, limit, and failure shapes. |
+| [Contracts](/docs/reference/schema) | Agent, tool, Runtime, context, environment, state, Run, event, limit, and failure shapes. |
 
 ## Namespace
 
@@ -23,9 +23,9 @@ The common API is exposed from one namespace:
 (require '[karcarthy :as k])
 ```
 
-The workspace tools and prompt, Responses-hosted web search, MCP adapter, and ACP serving are
-re-exported by the facade. Lower-level provider translation and future memory
-implementations remain in narrower namespaces.
+Local tools, prompt composition, Responses-hosted web search, the MCP adapter,
+and ACP serving are re-exported by the facade. Lower-level provider translation
+remains in narrower namespaces.
 
 ## Status
 

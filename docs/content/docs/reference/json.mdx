@@ -15,7 +15,7 @@ The source must contain one top-level form whose evaluation returns an Agent:
 (agent
   {:name "generated-reviewer"
    :model {:transport :responses :id "gpt-5.6"}
-   :instructions "Review the change and return concrete findings."
+   :context "Review the change and return concrete findings."
    :tools [read-file search-code]
    :input ::change
    :output ::review})
@@ -79,12 +79,12 @@ Checking and evaluation include:
 - valid Clojure syntax and symbol resolution;
 - macro argument contracts;
 - agent and tool configuration contracts;
-- input/output/context contract references;
+- input/output/environment contract references;
 - policy checks selected by the Runtime;
 - compiler analysis during evaluation.
 
 Clojure is dynamically typed. “Type checking” here means compiler analysis and
-explicit contracts at agent, tool, model, and context boundaries. A static
+explicit contracts at Agent, Tool, model, and environment boundaries. A static
 analyzer can add stronger checks without changing the source language.
 
 ### Evaluate
@@ -98,8 +98,9 @@ workflow language.
 ### Verify and invoke
 
 The resulting value must satisfy `agent?`. It then runs through `invoke!` like
-an authored Agent, inheriting runtime lineage, cancellation, budgets, memory,
-observation, and approval handling.
+an authored Agent, inheriting Runtime lineage, cancellation, budgets,
+observation, and approval handling. Root conversation state is explicit Run
+input/output rather than an inherited hidden store.
 
 ## Recursive generation
 

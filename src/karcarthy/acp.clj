@@ -117,10 +117,10 @@
 
 (defn- materialize-agent [server session]
   (let [source (:agent server)
-        context {:cwd (:cwd session)
-                 :mcp-tools (:mcp-tools session)
-                 :session-id (:id session)}
-        agent (if (core/agent? source) source (source context))]
+        environment {:cwd (:cwd session)
+                     :mcp-tools (:mcp-tools session)
+                     :session-id (:id session)}
+        agent (if (core/agent? source) source (source environment))]
     (when-not (core/agent? agent)
       (core/fail! :acp :configuration
                   "ACP :agent must be an Agent or a function returning one"
@@ -154,9 +154,18 @@
     (re-find #"(?i)(fetch|http|web)" name) "fetch"
     :else "other"))
 
-(defn- observer [server session]
+(defn- observer [server session message-id streamed?]
   (fn [event]
     (case (:type event)
+      :model/text-delta
+      (do
+        (reset! streamed? true)
+        (session-update!
+         server (:id session)
+         {:sessionUpdate "agent_message_chunk"
+          :messageId message-id
+          :content {:type "text" :text (:delta event)}}))
+
       :tool/started
       (session-update!
        server (:id session)
@@ -224,25 +233,27 @@
       (error! server id -32000 "Session already has an active prompt" nil)
       (try
         (reset! (:cancel session) false)
-        (let [agent (materialize-agent server session)
+        (let [message-id (str "msg_" (UUID/randomUUID))
+              streamed? (atom false)
+              agent (materialize-agent server session)
               base-options (or (:run-options server) {})
               run-options
               (merge base-options
-                     {:memory (:memory session)
+                     {:state @(:state session)
                       :cancel (:cancel session)
-                      :observe (observer server session)
+                      :observe (observer server session message-id streamed?)
                       :approval (approval-handler server session)
-                      :context (merge (:context base-options)
-                                      {:cwd (:cwd session)
-                                       :session-id sessionId})})
+                      :environment (merge (:environment base-options)
+                                          {:cwd (:cwd session)
+                                           :session-id sessionId})})
               run (core/run! agent (prompt-text prompt) run-options)
+              _ (reset! (:state session) (:state run))
               text (if (= :completed (:status run))
                      (if (string? (:output run))
                        (:output run)
                        (json/write-str (:output run)))
                      (str "karcarthy run failed: "
                           (get-in run [:error :message])))
-              message-id (str "msg_" (UUID/randomUUID))
               stop-reason (cond
                             (= :cancelled (:status run)) "cancelled"
                             (and (= :budget (get-in run [:error :kind]))
@@ -250,11 +261,12 @@
                                             (get-in run [:error :phase])))
                             "max_turn_requests"
                             :else "end_turn")]
-          (session-update!
-           server sessionId
-           {:sessionUpdate "agent_message_chunk"
-            :messageId message-id
-            :content {:type "text" :text text}})
+          (when (or (not @streamed?) (not= :completed (:status run)))
+            (session-update!
+             server sessionId
+             {:sessionUpdate "agent_message_chunk"
+              :messageId message-id
+              :content {:type "text" :text text}}))
           (respond! server id {:stopReason stop-reason}))
         (catch Throwable error
           (error! server id -32000
@@ -298,7 +310,7 @@
                          :cwd cwd
                          :mcp-connections connections
                          :mcp-tools (vec mcp-tools)
-                         :memory (atom {})
+                         :state (atom nil)
                          :cancel (atom false)
                          :running? (atom false)
                          :always-allowed (atom #{})}]

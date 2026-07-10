@@ -33,14 +33,14 @@ provider and search functions are application dependencies.
    :output ::sources
    :approval :never}
   [rt {:keys [question]}]
-  (search-web! (:http (k/context rt)) question))
+  (search-web! (:http (k/environment rt)) question))
 
 (k/deftool fetch-page
   {:description "Fetch a page selected from search results."
    :input ::url-request
    :output string?}
   [rt {:keys [url]}]
-  (fetch! (:http (k/context rt)) url))
+  (fetch! (:http (k/environment rt)) url))
 ```
 
 ## Leaf agents
@@ -49,28 +49,28 @@ provider and search functions are application dependencies.
 (k/defagent researcher
   {:description "Produce one evidence-backed report."
    :model {:transport :responses :id "gpt-5.6" :reasoning :high}
-   :instructions "Research carefully. Separate evidence from inference."
+   :context "Research carefully. Separate evidence from inference."
    :input ::request
    :tools [web-search fetch-page]
    :output ::report})
 
 (k/defagent fact-checker
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Check every factual claim against the supplied sources."
+   :context "Check every factual claim against the supplied sources."
    :input ::report
    :tools [fetch-page]
    :output ::review})
 
 (k/defagent citation-checker
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Check that each citation supports its associated claim."
+   :context "Check that each citation supports its associated claim."
    :input ::report
    :tools [fetch-page]
    :output ::review})
 
 (k/defagent editor
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Revise the report using the reviews without inventing evidence."
+   :context "Revise the report using the reviews without inventing evidence."
    :input ::edit-request
    :output ::report})
 ```
@@ -104,7 +104,7 @@ An architect agent may return a Clojure source string:
 (agent
   {:name "domain-specialist"
    :model {:transport :responses :id "gpt-5.6"}
-   :instructions "Analyze the domain terminology before answering."
+   :context "Analyze the domain terminology before answering."
    :tools [web-search fetch-page]
    :input ::request
    :output ::report})
@@ -129,7 +129,7 @@ contain a custom body, macros, nested agent forms, or structural transformations
 (def result
   (k/run! research-team
           {:question "How do language models use tool feedback?"}
-          {:context {:http http-client}
+          {:environment {:http http-client}
            :limits {:model-calls 40
                     :parallelism 2
                     :agent-depth 5

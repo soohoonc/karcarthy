@@ -17,7 +17,7 @@ clojure -M -m karcarthy.acp example.research/research-team
 ```
 
 The process speaks ACP over stdio. The selected var must contain an Agent or a
-function that builds an Agent from session context.
+function that builds an Agent from the ACP session environment.
 
 ## Connect from Python
 
@@ -39,10 +39,10 @@ async with acp.spawn(
         record(event)
 ```
 
-The client sees tool-call updates, permission requests, one or more message
-chunks, and the prompt stop reason. The server retains
-the Clojure source form, expanded form, local context, model credentials, tools,
-and memory.
+The client sees tool-call updates, permission requests, streaming message
+chunks, and the prompt stop reason. The server retains the Clojure source form,
+expanded form, local environment, model credentials, tools, and conversation
+state.
 
 ## Harbor evaluation
 
@@ -71,7 +71,7 @@ harness.
 | ACP tool and message updates | function values and closures |
 | approval and input responses | tools and local dependencies |
 | cancellation | macroexpansion and evaluation |
-| final Agent message and stop reason | memory, usage, and provider credentials |
+| final Agent message and stop reason | conversation state, usage, and provider credentials |
 
 ## Next
 

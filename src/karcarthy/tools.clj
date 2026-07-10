@@ -1,5 +1,5 @@
 (ns karcarthy.tools
-  "Small, orthogonal tools for agents operating on a local workspace."
+  "Small, orthogonal tools for agents operating in a local directory."
   (:refer-clojure :exclude [read])
   (:require [clojure.string :as str]
             [karcarthy.core :as core])
@@ -22,7 +22,7 @@
       (Files/exists candidate no-link-options) candidate
       :else (recur (.getParent candidate)))))
 
-(defn- workspace-path [^Path root value]
+(defn- local-path [^Path root value]
   (when-not (and (string? value) (not (str/blank? value)))
     (core/fail! :contract :tool-input "path must be a non-empty string"
                 {:path value}))
@@ -31,14 +31,14 @@
                       (.toAbsolutePath)
                       (.normalize))]
     (when-not (.startsWith candidate root)
-      (core/fail! :tool :path "Path escapes the coding workspace"
-                  {:path value :workspace (str root)}))
+      (core/fail! :tool :path "Path escapes the configured directory"
+                  {:path value :root (str root)}))
     (when-let [ancestor (existing-ancestor candidate)]
       (let [real-root (.toRealPath root no-link-options)
             real-ancestor (.toRealPath ancestor no-link-options)]
         (when-not (.startsWith real-ancestor real-root)
-          (core/fail! :tool :path "Path resolves outside the coding workspace"
-                      {:path value :workspace (str root)}))))
+          (core/fail! :tool :path "Path resolves outside the configured directory"
+                      {:path value :root (str root)}))))
     candidate))
 
 (defn- approval [options tool-name]
@@ -108,7 +108,7 @@
   (core/make-tool
    {:name "read"
     :description
-    "Read a UTF-8 text file inside the workspace. Use offset and limit for large files. Read a file before editing it."
+    "Read a UTF-8 text file inside the configured directory. Use offset and limit for large files. Read a file before editing it."
     :input {:type "object"
             :properties
             {"path" {:type "string"}
@@ -120,7 +120,7 @@
     :approval (approval options :read)}
    '(coding/read) nil
    (fn [_ {:keys [path offset limit]}]
-     (let [file (workspace-path root path)
+     (let [file (local-path root path)
            offset (long (or offset 1))
            limit (long (or limit 2000))]
        (when-not (Files/isRegularFile file no-link-options)
@@ -145,7 +145,7 @@
   (core/make-tool
    {:name "write"
     :description
-    "Create or replace a UTF-8 text file inside the workspace. Prefer edit for targeted changes to an existing file. Parent directories are created."
+    "Create or replace a UTF-8 text file inside the configured directory. Prefer edit for targeted changes to an existing file. Parent directories are created."
     :input {:type "object"
             :properties {"path" {:type "string"}
                          "content" {:type "string"}}
@@ -155,7 +155,7 @@
     :approval (approval options :write)}
    '(coding/write) nil
    (fn [_ {:keys [path content]}]
-     (let [file (workspace-path root path)
+     (let [file (local-path root path)
            parent (.getParent file)]
        (when parent (Files/createDirectories parent (make-array java.nio.file.attribute.FileAttribute 0)))
        (Files/writeString file content StandardCharsets/UTF_8
@@ -183,7 +183,7 @@
     :approval (approval options :edit)}
    '(coding/edit) nil
    (fn [_ {:keys [path old_text new_text replace_all]}]
-     (let [file (workspace-path root path)]
+     (let [file (local-path root path)]
        (when-not (Files/isRegularFile file no-link-options)
          (core/fail! :tool :edit "File does not exist or is not regular"
                      {:path path}))
@@ -209,7 +209,7 @@
   (core/make-tool
    {:name "bash"
     :description
-    "Run a shell command with the workspace as its working directory. Use read, search, edit, and write for file operations when they fit. Avoid destructive commands unless explicitly requested."
+    "Run a shell command in the configured directory. Use read, search, edit, and write for file operations when they fit. Avoid destructive commands unless explicitly requested."
     :input {:type "object"
             :properties
             {"command" {:type "string" :minLength 1}
@@ -228,7 +228,7 @@
   (core/make-tool
    {:name "search"
     :description
-    "Search workspace file contents with ripgrep regular expressions. Use this instead of Bash grep for bounded, path-scoped results."
+    "Search local file contents with ripgrep regular expressions. Use this instead of Bash grep for bounded, path-scoped results."
     :input {:type "object"
             :properties
             {"pattern" {:type "string" :minLength 1}
@@ -242,7 +242,7 @@
    '(coding/search) nil
    (fn [_ {:keys [pattern path glob max_results]}]
      (let [max-results (long (or max_results 200))
-           target (workspace-path root (or path "."))
+           target (local-path root (or path "."))
            command (cond-> ["rg" "--line-number" "--no-heading" "--color" "never"
                             "--max-count" (str max-results)]
                      glob (into ["--glob" glob])
@@ -260,14 +260,14 @@
                   :truncated? truncated?))
          (core/fail! :tool :search "ripgrep failed" result))))))
 
-(defn workspace
-  "Build the minimal local toolset for one workspace."
-  ([] (workspace {}))
+(defn local
+  "Build the minimal local toolset rooted at one existing directory."
+  ([] (local {}))
   ([options]
    (let [root (absolute-path (or (:cwd options) "."))]
      (when-not (Files/isDirectory root no-link-options)
        (core/fail! :contract :configuration
-                   "Coding workspace must be an existing directory"
+                   "Local tool root must be an existing directory"
                    {:cwd (str root)}))
      [(read-tool root options)
       (write-tool root options)

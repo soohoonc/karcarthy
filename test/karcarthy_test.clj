@@ -5,9 +5,10 @@
 (deftest facade-exposes-only-the-native-harness
   (doseq [sym '[agent defagent tool deftool agent? tool?
                 run! invoke! spawn! await! await-all! handoff! as-tool
-                context model! emit! events model-transport fake-model
+                environment conversation-state?
+                model! emit! events model-transport fake-model
                 hosted-tool hosted-tool?
-                workspace-tools workspace-prompt
+                local-tools prompt prompt-file system-prompt
                 responses-web-search connect-mcp! mcp-tools close-mcp!
                 serve-acp!
                 read-agent-form check-agent-form! eval-agent-form!
@@ -15,7 +16,8 @@
     (is (some? (ns-resolve 'karcarthy sym)) (str "missing " sym)))
   (doseq [removed '[run pipe branch delegate reduce revise route continue
                     dynamic evolve mock-runner fn-runner process-runner
-                    claude-runner codex-runner openai-runner acp-runner]]
+                    claude-runner codex-runner openai-runner acp-runner
+                    context workspace-tools workspace-prompt]]
     (is (nil? (get (ns-publics 'karcarthy) removed))
         (str "still exports " removed))))
 

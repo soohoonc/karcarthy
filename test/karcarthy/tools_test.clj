@@ -2,7 +2,6 @@
   (:require [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
             [karcarthy :as k]
-            [karcarthy.prompt :as prompt]
             [karcarthy.tools :as tools])
   (:import [java.nio.file Files Path]
            [java.nio.file.attribute FileAttribute]))
@@ -23,13 +22,14 @@
     (is (some? resource))
     (when resource
       (let [template (slurp resource)]
-        (is (re-find #"## Available tools" template))
-        (is (re-find #"\{\{project_instructions\}\}" template))))))
+        (is (re-find #"## Guidelines" template))
+        (is (= template (k/system-prompt)))
+        (is (not (re-find #"\{\{" template)))))))
 
-(deftest minimal-workspace-tools-work-together
+(deftest minimal-local-tools-work-together
   (let [root (temp-directory)]
     (try
-      (let [tools (tools/workspace {:cwd (str root)})
+      (let [tools (tools/local {:cwd (str root)})
             read (by-name tools "read")
             write (by-name tools "write")
             edit (by-name tools "edit")
@@ -68,7 +68,7 @@
       (finally
         (delete-tree! root)))))
 
-(deftest prompt-and-tools-stay-in-sync
+(deftest prompts-compose-with-tools-without-a-workspace-abstraction
   (let [root (temp-directory)]
     (try
       (spit (.toFile (.resolve root "AGENTS.md"))
@@ -78,26 +78,25 @@
                    (fn [request]
                      (reset! seen request)
                      {:type :final :output "ok"}))
-            local-tools (tools/workspace {:cwd (str root)})
+            local-tools (tools/local {:cwd (str root)})
             all-tools (conj local-tools (k/responses-web-search))
             agent (k/agent
-                   {:name "workspace-agent"
+                   {:name "local-agent"
                     :model {:id "fake" :transport model}
-                    :instructions
-                    (prompt/workspace
-                     {:cwd (str root)
-                      :tools all-tools
-                      :append "Do not commit changes."})
+                    :context
+                    (k/prompt
+                     (k/system-prompt)
+                     (k/prompt-file (str (.resolve root "AGENTS.md")))
+                     "Do not commit changes.")
                     :tools all-tools
                     :input any?
                     :output string?})
             run (k/run! agent "inspect")]
         (is (= :completed (:status run)))
-        (is (re-find #"Available tools" (get-in agent [:config :instructions])))
         (is (re-find #"Run the smallest relevant test"
-                     (get-in agent [:config :instructions])))
+                     (get-in @seen [:context :system])))
         (is (re-find #"Do not commit changes"
-                     (get-in agent [:config :instructions])))
+                     (get-in @seen [:context :system])))
         (is (= #{"read" "write" "edit" "bash" "search"}
                (->> (:tools @seen)
                     (filter #(= :function (:kind %)))

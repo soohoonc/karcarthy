@@ -10,6 +10,7 @@ This guide introduces the native karcarthy API.
 - JDK 21 or newer
 - Clojure CLI
 - an API key for the model provider you configure
+- ripgrep when using `local-tools` search
 
 During development, depend on karcarthy from Git:
 
@@ -38,7 +39,7 @@ its input and output boundaries:
    :input ::search-input
    :output ::search-output}
   [rt {:keys [query]}]
-  (search! (:http (k/context rt)) query))
+  (search! (:http (k/environment rt)) query))
 ```
 
 The harness validates tool arguments before execution and validates the return
@@ -60,11 +61,11 @@ sees.
    :model {:transport :responses
            :id "gpt-5.6"
            :reasoning :high}
-   :instructions
-   (fn [{:keys [context]}]
-     (str "Research carefully for user " (:user-id context)
+   :context
+   (fn [{:keys [environment]}]
+     (str "Research carefully for user " (:user-id environment)
           ". Distinguish evidence from inference."))
-   :context ::run-context
+   :environment map?
    :input ::request
    :tools [web-search]
    :output ::report
@@ -91,8 +92,8 @@ gateway, keep the Agent unchanged and configure its model boundary:
 (def run
   (k/run! researcher
           {:question "What makes Lisp homoiconic?"}
-          {:context {:user-id "u_123"
-                     :http http-client}
+          {:environment {:user-id "u_123"
+                         :http http-client}
            :limits {:model-calls 20
                     :deadline-ms 120000}
            :observe println}))
@@ -105,14 +106,22 @@ gateway, keep the Agent unchanged and configure its model boundary:
 `invoke!`, which returns the child output while attaching the child's run to
 the same trace tree.
 
-## Add workspace tools
+To continue the same model conversation later, persist the plain-data snapshot
+and pass it back explicitly:
 
-For a Codex/Pi/Claude-Code-shaped local Agent, compose the provided workspace
-Tools and prompt explicitly:
+```clojure
+(def next-run
+  (k/run! researcher next-request {:state (:state run)}))
+```
+
+## Add local tools
+
+For a Codex/Pi/Claude-Code-shaped local Agent, compose the provided Tools and
+prompt explicitly:
 
 ```clojure
 (def tools
-  (conj (k/workspace-tools {:cwd "/workspace/project"})
+  (conj (k/local-tools {:cwd "/workspace/project"})
         (k/responses-web-search)))
 
 (def coder
@@ -121,21 +130,22 @@ Tools and prompt explicitly:
     :model {:transport :responses
             :id "gpt-5.6"
             :reasoning :high}
-    :instructions
-    (k/workspace-prompt {:cwd "/workspace/project"
-                         :tools tools})
+    :context
+    (k/prompt
+     (k/system-prompt)
+     (k/prompt-file "/workspace/project/AGENTS.md"))
     :tools tools
     :output string?}))
 
 (k/run! coder "Fix the failing test and verify the smallest relevant target.")
 ```
 
-`workspace-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
-`search`. `workspace-prompt` lists only the supplied capabilities, includes
-root `AGENTS.md` or `CLAUDE.md`, and can append caller instructions by rendering
-the packaged `resources/karcarthy/system.md` template. Hosted web search is an
+`local-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
+`search`, all rooted at `:cwd`. Prompt composition is independent:
+`system-prompt` reads the packaged `resources/karcarthy/system.md`, while
+`prompt-file` reads only the file the caller names. Hosted web search is an
 explicit Responses Tool whose availability depends on the endpoint and selected
-model. Neither function introduces a special Agent.
+model. None of these functions introduces a special Agent.
 
 ## Add MCP tools
 
@@ -149,15 +159,16 @@ MCP is an adapter into ordinary Tools:
     :args ["-y" "@example/project-mcp"]}))
 
 (try
-  (let [tools (into (k/workspace-tools {:cwd "/workspace/project"})
+  (let [tools (into (k/local-tools {:cwd "/workspace/project"})
                     ;; :never means this MCP server is explicitly trusted.
                     (k/mcp-tools server {:approval :never}))
         coder (k/agent
                {:name "coder"
                 :model {:transport :responses :id "gpt-5.6"}
-                :instructions
-                (k/workspace-prompt {:cwd "/workspace/project"
-                                     :tools tools})
+                :context
+                (k/prompt
+                 (k/system-prompt)
+                 (k/prompt-file "/workspace/project/AGENTS.md"))
                 :tools tools
                 :output string?})]
     (k/run! coder "Inspect the project service."))
@@ -171,16 +182,16 @@ branch.
 
 ## Serve an Agent over ACP
 
-Use a factory when the Agent's workspace and MCP tools depend on the ACP
+Use a factory when the Agent's local directory and MCP tools depend on the ACP
 session:
 
 ```clojure
 (defn acp-agent [{:keys [cwd mcp-tools]}]
-  (let [tools (into (k/workspace-tools {:cwd cwd}) mcp-tools)]
+  (let [tools (into (k/local-tools {:cwd cwd}) mcp-tools)]
     (k/agent
-     {:name "workspace-agent"
+     {:name "local-agent"
       :model {:transport :responses :id "gpt-5.6"}
-      :instructions (k/workspace-prompt {:cwd cwd :tools tools})
+      :context (k/system-prompt)
       :tools tools
       :output string?})))
 ```
@@ -190,8 +201,9 @@ clojure -M -m karcarthy.acp your.namespace/acp-agent
 ```
 
 The ACP v1 stdio server supports initialization, new/prompt/close sessions,
-cancellation, tool-call updates, client permissions, and session-provided
-stdio MCP servers. HTTP/SSE MCP and resumable ACP sessions are not advertised.
+cancellation, streaming Agent-message chunks, tool-call updates, client
+permissions, and session-provided stdio MCP servers. HTTP/SSE MCP and resumable
+ACP sessions are not advertised.
 
 ## Compose agents with Clojure
 
@@ -218,7 +230,7 @@ Add the expansion capability to its tool set:
 ```clojure
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Design and run the smallest useful child Agent."
+   :context "Design and run the smallest useful child Agent."
    :tools [(k/agent)]})
 ```
 

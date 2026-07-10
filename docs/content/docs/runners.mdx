@@ -1,15 +1,16 @@
 ---
 title: Harness
-description: The in-process model/tool loop, execution runtime, limits, memory, approvals, and observability.
+description: The in-process model/tool loop, context, environment, state, streaming, limits, approvals, and observability.
 ---
 
-karcarthy is the harness. It owns the complete semantics of an agent run:
-model calls, tool calls, context, memory, child agents, guardrails, approvals,
+karcarthy is the harness. It owns model calls, context assembly, tool calls,
+conversation state, child agents, streaming events, guardrails, approvals,
 limits, cancellation, and traces.
 
 There is no Runner protocol. A provider integration is only a model transport:
-it accepts a normalized model request and returns model output events. It does
-not execute tools or decide how an agent proceeds.
+it accepts a normalized model request and returns one authoritative response.
+A streaming transport may emit normalized deltas while producing that response.
+It does not execute tools or decide how an agent proceeds.
 
 ## Minimal kernel
 
@@ -26,25 +27,24 @@ not execute tools or decide how an agent proceeds.
 such as `spawn!`, `await-all!`, `as-tool`, and `handoff!` are conveniences built
 from the kernel.
 
-This separation follows the most useful part of Pi's design: one small loop,
-a small default coding toolset, and a prompt generated from enabled
-capabilities. Product integrations and protocol clients remain outside the
-loop. Claude Code and Codex expose broader tool surfaces, but the same invariant
-applies here: structured tool definitions are authoritative, while the system
-instructions explain how and when to use them.
+This separation follows the most useful part of Pi's design: one small loop and
+a small tool surface. Product integrations and protocol clients remain outside
+the loop. Structured tool definitions are authoritative; prompts explain policy
+without duplicating tool schemas.
 
 ## The default loop
 
 An agent without a custom body uses this loop:
 
-1. Validate input and runtime context.
-2. Resolve instructions, model options, enabled tools, and guardrails.
-3. Build the model-visible conversation from memory.
-4. Call the model transport.
-5. If the model returned a final value, validate the output and complete.
-6. If it requested tools, validate, authorize, and execute them.
-7. Append tool results, update memory, and repeat.
-8. Stop on completion, cancellation, failure, deadline, or another configured
+1. Validate input and the local Runtime environment.
+2. Resolve model options and enabled tools.
+3. Load an optional root conversation-state snapshot.
+4. Assemble provider-neutral model context as `{:system ... :messages [...]}`.
+5. Call the model transport, recording streaming deltas when available.
+6. If the model returned a final value, checkpoint state, validate, and complete.
+7. If it requested tools, validate, authorize, and execute them.
+8. Append tool results, checkpoint state, and repeat.
+9. Stop on completion, cancellation, failure, deadline, or another configured
    stop condition.
 
 This loop is implemented in Clojure and used by every provider.
@@ -59,40 +59,51 @@ This loop is implemented in Clojure and used by every provider.
            :id "gpt-5.6"
            :reasoning :high
            :temperature 0.2}
-   :instructions (fn [rt] "Research carefully.")
-   :context ::research-context
+   :context
+   (fn [{:keys [environment pending turn]}]
+     {:system (str "Research carefully for " (:user-id environment)
+                   "; turn " turn ".")
+      :messages pending})
+   :environment ::research-environment
    :input ::request
    :tools [web-search fetch-page]
    :output ::report
    :loop {:max-turns 20
-          :stop? stop?
-          :prepare-step prepare-step}
+          :stop? stop?}
    :guardrails {:input [safe-input?]
                 :output [grounded?]}
    :hooks [trace-hook]})
 ```
 
-Configuration values may be literal values or resolver functions where
-documented. Model, instructions, and tool resolvers receive an immutable
-runtime view; step preparation receives that view plus the normalized request.
+Model and tool resolvers receive an immutable Runtime view. A context function
+runs once per model turn with `:environment`, complete `:history`, current
+`:pending` messages, provider `:state`, and `:turn`. It may return only
+`{:system string-or-nil :messages [...]}`. There is no request-wide
+`prepare-step` mutation hook.
 
-## Context
+## Context and environment
 
-Local context is dependency injection. It may contain database handles,
+Context is exactly what enters the model. For the common case it is a string:
+
+```clojure
+{:context "Research carefully and cite sources."}
+```
+
+For retrieval, compaction, or dynamic prompting, use the per-turn function
+shown above. `prompt`, `prompt-file`, and `system-prompt` compose prompt text;
+they do not infer directories, tools, or project policy.
+
+Environment is local dependency injection. It may contain database handles,
 authenticated user metadata, feature flags, HTTP clients, clocks, or helper
-functions. It is passed to tools, guardrails, hooks, and agent programs but is
-not automatically shown to the model.
+functions. It is available to tools, guardrails, hooks, Agent programs, and
+context assembly but is never shown to the model automatically.
 
 ```clojure
 (k/run! agent input
-        {:context {:user-id "u_123"
-                   :db db
-                   :http http-client}})
+        {:environment {:user-id "u_123"
+                       :db db
+                       :http http-client}})
 ```
-
-Model-visible context is produced deliberately through `:instructions`, input
-messages, tools, or a memory projection. This avoids confusing trusted local
-state with prompt content.
 
 ## Tools
 
@@ -118,25 +129,23 @@ only by their matching model transport and never placed in the local execution
 map. For example, `responses-web-search` becomes the Responses API's native
 `web_search` tool.
 
-## Workspace tools and prompt
+## Local tools and prompts
 
-`workspace-tools` constructs five local Tools:
+`local-tools` constructs five local Tools:
 
 | Tool | Responsibility |
 | --- | --- |
-| `read` | Bounded UTF-8 file reads inside the workspace. |
+| `read` | Bounded UTF-8 file reads inside the configured directory. |
 | `write` | Create or replace a UTF-8 file. |
 | `edit` | Exact, uniqueness-checked text replacement. |
-| `bash` | Bounded subprocess execution starting in the workspace. |
+| `bash` | Bounded subprocess execution starting in that directory. |
 | `search` | Bounded ripgrep content search. |
 
-The file and search tools reject paths outside the workspace. `bash` is not a
-sandbox and retains the process's OS authority. `workspace-prompt` is a
-separate function: it renders the readable `resources/karcarthy/system.md`
-template with the actual Tool values, project guidance, date, working
-directory, and optional appended instructions. Callers pass both values to an
-ordinary `agent`. The instructions are informed by public behavior and
-open-source implementations, not copied from a private product prompt.
+The file and search tools reject paths outside the configured root. `bash` is
+not a sandbox and retains the process's OS authority. Prompt composition is
+independent: `system-prompt` reads the packaged `resources/karcarthy/system.md`,
+`prompt-file` reads a caller-selected file, and `prompt` joins static or
+turn-dependent fragments. No API assumes a “workspace.”
 
 ## MCP boundary
 
@@ -160,12 +169,39 @@ There are two built-in projections:
 Arbitrary orchestration belongs in custom agent bodies using `invoke!`,
 `spawn!`, and ordinary Clojure control flow.
 
-## Memory
+## Conversation state
 
-Pass an atom containing `{agent-name messages}` as the `:memory` run option to
-carry model conversation items between runs. The default is a fresh in-memory
-atom for each root Run. Protocol-backed stores and observable compaction remain
-roadmap work.
+State is explicit data, not a hidden memory atom:
+
+```clojure
+(def first-run (k/run! agent "first"))
+(def second-run (k/run! agent "second" {:state (:state first-run)}))
+```
+
+The versioned snapshot contains normalized message history, model identity, and
+provider continuation state. The Runtime checkpoints it after tool results and
+after a final response. Applications may persist the Run's `:state` in any
+database or file and supply it to a later root Run.
+
+The snapshot belongs to the root model-backed Agent. A custom Clojure
+orchestrator owns its own durable domain state; child invocation trees are not
+silently serialized into the root conversation.
+
+This is conversation resumption, not general durable workflow execution.
+Arbitrary Clojure stacks and closures are not serializable. A crash after a
+side-effecting Tool completes but before its checkpoint may repeat that effect.
+Crash-safe suspension therefore still requires explicit continuation points,
+an effect journal, and idempotency keys; the harness does not pretend otherwise.
+
+## Streaming
+
+`model-transport` accepts `{:complete f :stream f}`. A stream function receives
+the normalized request plus `emit-delta!`, emits values such as
+`{:type :text-delta :delta "..."}`, and returns the same final response shape
+as a non-streaming transport. The Runtime records `:model/text-delta` and
+`:model/tool-call-delta` events. Responses uses
+[typed SSE events](https://developers.openai.com/api/docs/guides/streaming-responses),
+while ACP maps text deltas to immediate `agent_message_chunk` updates.
 
 ## Limits
 
@@ -190,7 +226,7 @@ permits recursive agent generation without a separate recursion prohibition.
 
 Approval is evaluated after tool-input validation and before the effect. A
 policy may always approve, always deny, ask once per tool per run, or inspect
-the tool, arguments, context, and lineage.
+the tool, arguments, environment, and lineage.
 
 When approval is required, the configured handler returns an allow/deny
 decision. Missing or denied approval fails before the effect. Durable
@@ -204,9 +240,11 @@ The harness emits stable events such as:
 {:type :run/started ...}
 {:type :agent/started ...}
 {:type :model/requested ...}
+{:type :model/text-delta :delta "..." ...}
 {:type :model/completed ...}
 {:type :tool/started ...}
 {:type :tool/completed ...}
+{:type :state/checkpointed ...}
 {:type :program/read ...}
 {:type :program/expanded ...}
 {:type :program/evaluated ...}
@@ -219,8 +257,8 @@ Sensitive payload recording is controlled independently from event emission.
 
 ## Provider integrations
 
-karcarthy includes a Responses-compatible HTTP transport and an in-process fake
-transport. The HTTP adapter defaults to OpenAI but can target compatible
+karcarthy includes a Responses-compatible HTTP/SSE transport and an in-process
+fake transport. The adapter defaults to OpenAI but can target compatible
 gateways without changing the model loop. Native provider adapters may
 implement the same narrow request boundary when their semantics cannot be
 represented by Responses. This is not runner portability: the harness
