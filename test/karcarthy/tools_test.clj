@@ -1,5 +1,6 @@
 (ns karcarthy.tools-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.java.io :as io]
+            [clojure.test :refer [deftest is testing]]
             [karcarthy :as k]
             [karcarthy.prompt :as prompt]
             [karcarthy.tools :as tools])
@@ -16,6 +17,14 @@
 
 (defn- by-name [tools name]
   (first (filter #(= name (:name %)) tools)))
+
+(deftest system-prompt-is-a-packaged-readable-resource
+  (let [resource (io/resource "karcarthy/system.md")]
+    (is (some? resource))
+    (when resource
+      (let [template (slurp resource)]
+        (is (re-find #"## Available tools" template))
+        (is (re-find #"\{\{project_instructions\}\}" template))))))
 
 (deftest minimal-workspace-tools-work-together
   (let [root (temp-directory)]

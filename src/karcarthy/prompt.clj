@@ -1,12 +1,20 @@
 (ns karcarthy.prompt
-  "Capability-derived system instructions for a workspace Agent."
-  (:require [clojure.string :as str]
+  "Renders the packaged system.md template for a workspace Agent."
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [karcarthy.core :as core])
   (:import [java.nio.charset StandardCharsets]
            [java.nio.file Files LinkOption Paths]
            [java.time LocalDate]))
 
 (def ^:private no-link-options (make-array LinkOption 0))
+
+(def ^:private system-template
+  (delay
+    (if-let [resource (io/resource "karcarthy/system.md")]
+      (slurp resource)
+      (throw (ex-info "Missing packaged system prompt"
+                      {:resource "karcarthy/system.md"})))))
 
 (defn- absolute-path [value]
   (-> (Paths/get (str value) (make-array String 0))
@@ -35,25 +43,31 @@
     (when file
       (bounded (Files/readString file StandardCharsets/UTF_8) 30000))))
 
+(defn- section [heading content]
+  (if (seq content)
+    (str heading "\n\n" content "\n\n")
+    ""))
+
+(defn- render [template replacements]
+  (str/replace template #"\{\{([a-z_]+)\}\}"
+               (fn [[placeholder key]]
+                 (let [key (keyword key)]
+                   (if (contains? replacements key)
+                     (str (get replacements key))
+                     (throw (ex-info "Unknown system prompt placeholder"
+                                     {:placeholder placeholder})))))))
+
 (defn workspace
-  "Build compact system instructions from the capabilities actually exposed."
+  "Render system.md with the capabilities and workspace context actually exposed."
   [{:keys [cwd tools append]}]
   (let [root (absolute-path (or cwd "."))
         guidance (project-guidance root)]
-    (str
-     "You are an agent operating inside the karcarthy harness. Work on the "
-     "user's request until it is resolved, using the capabilities listed "
-     "below. Tool schemas are authoritative; never invent a capability.\n\n"
-     "Available tools:\n"
-     (str/join "\n" (map tool-summary tools))
-     "\n\nGuidelines:\n"
-     "- Inspect relevant files before editing and preserve unrelated changes.\n"
-     "- Prefer read/search/edit/write over shell equivalents when they fit.\n"
-     "- Use bash for tests, builds, version control, and commands without a dedicated tool.\n"
-     "- Make focused changes, avoid destructive operations, and verify proportionally to risk.\n"
-     "- Lead the final response with the outcome, evidence, and any remaining caveat.\n"
-     (when guidance
-       (str "\nProject instructions from AGENTS.md or CLAUDE.md:\n" guidance "\n"))
-     (when (seq append) (str "\nAdditional instructions:\n" append "\n"))
-     "\nCurrent date: " (LocalDate/now)
-     "\nCurrent working directory: " root)))
+    (render @system-template
+            {:tools (str/join "\n" (map tool-summary tools))
+             :project_instructions
+             (section "## Project instructions from AGENTS.md or CLAUDE.md"
+                      guidance)
+             :additional_instructions
+             (section "## Additional instructions" append)
+             :current_date (LocalDate/now)
+             :cwd root})))

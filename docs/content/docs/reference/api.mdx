@@ -299,7 +299,10 @@ is optional descriptive metadata; `:transport` selects executable model I/O.
 `workspace-tools` returns `read`, `write`, `edit`, `bash`, and `search` rooted
 at an existing directory. Its options configure approval and output/time
 bounds. `workspace-prompt` describes whatever local, hosted, or MCP Tools the
-caller supplies. Neither function constructs a special Agent type.
+caller supplies. It renders the packaged, human-readable
+`resources/karcarthy/system.md` template with the actual tools, project
+instructions, date, working directory, and optional `:append` text. Neither
+function constructs a special Agent type.
 
 ## MCP
 

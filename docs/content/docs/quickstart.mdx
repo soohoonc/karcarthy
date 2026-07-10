@@ -132,9 +132,10 @@ Tools and prompt explicitly:
 
 `workspace-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
 `search`. `workspace-prompt` lists only the supplied capabilities, includes
-root `AGENTS.md` or `CLAUDE.md`, and can append caller instructions. Hosted web
-search is an explicit Responses Tool whose availability depends on the endpoint
-and selected model. Neither function introduces a special Agent.
+root `AGENTS.md` or `CLAUDE.md`, and can append caller instructions by rendering
+the packaged `resources/karcarthy/system.md` template. Hosted web search is an
+explicit Responses Tool whose availability depends on the endpoint and selected
+model. Neither function introduces a special Agent.
 
 ## Add MCP tools
 

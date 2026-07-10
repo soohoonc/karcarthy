@@ -30,7 +30,8 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy/eval.clj` | Model-authored source reading, macroexpansion, evaluation, verification, and program events. |
 | `src/karcarthy/model/responses.clj` | Responses-compatible HTTP transport for OpenAI or compatible gateways. It translates model I/O only. |
 | `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a workspace. |
-| `src/karcarthy/prompt.clj` | Capability-derived workspace system instructions. |
+| `src/karcarthy/prompt.clj` | Renders capability-derived workspace system instructions. |
+| `resources/karcarthy/system.md` | Readable system-prompt template packaged in library and standalone jars. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
 | `src/karcarthy/demo.clj` | Offline fake-model/tool-loop demonstration. |

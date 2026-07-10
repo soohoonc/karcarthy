@@ -25,8 +25,8 @@
                 :basis     @basis
                 :src-dirs  ["src"]
                 :scm       {:url "https://github.com/soohoonc/karcarthy"}})
-  ;; Clojure libraries distribute source.
-  (b/copy-dir {:src-dirs ["src"] :target-dir class-dir}))
+  ;; Clojure libraries distribute source and packaged prompt resources.
+  (b/copy-dir {:src-dirs ["src" "resources"] :target-dir class-dir}))
 
 (defn- compile-main []
   (b/compile-clj {:basis      @basis

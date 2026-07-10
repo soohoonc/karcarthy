@@ -83,8 +83,10 @@ own tools or orchestration and is not a Runner.
 
 Following Pi's small-kernel design, karcarthy provides five orthogonal local
 tools—`read`, `write`, `edit`, `bash`, and `search`—plus a prompt function that
-describes the capabilities actually present. They are inputs to an ordinary
-Agent, not a separate kind of coding Agent.
+describes the capabilities actually present. The readable base prompt lives in
+[`resources/karcarthy/system.md`](resources/karcarthy/system.md); the function
+fills in tools and runtime context. They are inputs to an ordinary Agent, not a
+separate kind of coding Agent.
 
 ```clojure
 (def tools

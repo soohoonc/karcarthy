@@ -132,11 +132,11 @@ map. For example, `responses-web-search` becomes the Responses API's native
 
 The file and search tools reject paths outside the workspace. `bash` is not a
 sandbox and retains the process's OS authority. `workspace-prompt` is a
-separate function: it lists the actual Tool values, loads project guidance, and
-adds compact inspection, editing, verification, and safe-version-control
-invariants. Callers pass both values to an ordinary `agent`. The instructions
-are informed by public behavior and open-source implementations, not copied
-from a private product prompt.
+separate function: it renders the readable `resources/karcarthy/system.md`
+template with the actual Tool values, project guidance, date, working
+directory, and optional appended instructions. Callers pass both values to an
+ordinary `agent`. The instructions are informed by public behavior and
+open-source implementations, not copied from a private product prompt.
 
 ## MCP boundary
 
