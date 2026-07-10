@@ -93,12 +93,13 @@ This executes model-authored JVM Clojure and is not a sandbox.
 
 - [Home](docs/content/docs/index.mdx)
 - [Quickstart](docs/content/docs/quickstart.mdx)
+- [REPL development](docs/content/docs/repl.mdx)
 - [Agents](docs/content/docs/agents.mdx)
 - [Tools](docs/content/docs/tools.mdx)
 - [MCP](docs/content/docs/mcp.mdx)
 - [ACP](docs/content/docs/acp.mdx)
 - [Harbor](docs/content/docs/harbor.mdx)
-- [Chat from the REPL](docs/content/docs/examples/chat.mdx)
+- [Examples](docs/content/docs/examples/index.mdx)
 - [Reference](docs/content/docs/reference/index.mdx)
 
 ## Development

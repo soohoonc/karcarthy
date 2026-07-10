@@ -5,12 +5,13 @@ description: Coordinate independent Agent Runs with ordinary Clojure.
 
 This example runs two reviewers in parallel and passes their outputs to an
 editor. Each `run!` call is independent, so the example checks every Run and
-sets limits for each reviewer explicitly.
+sets limits for each reviewer explicitly. The complete source lives at
+`examples/clojure/composition.clj`.
 
 ## Build the system
 
 ```clojure
-(ns example.review
+(ns example.composition
   (:require [karcarthy :as k]))
 
 (defn output! [run]
@@ -87,8 +88,12 @@ propagates failed child Runs instead of quietly passing `nil` to the editor.
 
 ## Run it
 
+With `OPENAI_API_KEY` set, load the example from the repository root:
+
 ```clojure
-(def team (review-system "/workspace/project"))
+(load-file "examples/clojure/composition.clj")
+
+(def team (example.composition/review-system "/workspace/project"))
 
 (def run
   (k/run! team "Review the current working tree against origin/main."))
@@ -123,4 +128,5 @@ new Agent instead of hard-coding the review team:
 ```
 
 Generated Agents remain inside this Run, so these limits and events cover the
-whole Agent tree.
+whole Agent tree. Continue with [Dynamic Agents](/docs/examples/dynamic-agents)
+for an offline trace of that generation path.

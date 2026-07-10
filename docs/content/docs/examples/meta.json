@@ -2,9 +2,9 @@
   "title": "Examples",
   "pages": [
     "index",
-    "repl",
     "chat",
-    "clojure",
-    "dynamic-agents"
+    "composition",
+    "dynamic-agents",
+    "hill-climbing"
   ]
 }

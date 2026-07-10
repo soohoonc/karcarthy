@@ -1,5 +1,5 @@
 ---
-title: Dynamic Agent proof
+title: Dynamic Agents
 description: Watch a model submit, compile, and run a new Agent form offline.
 ---
 
@@ -52,30 +52,6 @@ appear in the Run lineage, and all four successful `:program/*` lifecycle events
 are present. The deterministic model controls only which Tool call is proposed;
 the ordinary karcarthy kernel performs compilation and execution.
 
-## Evaluate candidate programs locally
-
-The companion example submits three different Agent forms and scores their
-artifacts with an exact-match evaluator:
-
-```bash
-clojure -M -m karcarthy.demo.dynamic hill-climb
-```
-
-Observed output:
-
-```text
-metric: exact answer.txt match
-constant       [#..] 1/3
-first-line     [...] 0/3
-target-parser  [###] 3/3
-winner: target-parser
-```
-
-The result and individual trial records are written under
-`target/hill-climb-results/`. For isolated environments, verifier rewards, ATIF
-trajectories, and a viewer, run the same search through the [Harbor
-example](/docs/harbor#reproducible-local-evaluation).
-
 ## Live model generation
 
 The paid live test asks GPT-5.6 to author an Agent form rather than using the
@@ -86,3 +62,8 @@ KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 ```
 
 Live tests remain opt-in so the normal suite stays deterministic and free.
+
+## Next
+
+[Hill Climbing](/docs/examples/hill-climbing) evaluates multiple generated
+Agent programs against one metric, first locally and then through Harbor.

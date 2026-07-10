@@ -1,55 +1,87 @@
 # Examples
 
-[`clojure/chat.clj`](clojure/chat.clj) is a minimal terminal chat built from an
-Agent, `run!`, and a Session. With `OPENAI_API_KEY` available, load it from a
-REPL and start the loop:
+These examples form one path from the core model/Tool loop to metric-driven
+evaluation. The documentation mirrors this order.
+
+| Example | Command or source | Requires | Demonstrates |
+| --- | --- | --- | --- |
+| 1. Hello | `clojure -M -m karcarthy.demo "hello"` | Clojure | Offline model/Tool loop |
+| 2. Chat | [`clojure/chat.clj`](clojure/chat.clj) | API key | Sessions and a terminal application |
+| 3. Agent composition | [`clojure/composition.clj`](clojure/composition.clj) | API key | Clojure functions and concurrency as orchestration |
+| 4. Dynamic Agents | `clojure -M -m karcarthy.demo.dynamic` | Clojure | Runtime generation and event lineage |
+| 5. Hill Climbing | local command or [`harbor`](harbor) | Clojure; optionally Docker and Harbor | Metric-driven candidate selection |
+
+## 1. Hello
+
+Run the smallest offline proof from the repository root:
+
+```bash
+clojure -M -m karcarthy.demo "hello"
+```
+
+A deterministic model calls an `uppercase` Tool and prints `HELLO`.
+
+## 2. Chat
+
+With `OPENAI_API_KEY` available, start a REPL and load the terminal chat:
 
 ```clojure
 (load-file "examples/clojure/chat.clj")
 (example.chat/chat!)
 ```
 
-[`clojure/generated_calculator.clj`](clojure/generated_calculator.clj) runs
-entirely offline and demonstrates:
+## 3. Agent composition
 
-- a contracted Clojure Tool;
-- an Agent using the model/Tool loop;
-- an Agent written as a Clojure program;
-- model-authored Clojure read, expansion, checking, and evaluation;
-- recursive Agent creation;
-- Run events and Agent-form usage.
+[`clojure/composition.clj`](clojure/composition.clj) defines two reviewers that
+run concurrently and an editor that combines their results. Load it from a
+REPL, construct a team with `example.composition/review-system`, and run the
+returned Agent.
 
-Run it from the repository root:
+## 4. Dynamic Agents
+
+Run the deterministic runtime-generation trace:
+
+```bash
+clojure -M -m karcarthy.demo.dynamic
+```
+
+The architect model calls karcarthy's built-in `agent` Tool. The command prints
+the submitted source and the read, expansion, checking, evaluation, and Agent
+event lineage.
+
+## 5. Hill Climbing
+
+Run the three-candidate search locally:
+
+```bash
+clojure -M -m karcarthy.demo.dynamic hill-climb
+```
+
+Repeat the same search in isolated Harbor tasks with verifier rewards, ATIF
+trajectories, and Harbor's results viewer:
+
+```bash
+examples/harbor/hillclimb.sh
+```
+
+See [`harbor/README.md`](harbor/README.md) for requirements and artifacts.
+
+## Additional compiler example
+
+[`clojure/generated_calculator.clj`](clojure/generated_calculator.clj) is a
+compact, low-level example of `compile-agent!`. It is useful when studying the
+compiler API, but it is not another step in the main example path:
 
 ```bash
 clojure -M -e '(load-file "examples/clojure/generated_calculator.clj")'
 ```
 
-[`clojure/dynamic_agent.clj`](clojure/dynamic_agent.clj) is the most direct
-runtime-generation proof. A deterministic model calls karcarthy's built-in
-`agent` Tool with a new Clojure form, the harness compiles and runs it, and the
-example prints the Agent/program event tree plus the submitted source:
-
-```bash
-clojure -M -e '(load-file "examples/clojure/dynamic_agent.clj")'
-```
-
-[`clojure/hill_climb.clj`](clojure/hill_climb.clj) evaluates three generated
-Agent programs on the same exact-match metric and retains the best candidate:
-
-```bash
-clojure -M -e '(load-file "examples/clojure/hill_climb.clj")'
-```
-
-The [`harbor`](harbor) example runs the same candidates as isolated Harbor
-jobs, using Harbor's verifier rewards, ATIF trajectories, and results viewer.
-
-The paid end-to-end test lets GPT-5.6 write a new `agent` form and run it:
+The paid end-to-end test is also deliberately outside the example path. It
+lets GPT-5.6 author and run a new Agent form:
 
 ```bash
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 ```
 
-Any ACP client can launch
-`clojure -M -m karcarthy.acp namespace/agent-var` and speak ACP over stdio.
-See the dedicated [ACP documentation](../docs/content/docs/acp.mdx).
+For serving an Agent to another process, see the [ACP
+documentation](../docs/content/docs/acp.mdx).

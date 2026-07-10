@@ -1,38 +1,41 @@
 ---
 title: Examples
-description: Examples for REPL development, chat, and Agent composition.
+description: A path from the core model/Tool loop to metric-driven Agent evaluation.
 ---
 
+The examples form one progression. Start with the first unfamiliar capability;
+each later example builds on the earlier execution model.
+
+| Example | Requires | What it demonstrates |
+| --- | --- | --- |
+| [Hello](/docs/quickstart#run-the-offline-example) | Clojure | Offline model/Tool loop |
+| [Chat](/docs/examples/chat) | API key | Sessions and an interactive application |
+| [Agent composition](/docs/examples/composition) | API key | Ordinary Clojure as orchestration |
+| [Dynamic Agents](/docs/examples/dynamic-agents) | Clojure | Runtime Agent generation and event lineage |
+| [Hill Climbing](/docs/examples/hill-climbing) | Clojure; optionally Docker and Harbor | Metric-driven candidate selection |
+
 <Cards>
-  <Card title="REPL development" href="/docs/examples/repl" />
-  <Card title="Chat from the REPL" href="/docs/examples/chat" />
-  <Card title="Agent composition" href="/docs/examples/clojure" />
-  <Card title="Dynamic Agent proof" href="/docs/examples/dynamic-agents" />
+  <Card title="1. Hello" href="/docs/quickstart#run-the-offline-example" />
+  <Card title="2. Chat" href="/docs/examples/chat" />
+  <Card title="3. Agent composition" href="/docs/examples/composition" />
+  <Card title="4. Dynamic Agents" href="/docs/examples/dynamic-agents" />
+  <Card title="5. Hill Climbing" href="/docs/examples/hill-climbing" />
 </Cards>
 
-## REPL development
+## Two kinds of orchestration
 
-The [REPL example](/docs/examples/repl) uses the included deterministic model,
-so it runs without a network connection or API key. It covers Agent execution,
-Run inspection, Agent definition inspection, and redefinition.
+[Agent composition](/docs/examples/composition) shows orchestration written by
+a developer with functions, `future`, and `run!`. [Dynamic
+Agents](/docs/examples/dynamic-agents) shows a model submitting a new Clojure
+Agent form through the same kernel. Both use ordinary Agent values; there is no
+separate workflow representation.
 
-## Chat from the REPL
+## One evaluation, two execution modes
 
-The [chat example](/docs/examples/chat) adds a small `read-line` loop and a
-Session around `run!`. It keeps the interface in application code while making
-conversation history, Run inspection, reset, and exit behavior explicit.
+[Hill Climbing](/docs/examples/hill-climbing) runs one candidate search in two
+ways. The local mode is fast and deterministic. The Harbor mode repeats it in
+isolated tasks and adds verifier rewards, ATIF trajectories, and a viewer.
 
-## Agent composition
-
-The [Clojure example](/docs/examples/clojure) contrasts independent `run!`
-composition with a model-created Agent tree that shares one Run.
-
-## Dynamic Agent proof
-
-The [dynamic Agent example](/docs/examples/dynamic-agents) prints the actual
-Agent and program event lineage while a model submits and runs a new Clojure
-Agent form. Its companion evaluator scores three generated programs locally;
-the Harbor example repeats the search in isolated tasks with verifier rewards
-and ATIF trajectories.
-
-All examples use the public `(require '[karcarthy :as k])` API.
+The [REPL guide](/docs/repl) is a development workflow rather than another
+example. Integration details for [MCP](/docs/mcp), [ACP](/docs/acp), and
+[Harbor](/docs/harbor) live in their dedicated guides.
