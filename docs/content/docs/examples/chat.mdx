@@ -6,7 +6,7 @@ description: Build a minimal terminal chat with an Agent, run!, and a Session.
 A chat interface is application code around three existing values: an Agent,
 `run!`, and a Session. karcarthy does not need a separate chat abstraction.
 
-The runnable example lives at `examples/clojure/chat.clj`:
+The runnable example lives at `examples/chat/main.clj`:
 
 ```clojure
 (ns example.chat
@@ -60,7 +60,7 @@ clojure -M
 Then load and start the example:
 
 ```clojure
-(load-file "examples/clojure/chat.clj")
+(load-file "examples/chat/main.clj")
 (example.chat/chat!)
 ```
 

@@ -1,16 +1,15 @@
 # Examples
 
 Public examples use the live Responses transport. Fake models remain in the
-offline unit tests, not in the example applications. `examples/src` is added
-only by the `:examples` and `:live-test` aliases and is not part of published
-library artifacts.
+offline unit tests, not in the example applications. Each example has its own
+folder and `main.clj`; none of them are part of published library artifacts.
 
 | Example | Command or source | Demonstrates |
 | --- | --- | --- |
-| Basic Agent | `clojure -M:examples basic <prompt>` | One live model Run |
-| Chat | [`clojure/chat.clj`](clojure/chat.clj) | Sessions and a terminal application |
-| Agent composition | [`clojure/composition.clj`](clojure/composition.clj) | Predefined Agents coordinated with Clojure |
-| Coding Agent | `clojure -M:examples coding <directory> <task>` | Open-ended repository work with optional Agent generation |
+| Basic Agent | [`basic/main.clj`](basic/main.clj) | One live model Run |
+| Chat | [`chat/main.clj`](chat/main.clj) | Sessions and a terminal application |
+| Agent composition | [`composition/main.clj`](composition/main.clj) | Predefined Agents coordinated with Clojure |
+| Coding Agent | [`coding/main.clj`](coding/main.clj) | Open-ended repository work with optional Agent generation |
 | Harbor | [`harbor`](harbor) | Reflective search over executable Agent programs |
 
 Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running an example. Use
@@ -27,13 +26,13 @@ clojure -M:examples basic "Explain what an Agent value is."
 Start a REPL, then load the terminal chat:
 
 ```clojure
-(load-file "examples/clojure/chat.clj")
+(load-file "examples/chat/main.clj")
 (example.chat/chat!)
 ```
 
 ## Agent composition
 
-[`clojure/composition.clj`](clojure/composition.clj) defines two reviewers that
+[`composition/main.clj`](composition/main.clj) defines two reviewers that
 run concurrently and an editor that combines their results. Load it from a
 REPL and construct a team with `example.composition/review-system`.
 

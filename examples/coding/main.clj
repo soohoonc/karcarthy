@@ -1,5 +1,5 @@
-(ns karcarthy.examples.coding
-  "Open-ended live Coding Agent and seed for Agent-program search."
+(ns example.coding
+  "Open-ended live Coding Agent."
   (:require [clojure.string :as str]
             [karcarthy :as k]))
 

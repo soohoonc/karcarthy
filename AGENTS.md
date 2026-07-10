@@ -37,8 +37,10 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `resources/karcarthy/agent.md` | Model-facing manual for generating Agent programs; runtime model, Tool, and Agent catalogs are interpolated into it. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
-| `examples/src/karcarthy/examples.clj` | Examples-only dispatcher for live Agents, candidate validation, and the REPL. |
-| `examples/src/karcarthy/examples/search.clj` | Compiles complete candidate Agent forms for Harbor evaluation. |
+| `examples/main.clj` | Small command dispatcher for the live Basic and Coding examples and the REPL. |
+| `examples/basic/main.clj` | Minimal live Agent example. |
+| `examples/coding/main.clj` | Open-ended live Coding Agent. |
+| `examples/harbor/main.clj` | Harbor-only candidate compiler and ACP Agent factory. |
 | `examples/harbor/optimize.py` | GEPA search over candidate Agent programs using Harbor train/validation/test rollouts. |
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
 | `test/karcarthy/core_test.clj` | Kernel, model loop, instructions/context, Sessions, streaming, composition, limits, and events. |

@@ -41,7 +41,7 @@ All notable changes are documented here, following
 
 ### Changed
 
-- Runnable examples now live on an explicit examples classpath and Harbor
+- Runnable examples now live in task-scoped folders outside library source and Harbor
   builds a separate application artifact; library artifacts contain only the
   harness and production CLI.
 - Documentation now introduces the harness from ordinary Agent use outward,

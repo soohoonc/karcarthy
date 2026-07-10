@@ -37,7 +37,6 @@ from harbor.registry.client import RegistryClientFactory
 
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent
 ARCHIVE = HERE / "dist" / "karcarthy-harbor.tgz"
 SEED = HERE / "seed.clj"
 
@@ -111,8 +110,8 @@ def validate_sync(candidate: str) -> str | None:
         path = Path(directory) / "candidate.clj"
         path.write_text(candidate)
         result = subprocess.run(
-            ["clojure", "-M:examples", "validate", str(path)],
-            cwd=ROOT,
+            ["clojure", "-M", "-m", "main", "validate", str(path)],
+            cwd=HERE,
             text=True,
             capture_output=True,
             timeout=45,

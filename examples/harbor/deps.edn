@@ -1,4 +1,4 @@
-{:paths []
+{:paths ["."]
 
  :deps
  {io.github.soohoonc/karcarthy {:local/root "../.."}}

@@ -11,12 +11,12 @@
          :main-opts   ["-m" "karcarthy.test-runner"]}
 
   ;; Runnable examples are deliberately outside the library source path.
-  :examples {:extra-paths ["examples/src"]
-             :main-opts   ["-m" "karcarthy.examples"]}
+  :examples {:extra-paths ["examples"]
+             :main-opts   ["-m" "main"]}
 
   ;; Explicitly paid/networked: KARCARTHY_LIVE=1 OPENAI_API_KEY=... \
   ;; clojure -M:live-test
-  :live-test {:extra-paths ["test" "examples/src"]
+  :live-test {:extra-paths ["test"]
               :main-opts   ["-m" "karcarthy.live-test"]}
 
   ;; Build/install jars:  clojure -T:build jar | uber | all | install

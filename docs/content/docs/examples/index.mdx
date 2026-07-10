@@ -6,13 +6,19 @@ description: Live examples from a basic Agent to repository coding through Harbo
 The public examples use the live Responses transport. Fake models stay in the
 offline unit suite, where they make kernel behavior deterministic and free.
 
-| Example | What it demonstrates |
-| --- | --- |
-| [Basic Agent](/docs/quickstart#run-the-live-example) | One live model Run |
-| [Chat](/docs/examples/chat) | Sessions and an interactive application |
-| [Agent composition](/docs/examples/composition) | Predefined Agents coordinated with Clojure |
-| [Coding Agent](/docs/examples/coding-agent) | Open-ended repository work with optional Agent generation |
-| [Harbor](/docs/harbor#from-demonstration-to-search) | Search over executable Agent programs using rewards and trajectories |
+Each example is an application in its own folder with a locally scoped
+`main.clj`. They are not library namespaces and are not included in the
+published artifact.
+
+## Recommended sequence
+
+| Example | Add this concept | Source |
+| --- | --- | --- |
+| [Basic Agent](/docs/quickstart#run-the-live-example) | One live model Run. | [`basic/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/basic/main.clj) |
+| [Chat](/docs/examples/chat) | Conversation history across Runs. | [`chat/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/chat/main.clj) |
+| [Agent composition](/docs/examples/composition) | Fixed coordination with ordinary Clojure, contrasted with runtime generation. | [`composition/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/composition/main.clj) |
+| [Coding Agent](/docs/examples/coding-agent) | Open-ended Tool use where the model chooses its own strategy. | [`coding/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/coding/main.clj) |
+| [Harbor](/docs/harbor#from-demonstration-to-search) | Search over complete Agent programs using verifier rewards and trajectories. | [`harbor/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/main.clj) |
 
 <Cards>
   <Card title="Basic Agent" href="/docs/quickstart#run-the-live-example" />
@@ -22,9 +28,10 @@ offline unit suite, where they make kernel behavior deterministic and free.
   <Card title="Harbor" href="/docs/harbor#from-demonstration-to-search" />
 </Cards>
 
-The Coding Agent is the main end-to-end application example. The Harbor example
-then treats a complete Clojure Agent form as the search artifact and uses
-isolated tasks, verifier rewards, and trajectories to evolve it.
+The progression is additive rather than a taxonomy of competing demos. The
+Coding Agent is the main end-to-end application. Harbor then treats a complete
+Clojure Agent form as the search artifact and evaluates replacements for that
+application on isolated tasks.
 
 The [REPL guide](/docs/repl) covers interactive development. Integration details
 for [MCP](/docs/mcp) and [ACP](/docs/acp) remain in their dedicated guides.

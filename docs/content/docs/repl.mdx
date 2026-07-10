@@ -16,7 +16,7 @@ clojure -M:examples repl
 
 ```clojure
 (require '[karcarthy :as k]
-         '[karcarthy.examples.basic :as basic])
+         '[example.basic :as basic])
 
 (def assistant (basic/basic-agent))
 (def run (k/run! assistant "Explain what an Agent value is."))
@@ -103,7 +103,6 @@ Allow a live Agent to write and run a new Agent:
 
 ## Next
 
-- [Chat](/docs/examples/chat) adds conversation history.
-- [Coding Agent](/docs/examples/coding-agent) applies live repository Tools and chooses its own strategy.
-- [Agents](/docs/agents#run-an-agent) documents Run results and limits.
-- [ACP](/docs/acp) documents serving an Agent to another process.
+- [Examples](/docs/examples) continues from chat through coding and Harbor evaluation.
+- [Agents](/docs/agents#choose-a-composition-mechanism) compares the three composition mechanisms.
+- [ACP](/docs/acp) serves an Agent to another process.

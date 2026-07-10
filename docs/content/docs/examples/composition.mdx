@@ -6,7 +6,7 @@ description: Coordinate independent Agent Runs with ordinary Clojure.
 This example runs two reviewers in parallel and passes their outputs to an
 editor. Each `run!` call is independent, so the example checks every Run and
 sets limits for each reviewer explicitly. The complete source lives at
-`examples/clojure/composition.clj`.
+`examples/composition/main.clj`.
 
 ## Build the system
 
@@ -91,7 +91,7 @@ propagates failed child Runs instead of quietly passing `nil` to the editor.
 With `OPENAI_API_KEY` set, load the example from the repository root:
 
 ```clojure
-(load-file "examples/clojure/composition.clj")
+(load-file "examples/composition/main.clj")
 
 (def team (example.composition/review-system "/workspace/project"))
 
