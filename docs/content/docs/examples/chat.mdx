@@ -1,0 +1,101 @@
+---
+title: Chat from the REPL
+description: Build a minimal terminal chat with an Agent, run!, and a Session.
+---
+
+A chat interface is application code around three existing values: an Agent,
+`run!`, and a Session. karcarthy does not need a separate chat abstraction.
+
+The runnable example lives at `examples/clojure/chat.clj`:
+
+```clojure
+(ns example.chat
+  (:require [karcarthy :as k]))
+
+(def assistant
+  (k/agent
+   {:name "chat-assistant"
+    :model {:transport :responses :id "gpt-5.6"}
+    :instructions "Be helpful and concise."
+    :output string?}))
+
+(def session (k/memory-session))
+(def last-run (atom nil))
+
+(defn ask! [input]
+  (let [run (k/run! assistant input {:session session})]
+    (reset! last-run run)
+    run))
+
+(defn reset-chat! []
+  (k/clear-session! session))
+
+(defn chat! []
+  (println "Type /reset to clear the conversation or /quit to exit.")
+  (loop []
+    (print "you> ")
+    (flush)
+    (when-let [input (read-line)]
+      (case input
+        "/quit" :done
+        "/reset" (do (reset-chat!)
+                      (println "Conversation cleared.")
+                      (recur))
+        (let [run (ask! input)]
+          (if (= :completed (:status run))
+            (println "agent>" (:output run))
+            (println "error>" (get-in run [:error :message])))
+          (recur))))))
+```
+
+## Start chatting
+
+Start a REPL with `OPENAI_API_KEY` available to the process:
+
+```bash
+clojure -M
+```
+
+Then load and start the example:
+
+```clojure
+(load-file "examples/clojure/chat.clj")
+(example.chat/chat!)
+```
+
+The terminal becomes a small chat interface:
+
+```text
+Type /reset to clear the conversation or /quit to exit.
+you> Remember that my project is called karcarthy.
+agent> Got it.
+you> What is my project called?
+agent> karcarthy.
+you> /quit
+:done
+```
+
+Each message starts a Run. The shared Session supplies earlier messages to the
+next Run.
+
+## Inspect and reset
+
+After leaving the loop, inspect the most recent Run and conversation:
+
+```clojure
+(select-keys @example.chat/last-run [:status :output :usage])
+(k/events @example.chat/last-run)
+(k/get-items example.chat/session)
+```
+
+Clear the conversation without recreating the Agent:
+
+```clojure
+(example.chat/reset-chat!)
+```
+
+## Next
+
+- [REPL development](/docs/examples/repl) covers redefining and inspecting Agents.
+- [Sessions](/docs/sessions) explains in-memory and durable conversation stores.
+- [Streaming and events](/docs/streaming) shows incremental model output.

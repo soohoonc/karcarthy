@@ -40,7 +40,7 @@ Create `src/example.clj`:
            :required ["text"]
            :additionalProperties false}
    :output integer?}
-  [_ {:keys [text]}]
+  [{:keys [text]}]
   (count (re-seq #"\S+" text)))
 ```
 
@@ -152,6 +152,7 @@ Runs are independent unless you pass a Session:
 - [Running agents](/docs/running-agents): `run!`, results, and limits
 - [Tools](/docs/tools): contracts, approvals, local Tools, and Agents as Tools
 - [Sessions](/docs/sessions): conversation history across Runs
+- [Chat example](/docs/examples/chat): a terminal conversation from the REPL
 - [Streaming and events](/docs/streaming): live model text and lifecycle events
 - [Integrations](/docs/integrations): model endpoints, MCP, ACP, and Harbor
 - [Library API](/docs/reference/api): complete function and macro reference
