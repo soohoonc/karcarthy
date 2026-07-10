@@ -63,6 +63,36 @@ Status is `:completed`, `:failed`, or `:cancelled`. Completion means the
 harness contracts passed; an external evaluator may still score the behavior
 poorly.
 
+## Run monitor snapshot
+
+Dereferencing a Run monitor returns process-local data derived from observed
+events:
+
+```clojure
+{:karcarthy/type :run-monitor-snapshot
+ :run-order ["run_..."]
+ :runs
+ {"run_..."
+  {:id "run_..."
+   :status :running
+   :agent "architect"
+   :agent-forms 2
+   :created-agents ["failure-analyst" "rollout-planner"]
+   :agent-order ["agent_..." "agent_..." "agent_..."]
+   :agents
+   {"agent_..."
+    {:id "agent_..."
+     :parent-id nil
+     :depth 0
+     :name "architect"
+     :status :running
+     :activity :waiting-agents
+     :tools {...}}}}}}
+```
+
+The monitor is a live display. The completed Run and its event vector are the
+permanent record.
+
 ## Session
 
 A Session implements `karcarthy.session/Session`:

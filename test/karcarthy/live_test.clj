@@ -47,7 +47,8 @@
   (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
   (when (and (live?) (credentials?))
     (let [run (architect/run-architect!
-               "Review a migration from synchronous writes to a queue.")
+               "Review a migration from synchronous writes to a queue."
+               (k/run-monitor))
           program-events (->> (:events run)
                               (map :type)
                               (filter #(= "program" (namespace %)))

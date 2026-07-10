@@ -33,55 +33,17 @@
   (or (not (str/blank? (System/getenv "RESPONSES_API_KEY")))
       (not (str/blank? (System/getenv "OPENAI_API_KEY")))))
 
-(defn- line! [depth text]
-  (locking *out*
-    (println (str (apply str (repeat depth "  ")) text))
-    (flush)))
-
-(defn trace! [{:keys [type agent tool input depth]}]
-  (let [depth (or depth 0)]
-    (case type
-      :agent/started
-      (line! depth (str "RUN    " agent))
-
-      :tool/started
-      (when (= "agent" tool)
-        (locking *out*
-          (println "MODEL  -> new Agent")
-          (println)
-          (println (:source input))
-          (println)
-          (flush)))
-
-      :program/read
-      (line! depth "KERNEL read")
-
-      :program/expanded
-      (line! depth "KERNEL expand")
-
-      :program/checked
-      (line! depth "KERNEL check")
-
-      :program/evaluated
-      (line! depth (str "KERNEL evaluate -> " agent))
-
-      :tool/completed
-      (when (= "agent" tool)
-        (line! depth "RETURN <- generated Agent"))
-
-      :agent/completed
-      (line! depth (str "DONE   " agent))
-
-      nil)))
-
-(defn run-architect! [task]
-  (k/run! (architect) task
-          {:observe trace!
-           :limits {:model-calls 4
-                    :agent-forms 2
-                    :depth 2
-                    :parallelism 3
-                    :deadline-ms 240000}}))
+(defn run-architect!
+  ([task]
+   (run-architect! task (k/run-monitor {:display :tree})))
+  ([task monitor]
+   (k/run! (architect) task
+           {:observe monitor
+            :limits {:model-calls 4
+                     :agent-forms 2
+                     :depth 2
+                     :parallelism 3
+                     :deadline-ms 240000}})))
 
 (def default-task
   "Review a migration from synchronous writes to a queue.")

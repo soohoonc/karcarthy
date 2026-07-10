@@ -32,10 +32,10 @@ clojure -M:examples architect \
 ```
 
 The parent must use the automatic `agent` Tool to author two complementary
-Agents after seeing the task. The example prints both Clojure forms, the
-kernel's read/expand/check/evaluate phases, the concurrent child Runs, and their
-return to the parent. This terminal output is designed to be recorded directly
-as the project's short GIF or video.
+Agents after seeing the task. A Run monitor redraws the live tree while the
+parent creates both Agents, runs them concurrently, and waits for their
+answers. This terminal output is designed to be recorded directly as the
+project's short GIF or video.
 See the [recording guide](architect/README.md) for the shot sequence and export
 settings.
 

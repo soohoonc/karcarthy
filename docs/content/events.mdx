@@ -19,6 +19,64 @@ The built-in Responses transport streams by default. `:model/text-delta` is
 the event to render for incremental model text. Other events report Agent,
 Tool, model, Session, and generated-program activity.
 
+## Watch Runs live
+
+A Run monitor turns those events into current state. Pass it directly as the
+observer:
+
+```clojure
+(def live (k/run-monitor {:display :tree}))
+
+(def run
+  (k/run! architect task {:observe live}))
+```
+
+`:display :tree` redraws the same terminal lines as events arrive:
+
+```text
+Run run_7c2e9b… · running · 2 Agent forms
+└─ architect · waiting for 2 Agents
+   ├─ failure-analyst · calling model
+   └─ rollout-planner · Tool: search
+```
+
+The tree shows running, completed, and failed Agents; parent and child
+relationships; model calls; active Tools; and submitted Agent forms. It does
+not print model text or Tool inputs and outputs.
+
+The monitor is also ordinary REPL state. Create it without `:display` when you
+want to inspect it manually:
+
+```clojure
+(def live (k/run-monitor))
+
+(def work
+  (future
+    (k/run! architect task {:observe live})))
+
+@live                  ; current state as Clojure data
+(k/monitor-view live)  ; current tree as a string
+(k/print-monitor live) ; print one tree snapshot
+```
+
+Running the Agent in a `future` leaves the REPL prompt free for manual
+inspection. A single monitor can observe several concurrent root Runs; it keeps
+them separate by Run ID.
+
+The live tree uses ANSI cursor movement. Use a monitor without `:display` in a
+console that does not support ANSI control sequences. Pass `:out` to render to
+another `java.io.Writer`:
+
+```clojure
+(k/run-monitor {:display :tree :out *err*})
+```
+
+If another observer is already installed, compose the functions:
+
+```clojure
+{:observe (juxt live record-event!)}
+```
+
 ## Event families
 
 ```clojure

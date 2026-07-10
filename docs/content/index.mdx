@@ -90,21 +90,13 @@ clojure -M:examples architect \
   "Review a migration from synchronous writes to a queue."
 ```
 
-The terminal shows both Clojure forms and both Agent Runs:
+The terminal redraws the Agent tree as the Run changes:
 
 ```text
-RUN    architect
-MODEL  -> new Agent
-(agent {:name "failure-analyst" ...})
-
-MODEL  -> new Agent
-(agent {:name "rollout-planner" ...})
-
-  RUN    failure-analyst
-  RUN    rollout-planner
-  DONE   failure-analyst
-  DONE   rollout-planner
-DONE   architect
+Run run_7c2e9b… · running · 2 Agent forms
+└─ architect · waiting for 2 Agents
+   ├─ failure-analyst · calling model
+   └─ rollout-planner · Tool: search
 ```
 
 [Read the walkthrough](/docs/guides/architect) or inspect the
@@ -122,6 +114,22 @@ execution of it.
 A Run sets limits on model calls, tokens, depth, concurrency, generated Agent
 forms, and time. Agents created by a model use the same limits and appear in
 the same event history.
+
+Use a Run monitor to see that history as it happens:
+
+```clojure
+(def live (k/run-monitor {:display :tree}))
+(def run (k/run! reviewer "Review this migration." {:observe live}))
+```
+
+The monitor redraws the Agent tree in the terminal. Dereference it for the
+current state as Clojure data:
+
+```clojure
+@live
+```
+
+[Events](/docs/events#watch-runs-live) documents live and manual display.
 
 ## Why Clojure
 

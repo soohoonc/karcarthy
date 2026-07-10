@@ -43,61 +43,40 @@ clojure -M:examples architect \
 The source is in
 [`examples/architect/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/architect/main.clj).
 
-## Read the trace
+## Read the monitor
 
-The names and instructions will vary. A run looks like this:
+The names will vary. While both children run, the terminal looks like this:
 
 ```text
-RUN    architect
-MODEL  -> new Agent
-
-(agent
-  {:name "failure-analyst"
-   :model {:transport :responses :id "gpt-5.6"}
-   :instructions "Find one hidden failure mode."
-   :input string?
-   :output string?})
-
-KERNEL read
-KERNEL expand
-KERNEL check
-KERNEL evaluate -> failure-analyst
-
-MODEL  -> new Agent
-
-(agent
-  {:name "rollout-planner"
-   :model {:transport :responses :id "gpt-5.6"}
-   :instructions "Propose a safe rollout plan."
-   :input string?
-   :output string?})
-
-KERNEL read
-KERNEL expand
-KERNEL check
-KERNEL evaluate -> rollout-planner
-
-  RUN    failure-analyst
-  RUN    rollout-planner
-  DONE   failure-analyst
-RETURN <- generated Agent
-  DONE   rollout-planner
-RETURN <- generated Agent
-DONE   architect
+Run run_7c2e9b… · running · 2 Agent forms
+└─ architect · waiting for 2 Agents
+   ├─ failure-analyst · calling model
+   └─ rollout-planner · Tool: search
 ```
 
-The two calls may interleave because they run at the same time.
+The display redraws when an Agent starts, calls a model or Tool, creates an
+Agent form, finishes, or fails. The two child lines may change in either order
+because they run at the same time.
 
 Here is what happened:
 
-1. The parent model wrote two `(agent ...)` forms.
-2. karcarthy turned each form into an Agent value.
-3. karcarthy ran both Agents.
-4. Their answers went back to the parent model.
-5. The parent used both answers to write its own answer.
+1. `2 Agent forms` means the parent model wrote two `(agent ...)` forms.
+2. The two indented lines are the Agent values created from those forms.
+3. `calling model` and `Tool: search` show what each Agent is doing now.
+4. When both lines say `done`, their answers have returned to the parent.
+5. The parent then calls its model again and writes the final answer.
 
 The parent did not describe a team for some other system to build. It wrote the
 team as Clojure, and that Clojure ran.
+
+The example creates the monitor with:
+
+```clojure
+(k/run-monitor {:display :tree})
+```
+
+See [Events: Watch Runs live](/docs/events#watch-runs-live) to use the same
+monitor with another Agent.
 
 ## What each new Agent knows
 

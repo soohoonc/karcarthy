@@ -5,6 +5,7 @@
   '[karcarthy-test
     karcarthy.core-test
     karcarthy.cli-test
+    karcarthy.monitor-test
     karcarthy.tools-test
     karcarthy.eval-test
     karcarthy.responses-test

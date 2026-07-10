@@ -6,12 +6,12 @@ This is the shortest live demonstration of karcarthy's central idea:
 
 The parent Agent must author and call two task-specific specialists through the
 automatic `agent` Tool. It submits both calls together so karcarthy can run them
-concurrently. The terminal trace prints:
+concurrently. The live monitor shows:
 
 1. the parent Run;
-2. both complete Clojure Agent forms submitted by the model;
-3. the kernel's read, expand, check, and evaluate phases;
-4. both generated child Runs and their return to the parent; and
+2. how many Clojure Agent forms the model submitted;
+3. both generated child Runs and their current activity;
+4. Tools used by each Agent; and
 5. the parent's final answer.
 
 Run it with:
@@ -32,10 +32,11 @@ order. The short cut should take 15–25 seconds:
 
 ```text
 command
-  -> two model-authored (agent ...) forms
-  -> read / expand / check / evaluate
-  -> concurrent generated Agent Runs
-  -> both return to parent
+  -> parent calls model
+  -> parent creates two Agent forms
+  -> live tree branches into two Agent Runs
+  -> model and Tool activity updates in place
+  -> both children finish
   -> final answer
 ```
 
@@ -44,9 +45,10 @@ Export two files from the same recording:
 - a silent looping GIF for the repository README;
 - a 1080p MP4 with brief captions for social posts and the documentation site.
 
-Keep the Clojure source legible. The GIF should show the mechanism, not every
-word of the final answer. The video can pause on the generated form and explain
-that it is executable source rather than a workflow serialization.
+Keep the Agent names and activity labels legible. The GIF should show the tree
+branch and both children finish; it does not need every word of the final
+answer. The longer video can cut to the `:program/read` events afterward to
+show the exact submitted Clojure.
 
 Given an edited `agent-architecture.mp4`, `ffmpeg` can produce a compact GIF:
 

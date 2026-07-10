@@ -26,43 +26,18 @@ clojure -M:examples architect \
   "Review a migration from synchronous writes to a queue."
 ```
 
-The terminal trace makes the runtime path visible:
+The terminal redraws the live Agent tree as the Run changes:
 
 ```text
-RUN    architect
-MODEL  -> new Agent
-
-(agent
-  {:name "failure-analyst"
-   ...})
-
-KERNEL read
-KERNEL expand
-KERNEL check
-KERNEL evaluate -> failure-analyst
-MODEL  -> new Agent
-
-(agent
-  {:name "rollout-planner"
-   ...})
-
-KERNEL read
-KERNEL expand
-KERNEL check
-KERNEL evaluate -> rollout-planner
-  RUN    failure-analyst
-  RUN    rollout-planner
-  DONE   failure-analyst
-RETURN <- generated Agent
-  DONE   rollout-planner
-RETURN <- generated Agent
-DONE   architect
+Run run_7c2e9b… · running · 2 Agent forms
+└─ architect · waiting for 2 Agents
+   ├─ failure-analyst · calling model
+   └─ rollout-planner · Tool: search
 ```
 
-The submitted source is not serialized workflow configuration. It is an
-ordinary Agent program. karcarthy reads, macroexpands, checks, evaluates, and
-runs it; each child receives only its explicit input, and both outputs return
-to the parent Agent.
+When both children finish, the tree marks them done and the parent writes the
+answer. The `2 Agent forms` count comes from the Clojure forms submitted by the
+parent model.
 
 ## One representation
 
@@ -99,6 +74,18 @@ Run limits, events, and nested lineage.
 
 This is why karcarthy uses Clojure: an Agent's source is simultaneously an
 executable program and data that a developer, macro, or model can produce.
+
+## Watch live Runs at the REPL
+
+`run-monitor` turns the event stream into a live Agent tree:
+
+```clojure
+(def live (k/run-monitor {:display :tree}))
+(def run (k/run! assistant "Complete the task." {:observe live}))
+```
+
+Use `@live` for the current state as Clojure data or `(k/print-monitor live)`
+to print one snapshot. A monitor can observe several concurrent Runs.
 
 ## Examples
 
