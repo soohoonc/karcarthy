@@ -25,7 +25,7 @@ npm run build
 
 ## Content
 
-Docs are written in MDX under `content/docs/`.
+Docs are written in MDX under `content/`.
 
 Useful app files:
 

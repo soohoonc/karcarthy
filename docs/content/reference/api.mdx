@@ -142,7 +142,7 @@ text. `system-prompt` reads `resources/karcarthy/system.md`; karcarthy already
 prepends that file to every model Agent, so applications normally use the
 function only to inspect it or for explicit prompt composition.
 
-## Generated Agents
+## Agent forms
 
 ```clojure
 (def form (k/read-agent-form source))
@@ -154,7 +154,7 @@ function only to inspect it or for explicit prompt composition.
 ```
 
 These functions must run from an Agent program because compilation is charged
-to the current Run. See [Generated Agents](/docs/reference/generated-agents).
+to the current Run. See [Agent forms](/docs/reference/agent-forms).
 
 ## Models
 
@@ -197,7 +197,7 @@ Use a deterministic model in tests:
 
 `local-tools` supplies `read`, `write`, `edit`, `bash`, and `search`. MCP uses
 stdio and must be closed by the caller. See [Tools](/docs/tools),
-[Models](/docs/models), and [MCP](/docs/mcp) for execution and lifecycle
+[Models](/docs/models), and [MCP](/docs/protocols/mcp) for execution and lifecycle
 semantics.
 
 ## ACP
@@ -220,7 +220,7 @@ Or provide an Agent factory:
              :output string?}))})
 ```
 
-Client-provided MCP Tools are appended automatically. See [ACP](/docs/acp) for
+Client-provided MCP Tools are appended automatically. See [ACP](/docs/protocols/acp) for
 the complete session factory and supported protocol surface.
 
 ## Events and contracts

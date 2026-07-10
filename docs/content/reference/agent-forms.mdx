@@ -1,6 +1,6 @@
 ---
-title: Generated Agents
-description: How a model writes and runs a new Clojure Agent.
+title: Agent forms
+description: Define, compile, evaluate, and run executable Clojure Agent forms.
 ---
 
 Every model Agent can write a new Clojure `agent` form and run it:
@@ -111,6 +111,23 @@ compiler catch malformed forms; Agent and Tool contracts validate their
 boundaries. Clojure is dynamically typed, so this is not whole-program static
 type checking.
 
+### Compiler events
+
+In event names, `program` means the submitted Clojure source for a generated
+Agent. These events are not emitted for every ordinary Agent or Tool call.
+
+| Event | Meaning | Important fields |
+| --- | --- | --- |
+| `:program/read` | The compiler received the source string and entered the read phase. It records an attempted read, not proof that parsing succeeded. | `:source` |
+| `:program/expanded` | The source was read as one top-level `agent` form and macroexpanded. | `:definition`, `:expansion`, `:namespace` |
+| `:program/checked` | The expanded form passed the compiler's structural checks. | `:namespace` |
+| `:program/evaluated` | Evaluation produced a valid Agent value. | `:agent`, `:namespace` |
+| `:program/failed` | Expansion or evaluation failed. The containing Run also ends with a structured failure. | `:phase`, `:error` |
+
+A successful compilation therefore emits `read`, `expanded`, `checked`, and
+`evaluated` in order. The generated Agent's normal `:agent/*`, `:model/*`, and
+`:tool/*` events follow when it runs.
+
 ## Available symbols
 
 Generated code runs in a fresh evaluation namespace. It receives Clojure core,
@@ -140,9 +157,8 @@ another Agent. Bound recursive programs with Run limits:
  :deadline-ms 300000}
 ```
 
-Compilation emits `:program/read`, `:program/expanded`, `:program/checked`,
-`:program/evaluated`, or `:program/failed` events. `:agent-forms` counts each
-submitted top-level Agent form, including failed attempts.
+`:agent-forms` counts each submitted top-level Agent form, including failed
+attempts.
 
 ## Direct compilation
 

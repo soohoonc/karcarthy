@@ -1,5 +1,5 @@
 ---
-title: Data model
+title: Data
 description: Agent, Tool, Run, Session, event, and failure values.
 ---
 
@@ -94,6 +94,11 @@ Every event has `:type`, `:time-ms`, and `:run-id`. Agent events add
 :program/read         :program/expanded    :program/checked
 :program/evaluated    :program/failed
 ```
+
+The `:program/*` events describe generated-Agent source compilation, not
+ordinary Agent execution. See the [compiler event
+table](/docs/reference/agent-forms#compiler-events) for their sequence and
+fields.
 
 ## Failure
 

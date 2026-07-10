@@ -7,6 +7,8 @@ functions, macros, control flow, and concurrency compose them.
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+[Documentation](https://karcarthy.vercel.app/docs)
+
 ## Run the live example
 
 JDK 21, the Clojure CLI, and `RESPONSES_API_KEY` or `OPENAI_API_KEY` are
@@ -85,22 +87,17 @@ therefore share one language and representation.
 The built-in `agent` Tool explains the exact grammar, when generation is
 useful, when it is unnecessary, and the model, Tool, and Agent symbols actually
 available. Its call contains the Clojure `source` and an explicit `input`.
-Generated Agents do not inherit the parent's model conversation.
+Agent forms submitted at runtime do not inherit the parent's model conversation.
 
 This executes model-authored JVM Clojure and is not a sandbox.
 
 ## Documentation
 
-- [Home](docs/content/docs/index.mdx)
-- [Quickstart](docs/content/docs/quickstart.mdx)
-- [REPL development](docs/content/docs/repl.mdx)
-- [Agents](docs/content/docs/agents.mdx)
-- [Tools](docs/content/docs/tools.mdx)
-- [MCP](docs/content/docs/mcp.mdx)
-- [ACP](docs/content/docs/acp.mdx)
-- [Harbor](docs/content/docs/harbor.mdx)
-- [Examples](docs/content/docs/examples/index.mdx)
-- [Reference](docs/content/docs/reference/index.mdx)
+- [Quickstart](https://karcarthy.vercel.app/docs/quickstart)
+- [Library](https://karcarthy.vercel.app/docs/agents)
+- [Guides](https://karcarthy.vercel.app/docs/guides)
+- [Protocols](https://karcarthy.vercel.app/docs/protocols/mcp)
+- [Reference](https://karcarthy.vercel.app/docs/reference)
 
 ## Development
 
