@@ -2,8 +2,7 @@
   "title": "Examples",
   "pages": [
     "index",
-    "clojure",
-    "python",
-    "typescript"
+    "repl",
+    "clojure"
   ]
 }

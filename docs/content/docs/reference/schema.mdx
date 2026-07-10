@@ -1,10 +1,11 @@
 ---
-title: Contracts
+title: Data model
 description: Agent, Tool, Runtime, Session, Run, event, limit, and failure values.
 ---
 
-karcarthy values are ordinary Clojure values. Some contain functions, protocol
-implementations, or compiled code and are intentionally not EDN/JSON portable.
+karcarthy values are ordinary Clojure values. Agent and Tool values may contain
+functions and compiled code; Run events and outputs can be projected to an
+external serialization format by the application.
 
 ## Agent
 
@@ -89,9 +90,9 @@ A Session implements `karcarthy.session/Session`:
 ```
 
 Stored items are normalized message maps with roles such as `:user`,
-`:assistant`, and `:tool`. A Session is conversation history, not a serialized
-Runtime or workflow checkpoint. `memory-session` stores a vector in an atom;
-durable implementations choose their own storage.
+`:assistant`, and `:tool`. A Session stores conversation history; it does not
+serialize Runtime stacks or arbitrary effects. `memory-session` stores a vector
+in an atom; durable implementations choose their own storage.
 
 ## Limits
 
@@ -130,8 +131,8 @@ lower inherited ceilings but cannot raise them.
 output passed the harness contracts and guardrails; an external evaluator may
 still score it poorly.
 
-The Run does not contain a synthetic trace ID or conversation snapshot. Its
-`id` joins its events, while a caller-owned Session holds conversation history.
+The Run `id` joins its events. A caller-owned Session holds conversation
+history across Runs.
 
 ## Events
 
@@ -160,8 +161,7 @@ Stable event families include:
 :program/evaluated    :program/failed
 ```
 
-The Run's `:observe` callback receives events as they occur. There is no
-separate Agent-hook abstraction.
+The Run's `:observe` callback receives events as they occur.
 
 ## Failure
 
@@ -179,26 +179,7 @@ contracts, models, Tools, guardrails, approvals, budgets, deadlines,
 cancellation, and custom programs. Failed and cancelled Runs retain failure
 data and events but have no output.
 
-## Mathematical view
-
-Let `p` be a Clojure Agent program, `τ` a task, `c` local context, `h` Session
-history, and `ξ` the stochastic event sequence:
-
-```text
-(y, h', ξ) ~ Exec(p, τ, c, h)
-```
-
-For an evaluation distribution `D`, an optimizer may search program forms:
-
-```text
-p* = argmaxₚ E_{τ~D, ξ}[R(τ, y, ξ) - λ C(ξ) - μ L(ξ)]
-```
-
-Optimization is optional. The same representation supports invariant checks,
-behavioral comparisons, negative results, and exact inspection of generated
-programs.
-
 ## Next
 
-- [Generated Code](/docs/reference/json) specifies form compilation.
-- [Harness](/docs/runners) explains how these values interact during a Run.
+- [Generated Agents](/docs/reference/generated-agents) specifies form compilation.
+- [Runtime](/docs/runtime) explains how these values interact during a Run.

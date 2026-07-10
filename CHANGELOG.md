@@ -31,6 +31,9 @@ All notable changes are documented here, following
 
 ### Changed
 
+- Documentation is organized around Agents, Tools, Runtime, runnable examples,
+  and reference material, with model-created Agents presented as the primary
+  capability.
 - The harness now owns the model/tool loop; provider transports only translate
   model I/O.
 - Orchestration is normal Clojure control flow and Agent invocation rather than
