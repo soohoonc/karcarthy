@@ -5,7 +5,8 @@
     "quickstart",
     "agents",
     "tools",
-    "runtime",
+    "execution",
+    "integrations",
     "examples",
     "reference"
   ]

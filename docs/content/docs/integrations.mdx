@@ -1,0 +1,166 @@
+---
+title: Integrations
+description: Connect model endpoints, hosted Tools, MCP servers, ACP clients, and Harbor evaluation.
+---
+
+karcarthy's Agent and execution model is in-process Clojure. Integrations sit
+at its boundaries: model inference enters through a transport, external
+capabilities become Tools, and ACP exposes an Agent to another process.
+
+## Model endpoints
+
+The built-in Responses-compatible transport defaults to OpenAI:
+
+```clojure
+(k/defagent assistant
+  {:model {:transport :responses
+           :provider :openai
+           :id "gpt-5.6"}
+   :instructions "Answer accurately and concisely."
+   :output string?})
+```
+
+It reads `RESPONSES_API_KEY` or `OPENAI_API_KEY` unless the model config
+specifies another credential source. Streaming is enabled by default.
+
+A Responses-compatible gateway uses the same transport:
+
+```clojure
+{:transport :responses
+ :provider :anthropic
+ :id "anthropic/claude-model"
+ :base-url "https://ai-gateway.vercel.sh/v1"
+ :api-key-env "AI_GATEWAY_API_KEY"
+ :headers {"X-Application" "karcarthy"}}
+```
+
+Endpoint options include `:base-url`, `:path`, `:url`, `:api-key`,
+`:api-key-env`, `:headers`, `:auth?`, `:timeout-ms`, `:stream`, and
+`:provider-options`.
+
+Tests can replace network inference with `fake-model`:
+
+```clojure
+(def model
+  (k/fake-model
+   (fn [_]
+     {:type :final
+      :output "deterministic response"})))
+```
+
+## Provider-hosted Tools
+
+Hosted Tools are executed by the model endpoint rather than by local Clojure:
+
+```clojure
+(k/defagent researcher
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Research current information and cite sources."
+   :tools [(k/responses-web-search
+            {:search_context_size "medium"})]
+   :output string?})
+```
+
+The selected endpoint and model must support the hosted capability.
+
+## MCP
+
+Connect to a stdio MCP server:
+
+```clojure
+(def connection
+  (k/connect-mcp!
+   {:name "project"
+    :command "npx"
+    :args ["-y" "@example/project-mcp"]
+    :cwd "/workspace/project"}))
+```
+
+Adapt its discovered definitions into karcarthy Tools:
+
+```clojure
+(try
+  (let [remote-tools (k/mcp-tools connection)
+        agent (k/agent
+               {:name "project-agent"
+                :model {:transport :responses :id "gpt-5.6"}
+                :instructions "Inspect the project and answer the request."
+                :tools remote-tools
+                :output string?})]
+    (k/run! agent "Summarize the open work."))
+  (finally
+    (k/close-mcp! connection)))
+```
+
+MCP Tools use the same validation, approval, execution, and event path as local
+Tools. They request approval by default. The current client implements MCP
+`2025-11-25` over stdio.
+
+## ACP serving
+
+ACP exposes karcarthy to editors, evaluation systems, and other process-level
+clients. Serve a static Agent:
+
+```clojure
+(k/serve-acp! {:agent assistant})
+```
+
+Use a factory when the ACP session supplies the working directory, model, or
+MCP Tools:
+
+```clojure
+(defn acp-agent [{:keys [cwd mcp-tools model-id]}]
+  (k/agent
+   {:name "coding-agent"
+    :model {:transport :responses :id model-id}
+    :instructions (k/system-prompt)
+    :tools (into (conj (k/local-tools {:cwd cwd})
+                       (k/agent))
+                 mcp-tools)
+    :output string?}))
+
+(k/serve-acp! {:agent acp-agent
+               :models ["gpt-5.6" "gpt-5.5"]})
+```
+
+For stdio clients, launch a namespace var in its own process:
+
+```bash
+clojure -M -m karcarthy.acp example/acp-agent
+```
+
+The server supports initialization, new/prompt/close sessions, cancellation,
+permission requests, session model configuration, session-provided stdio MCP
+servers, streaming Agent-message chunks, Tool updates, and prompt token usage
+when every model call reports it.
+
+Do not start the default stdio server inside the same terminal REPL. Use a
+separate process or pass dedicated `:in` and `:out` streams.
+
+## Harbor evaluation
+
+Harbor's generic ACP adapter can launch a packaged karcarthy ACP command for
+each task. The adapter records the protocol exchange and writes its normal
+evaluation artifacts:
+
+```text
+acp-events.jsonl
+acp-summary.json
+trajectory.json
+```
+
+Harbor converts ACP Tool calls, observations, Agent messages, selected model,
+and reported token usage into ATIF. Task configuration, verifier output,
+rewards, and experiment storage remain Harbor concepts; karcarthy provides the
+Agent execution and ACP event stream.
+
+This keeps the homoiconic program inside the harness while giving evaluation
+infrastructure a standard process and trajectory boundary. The Run still
+retains generated source and expanded forms for experiments that want to study
+program structure.
+
+## Next
+
+- [Tools](/docs/tools) covers Tool contracts and approval.
+- [Execution](/docs/execution) covers Runs, Sessions, limits, and events.
+- [REPL example](/docs/examples/repl) shows local and live-model testing.

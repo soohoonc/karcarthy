@@ -1,17 +1,21 @@
 # karcarthy
 
-> A Clojure agent harness where models can create and run new Agents through a
-> Tool call.
+> A homoiconic Clojure agent harness where models can create and run new Agents
+> through a Tool call.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-karcarthy provides an in-process model/Tool loop, typed Tools, conversation
-Sessions, streaming events, child execution, MCP, and ACP.
+In karcarthy, an Agent is both executable Clojure and inspectable Clojure data.
+The same form can be authored by a developer, emitted by a model, macroexpanded,
+transformed, evaluated, and run.
 
-Agents are executable Clojure values. Add the built-in `agent` Tool to let a
-model submit a new Agent definition that karcarthy checks, evaluates, and runs
-inside the current execution tree.
+That homoiconic representation powers the central capability: add the built-in
+`agent` Tool to let a model submit a new Agent definition that karcarthy checks,
+evaluates, and runs inside the current execution tree.
+
+The harness also provides a model/Tool loop, typed Tools, conversation Sessions,
+streaming events, child execution, MCP, and ACP.
 
 ## Install
 
@@ -134,7 +138,8 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 - [Quickstart](docs/content/docs/quickstart.mdx)
 - [Agents](docs/content/docs/agents.mdx)
 - [Tools](docs/content/docs/tools.mdx)
-- [Runtime](docs/content/docs/runtime.mdx)
+- [Execution](docs/content/docs/execution.mdx)
+- [Integrations](docs/content/docs/integrations.mdx)
 - [Examples](docs/content/docs/examples/index.mdx)
 - [Reference](docs/content/docs/reference/index.mdx)
 
