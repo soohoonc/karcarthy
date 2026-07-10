@@ -1,26 +1,22 @@
 # karcarthy
 
-karcarthy is a small Clojure agent harness. It runs model-backed Agents,
-executes their Tools, and returns a structured Run containing output, usage,
-events, and failures.
+karcarthy is a small Clojure agent harness inspired by Lisp's homoiconicity.
+Clojure itself is the workflow engine: Agents are values and forms, and normal
+functions, macros, control flow, and concurrency compose them.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Install
+## Run the offline example
 
 JDK 21 and the Clojure CLI are required.
 
-```clojure
-{:deps
- {io.github.soohoonc/karcarthy
-  {:git/url "https://github.com/soohoonc/karcarthy"
-   :git/sha "<commit-sha>"}}
- :paths ["src"]}
+```bash
+clojure -M -m karcarthy.demo "hello"
 ```
 
-The built-in Responses transport reads `RESPONSES_API_KEY` or
-`OPENAI_API_KEY`.
+This calls a Clojure Tool through a deterministic fake model and prints
+`HELLO`. It does not require a network call.
 
 ## Define and run an Agent
 
@@ -39,20 +35,16 @@ The built-in Responses transport reads `RESPONSES_API_KEY` or
 (:output run) ;=> "..."
 ```
 
-A model-backed Agent normally receives a prompt string. Local dependencies and
-request data belong in the Run's `:context`; they are not sent to the model
-automatically.
+The built-in Responses transport reads `RESPONSES_API_KEY` or
+`OPENAI_API_KEY`.
 
 ## Add a Tool
-
-Tool inputs are structured because the model must know which arguments to
-produce:
 
 ```clojure
 (k/deftool word-count
   {:description "Count the words in text."
    :input {:type "object"
-           :properties {:text {:type "string"}}
+           :properties {"text" {:type "string"}}
            :required ["text"]
            :additionalProperties false}
    :output integer?}
@@ -60,52 +52,51 @@ produce:
   (count (re-seq #"\S+" text)))
 ```
 
-Add the Tool to an Agent with `:tools [word-count]`. Tool input and output are
-validated around every call.
+Put the Tool in an Agent with `:tools [word-count]`. The model receives its
+name, description, and schema; karcarthy validates and executes its calls.
 
-## Use Clojure for composition
-
-An Agent may have a Clojure body. Its one input value is passed through
-unchanged:
+## Make another Agent available
 
 ```clojure
-(k/defagent select-request-fields
-  {:input map? :output map?}
-  [request]
-  (select-keys request [:task :repository]))
+(k/defagent editor
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Write the answer. Ask researcher when useful."
+   :agents [researcher]
+   :output string?})
 ```
 
-Calls to `run!` start independent Runs. Use ordinary Clojure functions,
-conditionals, `future`, and `deref` to coordinate them.
+The editor's model can call `researcher`. Its output returns to the
+editor, which continues to the final answer.
 
-## Let a model create an Agent
-
-Zero-arity `(k/agent)` returns a Tool named `agent`:
+## Let a model write Clojure
 
 ```clojure
 (k/defagent architect
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions
-   "Complete the task. Create a focused Agent when specialization helps."
-   :tools [(k/agent)]
+   :instructions "Write and run a focused Agent when useful."
    :output string?})
 ```
 
-The model supplies a Clojure Agent form and an input. karcarthy reads,
-macroexpands, checks, evaluates, verifies, and runs the Agent inside the current
-Run. Authored and generated Agents use the same representation; this is the
-homoiconic motivation for the library.
+Every model Agent may submit a new `(agent ...)` form. karcarthy reads, expands,
+evaluates, verifies, and runs the resulting Agent. A generated form can use
+ordinary Clojure and call other Agents. Authored and generated orchestration
+therefore share one language and representation.
 
-## More
+The built-in `agent` Tool explains the exact grammar, when generation is
+useful, when it is unnecessary, and the model, Tool, and Agent symbols actually
+available. Its call contains the Clojure `source` and an explicit `input`.
+Generated Agents do not inherit the parent's model conversation.
 
+This executes model-authored JVM Clojure and is not a sandbox.
+
+## Documentation
+
+- [Home](docs/content/docs/index.mdx)
 - [Quickstart](docs/content/docs/quickstart.mdx)
 - [Agents](docs/content/docs/agents.mdx)
 - [Tools](docs/content/docs/tools.mdx)
-- [Running agents](docs/content/docs/running-agents.mdx)
-- [Sessions](docs/content/docs/sessions.mdx)
-- [Streaming and events](docs/content/docs/streaming.mdx)
-- [Integrations](docs/content/docs/integrations.mdx)
-- [Examples](docs/content/docs/examples/index.mdx)
+- [Running Agents](docs/content/docs/running-agents.mdx)
+- [Chat from the REPL](docs/content/docs/examples/chat.mdx)
 - [Reference](docs/content/docs/reference/index.mdx)
 
 ## Development
@@ -118,5 +109,4 @@ clojure -T:build all
 cd docs && npm ci && npm run lint && npm run types:check && npm run build
 ```
 
-The local `search` Tool additionally requires ripgrep. karcarthy is MIT
-licensed.
+karcarthy is MIT licensed.

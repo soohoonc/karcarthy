@@ -1,5 +1,6 @@
 (ns karcarthy.tools-test
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [karcarthy :as k]
             [karcarthy.tools :as tools])
@@ -22,7 +23,8 @@
     (is (some? resource))
     (when resource
       (let [template (slurp resource)]
-        (is (re-find #"## Guidelines" template))
+        (is (re-find #"## Agent programs" template))
+        (is (re-find #"## Working principles" template))
         (is (= template (k/system-prompt)))
         (is (not (re-find #"\{\{" template)))))))
 
@@ -85,7 +87,6 @@
                     :model {:id "fake" :transport model}
                     :instructions
                     (k/prompt
-                     (k/system-prompt)
                      (k/prompt-file (str (.resolve root "AGENTS.md")))
                      "Do not commit changes.")
                     :tools all-tools
@@ -97,7 +98,8 @@
                      (:instructions @seen)))
         (is (re-find #"Do not commit changes"
                      (:instructions @seen)))
-        (is (= #{"read" "write" "edit" "bash" "search"}
+        (is (str/starts-with? (:instructions @seen) (k/system-prompt)))
+        (is (= #{"read" "write" "edit" "bash" "search" "agent"}
                (->> (:tools @seen)
                     (filter #(= :function (:kind %)))
                     (map :name)

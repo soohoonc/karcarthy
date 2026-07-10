@@ -2,10 +2,11 @@
 
 karcarthy is a native Clojure agent harness. The implemented kernel includes:
 
-- Agent and Tool values that retain source and expanded forms;
+- Agent and Tool values that retain definitions and expansions;
 - a model and Tool loop with typed inputs, outputs, approvals, and events;
-- Clojure-body Agents and ordinary `run!` composition;
-- the model-facing `agent` Tool for recursive Agent creation;
+- Clojure Agent programs and ordinary `run!` composition;
+- available Agents through `:agents`;
+- recursive model-written Agents by default;
 - Responses-compatible complete and streaming inference;
 - local, hosted, and MCP Tools;
 - conversation Sessions;
@@ -33,5 +34,5 @@ karcarthy is a native Clojure agent harness. The implemented kernel includes:
 - no EDN or JSON orchestration language;
 - no workflow-node interpreter;
 - no separate dynamic-workflow feature;
-- no second child-call API alongside `run!` and Agent Tools;
+- no second child-call API alongside `run!` and `:agents`;
 - no requirement that an experiment demonstrate improvement.

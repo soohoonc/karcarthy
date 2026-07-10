@@ -1,10 +1,11 @@
 (ns karcarthy.core
-  "The karcarthy kernel: executable Agents and Tools, a native model/tool loop,
-  structured child Agents, contracts, limits, and observation."
+  "The karcarthy kernel: executable Agents and Tools, the model/Tool loop,
+  contracts, limits, and observation."
   (:refer-clojure :exclude [agent await run!])
   (:require [clojure.data.json :as json]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [karcarthy.prompt :as prompt]
             [karcarthy.session :as session])
   (:import [java.util UUID]
            [java.util.concurrent Callable ExecutionException Executors Future
@@ -200,8 +201,9 @@
 ;; ---------------------------------------------------------------------------
 
 (def ^:private agent-config-keys
-  #{:name :description :model :instructions :context :input :tools :output
-    :output-schema :max-turns :stop-when :guardrails :limits :metadata})
+  #{:name :description :model :instructions :context :input :input-schema
+    :tools :agents :output :output-schema :max-turns :stop-when :guardrails
+    :limits :metadata})
 
 (def ^:private tool-config-keys
   #{:name :description :input :input-schema :output :output-schema :approval
@@ -228,9 +230,9 @@
 
 (defn make-agent
   "Implementation constructor used by `agent` and `defagent`."
-  ([config source-form expanded-form program]
-   (make-agent config source-form expanded-form program nil))
-  ([config source-form expanded-form program definition-ns]
+  ([config definition expansion program]
+   (make-agent config definition expansion program nil))
+  ([config definition expansion program definition-ns]
    (when-not (map? config)
      (fail! :contract :configuration "Agent configuration must be a map"
             {:value config}))
@@ -241,14 +243,15 @@
    (when (and (nil? program)
               (or (nil? (:model config)) (nil? (:instructions config))))
      (fail! :contract :configuration
-            "A model-backed Agent requires :model and :instructions"
+            (str "An Agent without a Clojure program requires "
+                 ":model and :instructions")
             {:name (:name config)}))
    {:karcarthy/type :agent
     :name (:name config)
     :config config
     :definition-ns definition-ns
-    :source-form source-form
-    :expanded-form expanded-form
+    :definition definition
+    :expansion expansion
     :body program}))
 
 (defn- body-function-form [label bindings body]
@@ -263,17 +266,14 @@
        ~@body)))
 
 (defmacro agent
-  "With no arguments, return the model-facing Agent capability. With a config,
-  construct an executable Agent. A configured Agent with no body uses the
+  "Construct an executable Agent. A configured Agent with no body uses the
   native model/tool loop; `[input] body ...` supplies a Clojure program."
-  ([]
-   `(karcarthy.core/agent-capability))
-  ([config & body]
-   (let [source &form
-         program (when (seq body)
-                   (body-function-form "agent" (first body) (next body)))
-         expansion `(karcarthy.core/make-agent ~config '~source nil ~program '~(ns-name *ns*))]
-     `(karcarthy.core/make-agent ~config '~source '~expansion ~program '~(ns-name *ns*)))))
+  [config & body]
+  (let [source &form
+        program (when (seq body)
+                  (body-function-form "agent" (first body) (next body)))
+        expansion `(karcarthy.core/make-agent ~config '~source nil ~program '~(ns-name *ns*))]
+    `(karcarthy.core/make-agent ~config '~source '~expansion ~program '~(ns-name *ns*))))
 
 (defmacro defagent
   "Define a var containing an Agent. The symbol supplies the default :name."
@@ -300,15 +300,19 @@
        (map? (:config x))
        (or (nil? (:body x)) (fn? (:body x)))))
 
-(defn source-form [agent-or-tool]
-  (:source-form agent-or-tool))
+(defn definition
+  "Return the Clojure definition that created an Agent or Tool."
+  [agent-or-tool]
+  (:definition agent-or-tool))
 
-(defn expanded-form [agent-or-tool]
-  (:expanded-form agent-or-tool))
+(defn expansion
+  "Return the macroexpanded Clojure definition for an Agent or Tool."
+  [agent-or-tool]
+  (:expansion agent-or-tool))
 
 (defn make-tool
   "Implementation constructor used by `tool` and `deftool`."
-  [config source-form expanded-form execute]
+  [config definition expansion execute]
   (when-not (map? config)
     (fail! :contract :configuration "Tool configuration must be a map"
            {:value config}))
@@ -326,8 +330,8 @@
    :name (:name config)
    :description (:description config)
    :config config
-   :source-form source-form
-   :expanded-form expanded-form
+   :definition definition
+   :expansion expansion
    :execute execute})
 
 (defmacro tool
@@ -386,32 +390,179 @@
 (def ^:private agent-request-schema
   {:type "object"
    :properties
-   {"source" {:type "string"
-              :description "Exactly one Clojure (agent ...) form."}
-    "input" {:description "The input passed to the generated Agent."}}
+   {"source"
+    {:type "string"
+     :description
+     (str "Exactly one complete Clojure (agent ...) form following the "
+          "generation grammar in this Tool description.")}
+    "input"
+    {:description
+     (str "The complete input value passed to the generated Agent. Include "
+          "all task-specific information it needs.")}}
    :required ["source" "input"]
    :additionalProperties false})
 
+(def ^:private generated-symbol-reservations
+  #{"agent" "tool" "run!" "context" "model!" "emit!" "definition"
+    "expansion" "compile-agent!"})
+
+(defn- generated-symbol [kind value-name]
+  (let [clean (-> (str value-name)
+                  (str/replace #"[^A-Za-z0-9*+!_?.-]+" "-")
+                  (str/replace #"^-+|-+$" ""))
+        clean (if (or (str/blank? clean)
+                      (re-find #"^[0-9]" clean)
+                      (contains? generated-symbol-reservations clean))
+                (str (name kind) "-" (if (str/blank? clean) "value" clean))
+                clean)]
+    (symbol clean)))
+
+(defn- hosted-tool-name [hosted]
+  (let [spec (:spec hosted)]
+    (or (:name spec) (get spec "name")
+        (:type spec) (get spec "type")
+        "hosted-tool")))
+
+(defn- capability-entry [kind value]
+  (let [config (:config value)
+        value-name (case kind
+                     :agent (:name value)
+                     :tool (:name value)
+                     :hosted-tool (hosted-tool-name value))
+        description
+        (case kind
+          :agent (or (:description config) "No description provided.")
+          :tool (or (:description value) "No description provided.")
+          :hosted-tool "Provider-hosted capability.")
+        schema
+        (case kind
+          :agent (or (:input-schema config)
+                     (contract->json-schema (:input config)))
+          :tool (or (:input-schema config)
+                    (contract->json-schema (:input config)))
+          :hosted-tool (:spec value))]
+    {:kind kind
+     :name (str value-name)
+     :symbol (generated-symbol kind value-name)
+     :description description
+     :schema schema
+     :value value}))
+
+(defn- capability-entries [tools agents]
+  (let [entries
+        (concat
+         (map #(capability-entry (if (hosted-tool? %) :hosted-tool :tool) %)
+              tools)
+         (map #(capability-entry :agent %) agents))
+        duplicate-symbols
+        (->> entries
+             (map :symbol)
+             frequencies
+             (keep (fn [[sym n]] (when (> n 1) sym)))
+             sort
+             vec)]
+    (when (seq duplicate-symbols)
+      (fail! :contract :configuration
+             "Available Tools and Agents produce duplicate Clojure symbols"
+             {:symbols duplicate-symbols}))
+    (vec entries)))
+
+(defn- model-source-config [model]
+  (when (map? model)
+    (let [config (select-keys model [:transport :provider :id :reasoning])]
+      (cond-> config
+        (not (keyword? (:transport config))) (dissoc :transport)))))
+
+(defn- catalog-lines [kinds entries]
+  (let [kinds (if (set? kinds) kinds #{kinds})
+        entries (filter #(contains? kinds (:kind %)) entries)]
+    (if (seq entries)
+      (str/join
+       "\n"
+       (map (fn [{:keys [name symbol description schema]}]
+              (str "- `" symbol "` (model name `" name "`) — " description
+                   (when schema (str " Input: `" (pr-str schema) "`"))))
+            entries))
+      "- None.")))
+
+(defn- agent-capability-description [model entries]
+  (let [model-config (model-source-config model)]
+    (prompt/agent-tool-prompt
+     {:model-configuration
+      (if (seq model-config)
+        (str "```clojure\n" (pr-str model-config) "\n```")
+        (str "No reusable printable model configuration is available. Use a "
+             "Clojure-program Agent or an explicitly configured model."))
+      :tools (catalog-lines #{:tool :hosted-tool} entries)
+      :agents (catalog-lines :agent entries)})))
+
 (defn ^:no-doc agent-capability
-  "Implementation of zero-arity `(agent)`: a Tool that evaluates and runs
-  another ordinary Agent form in the current run tree."
-  []
-  (make-tool
-   {:name "agent"
-    :description
-    (str "Define and run an Agent. Provide exactly one Clojure (agent ...) "
-         "form as source and the value to pass to it as input.")
-    :input agent-request-schema
-    :input-schema agent-request-schema
-    :output any?
-    :approval :never}
-   '(agent)
-   '(karcarthy.core/agent-capability)
-   (fn [rt {:keys [source input]}]
-     (let [compile-agent! (requiring-resolve
-                           'karcarthy.eval/compile-agent-in-run!)
-           child (compile-agent! rt source)]
-       (run-agent! rt child input {})))))
+  "Tool that evaluates and runs an Agent definition in the current Run."
+  [model tools agents]
+  (let [entries (capability-entries tools agents)
+        bindings (into {} (map (juxt :symbol :value)) entries)]
+    (make-tool
+     {:name "agent"
+      :description (agent-capability-description model entries)
+      :input agent-request-schema
+      :input-schema agent-request-schema
+      :output any?
+      :approval :never}
+     '(agent)
+     '(karcarthy.core/agent-capability)
+     (fn [rt {:keys [source input]}]
+       (let [compile-agent! (requiring-resolve
+                             'karcarthy.eval/compile-agent-in-run!)
+             generated (compile-agent!
+                        (assoc rt :evaluation-bindings bindings)
+                        source)]
+         (run-agent! rt generated input {}))))))
+
+(def ^:private agent-call-schema
+  {:type "object"
+   :properties
+   {"input" {:description "The complete input value passed to this Agent."}}
+   :required ["input"]
+   :additionalProperties false})
+
+(defn- object-schema? [schema]
+  (contains? #{"object" :object}
+             (or (:type schema) (get schema "type"))))
+
+(defn- agent-tool
+  [agent]
+  (when-not (agent? agent)
+    (fail! :contract :configuration
+           "Agent :agents must contain Agent values"
+           {:value agent}))
+  (let [config (:config agent)
+        schema (or (:input-schema config)
+                   (contract->json-schema (:input config)))
+        structured-input? (object-schema? schema)
+        tool-schema (if structured-input? schema agent-call-schema)
+        tool-input (if structured-input?
+                     (or (:input config) any?)
+                     agent-call-schema)]
+    (make-tool
+     {:name (:name agent)
+      :description
+      (str (or (:description config)
+               (str "Ask " (:name agent) " to complete a task."))
+           " This Agent starts without the parent conversation and receives "
+           (if structured-input?
+             "the Tool input object directly."
+             "only the value in the `input` field.")
+           " Its final output returns as the Tool result.")
+      :input tool-input
+      :input-schema tool-schema
+      :output (:output config)
+      :approval :never}
+     nil
+     nil
+     (fn [rt input]
+       (run-agent! rt agent
+                   (if structured-input? input (:input input))
+                   {})))))
 
 ;; ---------------------------------------------------------------------------
 ;; Run context, limits, and observation
@@ -430,7 +581,7 @@
   #{:context :session :limits :observe :approval :cancel :metadata
     :model-transports :evaluation-namespace})
 
-(def ^:private child-option-keys #{:context :limits})
+(def ^:private agent-call-option-keys #{:context :limits})
 
 (defn- validate-limits!
   [limits]
@@ -895,15 +1046,47 @@
              {:value resolved}))
     resolved))
 
+(defn- model-instructions! [rt value]
+  (let [base (prompt/system-prompt)
+        configured (instructions! rt value)]
+    (if (str/starts-with? configured base)
+      configured
+      (str base "\n\n## Agent instructions\n\n" configured))))
+
+(defn- unique-tools! [tools]
+  (let [duplicates (->> tools
+                        (filter tool?)
+                        (map :name)
+                        frequencies
+                        (keep (fn [[name n]] (when (> n 1) name)))
+                        sort
+                        vec)]
+    (when (seq duplicates)
+      (fail! :contract :configuration
+             "Agent contains duplicate Tool or Agent names"
+             {:names duplicates}))
+    tools))
+
 (defn- default-loop!
   [rt agent input]
   (let [config (:config agent)
         max-turns (or (:max-turns config) 20)
-        tools-value (:tools config)
-        tools (vec (or (resolve-value tools-value rt) []))
-        tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
-        instructions (instructions! rt (:instructions config))
         model (resolve-value (:model config) rt)
+        tools-value (:tools config)
+        direct-tools (vec (or (resolve-value tools-value rt) []))
+        agents-value (:agents config)
+        available-agents (vec (or (resolve-value agents-value rt) []))
+        _ (doseq [tool direct-tools]
+            (when-not (or (tool? tool) (hosted-tool? tool))
+              (fail! :tool :configuration
+                     "Agent :tools must contain Tool values"
+                     {:value tool})))
+        known-agent-tools (mapv agent-tool available-agents)
+        tools (unique-tools!
+               (conj (into direct-tools known-agent-tools)
+                     (agent-capability model direct-tools available-agents)))
+        tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
+        instructions (model-instructions! rt (:instructions config))
         prior (session-items! (:session rt))
         user-message {:role :user :content input}
         messages (conj prior user-message)]
@@ -981,7 +1164,7 @@
   (when-not (agent? agent)
     (fail! :contract :agent "run! requires an Agent" {:value agent}))
   (let [options (or options {})]
-    (reject-unknown! "Child Agent options" child-option-keys options))
+    (reject-unknown! "Nested Agent options" agent-call-option-keys options))
   (let [depth (inc (:depth parent-rt))
         limits (validate-limits!
                 (narrower-limits (:limits parent-rt)
@@ -1044,34 +1227,6 @@
             (fail! :program :execute (or (ex-message t) (str t))
                    {:agent (:name agent)} t)))))))
 
-(defn as-tool
-  "Project an Agent as a Tool while the parent remains active.
-
-  Options may override `:name`, `:description`, `:input`, `:output`, and
-  `:approval`. A `:context` function receives `[parent-context tool-input]`
-  and returns the local context for the nested Agent."
-  ([agent] (as-tool agent {}))
-  ([agent options]
-   (when-not (agent? agent)
-     (fail! :contract :tool "as-tool requires an Agent" {:value agent}))
-   (let [agent-config (:config agent)
-         config {:name (or (:name options) (:name agent))
-                 :description (or (:description options)
-                                  (:description agent-config)
-                                  (str "Invoke Agent " (:name agent)))
-                 :input (or (:input options) (:input agent-config) any?)
-                 :output (or (:output options) (:output agent-config))
-                 :approval (or (:approval options) :never)}]
-     (make-tool config
-                `(as-tool ~(source-form agent) ~options)
-                nil
-                (fn [rt input]
-                  (run-agent! rt agent input
-                              (cond-> {}
-                                (:context options)
-                                (assoc :context ((:context options)
-                                                 (context rt) input)))))))))
-
 (defn run!
   "Start a root Run, call an Agent, and return the complete Run value."
   ([agent input]
@@ -1115,11 +1270,14 @@
              :executor executor
              :semaphore (Semaphore. (int (:parallelism limits)) true)
              :deadline-ns deadline-ns
-             :evaluation-namespace
+             :evaluation-parent-namespace
              (or (:evaluation-namespace options)
-                 (:definition-ns agent)
-                 (symbol (str "karcarthy.generated.run_"
-                              (str/replace run-id "-" "_"))))}]
+                 (:definition-ns agent))
+             :evaluation-namespace
+             (symbol
+              (str (or (:evaluation-namespace options) 'karcarthy.generated)
+                   ".run_" (str/replace run-id "-" "_")))
+             :evaluation-counter (atom 0)}]
      (emit! rt {:type :run/started :agent (:name agent) :input input})
      (try
        (let [output (run-agent! rt agent input {})

@@ -1,11 +1,10 @@
 ---
 title: Data model
-description: Agent, Tool, Session, Run, event, limit, and failure values.
+description: Agent, Tool, Run, Session, event, and failure values.
 ---
 
-karcarthy values are ordinary Clojure values. Agent and Tool values may contain
-functions and compiled code; Run events and outputs can be projected to an
-external serialization format by the application.
+karcarthy values are ordinary Clojure data. Agent and Tool values also contain
+functions, so applications choose how to project them into an external format.
 
 ## Agent
 
@@ -14,31 +13,18 @@ external serialization format by the application.
  :name "researcher"
  :config {...}
  :definition-ns 'example.research
- :source-form '(agent {...})
- :expanded-form '(...)
+ :definition '(agent {...})
+ :expansion '(...)
  :body nil}
 ```
 
-The public configuration surface is:
+The public config keys are `:name`, `:description`, `:model`, `:instructions`,
+`:context`, `:input`, `:input-schema`, `:tools`, `:agents`, `:output`,
+`:output-schema`, `:max-turns`, `:stop-when`, `:guardrails`, `:limits`, and
+`:metadata`.
 
-| Key | Meaning |
-| --- | --- |
-| `:name` | Stable identifier; `defagent` supplies it from the symbol. |
-| `:description` | Human- and model-facing description. |
-| `:model` | Model identifier and adapter-specific options, or a resolver function. |
-| `:instructions` | Model-visible string or resolver function returning a string. |
-| `:context` | Contract for the local, non-model-visible context value. |
-| `:input` | Optional contract for the value passed to the Agent. Usually `string?` for a model-backed Agent; arbitrary for a Clojure body. |
-| `:tools` | Tool values or a resolver function. |
-| `:output` | Agent output contract. |
-| `:output-schema` | Explicit model-facing JSON Schema. |
-| `:max-turns` | Maximum model turns; defaults to 20. |
-| `:stop-when` | Predicate accepting call metadata and final-response data. |
-| `:guardrails` | Input and output guardrail functions. |
-| `:limits` | Limits narrower than the current Run's grant. |
-| `:metadata` | Application metadata retained in configuration. |
-
-A custom-body Agent may omit `:model` and `:instructions`.
+`definition` and `expansion` are retained for program analysis. `body` is nil
+for the normal model loop and a compiled function for a Clojure Agent program.
 
 ## Tool
 
@@ -47,66 +33,13 @@ A custom-body Agent may omit `:model` and `:instructions`.
  :name "web-search"
  :description "Search the web."
  :config {...}
- :source-form '(tool {...} [input] ...)
- :expanded-form '(...)
+ :definition '(tool {...} [input] ...)
+ :expansion '(...)
  :execute #object[clojure.lang.IFn ...]}
 ```
 
-Tool input is validated before approval and the call. Tool output is
-validated before it becomes visible to the model. `:to-model-output` may
-project a rich application result into a smaller model-visible value.
-
-## Dynamic configuration
-
-Dynamic instructions, model and Tool resolvers, and guardrails receive an
-immutable map describing the current Agent call:
-
-```clojure
-{:run-id "run_..."
- :agent-id "agent_..."
- :parent-id "agent_..."
- :depth 1
- :context {...}
- :limits {...}
- :usage {...}
- :agent agent}
-```
-
-Agent and Tool bodies do not receive this map. They use `context`, `model!`,
-`emit!`, and `compile-agent!` directly.
-
-## Session
-
-A Session implements `karcarthy.session/Session`:
-
-```clojure
-(session-id session)       ; stable string
-(get-items session)        ; chronological messages
-(add-items! session items) ; append
-(pop-item! session)        ; remove newest
-(clear-session! session)   ; remove all
-```
-
-Stored items are normalized message maps with roles such as `:user`,
-`:assistant`, and `:tool`. A Session stores conversation history; it does not
-serialize in-flight Run stacks or arbitrary effects. `memory-session` stores a
-vector in an atom; durable implementations choose their own storage.
-
-## Limits
-
-```clojure
-{:model-calls 100
- :input-tokens 1000000
- :output-tokens 100000
- :agent-depth 8
- :parallelism 6
- :generated-forms 20
- :deadline-ms 300000}
-```
-
-Limits and usage counters are shared by Agents entered through `as-tool` or the
-model-facing `(agent)` Tool. A separate `run!` call starts a separate Run. A
-child inside a Run may lower inherited ceilings but cannot raise them.
+Tool input is validated before execution. Tool output is validated before it
+is returned to the model.
 
 ## Run
 
@@ -114,53 +47,53 @@ child inside a Run may lower inherited ceilings but cannot raise them.
 {:karcarthy/type :run
  :id "run_..."
  :status :completed
- :agent "research-team"
- :input {...}
- :output {...}
- :usage {:model-calls 7
-         :input-tokens 42000
-         :output-tokens 3900
+ :agent "researcher"
+ :input "question"
+ :output "answer"
+ :usage {:model-calls 3
+         :input-tokens 12000
+         :output-tokens 900
          :generated-forms 1
-         :duration-ms 12800}
+         :duration-ms 4200.0}
  :events [...]
  :error nil}
 ```
 
-`status` is `:completed`, `:failed`, or `:cancelled`. Completion means the
-output passed the harness contracts and guardrails; an external evaluator may
-still score it poorly.
+Status is `:completed`, `:failed`, or `:cancelled`. Completion means the
+harness contracts passed; an external evaluator may still score the behavior
+poorly.
 
-The Run `id` joins its events. A caller-owned Session holds conversation
-history across Runs.
+## Session
+
+A Session implements `karcarthy.session/Session`:
+
+```clojure
+(session-id session)
+(get-items session)
+(add-items! session items)
+(pop-item! session)
+(clear-session! session)
+```
+
+It stores chronological conversation messages across Runs. It is not a Run
+checkpoint or general application-state store.
 
 ## Events
 
-Every event contains `:type`, `:time-ms`, and `:run-id`. Agent-specific events
-also carry `:agent-id`, `:parent-id`, and `:depth`; Tool events may carry a
-`:tool-call-id`.
-
-Stable event families include:
+Every event has `:type`, `:time-ms`, and `:run-id`. Agent events add
+`:agent-id`, `:parent-id`, and `:depth`; Tool events may add `:tool-call-id`.
 
 ```clojure
 :run/started          :run/completed       :run/failed
 :run/cancelled
-
 :agent/started        :agent/completed     :agent/failed
-
-:model/requested      :model/text-delta    :model/tool-call-delta
-:model/stream-event   :model/completed     :model/failed
-
-:tool/approval-requested  :tool/approval-resolved
-:tool/approval-reused
+:model/requested      :model/text-delta    :model/completed
+:model/failed
 :tool/started         :tool/completed      :tool/failed
-
 :session/updated
-
 :program/read         :program/expanded    :program/checked
 :program/evaluated    :program/failed
 ```
-
-The Run's `:observe` callback receives events as they occur.
 
 ## Failure
 
@@ -173,12 +106,5 @@ The Run's `:observe` callback receives events as they occur.
  :recoverable? false}
 ```
 
-Failures cover reading, expansion, evaluation, instructions, Sessions,
-contracts, models, Tools, guardrails, approvals, budgets, deadlines,
-cancellation, and custom programs. Failed and cancelled Runs retain failure
-data and events but have no output.
-
-## Next
-
-- [Generated Agents](/docs/reference/generated-agents) specifies form compilation.
-- [Running agents](/docs/running-agents) explains how these values interact.
+Failed and cancelled Runs retain their events and failure data but have no
+output.

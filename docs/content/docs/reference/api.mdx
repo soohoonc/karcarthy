@@ -1,31 +1,28 @@
 ---
 title: Library API
-description: Macros and functions for the native Clojure Agent harness.
+description: The public karcarthy API.
 ---
 
-The common API is exposed from `(require '[karcarthy :as k])`.
+```clojure
+(require '[karcarthy :as k])
+```
 
-## Agents
-
-### `agent`
+## `agent` and `defagent`
 
 ```clojure
 (k/agent config)
 (k/agent config [input] body ...)
-(k/agent)
+
+(k/defagent name config)
+(k/defagent name config [input] body ...)
 ```
 
-With a config, constructs an Agent value and retains its original and expanded
-forms. Without a body, the Agent uses the standard model/Tool loop. A
-model-backed Agent requires `:name`, `:model`, and `:instructions`. A custom-body
-Agent requires `:name` but may omit model configuration.
+Both forms create an Agent. `defagent` defines a var and supplies `:name` from
+its symbol. `agent` creates a value and requires `:name` in the config.
 
-With no arguments, returns the model-facing `agent` Tool. That Tool accepts
-`{:source <one (agent ...) form> :input <value>}`, compiles the form, verifies
-that it produced an Agent, and runs it in the current Run. See
-[Let the model define an Agent](/docs/agents#let-the-model-define-an-agent).
-
-Supported configuration keys are:
+Without a body, an Agent requires `:model` and `:instructions` and uses the
+model/Tool loop. With `[input] body ...`, the Clojure program computes its
+output directly.
 
 ```clojure
 {:name "researcher"
@@ -34,7 +31,9 @@ Supported configuration keys are:
  :instructions "Research carefully."
  :context map?
  :input string?
+ :input-schema {...}
  :tools [search-tool]
+ :agents [fact-checker]
  :output ::report
  :output-schema {...}
  :max-turns 20
@@ -44,85 +43,50 @@ Supported configuration keys are:
  :metadata {...}}
 ```
 
-`:model`, `:instructions`, and `:tools` may be functions of immutable call
-metadata. Instructions must resolve to a string. `:context` validates the local
-context value; it is not model-visible prompt text.
+`:model`, `:instructions`, `:tools`, and `:agents` may be functions of the
+current call metadata. Instructions must resolve to a string and are appended
+to the packaged base system prompt automatically.
 
-For a model-backed Agent, the `run!` input is normally a prompt string. A
-Clojure-body Agent receives its input unchanged. `:input` optionally validates
-that boundary in either case.
+`:agents` makes those Agents callable by the model. An object-shaped
+`:input-schema` or `:input` becomes the callable schema; otherwise the model
+calls the Agent with `{"input": ...}`.
 
-### `defagent`
-
-```clojure
-(k/defagent name config)
-(k/defagent name config [input] body ...)
-```
-
-Defines a var containing an Agent. The symbol supplies the default `:name`.
-This is definition syntax for the same value constructed by `agent`, not a
-different Agent type.
-
-### Inspection
+Every model Agent may submit a new Clojure `agent` form and run the resulting
+Agent inside the current Run.
 
 ```clojure
 (k/agent? value)
-(k/source-form agent)
-(k/expanded-form agent)
+(k/definition agent)
+(k/expansion agent)
 ```
 
-## Tools
+`definition` and `expansion` expose the retained Clojure forms for tooling and
+experiments. They are not needed to run an Agent.
 
-### `tool` and `deftool`
+## `tool` and `deftool`
 
 ```clojure
 (k/tool config [input] body ...)
 (k/deftool name config [input] body ...)
 ```
 
-A Tool requires `:name`, `:description`, and `:input`. `deftool` supplies the
-name from its symbol. Optional keys are `:input-schema`, `:output`,
-`:output-schema`, `:approval`, `:enabled?`, `:guardrails`, `:timeout-ms`,
-`:retry`, `:to-model-output`, and `:metadata`.
-
-Tool arguments are validated before approval and the call. Tool results are
-validated before they are returned to the model. `tool?` identifies Tool
-values. Tool bodies have exactly one `[input]` binding.
-
-### Hosted tools
+A Tool requires `:name`, `:description`, and `:input`; `deftool` supplies the
+name. Optional keys are `:input-schema`, `:output`, `:output-schema`,
+`:approval`, `:enabled?`, `:guardrails`, `:timeout-ms`, `:retry`,
+`:to-model-output`, and `:metadata`.
 
 ```clojure
-(k/hosted-tool :responses {:type "web_search"})
-(k/responses-web-search)
-(k/responses-web-search {:search_context_size "low"})
+(k/tool? value)
 ```
 
-A hosted Tool is executed by its matching provider endpoint, not by local
-Clojure code. `hosted-tool?` identifies this value.
-
-### `as-tool`
-
-```clojure
-(k/as-tool agent)
-(k/as-tool agent options)
-```
-
-Projects an Agent as a Tool while the parent retains control. Options may
-override `:name`, `:description`, `:input`, `:output`, and `:approval`. A
-`:context` function receives the parent context and Tool input and returns the
-local context for the nested Agent.
-
-## Running agents
-
-### `run!`
+## `run!`
 
 ```clojure
 (k/run! agent input)
 (k/run! agent input options)
 ```
 
-Starts a root Run, validates local context and Agent input, calls the Agent,
-and returns a Run value.
+Starts a Run and returns its complete result.
 
 ```clojure
 {:context {...}
@@ -136,28 +100,12 @@ and returns a Run value.
  :evaluation-namespace 'example.generated}
 ```
 
-Runs are stateless unless `:session` is supplied.
-
-### Run from an Agent body
-
-```clojure
-(def other-run (k/run! other-agent input))
-(:output other-run)
-```
-
-Agent bodies use the same `run!` function as application code. Each call starts
-a complete, independent Run with separate limits, events, context, Session, and
-cancellation. Clojure's normal functions, conditionals, `future`, and `deref`
-provide composition. Agents entered through `as-tool` or `(agent)` instead
-remain inside the current Run.
-
-### `context`
+`context` returns the current Run's local dependency value from a Tool or
+Clojure Agent program:
 
 ```clojure
 (k/context)
 ```
-
-Returns the local, non-model-visible context value for the current Agent call.
 
 ## Sessions
 
@@ -173,64 +121,36 @@ Returns the local, non-model-visible context value for the current Agent call.
 (k/clear-session! session)
 ```
 
-A Session is an ordered conversation store shared across root Agent runs.
-`memory-session` is thread-safe and process-local. Durable stores implement the
-`karcarthy.session/Session` protocol; karcarthy does not impose a file or
-database format.
+`memory-session` is thread-safe and process-local. Durable stores implement
+`karcarthy.session/Session`.
 
-## Instructions and prompts
+## Prompts
 
 ```clojure
-(def instructions
-  (k/prompt
-   (k/system-prompt)
-   (k/prompt-file "AGENTS.md")
-   (fn [{:keys [context]}]
-     (str "Current user: " (:user-id context)))))
+(k/prompt "Base instructions" (k/prompt-file "AGENTS.md"))
+(k/system-prompt)
 ```
 
-`prompt` joins strings and call-metadata functions. Each function returns a
-string or nil. `prompt-file` reads the named UTF-8 file. `system-prompt` reads
-the packaged `resources/karcarthy/system.md`.
+`prompt` joins strings and call-metadata functions. `prompt-file` reads UTF-8
+text. `system-prompt` reads `resources/karcarthy/system.md`; karcarthy already
+prepends that file to every model Agent, so applications normally use the
+function only to inspect it or for explicit prompt composition.
 
 ## Generated Agents
 
 ```clojure
 (def form (k/read-agent-form source))
 (def checked (k/check-agent-form! form))
-(def agent (k/eval-agent-form! checked))
-(def agent (k/compile-agent! source))
+(def generated (k/eval-agent-form! checked))
+
+;; Read, expand, evaluate, and verify in one call:
+(def generated (k/compile-agent! source))
 ```
 
-`read-agent-form` reads one form with reader evaluation disabled.
-`check-agent-form!` macroexpands executable positions in the current Run's
-evaluation namespace. `eval-agent-form!` intentionally evaluates the checked
-form as JVM Clojure and verifies the resulting Agent. `compile-agent!` composes
-the three phases and emits program lifecycle events. See
-[Generated Agents](/docs/reference/generated-agents).
+These functions must run from an Agent program because compilation is charged
+to the current Run. See [Generated Agents](/docs/reference/generated-agents).
 
-## Model access
-
-### `model!`
-
-```clojure
-(k/model! normalized-request)
-```
-
-Calls the active model transport for a custom Agent body. Most Agents use the
-standard loop or run another model-backed Agent.
-
-### `fake-model`
-
-```clojure
-(k/fake-model (fn [request] {:type :final :output "done"}))
-```
-
-Creates a deterministic in-process model for tests and examples.
-
-### Responses-compatible model
-
-`:transport :responses` selects the built-in HTTP/SSE adapter:
+## Models
 
 ```clojure
 {:transport :responses
@@ -238,96 +158,67 @@ Creates a deterministic in-process model for tests and examples.
  :id "gpt-5.6"}
 ```
 
-A Responses-compatible gateway changes endpoint and credentials without
-changing harness semantics:
-
-```clojure
-{:transport :responses
- :provider :anthropic
- :id "anthropic/claude-model"
- :base-url "https://ai-gateway.vercel.sh/v1"
- :api-key-env "AI_GATEWAY_API_KEY"
- :headers {"X-Application" "karcarthy"}}
-```
-
-Supported endpoint options include `:base-url`, `:path`, `:url`, `:api-key`,
+The Responses transport supports `:base-url`, `:path`, `:url`, `:api-key`,
 `:api-key-env`, `:headers`, `:auth?`, `:timeout-ms`, `:stream`, and
-`:provider-options`. Direct OpenAI uses `RESPONSES_API_KEY` or
-`OPENAI_API_KEY` when no credential option is supplied.
+`:provider-options`. Direct OpenAI calls read `RESPONSES_API_KEY` or
+`OPENAI_API_KEY` by default.
 
-## Local capabilities
+Use a deterministic model in tests:
 
 ```clojure
-(def tools (k/local-tools {:cwd "/workspace"}))
+(k/fake-model (fn [request] {:type :final :output "done"}))
 ```
 
-Returns ordinary `read`, `write`, `edit`, `bash`, and `search` Tools. Options
-configure approval and output/time bounds. `search` requires ripgrep. `bash`
-is not a sandbox.
-
-## MCP
+`model!` calls the active transport from a Clojure Agent program:
 
 ```clojure
+(k/model! normalized-request)
+```
+
+## Tools supplied by integrations
+
+```clojure
+(k/responses-web-search)
+(k/local-tools {:cwd "/workspace"})
+
 (def connection
   (k/connect-mcp! {:name "server"
                    :command "server-command"
-                   :args ["--stdio"]
-                   :cwd "/workspace"}))
+                   :args ["--stdio"]}))
 (def tools (k/mcp-tools connection))
 (k/close-mcp! connection)
 ```
 
-The client implements MCP `2025-11-25` over stdio. `mcp-tools` accepts
-`:prefix` and `:approval`; approval defaults to `:always`. Commands execute
-directly rather than through a shell. Always close the connection.
+`local-tools` supplies `read`, `write`, `edit`, `bash`, and `search`. MCP uses
+stdio and must be closed by the caller.
 
 ## ACP
 
 ```clojure
+(k/serve-acp! {:agent assistant})
+```
+
+Or provide an Agent factory:
+
+```clojure
 (k/serve-acp!
- {:models ["gpt-5.6" "gpt-5.5"]
+ {:models ["gpt-5.6"]
   :agent (fn [{:keys [cwd mcp-tools model-id]}]
            (k/agent
             {:name "acp-agent"
              :model {:transport :responses :id model-id}
-             :instructions (k/system-prompt)
+             :instructions "Complete the coding request."
              :tools (into (k/local-tools {:cwd cwd}) mcp-tools)
              :output string?}))})
 ```
 
-Serves ACP v1 over stdio or supplied `:in` and `:out` streams. A factory
-receives `{:cwd ... :mcp-tools ... :session-id ... :model-id ...}` and returns
-an Agent. For a static Agent, its configured model ID is advertised
-automatically. `:models` adds selectable model IDs; `:run-options` supplies base
-Run options.
-
-Model selection uses ACP session configuration options. The prompt response
-includes `inputTokens`, `outputTokens`, and `totalTokens` aggregated across the
-Run's model calls when each call reported usage. The field is currently marked
-unstable by ACP. Tool updates carry standard ACP content as well as raw inputs
-and outputs. Harbor's generic ACP adapter can convert these events into ATIF.
-
-```bash
-clojure -M -m karcarthy.acp your.namespace/agent-var
-```
-
-## Events
+## Events and contracts
 
 ```clojure
 (k/emit! {:type :application/decision :value value})
 (k/events run)
-```
 
-`emit!` adds Run and Agent lineage, records the event, and calls the Run's
-`:observe` function. `events` returns recorded events from a Run.
-
-## Contracts
-
-```clojure
 (k/contract-valid? contract value)
 (k/explain-contract contract value)
 (k/contract->json-schema contract)
 ```
-
-Contracts support Clojure specs, predicates, classes, sets, and basic JSON
-Schema. See [Data model](/docs/reference/schema) for the value shapes.

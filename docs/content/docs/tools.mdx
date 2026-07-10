@@ -1,19 +1,16 @@
 ---
 title: Tools
-description: Define typed capabilities that a model can call.
+description: Define Clojure functions that a model can call.
 ---
 
-A Tool is a model-callable function. Unlike an Agent prompt, a Tool input is
-intentionally structured: its schema tells the model which arguments to
-produce and lets karcarthy validate them before execution.
-
-## Define a Tool
+A Tool is a Clojure function with a model-visible name, description, and input
+schema.
 
 ```clojure
 (k/deftool lookup-user
   {:description "Look up a user by ID."
    :input {:type "object"
-           :properties {:user-id {:type "string"}}
+           :properties {"user-id" {:type "string"}}
            :required ["user-id"]
            :additionalProperties false}
    :output map?}
@@ -21,87 +18,92 @@ produce and lets karcarthy validate them before execution.
   (lookup! (:db (k/context)) user-id))
 ```
 
-A Tool body has exactly one binding. Here the model supplies a map and the body
-destructures it.
-
-Use `tool` inside an expression and `deftool` for a named top-level definition.
-They create the same Tool value; `deftool` supplies the default Tool name from
-the var name.
-
-## Schemas and contracts
-
-`:input` is both the execution contract and, when it is JSON Schema, the schema
-shown to the model. Use an object with named properties for a model-facing
-function Tool. Local contracts may accept other values, but model providers may
-reject non-object function schemas.
-
-Clojure predicates and specs can also validate input. If a contract cannot be
-translated into a useful model schema, provide the two separately:
+Expose it by putting the Tool value in an Agent's `:tools` vector:
 
 ```clojure
-{:input request?
- :input-schema {:type "object"
-                :properties {:query {:type "string"}}
-                :required ["query"]
-                :additionalProperties false}}
+(k/defagent support
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Resolve the user's request."
+   :tools [lookup-user]
+   :output string?})
 ```
 
-The same distinction exists for `:output` and `:output-schema`.
+## What happens on a Tool call
 
-## Tool configuration
-
-| Key | Purpose |
-| --- | --- |
-| `:name` | Model-visible function name. |
-| `:description` | When and how the model should use the Tool. |
-| `:input` | Input contract. Required. |
-| `:input-schema` | Explicit model-facing schema. |
-| `:output` | Optional output contract. |
-| `:output-schema` | Explicit output schema. |
-| `:approval` | Approval policy. |
-| `:timeout-ms` | Execution timeout. |
-| `:retry` | Retry count or options. |
-| `:to-model-output` | Projection of a rich result into what the model sees. |
-
-The [Library API](/docs/reference/api#tool-and-deftool) lists dynamic enablement,
-guardrails, and metadata.
-
-## Local context
-
-Tools read local application dependencies with `context`:
+On every model turn, karcarthy sends each Tool's name, description, and JSON
+input schema. The model may return a Tool call such as:
 
 ```clojure
-(k/run! support-agent "Look up account 123."
+{:name "lookup-user"
+ :input {:user-id "user_123"}}
+```
+
+karcarthy validates the input, requests approval if configured, runs the
+Clojure function, validates its output, and sends that output back to the
+model. The model continues until it returns a final answer.
+
+## `tool` and `deftool`
+
+Use `deftool` for a top-level definition. Use `tool` to create the same value
+inside an expression:
+
+```clojure
+(def lookup-user
+  (k/tool
+   {:name "lookup-user"
+    :description "Look up a user by ID."
+    :input map?
+    :input-schema {:type "object"
+                   :properties {"user-id" {:type "string"}}
+                   :required ["user-id"]
+                   :additionalProperties false}
+    :output map?}
+   [{:keys [user-id]}]
+   (lookup! (:db (k/context)) user-id)))
+```
+
+The body has one input binding and can use all of Clojure.
+
+## Contracts and schemas
+
+`:input` is the execution contract. If it is JSON Schema, the same value is
+shown to the model. Clojure predicates and specs also work as contracts;
+karcarthy derives a schema when possible. When the contract cannot describe a
+useful model interface, set `:input-schema` separately as in the example above.
+
+The same distinction exists between `:output` and `:output-schema`.
+
+Function Tool schemas should be object-shaped with named properties. That is
+the common interface expected by model providers, even though a local Clojure
+function can accept any value.
+
+## Context and approval
+
+Pass local dependencies to `run!`:
+
+```clojure
+(k/run! support "Look up account 123."
         {:context {:db db}})
 ```
 
-```clojure
-(k/deftool lookup-account
-  {:description "Look up an account."
-   :input {:type "object"
-           :properties {:id {:type "string"}}
-           :required ["id"]}
-   :output map?}
-  [{:keys [id]}]
-  (lookup! (:db (k/context)) id))
-```
+Tools read them with `(k/context)`. Context is not sent to the model unless
+your code deliberately includes it in instructions, messages, or Tool output.
 
-Context is not sent to the model automatically.
-
-## Approval
-
-Set `:approval` to `:always` or `:once`, then supply a handler to `run!`:
+For a Tool with `:approval :always` or `:once`, pass an approval function:
 
 ```clojure
-(k/run! agent prompt
+(k/run! support prompt
         {:approval
          (fn [{:keys [tool input]}]
            (confirm? (:name tool) input))})
 ```
 
-Without a handler, a Tool requiring approval fails closed.
+Without a handler, approval fails closed.
 
-## Built-in local Tools
+## Local, hosted, and MCP Tools
+
+`local-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
+`search` Tools:
 
 ```clojure
 (def tools
@@ -114,14 +116,8 @@ Without a handler, a Tool requiring approval fails closed.
                :bash :always}}))
 ```
 
-`local-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
-`search`. File Tools stay inside `:cwd`, including through symlinks. `bash` is
-bounded but is not a sandbox.
+Hosted provider capabilities and MCP capabilities also become values placed in
+`:tools`. See [Integrations](/docs/integrations).
 
-Hosted provider Tools and MCP Tools enter the same `:tools` vector. See
-[Integrations](/docs/integrations).
-
-## Agents as Tools
-
-`as-tool` exposes an existing Agent. Zero-arity `(agent)` lets the model supply
-a new Agent definition. Both are covered in [Agents](/docs/agents#expose-a-known-agent-as-a-tool).
+Agents are declared separately with `:agents`; see [Make specialists
+available](/docs/agents#make-specialists-available).

@@ -13,8 +13,8 @@ REPL and start the loop:
 entirely offline and demonstrates:
 
 - a contracted Clojure Tool;
-- a model-backed Agent using the native model/tool loop;
-- a custom Agent body;
+- an Agent using the model/Tool loop;
+- an Agent written as a Clojure program;
 - model-authored Clojure read, expansion, checking, and evaluation;
 - recursive Agent creation;
 - run events and generated-form usage.
@@ -25,8 +25,7 @@ Run it from the repository root:
 clojure -M -e '(load-file "examples/clojure/generated_calculator.clj")'
 ```
 
-The paid end-to-end test lets GPT-5.6 call the `agent` form, generate a child
-Agent, and run it:
+The paid end-to-end test lets GPT-5.6 write a new `agent` form and run it:
 
 ```bash
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test

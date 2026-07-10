@@ -1,6 +1,7 @@
 (ns karcarthy.core-test
   (:refer-clojure :exclude [run!])
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [karcarthy :as k]))
 
@@ -35,8 +36,8 @@
     (is (k/agent? program))
     (is (k/tool? uppercase))
     (is (= "uppercase" (:name uppercase)))
-    (is (seq (k/source-form program)))
-    (is (seq (k/expanded-form program)))))
+    (is (seq (k/definition program)))
+    (is (seq (k/expansion program)))))
 
 (deftest configuration-fails-closed
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown"
@@ -61,7 +62,7 @@
                         (k/tool {:name "x" :description "x"}
                                 [input] input))))
 
-(deftest model-backed-agent-final-output
+(deftest agent-final-output
   (let [agent (k/agent {:name "answer"
                         :model {:id "fake"
                                 :transport (scripted-model
@@ -305,7 +306,10 @@
                 :output string?})
         run (k/run! agent "hello" {:context {:user-id "u1"}})]
     (is (= :completed (:status run)))
-    (is (= "user=u1" (get-in @requests [0 :instructions])))
+    (is (str/starts-with? (get-in @requests [0 :instructions])
+                          (k/system-prompt)))
+    (is (str/ends-with? (get-in @requests [0 :instructions])
+                        "user=u1"))
     (is (= "hello"
            (get-in @requests [0 :messages 0 :content])))
     (is (nil? (get-in @requests [0 :context])))))
@@ -354,7 +358,7 @@
     (is (= [1 2] (:output run)))))
 
 (deftest depth-and-call-budgets
-  (let [leaf (k/agent {:name "leaf" :input any? :output string?} [_] "ok")
+  (let [leaf (k/agent {:name "leaf" :input string? :output string?} [_] "ok")
         parent (k/agent {:name "parent"
                          :model {:id "fake"
                                  :transport
@@ -362,9 +366,9 @@
                                   {:type :tool-calls
                                    :calls [{:id "child"
                                             :name "leaf"
-                                            :input nil}]})}
+                                            :input {:input "work"}}]})}
                          :instructions "Call leaf."
-                         :tools [(k/as-tool leaf)]
+                         :agents [leaf]
                          :output string?})
         looping (k/agent {:name "looping"
                           :model {:id "fake"
@@ -440,27 +444,84 @@
     (is (= 1 (count (filter #(= :tool/approval-reused (:type %))
                             (:events run)))))))
 
-(deftest agents-as-tools
-  (let [child (k/agent {:name "child" :input string? :output string?}
-                       [x] (str x "!"))
-        child-tool (k/as-tool child {:name "delegate"})
+(deftest available-agents-are-model-callable
+  (let [child-input {:type "object"
+                     :properties {"text" {:type "string"}}
+                     :required ["text"]
+                     :additionalProperties false}
+        child (k/agent {:name "child"
+                        :description "Add punctuation to text."
+                        :input child-input
+                        :output string?}
+                       [{:keys [text]}] (str text "!"))
         n (atom 0)
+        requests (atom [])
         parent (k/agent {:name "parent"
                          :model {:id "fake"
                                  :transport
                                  (k/fake-model
                                   (fn [request]
+                                    (swap! requests conj request)
                                     (if (= 1 (swap! n inc))
                                       {:type :tool-calls
                                        :calls [{:id "c"
-                                                :name "delegate"
-                                                :input "hi"}]}
+                                                :name "child"
+                                                :input {:text "hi"}}]}
                                       {:type :final
                                        :output (get-in request [:messages 0 :content])})))}
                          :instructions "delegate"
-                         :tools [child-tool]
+                         :agents [child]
                          :output string?})]
-    (is (= "hi!" (:output (k/run! parent nil))))))
+    (is (= "hi!" (:output (k/run! parent nil))))
+    (is (= "child" (get-in @requests [0 :tools 0 :name])))
+    (is (= ["text"]
+           (get-in @requests [0 :tools 0 :parameters :required])))))
+
+(deftest agent-program-tool-has-a-complete-dynamic-manual
+  (let [request (atom nil)
+        model (k/fake-model
+               (fn [value]
+                 (reset! request value)
+                 {:type :final :output "done"}))
+        specialist (k/agent {:name "specialist"
+                             :description "Independently verify one result."
+                             :input string?
+                             :output string?}
+                            [input] input)
+        parent (k/agent
+                {:name "parent"
+                 :model {:transport :captured
+                         :provider :test
+                         :id "test-model"}
+                 :instructions "Complete the assigned task."
+                 :tools [uppercase]
+                 :agents [specialist]
+                 :output string?})
+        run (k/run! parent "work"
+                    {:model-transports {:captured model}})
+        agent-tool (first (filter #(= "agent" (:name %))
+                                  (:tools @request)))
+        description (:description agent-tool)]
+    (is (= :completed (:status run)))
+    (is (str/starts-with? (:instructions @request) (k/system-prompt)))
+    (doseq [section ["## When to use"
+                     "## When not to use"
+                     "## Tool input"
+                     "## What to generate"
+                     "## What the new Agent receives"
+                     "## What happens"
+                     "## Example: one Clojure specialist"
+                     "## Available model configuration"
+                     "## Available Tools"
+                     "## Available Agents"]]
+      (is (str/includes? description section) section))
+    (is (str/includes? description
+                       "{:transport :captured, :provider :test, :id \"test-model\"}"))
+    (is (str/includes? description "`uppercase`"))
+    (is (str/includes? description "`specialist`"))
+    (is (= ["source" "input"]
+           (get-in agent-tool [:parameters :required])))
+    (is (nil? (get-in agent-tool [:parameters :properties "input" :type])))))
 
 (deftest guardrails-reject
   (let [agent (k/agent {:name "guarded"

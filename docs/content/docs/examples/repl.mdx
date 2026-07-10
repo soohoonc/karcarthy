@@ -44,8 +44,8 @@ Tool result. It does not make a network request.
 Inspect the Agent definition and its macroexpansion:
 
 ```clojure
-(k/source-form demo/demo-agent)
-(k/expanded-form demo/demo-agent)
+(k/definition demo/demo-agent)
+(k/expansion demo/demo-agent)
 ```
 
 ## Define an Agent at the prompt
@@ -103,9 +103,9 @@ an Agent using the Responses transport:
 The default credential variables are `RESPONSES_API_KEY` and
 `OPENAI_API_KEY`.
 
-## Test recursive Agent creation
+## Test generated Agent creation
 
-Add the Agent Tool to any live model-backed Agent:
+Allow a live Agent to write and run a new Agent:
 
 ```clojure
 (def architect
@@ -113,8 +113,7 @@ Add the Agent Tool to any live model-backed Agent:
    {:name "architect"
     :model {:transport :responses :id "gpt-5.6"}
     :instructions
-    "Create and run a focused child Agent to solve the user's task."
-    :tools [(k/agent)]
+    "Create and run a focused Agent when it would improve the answer."
     :output string?}))
 
 (def run

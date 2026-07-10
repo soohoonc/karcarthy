@@ -457,7 +457,7 @@
   :model-id string-or-nil}` and must return an Agent. This is the preferred
   form for coding Agents because their local tools are rooted per ACP session.
 
-  `:models` may contain selectable model-id strings. For a static model-backed
+  `:models` may contain selectable model-id strings. For a static model
   Agent, its configured model is included automatically."
   [{:keys [agent in out client-request-timeout-ms] :as options}]
   (when-not agent

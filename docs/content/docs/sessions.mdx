@@ -15,9 +15,11 @@ Runs are independent unless you pass a Session:
         {:session session})
 ```
 
-A Session stores normalized conversation items from root model-backed Agents.
-An independent `run!` call must receive the Session explicitly. Conversations
-inside Agents entered through `as-tool` or `(agent)` are not added implicitly.
+A Session stores normalized conversation items from root Agents. An
+independent `run!` call must receive the Session explicitly. An available or
+generated Agent starts without its parent's conversation; only its explicit
+Tool input is sent as its user message. Child conversations are not added to
+the parent's Session.
 
 ## In-memory Sessions
 
