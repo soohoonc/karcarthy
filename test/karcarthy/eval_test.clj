@@ -7,7 +7,7 @@
 
 (defn compile-in-run [source & [limits]]
   (let [compiler (k/agent {:name "compiler" :input string? :output k/agent?}
-                          [rt input] (k/compile-agent! rt input))]
+                          [input] (k/compile-agent! input))]
     (k/run! compiler source {:limits limits})))
 
 (deftest reads-one-form-with-reader-eval-disabled
@@ -17,13 +17,12 @@
   (is (thrown? Throwable
                (k/read-agent-form "#=(System/exit 1)"))))
 
-(deftest compiles-and-invokes-generated-agent
+(deftest compiles-and-runs-generated-agent
   (let [parent (k/agent {:name "parent" :input string? :output string?}
-                        [rt input]
+                        [input]
                         (let [child (k/compile-agent!
-                                     rt
-                                     "(agent {:name \"child\" :input string? :output string?} [rt x] (str x \"!\"))")]
-                          (k/invoke! rt child input)))
+                                     "(agent {:name \"child\" :input string? :output string?} [x] (str x \"!\"))")]
+                          (:output (k/run! child input))))
         run (k/run! parent "hello")]
     (is (= :completed (:status run)))
     (is (= "hello!" (:output run)))
@@ -37,13 +36,12 @@
 
 (deftest generated-code-resolves-definition-namespace
   (let [parent (k/agent {:name "parent" :output string?}
-                        [rt _]
-                        (k/invoke!
-                         rt
-                         (k/compile-agent!
-                          rt
-                          "(agent {:name \"child\" :output string?} [rt _] (str \"ok\" suffix))")
-                         nil))
+                        [_]
+                        (:output
+                         (k/run!
+                          (k/compile-agent!
+                           "(agent {:name \"child\" :output string?} [_] (str \"ok\" suffix))")
+                          nil)))
         run (k/run! parent nil)]
     (is (= :completed (:status run)))
     (is (= (str "ok" suffix) (:output run)))))
@@ -55,17 +53,16 @@
 
 (deftest compiler-errors-are-structured
   (let [run (compile-in-run
-             "(agent {:name \"bad\" :output string?} [rt _] (missing-symbol))")]
+             "(agent {:name \"bad\" :output string?} [_] (missing-symbol))")]
     (is (= :failed (:status run)))
     (is (= :evaluation (get-in run [:error :phase])))
     (is (re-find #"missing-symbol" (get-in run [:error :message])))))
 
 (deftest generated-form-budget
   (let [parent (k/agent {:name "parent" :output string?}
-                        [rt _]
+                        [_]
                         (k/compile-agent!
-                         rt
-                         "(agent {:name \"child\" :output string?} [_ _] \"ok\")")
+                         "(agent {:name \"child\" :output string?} [_] \"ok\")")
                         "unreachable")
         run (k/run! parent nil {:limits {:generated-forms 0}})]
     (is (= :failed (:status run)))
@@ -73,7 +70,7 @@
 
 (deftest evaluated-agent-retains-forms
   (let [run (compile-in-run
-             "(agent {:name \"child\" :output string?} [_ _] \"ok\")")
+             "(agent {:name \"child\" :output string?} [_] \"ok\")")
         agent (:output run)]
     (is (= :completed (:status run)))
     (is (= 'agent (first (k/source-form agent))))
@@ -93,7 +90,7 @@
                 :name "agent"
                 :input
                 {:source
-                 "(agent {:name \"increment\" :input int? :output int?} [_ n] (inc n))"
+                 "(agent {:name \"increment\" :input int? :output int?} [n] (inc n))"
                  :input 41}}]}
              {:type :final
               :output (get-in request [:messages 0 :content])})))

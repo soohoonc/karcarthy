@@ -11,7 +11,7 @@ The common API is exposed from `(require '[karcarthy :as k])`.
 
 ```clojure
 (k/agent config)
-(k/agent config [rt input] body ...)
+(k/agent config [input] body ...)
 (k/agent)
 ```
 
@@ -22,7 +22,7 @@ Agent requires `:name` but may omit model configuration.
 
 With no arguments, returns the model-facing `agent` Tool. That Tool accepts
 `{:source <one (agent ...) form> :input <value>}`, compiles the form, verifies
-that it produced an Agent, and invokes it in the current Run. See
+that it produced an Agent, and runs it in the current Run. See
 [Model-created Agents](/docs/agents#model-created-agents).
 
 Supported configuration keys are:
@@ -44,7 +44,8 @@ Supported configuration keys are:
  :metadata {...}}
 ```
 
-`:model`, `:instructions`, and `:tools` may be functions of the Runtime view.
+`:model`, `:instructions`, and `:tools` may be functions of immutable call
+metadata.
 Instructions must resolve to a string. `:context` is a contract for the local
 context value, not model-visible prompt text.
 
@@ -52,7 +53,7 @@ context value, not model-visible prompt text.
 
 ```clojure
 (k/defagent name config)
-(k/defagent name config [rt input] body ...)
+(k/defagent name config [input] body ...)
 ```
 
 Defines a var containing an Agent. The symbol supplies the default `:name`.
@@ -72,8 +73,8 @@ different Agent type.
 ### `tool` and `deftool`
 
 ```clojure
-(k/tool config [rt input] body ...)
-(k/deftool name config [rt input] body ...)
+(k/tool config [input] body ...)
+(k/deftool name config [input] body ...)
 ```
 
 A Tool requires `:name`, `:description`, and `:input`. `deftool` supplies the
@@ -81,7 +82,7 @@ name from its symbol. Optional keys are `:input-schema`, `:output`,
 `:output-schema`, `:approval`, `:enabled?`, `:guardrails`, `:timeout-ms`,
 `:retry`, `:to-model-output`, and `:metadata`.
 
-Tool arguments are validated before approval and execution. Tool results are
+Tool arguments are validated before approval and the call. Tool results are
 validated before they are returned to the model. `tool?` identifies Tool
 values.
 
@@ -106,9 +107,9 @@ Clojure code. `hosted-tool?` identifies this value.
 Projects an Agent as a Tool while the parent retains control. Options may
 override `:name`, `:description`, `:input`, `:output`, and `:approval`. A
 `:context` function receives the parent context and Tool input and returns the
-local context for the child invocation.
+local context for the nested Agent.
 
-## Execution
+## Running agents
 
 ### `run!`
 
@@ -117,8 +118,8 @@ local context for the child invocation.
 (k/run! agent input options)
 ```
 
-Creates a root Runtime, validates local context and Agent input, executes the
-Agent, and returns a Run record.
+Starts a root Run, validates local context and Agent input, calls the Agent,
+and returns a Run value.
 
 ```clojure
 {:context {...}
@@ -132,35 +133,24 @@ Agent, and returns a Run record.
 
 Runs are stateless unless `:session` is supplied.
 
-### `invoke!`
+### Run from an Agent body
 
 ```clojure
-(k/invoke! rt agent input)
-(k/invoke! rt agent input {:context {...} :limits {...}})
+(def child-run (k/run! child input))
+(:output child-run)
 ```
 
-Executes a child Agent inside an existing Runtime tree and returns its typed
-output. Limits may only narrow inherited limits. A child invocation does not
-implicitly share the root Session.
-
-### Structured child execution
-
-```clojure
-(def child (k/spawn! rt agent input))
-(k/await! child)
-(k/await-all! children)
-```
-
-Children share cancellation, usage counters, deadlines, and bounded
-parallelism with the root run tree.
+Agent bodies use the same `run!` function as application code. Each call
+returns a complete, independent Run value. Clojure's normal functions,
+conditionals, `future`, and `deref` provide composition.
 
 ### `context`
 
 ```clojure
-(k/context rt)
+(k/context)
 ```
 
-Returns the local, non-model-visible context value for a Runtime.
+Returns the local, non-model-visible context value for the current Agent call.
 
 ## Sessions
 
@@ -192,7 +182,7 @@ database format.
      (str "Current user: " (:user-id context)))))
 ```
 
-`prompt` joins strings and Runtime-view functions. Each function returns a
+`prompt` joins strings and call-metadata functions. Each function returns a
 string or nil. `prompt-file` reads the named UTF-8 file. `system-prompt` reads
 the packaged `resources/karcarthy/system.md`.
 
@@ -200,13 +190,13 @@ the packaged `resources/karcarthy/system.md`.
 
 ```clojure
 (def form (k/read-agent-form source))
-(def checked (k/check-agent-form! rt form))
-(def agent (k/eval-agent-form! rt checked))
-(def agent (k/compile-agent! rt source))
+(def checked (k/check-agent-form! form))
+(def agent (k/eval-agent-form! checked))
+(def agent (k/compile-agent! source))
 ```
 
 `read-agent-form` reads one form with reader evaluation disabled.
-`check-agent-form!` macroexpands executable positions in the Runtime's
+`check-agent-form!` macroexpands executable positions in the current Run's
 evaluation namespace. `eval-agent-form!` intentionally evaluates the checked
 form as JVM Clojure and verifies the resulting Agent. `compile-agent!` composes
 the three phases and emits program lifecycle events. See
@@ -217,11 +207,11 @@ the three phases and emits program lifecycle events. See
 ### `model!`
 
 ```clojure
-(k/model! rt normalized-request)
+(k/model! normalized-request)
 ```
 
 Calls the active model transport for a custom Agent body. Most Agents use the
-standard loop or invoke a model-backed child.
+standard loop or run another model-backed Agent.
 
 ### `fake-model`
 
@@ -317,12 +307,12 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 ## Events
 
 ```clojure
-(k/emit! rt {:type :application/decision :value value})
+(k/emit! {:type :application/decision :value value})
 (k/events run)
 ```
 
 `emit!` adds Run and Agent lineage, records the event, and calls the Run's
-`:observe` function. `events` returns recorded events from a Run or Runtime.
+`:observe` function. `events` returns recorded events from a Run.
 
 ## Contracts
 
@@ -333,4 +323,4 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 ```
 
 Contracts support Clojure specs, predicates, classes, sets, and basic JSON
-Schema. See [Data model](/docs/reference/schema) for the runtime shapes.
+Schema. See [Data model](/docs/reference/schema) for the value shapes.

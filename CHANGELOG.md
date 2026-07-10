@@ -8,13 +8,12 @@ All notable changes are documented here, following
 
 ### Added
 
-- A native Clojure Agent/Tool harness with dynamic instructions, local Runtime
-  context, optional Sessions, approvals, limits,
-  cancellation, structured child execution, and events.
+- A native Clojure Agent/Tool harness with dynamic instructions, local context,
+  optional Sessions, approvals, limits, cancellation, and events.
 - Homoiconic `agent`: `(agent config ...)` constructs an Agent while `(agent)`
   gives a model the same form as a recursive tool capability.
 - Model-authored Clojure reading, full executable-position macroexpansion,
-  evaluation, Agent verification, recursive invocation, and program events.
+  evaluation, Agent verification, recursive execution, and program events.
 - A Responses-compatible HTTP/SSE transport with configurable endpoint,
   authentication environment, headers, model IDs, normalized streaming
   deltas, and a deterministic in-process fake model transport.
@@ -31,13 +30,13 @@ All notable changes are documented here, following
 
 ### Changed
 
-- Documentation is organized around Agents, Tools, Runtime, runnable examples,
-  and reference material, with model-created Agents presented as the primary
-  capability.
+- Documentation now leads with the homoiconic motivation, derives the recursive
+  `agent` Tool from code-as-data, and separates Agents, Tools, Running agents,
+  Integrations, runnable examples, and reference material.
 - The harness now owns the model/tool loop; provider transports only translate
   model I/O.
-- Orchestration is normal Clojure control flow and Agent invocation rather than
-  a separate workflow language.
+- Orchestration is normal Clojure control flow plus `run!`, rather than a
+  separate workflow or child-call API.
 - Model-visible `:instructions` is distinct from local `:context`; local
   context is never exposed automatically.
 - Conversation history follows the established Session abstraction. Runs are
@@ -54,6 +53,8 @@ All notable changes are documented here, following
   the ACP server boundary.
 - The unrestricted `prepare-step` request mutation hook and the
   directory-specific `workspace-prompt` API.
+- Public `invoke!`, `spawn!`, `await!`, and `await-all!`; Agent and Tool bodies
+  now receive only their input and use ordinary Clojure plus `run!`.
 - The placeholder `handoff!`, Agent `:hooks`, Run `:trace-id`, public
   `model-transport`, and generic conversation-state snapshots.
 

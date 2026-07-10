@@ -3,7 +3,9 @@ title: Quickstart
 description: Install karcarthy, define a Tool and Agent, run it from a REPL, and enable recursive Agent creation.
 ---
 
-This guide builds one model-backed Agent and runs it from a Clojure REPL.
+This guide starts with a conventional model-backed Agent, then uses
+karcarthy's homoiconic step: exposing the same Agent form as a Tool so the model
+can create a child.
 
 ## Requirements
 
@@ -42,8 +44,8 @@ Create `src/example.clj`:
   (count (re-seq #"\S+" text)))
 ```
 
-`deftool` defines a var containing a Tool. Its input is validated before
-execution, and its output is validated before being returned to the model.
+`deftool` defines a var containing a Tool. Its input is validated before the
+call, and its output is validated before being returned to the model.
 
 ## Define an Agent
 
@@ -84,7 +86,8 @@ clojure -M
 ```
 
 ```clojure
-(require '[example :as example] :reload)
+(require '[karcarthy :as k]
+         '[example :as example] :reload)
 
 (def run
   (k/run! example/editor
@@ -100,8 +103,10 @@ offline setup using `fake-model`.
 
 ## Enable recursive Agent creation
 
-Zero-arity `(k/agent)` returns a Tool named `agent`. Add it when the model
-should be able to define and run a specialized child:
+Because an Agent definition is Clojure data, karcarthy can expose that
+definition as a model-callable capability. Zero-arity `(k/agent)` returns a
+Tool named `agent`; add it when the model should be able to define and run a
+specialized child:
 
 ```clojure
 (k/defagent architect
@@ -119,7 +124,8 @@ should be able to define and run a specialized child:
 ```
 
 The Tool accepts one `(agent ...)` source form plus its input. The generated
-Agent is checked, evaluated, and invoked as a child of the current Run. The
+Agent is checked, evaluated, and run inside the current Run. It
+retains the same source and expanded forms as a developer-authored Agent. The
 [Agents guide](/docs/agents) covers known Agent Tools, generated Agents,
 recursion, and source inspection.
 
@@ -143,6 +149,9 @@ Runs are independent unless you pass a Session:
 ## Next
 
 - [Agents](/docs/agents): configuration, composition, and recursive generation
-- [Tools](/docs/tools): local Tools, hosted Tools, MCP, and approvals
-- [Runtime](/docs/runtime): execution, Sessions, events, limits, and ACP
+- [Running agents](/docs/running-agents): `run!`, results, and limits
+- [Tools](/docs/tools): contracts, approvals, local Tools, and Agents as Tools
+- [Sessions](/docs/sessions): conversation history across Runs
+- [Streaming and events](/docs/streaming): live model text and lifecycle events
+- [Integrations](/docs/integrations): model endpoints, MCP, ACP, and Harbor
 - [Library API](/docs/reference/api): complete function and macro reference

@@ -337,7 +337,7 @@
               stop-reason (cond
                             (= :cancelled (:status run)) "cancelled"
                             (and (= :budget (get-in run [:error :kind]))
-                                 (contains? #{:model-loop :runtime}
+                                 (contains? #{:model-loop :run}
                                             (get-in run [:error :phase])))
                             "max_turn_requests"
                             :else "end_turn")

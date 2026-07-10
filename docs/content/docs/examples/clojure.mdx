@@ -54,18 +54,18 @@ can be run directly or served over ACP.
      {:name "review-team"
       :input map?
       :output string?}
-     [rt change]
+     [change]
      (let [reviews
-           (k/await-all!
-            [(k/spawn! rt security-reviewer change)
-             (k/spawn! rt api-reviewer change)])]
-       (k/invoke! rt editor {:change change
-                             :reviews reviews})))))
+           (->> [security-reviewer api-reviewer]
+                (mapv #(future (k/run! % change)))
+                (mapv deref)
+                (mapv :output))]
+       (:output (k/run! editor {:change change
+                                :reviews reviews}))))))
 ```
 
 The reviewers use the standard model/Tool loop. `review-team` has a Clojure
-body and coordinates them deterministically. All children share Run limits,
-cancellation, usage accounting, and event storage.
+body and coordinates their Runs with ordinary `future` and `deref`.
 
 ## Run it
 
@@ -76,8 +76,7 @@ cancellation, usage accounting, and event storage.
   (k/run! team
           {:request "Review the current working tree."
            :base "origin/main"}
-          {:limits {:parallelism 2
-                    :model-calls 20
+          {:limits {:model-calls 20
                     :deadline-ms 180000}
            :approval
            (fn [{:keys [tool input]}]
@@ -143,4 +142,6 @@ clojure -M -m karcarthy.acp example.review/acp-reviewer
 
 - [Agents](/docs/agents) documents generated-Agent evaluation and recursion.
 - [Tools](/docs/tools) documents local Tool security and approvals.
-- [Runtime](/docs/runtime) documents ACP and event streaming.
+- [Running agents](/docs/running-agents) documents Runs and limits.
+- [Streaming and events](/docs/streaming) documents live observation.
+- [Integrations](/docs/integrations) documents ACP serving.

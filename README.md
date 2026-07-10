@@ -1,17 +1,21 @@
 # karcarthy
 
-> A Clojure agent harness where models can create and run new Agents through a
-> Tool call.
+> A homoiconic Clojure agent harness where models can create and run new Agents
+> through a Tool call.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-karcarthy provides an in-process model/Tool loop, typed Tools, conversation
-Sessions, streaming events, child execution, MCP, and ACP.
+In karcarthy, an Agent is both executable Clojure and inspectable Clojure data.
+The same form can be authored by a developer, emitted by a model, macroexpanded,
+transformed, evaluated, and run.
 
-Agents are executable Clojure values. Add the built-in `agent` Tool to let a
-model submit a new Agent definition that karcarthy checks, evaluates, and runs
-inside the current execution tree.
+That homoiconic representation powers the central capability: add the built-in
+`agent` Tool to let a model submit a new Agent definition that karcarthy checks,
+evaluates, and runs inside the current Run.
+
+The harness also provides a model/Tool loop, typed Tools, conversation Sessions,
+streaming events, recursive Agent creation, MCP, and ACP.
 
 ## Install
 
@@ -75,7 +79,7 @@ The model calls the Tool with:
 ```
 
 karcarthy reads one Clojure form, macroexpands and checks it, evaluates it,
-verifies that it produced an Agent, and invokes the child. Generated Agents may
+verifies that it produced an Agent, and runs it. Generated Agents may
 receive the same Tool and create more Agents within shared limits.
 
 ## `agent` and `defagent`
@@ -103,11 +107,10 @@ Agents can also have a Clojure body for deterministic coordination:
 ```clojure
 (k/defagent review-team
   {:input map? :output string?}
-  [rt change]
-  (let [reviews (k/await-all!
-                 [(k/spawn! rt security-reviewer change)
-                  (k/spawn! rt api-reviewer change)])]
-    (k/invoke! rt editor {:change change :reviews reviews})))
+  [change]
+  (let [reviews [(:output (k/run! security-reviewer change))
+                 (:output (k/run! api-reviewer change))]]
+    (:output (k/run! editor {:change change :reviews reviews}))))
 ```
 
 ## Local and remote Tools
@@ -134,7 +137,10 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 - [Quickstart](docs/content/docs/quickstart.mdx)
 - [Agents](docs/content/docs/agents.mdx)
 - [Tools](docs/content/docs/tools.mdx)
-- [Runtime](docs/content/docs/runtime.mdx)
+- [Running agents](docs/content/docs/running-agents.mdx)
+- [Sessions](docs/content/docs/sessions.mdx)
+- [Streaming and events](docs/content/docs/streaming.mdx)
+- [Integrations](docs/content/docs/integrations.mdx)
 - [Examples](docs/content/docs/examples/index.mdx)
 - [Reference](docs/content/docs/reference/index.mdx)
 

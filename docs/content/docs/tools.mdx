@@ -1,6 +1,6 @@
 ---
 title: Tools
-description: Define typed Tools, configure approvals, use local and hosted capabilities, connect MCP servers, and expose Agents as Tools.
+description: Define typed Tools, configure approvals, use local capabilities, and expose Agents as Tools.
 ---
 
 Tools are the capabilities a model may call. A Tool has a name, model-facing
@@ -20,8 +20,8 @@ Use `tool` to construct a value:
             :required ["user_id"]
             :additionalProperties false}
     :output map?}
-   [rt {:keys [user_id]}]
-   (lookup! (:db (k/context rt)) user_id)))
+   [{:keys [user_id]}]
+   (lookup! (:db (k/context)) user_id)))
 ```
 
 Use `deftool` to define a var and derive its default name from the symbol:
@@ -31,8 +31,8 @@ Use `deftool` to define a var and derive its default name from the symbol:
   {:description "Look up a user by ID."
    :input map?
    :output map?}
-  [rt {:keys [user-id]}]
-  (lookup! (:db (k/context rt)) user-id))
+  [{:keys [user-id]}]
+  (lookup! (:db (k/context)) user-id))
 ```
 
 As with `agent` and `defagent`, these forms produce the same kind of Tool.
@@ -43,17 +43,17 @@ As with `agent` and `defagent`, these forms produce the same kind of Tool.
 | --- | --- |
 | `:name` | Model-visible function name. |
 | `:description` | When and how the model should use the Tool. |
-| `:input` | Runtime input contract. |
+| `:input` | Tool input contract. |
 | `:input-schema` | Explicit model-facing JSON Schema when different. |
-| `:output` | Runtime output contract. |
-| `:approval` | Approval policy or Runtime-view function. |
-| `:enabled?` | Runtime-view predicate controlling availability. |
+| `:output` | Tool output contract. |
+| `:approval` | Approval policy or function of the current call metadata. |
+| `:enabled?` | Predicate of the current call metadata controlling availability. |
 | `:guardrails` | Input and output guardrail functions. |
-| `:timeout-ms` | Execution timeout. |
+| `:timeout-ms` | Tool-call timeout. |
 | `:retry` | Retry count or retry options. |
 | `:to-model-output` | Project a rich result into the value shown to the model. |
 
-Tool input is validated before approval and execution. Tool output is validated
+Tool input is validated before approval and the call. Tool output is validated
 before it becomes model-visible.
 
 ## Approval
@@ -66,8 +66,8 @@ Set `:approval` to request authorization before execution:
    :input map?
    :output map?
    :approval :always}
-  [rt request]
-  (delete! (:db (k/context rt)) request))
+  [request]
+  (delete! (:db (k/context)) request))
 ```
 
 Supply an approval handler to `run!`:
@@ -109,49 +109,19 @@ File Tools reject paths outside `:cwd`, including symlink escapes. `bash` runs
 inside `:cwd` with time and output bounds, but it is not a sandbox. `search`
 requires `rg` on `PATH`.
 
-## Hosted Tools
+## External Tool sources
 
-Hosted Tools are executed by a model provider rather than local Clojure code:
-
-```clojure
-(k/defagent researcher
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Research current information and cite sources."
-   :tools [(k/responses-web-search
-            {:search_context_size "medium"})]
-   :output string?})
-```
-
-The selected model endpoint must support the hosted capability.
-
-## MCP Tools
-
-Connect to a stdio MCP server and adapt its definitions into ordinary Tools:
+Provider-hosted capabilities and MCP definitions enter the same `:tools`
+vector. Once adapted, they participate in the same Agent loop and event model:
 
 ```clojure
-(def connection
-  (k/connect-mcp!
-   {:name "project"
-    :command "npx"
-    :args ["-y" "@example/project-mcp"]
-    :cwd "/workspace/project"}))
-
-(try
-  (let [remote-tools (k/mcp-tools connection)
-        agent (k/agent
-               {:name "project-agent"
-                :model {:transport :responses :id "gpt-5.6"}
-                :instructions "Inspect the project and answer the request."
-                :tools remote-tools
-                :output string?})]
-    (k/run! agent "Summarize the open work."))
-  (finally
-    (k/close-mcp! connection)))
+{:tools [(k/responses-web-search)
+         known-local-tool
+         discovered-mcp-tool]}
 ```
 
-MCP Tools require approval by default. Pass `{:approval :never}` to
-`mcp-tools` only for a server whose command and implementations you trust.
-The current client implements MCP `2025-11-25` over stdio.
+[Integrations](/docs/integrations) covers hosted Tool configuration and the MCP
+connection lifecycle.
 
 ## Agents as Tools
 
@@ -169,10 +139,12 @@ There are two Agent-related Tool patterns:
 
 `as-tool` invokes the known Agent and returns control to the parent model.
 Zero-arity `(agent)` compiles and invokes the Agent supplied in the Tool call.
-See [Agents](/docs/agents) for both execution models.
+See [Agents](/docs/agents) for both patterns.
 
 ## Next
 
 - [Agents](/docs/agents) covers model-created and recursive Agents.
-- [Runtime](/docs/runtime) covers context, execution, and events.
+- [Running agents](/docs/running-agents) covers context, results, and limits.
+- [Streaming and events](/docs/streaming) covers live Run observation.
+- [Integrations](/docs/integrations) covers model endpoints, MCP, ACP, and Harbor.
 - [Library API](/docs/reference/api) lists all Tool options.

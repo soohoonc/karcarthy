@@ -42,7 +42,7 @@
              "This is an end-to-end harness test. Call the agent tool exactly "
              "once. Its source argument must be exactly: "
              "(agent {:name \"increment\" :input int? :output int?} "
-             "[_ n] (inc n)) "
+             "[n] (inc n)) "
              "Pass 41 as its input. After the tool returns, answer with only "
              "the decimal result, with no explanation.")
             :tools [agent-tool]

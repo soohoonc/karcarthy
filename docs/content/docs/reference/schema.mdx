@@ -1,6 +1,6 @@
 ---
 title: Data model
-description: Agent, Tool, Runtime, Session, Run, event, limit, and failure values.
+description: Agent, Tool, Session, Run, event, limit, and failure values.
 ---
 
 karcarthy values are ordinary Clojure values. Agent and Tool values may contain
@@ -16,7 +16,7 @@ external serialization format by the application.
  :definition-ns 'example.research
  :source-form '(agent {...})
  :expanded-form '(...)
- :invoke nil}
+ :body nil}
 ```
 
 The public configuration surface is:
@@ -25,17 +25,17 @@ The public configuration surface is:
 | --- | --- |
 | `:name` | Stable identifier; `defagent` supplies it from the symbol. |
 | `:description` | Human- and model-facing description. |
-| `:model` | Model identifier and adapter-specific options, or a Runtime-view function. |
-| `:instructions` | Model-visible string or Runtime-view function returning a string. |
+| `:model` | Model identifier and adapter-specific options, or a resolver function. |
+| `:instructions` | Model-visible string or resolver function returning a string. |
 | `:context` | Contract for the local, non-model-visible context value. |
 | `:input` | Agent input contract. |
-| `:tools` | Tool values or a Runtime-view function. |
+| `:tools` | Tool values or a resolver function. |
 | `:output` | Agent output contract. |
 | `:output-schema` | Explicit model-facing JSON Schema. |
 | `:max-turns` | Maximum model turns; defaults to 20. |
-| `:stop-when` | Predicate accepting the Runtime view and final-response data. |
+| `:stop-when` | Predicate accepting call metadata and final-response data. |
 | `:guardrails` | Input and output guardrail functions. |
-| `:limits` | Limits narrower than the current Runtime grant. |
+| `:limits` | Limits narrower than the current Run's grant. |
 | `:metadata` | Application metadata retained in configuration. |
 
 A custom-body Agent may omit `:model` and `:instructions`.
@@ -47,23 +47,22 @@ A custom-body Agent may omit `:model` and `:instructions`.
  :name "web-search"
  :description "Search the web."
  :config {...}
- :source-form '(tool {...} [rt input] ...)
+ :source-form '(tool {...} [input] ...)
  :expanded-form '(...)
  :execute #object[clojure.lang.IFn ...]}
 ```
 
-Tool input is validated before approval and execution. Tool output is
+Tool input is validated before approval and the call. Tool output is
 validated before it becomes visible to the model. `:to-model-output` may
 project a rich application result into a smaller model-visible value.
 
-## Runtime view
+## Dynamic configuration
 
 Dynamic instructions, model and Tool resolvers, and guardrails receive an
-immutable view:
+immutable map describing the current Agent call:
 
 ```clojure
-{:runtime rt
- :run-id "run_..."
+{:run-id "run_..."
  :agent-id "agent_..."
  :parent-id "agent_..."
  :depth 1
@@ -73,9 +72,8 @@ immutable view:
  :agent agent}
 ```
 
-Agent programs and Tools receive the internal Runtime as `rt`. Use public
-functions such as `context`, `emit!`, `invoke!`, `model!`, and
-`compile-agent!` rather than mutating its internal fields.
+Agent and Tool bodies do not receive this map. They use `context`, `model!`,
+`emit!`, and `compile-agent!` directly.
 
 ## Session
 
@@ -91,8 +89,8 @@ A Session implements `karcarthy.session/Session`:
 
 Stored items are normalized message maps with roles such as `:user`,
 `:assistant`, and `:tool`. A Session stores conversation history; it does not
-serialize Runtime stacks or arbitrary effects. `memory-session` stores a vector
-in an atom; durable implementations choose their own storage.
+serialize in-flight Run stacks or arbitrary effects. `memory-session` stores a
+vector in an atom; durable implementations choose their own storage.
 
 ## Limits
 
@@ -182,4 +180,4 @@ data and events but have no output.
 ## Next
 
 - [Generated Agents](/docs/reference/generated-agents) specifies form compilation.
-- [Runtime](/docs/runtime) explains how these values interact during a Run.
+- [Running agents](/docs/running-agents) explains how these values interact.

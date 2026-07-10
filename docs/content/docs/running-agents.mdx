@@ -1,0 +1,137 @@
+---
+title: Running agents
+description: Start a Run, inspect its result, and control limits and cancellation.
+---
+
+Use `run!` to ask an Agent to do work:
+
+```clojure
+(def run
+  (k/run! researcher
+          {:question "How does ACP model selection work?"}))
+```
+
+`run!` is the application entry point. The `!` follows the Clojure convention
+for a function that may call models, run Tools, and change external state. It
+returns a Run whether the Agent completes, fails, or is cancelled. Invalid call
+configuration is rejected before a Run starts.
+
+## Read the result
+
+```clojure
+(select-keys run [:status :output :usage :error])
+```
+
+A completed Run looks like this:
+
+```clojure
+{:karcarthy/type :run
+ :id "run_..."
+ :status :completed
+ :agent "researcher"
+ :input {:question "..."}
+ :output {:answer "..."}
+ :usage {:model-calls 4
+         :input-tokens 12000
+         :output-tokens 900
+         :generated-forms 0
+         :duration-ms 4200.0}
+ :events [...]
+ :error nil}
+```
+
+Status is `:completed`, `:failed`, or `:cancelled`. Failed and cancelled Runs
+keep the usage, events, and structured error recorded before they stopped.
+
+## What happens during a Run
+
+For a model-backed Agent, karcarthy:
+
+1. validates the Agent input and local context;
+2. resolves its model, instructions, and Tools;
+3. sends the conversation to the model;
+4. validates and executes requested Tools;
+5. returns Tool results to the model; and
+6. validates the final Agent output.
+
+The loop stops on valid output, failure, cancellation, a Run limit, or the
+Agent's `:max-turns`. `:stop-when` can reject a final response and continue the
+loop when an application-specific condition is not satisfied.
+
+## Run Agents from Clojure
+
+Agent bodies use the same `run!` function as application code:
+
+```clojure
+(k/defagent reviewer-team
+  {:input map? :output vector?}
+  [change]
+  [(:output (k/run! security-reviewer change))
+   (:output (k/run! api-reviewer change))])
+```
+
+Each call returns a Run. Use ordinary Clojure when runs should overlap:
+
+```clojure
+(->> [security-reviewer api-reviewer]
+     (mapv #(future (k/run! % change)))
+     (mapv deref))
+```
+
+No separate workflow or child-call API is required.
+
+## Pass application context
+
+Use `:context` for dependencies and request data that should not be inserted
+into the model prompt automatically:
+
+```clojure
+(k/run! account-agent request
+        {:context {:account-id "acct_123"
+                   :db db}})
+```
+
+Agent bodies and Tools read it with `(k/context)`. An Agent's `:context`
+contract validates the value at its boundary. Instructions that should be
+model-visible belong in `:instructions`.
+
+## Set limits
+
+```clojure
+(k/run! agent input
+        {:limits {:model-calls 100
+                  :input-tokens 1000000
+                  :output-tokens 100000
+                  :agent-depth 8
+                  :parallelism 6
+                  :generated-forms 20
+                  :deadline-ms 300000}})
+```
+
+Limits apply to one Run, including Agents entered through `as-tool` or the
+model-facing `(agent)` Tool. Separate `run!` calls have separate limits and
+events. `:agent-depth` bounds nested Agent Tools, `:generated-forms` bounds
+model-authored Agent compilation, and `:parallelism` bounds concurrent Tool
+work within the Run.
+
+## Cancel a Run
+
+Pass a Boolean, predicate, atom, or other dereferenceable value as `:cancel`:
+
+```clojure
+(def cancelled? (atom false))
+
+(future
+  (k/run! agent input {:cancel cancelled?}))
+
+(reset! cancelled? true)
+```
+
+Cancellation is checked around Agent, model, and Tool calls.
+
+## Next
+
+- [Sessions](/docs/sessions) adds conversation history across Runs.
+- [Streaming and events](/docs/streaming) observes a Run while it happens.
+- [Agents](/docs/agents) covers configuration and model-created Agents.
+- [Library API](/docs/reference/api#running-agents) lists every Run option.

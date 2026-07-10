@@ -54,14 +54,15 @@
       (when-not existing
         (clojure.core/refer 'clojure.core)
         nil)
-      ;; `agent` intentionally replaces clojure.core/agent in generated code.
-      (when-let [mapping (ns-resolve ns-obj 'agent)]
-        (when (= 'clojure.core (-> mapping meta :ns ns-name))
-          (ns-unmap ns-obj 'agent)))
+      ;; These forms intentionally replace clojure.core names in generated code.
+      (doseq [sym '[agent run!]]
+        (when-let [mapping (ns-resolve ns-obj sym)]
+          (when (= 'clojure.core (-> mapping meta :ns ns-name))
+            (ns-unmap ns-obj sym))))
       (clojure.core/refer
       'karcarthy.core
-      :only '[agent tool invoke! spawn! await! await-all!
-               as-tool context model! emit! source-form expanded-form])
+      :only '[agent tool run! as-tool context model! emit!
+               source-form expanded-form])
       (clojure.core/refer
        'karcarthy.eval
        :only '[read-agent-form check-agent-form! eval-agent-form!
@@ -80,12 +81,12 @@
       expanded
       (walk/walk macroexpand-all identity expanded))))
 
-(defn check-agent-form!
-  "Macroexpand a form in the Runtime evaluation namespace. Returns a checked
-  representation. Compiler symbol/arity failures that require evaluation are
-  reported by `eval-agent-form!`."
+(defn- check-agent-form-in-run!
+  "Macroexpand a form in the current Run's evaluation namespace. Returns a
+  checked representation. Compiler symbol/arity failures that require
+  evaluation are reported by `eval-agent-form!`."
   [rt form]
-  (core/check-runtime! rt)
+  (core/check-run! rt)
   (let [ns-obj (evaluation-ns! rt)]
     (try
       (let [expanded (binding [*ns* ns-obj]
@@ -108,14 +109,14 @@
         (core/fail! :expand :expand (or (ex-message t) (str t))
                     {:form form :namespace (ns-name ns-obj)} t)))))
 
-(defn eval-agent-form!
+(defn- eval-agent-form-in-run!
   "Evaluate a checked form and require it to produce an Agent."
   [rt checked]
   (when-not (= :checked-agent-form (:karcarthy/type checked))
     (core/fail! :contract :evaluation
                 "eval-agent-form! requires a checked Agent form"
                 {:value checked}))
-  (core/check-runtime! rt)
+  (core/check-run! rt)
   (let [ns-obj (evaluation-ns! rt)]
     (try
       (let [value (binding [*ns* ns-obj]
@@ -144,11 +145,26 @@
         (core/fail! :evaluation :evaluation (deepest-message t)
                     {:form (:form checked) :namespace (ns-name ns-obj)} t)))))
 
-(defn compile-agent!
+(defn ^:no-doc compile-agent-in-run!
   "Read, expand, check, evaluate, and return an Agent."
   [rt source]
   (core/consume! rt :generated-forms 1)
   (core/emit! rt {:type :program/read :source source})
   (->> (read-agent-form rt source)
-       (check-agent-form! rt)
-       (eval-agent-form! rt)))
+       (check-agent-form-in-run! rt)
+       (eval-agent-form-in-run! rt)))
+
+(defn check-agent-form!
+  "Macroexpand an Agent form inside the current Agent body."
+  [form]
+  (check-agent-form-in-run! (core/current-run-context) form))
+
+(defn eval-agent-form!
+  "Evaluate a checked Agent form inside the current Agent body."
+  [checked]
+  (eval-agent-form-in-run! (core/current-run-context) checked))
+
+(defn compile-agent!
+  "Read, expand, check, evaluate, and return an Agent inside an Agent body."
+  [source]
+  (compile-agent-in-run! (core/current-run-context) source))

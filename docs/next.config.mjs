@@ -14,7 +14,17 @@ const config = {
       },
       {
         source: '/docs/runners',
-        destination: '/docs/runtime',
+        destination: '/docs/running-agents',
+        permanent: true,
+      },
+      {
+        source: '/docs/runtime',
+        destination: '/docs/running-agents',
+        permanent: true,
+      },
+      {
+        source: '/docs/execution',
+        destination: '/docs/running-agents',
         permanent: true,
       },
       {
@@ -24,12 +34,12 @@ const config = {
       },
       {
         source: '/docs/examples/python',
-        destination: '/docs/runtime',
+        destination: '/docs/integrations',
         permanent: true,
       },
       {
         source: '/docs/examples/typescript',
-        destination: '/docs/runtime',
+        destination: '/docs/integrations',
         permanent: true,
       },
     ];
