@@ -3,9 +3,11 @@ title: Generated Agents
 description: Source format, compilation pipeline, evaluation namespace, limits, events, and security for model-created Agents.
 ---
 
-The zero-arity `(k/agent)` Tool accepts Clojure source and invokes the resulting
-Agent. Applications can use the same compilation path directly with
-`compile-agent!`.
+The zero-arity `(k/agent)` Tool is the model-facing use of karcarthy's
+homoiconic representation. It accepts the same Clojure Agent form a developer
+would write, treats that form as data through reading and macroexpansion, then
+evaluates and invokes the resulting Agent. Applications can use the same
+compilation path directly with `compile-agent!`.
 
 ## Tool input
 

@@ -3,8 +3,12 @@ title: Agents
 description: Define model-backed and custom Agents, expose known Agents as Tools, and let models create new Agents recursively.
 ---
 
-An Agent is an executable Clojure value with configuration, contracts, retained
-source forms, and either the standard model/Tool loop or a custom Clojure body.
+An Agent is both an executable Clojure value and a retained Clojure form. That
+homoiconic representation is what lets authored and model-created Agents share
+the same definition, macro system, contracts, and execution path.
+
+An Agent contains configuration, boundary contracts, source and expanded
+forms, and either the standard model/Tool loop or a custom Clojure body.
 
 ## `agent` and `defagent`
 
@@ -223,12 +227,17 @@ Authored and generated Agents retain their forms:
 (k/expanded-form reviewer)
 ```
 
+The forms are normal Clojure data. They can be quoted, walked, compared,
+rewritten, or passed to a search procedure before evaluation. `expanded-form`
+also exposes the macros that shaped the executable Agent.
+
 Generated-Agent compilation also emits `:program/read`, `:program/expanded`,
 `:program/checked`, and `:program/evaluated` events. See
 [Generated Agents](/docs/reference/generated-agents) for the exact lifecycle.
 
 ## Next
 
-- [Tools](/docs/tools) explains Tool contracts, approvals, MCP, and local Tools.
-- [Runtime](/docs/runtime) covers Runs, Sessions, limits, and events.
+- [Tools](/docs/tools) explains Tool contracts, approvals, and local Tools.
+- [Integrations](/docs/integrations) covers model endpoints, MCP, ACP, and Harbor.
+- [Execution](/docs/execution) covers Runs, Sessions, limits, and events.
 - [Clojure example](/docs/examples/clojure) shows a complete multi-Agent system.
