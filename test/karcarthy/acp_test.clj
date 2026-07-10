@@ -57,23 +57,53 @@
             {:type :tool-calls
              :calls [{:id "call_1"
                       :name remote-tool
-                      :input {:text "hello from ACP"}}]}
+                      :input {:text "hello from ACP"}}]
+             :usage {:input-tokens 5 :output-tokens 2}}
             (do
               (emit! {:type :text-delta :delta "MCP "})
               (emit! {:type :text-delta :delta "completed"})
-              {:type :final :output "MCP completed"})))}}
+              {:type :final
+               :output "MCP completed"
+               :usage {:input-tokens 3 :output-tokens 1}})))}}
       :instructions "Exercise the session MCP tool."
       :tools mcp-tools
       :output string?})))
 
+(defn resolved-agent-factory [_]
+  nil)
+
+(deftest resolves-a-qualified-agent-var
+  (let [served (atom nil)]
+    (with-redefs [acp/serve! #(reset! served %)]
+      (acp/serve-var! "karcarthy.acp-test/resolved-agent-factory"))
+    (is (identical? resolved-agent-factory (:agent @served)))))
+
+(deftest reports-prompt-usage-only-when-every-model-call-reports-it
+  (let [usage {:model-calls 2 :input-tokens 8 :output-tokens 3}]
+    (is (= {:inputTokens 8 :outputTokens 3 :totalTokens 11}
+           (#'acp/prompt-usage
+            {:usage usage
+             :events [{:type :model/completed
+                       :usage {:input-tokens 5 :output-tokens 2}}
+                      {:type :model/completed
+                       :usage {:input_tokens 3 :output_tokens 1}}]})))
+    (is (nil? (#'acp/prompt-usage
+               {:usage usage
+                :events [{:type :model/completed :usage nil}]})))))
+
 (deftest serves-acp-v1-and-bridges-session-mcp-tools
   (let [root (temp-directory)
+        seen-models (atom [])
+        factory (fn [{:keys [model-id] :as context}]
+                  (swap! seen-models conj model-id)
+                  (agent-factory context))
         server-socket (ServerSocket. 0 1 (InetAddress/getLoopbackAddress))
         server-thread
         (Thread/startVirtualThread
          ^Runnable
          #(with-open [socket (.accept server-socket)]
-            (acp/serve! {:agent agent-factory
+            (acp/serve! {:agent factory
+                         :models ["fake" "fake-2"]
                          :in (.getInputStream socket)
                          :out (.getOutputStream socket)
                          :client-request-timeout-ms 10000})))
@@ -99,8 +129,34 @@
                        :mcpServers [(mcp-test/fixture-command)]})
             session-id (get-in created [:result :sessionId])]
         (is (string? session-id))
+        (is (= "fake"
+               (get-in created
+                       [:result :configOptions 0 :currentValue])))
+        (is (= "model"
+               (get-in created [:result :configOptions 0 :category])))
+
+        ;; Compatibility with Harbor's current pre-config-options adapter.
+        (is (= {}
+               (:result (request! writer reader 3 "session/set_model"
+                                  {:sessionId session-id
+                                   :modelId "fake-2"}))))
+
+        ;; Canonical current ACP model selection.
+        (let [selected
+              (request! writer reader 4 "session/set_config_option"
+                        {:sessionId session-id
+                         :configId "model"
+                         :value "fake"})]
+          (is (= "fake"
+                 (get-in selected
+                         [:result :configOptions 0 :currentValue]))))
+        (request! writer reader 5 "session/set_config_option"
+                  {:sessionId session-id
+                   :configId "model"
+                   :value "fake-2"})
+
         (write-json! writer {:jsonrpc "2.0"
-                             :id 3
+                             :id 6
                              :method "session/prompt"
                              :params {:sessionId session-id
                                       :prompt [{:type "text"
@@ -123,13 +179,25 @@
               (recur (conj updates (get-in message [:params :update]))
                      permission?)
 
-              (= 3 (:id message))
+              (= 6 (:id message))
               (do
                 (is permission?)
                 (is (= "end_turn" (get-in message [:result :stopReason])))
-                (is (some #(= "tool_call" (:sessionUpdate %)) updates))
+                (is (= {:inputTokens 8
+                        :outputTokens 3
+                        :totalTokens 11}
+                       (get-in message [:result :usage])))
+                (is (= ["fake-2"] @seen-models))
+                (is (some #(and (= "tool_call" (:sessionUpdate %))
+                                (= "mcp_fixture__echo" (:title %)))
+                          updates))
                 (is (some #(and (= "tool_call_update" (:sessionUpdate %))
-                                (= "completed" (:status %)))
+                                (= "completed" (:status %))
+                                (= {:echo "hello from ACP"}
+                                   (get-in % [:rawOutput
+                                              :structured_content]))
+                                (= "hello from ACP"
+                                   (get-in % [:content 0 :content :text])))
                           updates))
                 (is (= "MCP completed"
                        (->> updates
@@ -141,7 +209,7 @@
               :else (recur updates permission?))))
 
         (is (= {}
-               (:result (request! writer reader 4 "session/close"
+               (:result (request! writer reader 7 "session/close"
                                   {:sessionId session-id})))))
       (finally
         (.close client)

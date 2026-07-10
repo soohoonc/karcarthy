@@ -1,0 +1,234 @@
+---
+title: Agents
+description: Define model-backed and custom Agents, expose known Agents as Tools, and let models create new Agents recursively.
+---
+
+An Agent is an executable Clojure value with configuration, contracts, retained
+source forms, and either the standard model/Tool loop or a custom Clojure body.
+
+## `agent` and `defagent`
+
+Use `agent` when you need an Agent value in an expression:
+
+```clojure
+(def reviewer
+  (k/agent
+   {:name "reviewer"
+    :model {:transport :responses :id "gpt-5.6"}
+    :instructions "Review the change and return actionable findings."
+    :input map?
+    :output vector?}))
+```
+
+Use `defagent` to define a var directly:
+
+```clojure
+(k/defagent reviewer
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Review the change and return actionable findings."
+   :input map?
+   :output vector?})
+```
+
+These create the same kind of value. The practical relationship is like
+`fn`/`defn`: use `agent` as an expression and `defagent` for a named top-level
+definition. `defagent` also supplies `:name` from the symbol when the config
+does not provide one.
+
+There is one additional arity:
+
+```clojure
+(k/agent) ;=> a Tool that creates and runs an Agent
+```
+
+That Tool is covered in [Model-created Agents](#model-created-agents).
+
+## Agent configuration
+
+```clojure
+(k/agent
+ {:name "researcher"
+  :description "Research one question."
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Research carefully and cite evidence."
+  :context map?
+  :input map?
+  :tools [search fetch-page]
+  :output map?
+  :max-turns 20
+  :stop-when accepted?
+  :guardrails {:input [safe-input?]
+               :output [grounded?]}
+  :limits {:model-calls 30}
+  :metadata {:owner "research"}})
+```
+
+| Key | Purpose |
+| --- | --- |
+| `:name` | Stable Agent name. Required by `agent`; supplied by `defagent`. |
+| `:model` | Model ID, transport, and inference options. |
+| `:instructions` | Model-visible string or Runtime-view function. |
+| `:context` | Contract for local, non-model-visible dependencies. |
+| `:input`, `:output` | Boundary contracts. |
+| `:tools` | Tool values or a Runtime-view function returning them. |
+| `:max-turns` | Maximum model turns for the Agent. |
+| `:stop-when` | Predicate that can reject a premature final response. |
+| `:guardrails` | Input and output validation functions. |
+| `:limits` | Limits narrower than the current Run's grant. |
+
+`:model`, `:instructions`, and `:tools` may be functions of the immutable
+Runtime view, allowing per-request model routing and capability selection.
+
+## Model-backed Agents
+
+An Agent without a body uses the built-in loop:
+
+```clojure
+(k/defagent support-agent
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions
+   (fn [{:keys [context]}]
+     (str "Help account " (:account-id context) "."))
+   :context map?
+   :tools [lookup-account create-ticket]
+   :output string?})
+```
+
+The loop sends instructions, input, Tool schemas, and conversation history to
+the model. It validates and executes Tool calls until the model returns a valid
+final output or the Run fails, is cancelled, or reaches a limit.
+
+## Agents with a Clojure body
+
+Add `[rt input]` and a body when coordination should be explicit code:
+
+```clojure
+(k/defagent review-team
+  {:input map?
+   :output map?}
+  [rt change]
+  (let [reviews (k/await-all!
+                 [(k/spawn! rt security-reviewer change)
+                  (k/spawn! rt api-reviewer change)])]
+    (k/invoke! rt editor {:change change :reviews reviews})))
+```
+
+A custom-body Agent may omit `:model` and `:instructions`. `invoke!` executes a
+child in the current Run; `spawn!` and `await-all!` provide bounded parallel
+child execution. Normal Clojure supplies sequencing, branching, iteration, and
+error handling.
+
+## Expose a known Agent as a Tool
+
+Use `as-tool` when the child Agent is known when the parent is defined:
+
+```clojure
+(k/defagent support-manager
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Resolve the request and use a specialist when appropriate."
+   :tools [(k/as-tool billing-agent
+                      {:name "billing"
+                       :description "Handle billing questions."})
+           (k/as-tool refund-agent
+                      {:name "refund"
+                       :description "Evaluate refund requests."})]
+   :output string?})
+```
+
+The parent model calls a normal Tool. karcarthy invokes the selected Agent and
+returns its output to the parent, which then continues its own loop.
+
+## Model-created Agents
+
+Use zero-arity `(k/agent)` when the model should decide the child Agent's
+configuration or Clojure body at runtime:
+
+```clojure
+(k/defagent architect
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions
+   "Solve the task. Create a focused child Agent when specialization helps."
+   :tools [(k/agent)]
+   :output string?})
+```
+
+The model sees a Tool named `agent` with this input shape:
+
+```json
+{
+  "source": "(agent {:name \"specialist\" ...})",
+  "input": {"task": "..."}
+}
+```
+
+`source` must contain exactly one Clojure form whose evaluation produces an
+Agent. It can define a conventional model-backed Agent. In this example,
+`generated-tools` is an application var available in the evaluation namespace:
+
+```clojure
+(agent
+ {:name "specialist"
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Analyze compatibility risks in the proposed API change."
+  :input map?
+  :tools generated-tools
+  :output map?})
+```
+
+Or it can define an Agent with a Clojure body:
+
+```clojure
+(agent
+ {:name "parallel-review"
+  :input map?
+  :output map?}
+ [rt change]
+ (let [reviews (await-all!
+                [(spawn! rt security-reviewer change)
+                 (spawn! rt api-reviewer change)])]
+   (invoke! rt editor {:change change :reviews reviews})))
+```
+
+For each Tool call, karcarthy performs this pipeline:
+
+```text
+source → read → macroexpand → check → evaluate → verify Agent → invoke
+```
+
+The child runs inside the same Run tree. It inherits shared token and model-call
+usage, cancellation, deadline, approval handling, and event recording. If its
+Tool set contains `(agent)`, it can create another child.
+
+Configure recursion with Run limits:
+
+```clojure
+(k/run! architect task
+        {:limits {:agent-depth 4
+                  :generated-forms 10
+                  :model-calls 50
+                  :input-tokens 500000
+                  :deadline-ms 300000}})
+```
+
+Generated source is intentionally evaluated as JVM Clojure. It has the
+capabilities of its evaluation namespace and process. Use a restricted process
+or sandbox when the model or task input is not trusted.
+
+## Inspect Agent source
+
+Authored and generated Agents retain their forms:
+
+```clojure
+(k/source-form reviewer)
+(k/expanded-form reviewer)
+```
+
+Generated-Agent compilation also emits `:program/read`, `:program/expanded`,
+`:program/checked`, and `:program/evaluated` events. See
+[Generated Agents](/docs/reference/generated-agents) for the exact lifecycle.
+
+## Next
+
+- [Tools](/docs/tools) explains Tool contracts, approvals, MCP, and local Tools.
+- [Runtime](/docs/runtime) covers Runs, Sessions, limits, and events.
+- [Clojure example](/docs/examples/clojure) shows a complete multi-Agent system.

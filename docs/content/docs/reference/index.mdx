@@ -1,40 +1,33 @@
 ---
 title: Reference
-description: API, generated-code lifecycle, and runtime contracts for the native Clojure harness.
+description: Public API, runtime values, and generated-Agent compilation behavior.
 ---
 
-This reference specifies the implemented native kernel. It intentionally
-excludes the former Runner protocol, EDN workflow nodes, JSON workflow schema,
-and separate dynamic subsystem.
-
-## Pages
-
-| Page | Contents |
-| --- | --- |
-| [Library API](/docs/reference/api) | Macros and functions for agents, tools, execution, composition, generated code, and observation. |
-| [Generated Code](/docs/reference/json) | Reading, expanding, checking, evaluating, invoking, repairing, and recording model-authored Clojure. |
-| [Contracts](/docs/reference/schema) | Agent, Tool, Runtime, instructions, context, Session, Run, event, limit, and failure shapes. |
-
-## Namespace
-
-The common API is exposed from one namespace:
+The common API is available from one namespace:
 
 ```clojure
 (require '[karcarthy :as k])
 ```
 
-Local tools, prompt composition, Responses-hosted web search, the MCP adapter,
-and ACP serving are re-exported by the facade. Lower-level provider translation
-remains in narrower namespaces.
-
-## Status
-
-The functions on these pages exist on `main`. Durable suspension, resumable ACP
-sessions, MCP Streamable HTTP, and observable compaction are documented as
-future work where mentioned.
-
 <Cards>
   <Card title="Library API" href="/docs/reference/api" />
-  <Card title="Generated Code" href="/docs/reference/json" />
-  <Card title="Contracts" href="/docs/reference/schema" />
+  <Card title="Data model" href="/docs/reference/schema" />
+  <Card title="Generated Agents" href="/docs/reference/generated-agents" />
 </Cards>
+
+## Library API
+
+[Library API](/docs/reference/api) lists Agent and Tool forms, execution
+functions, Sessions, model configuration, local Tools, MCP, ACP, events, and
+contracts.
+
+## Data model
+
+[Data model](/docs/reference/schema) specifies Agent, Tool, Runtime, Session,
+Run, event, limit, and failure values.
+
+## Generated Agents
+
+[Generated Agents](/docs/reference/generated-agents) specifies the source
+format, evaluation namespace, compilation pipeline, limits, events, and
+security boundary for the zero-arity `agent` Tool and `compile-agent!`.

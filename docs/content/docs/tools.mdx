@@ -1,0 +1,178 @@
+---
+title: Tools
+description: Define typed Tools, configure approvals, use local and hosted capabilities, connect MCP servers, and expose Agents as Tools.
+---
+
+Tools are the capabilities a model may call. A Tool has a name, model-facing
+description, input contract, optional output contract, and an implementation.
+
+## `tool` and `deftool`
+
+Use `tool` to construct a value:
+
+```clojure
+(def lookup-user
+  (k/tool
+   {:name "lookup-user"
+    :description "Look up a user by ID."
+    :input {:type "object"
+            :properties {:user_id {:type "string"}}
+            :required ["user_id"]
+            :additionalProperties false}
+    :output map?}
+   [rt {:keys [user_id]}]
+   (lookup! (:db (k/context rt)) user_id)))
+```
+
+Use `deftool` to define a var and derive its default name from the symbol:
+
+```clojure
+(k/deftool lookup-user
+  {:description "Look up a user by ID."
+   :input map?
+   :output map?}
+  [rt {:keys [user-id]}]
+  (lookup! (:db (k/context rt)) user-id))
+```
+
+As with `agent` and `defagent`, these forms produce the same kind of Tool.
+
+## Tool configuration
+
+| Key | Purpose |
+| --- | --- |
+| `:name` | Model-visible function name. |
+| `:description` | When and how the model should use the Tool. |
+| `:input` | Runtime input contract. |
+| `:input-schema` | Explicit model-facing JSON Schema when different. |
+| `:output` | Runtime output contract. |
+| `:approval` | Approval policy or Runtime-view function. |
+| `:enabled?` | Runtime-view predicate controlling availability. |
+| `:guardrails` | Input and output guardrail functions. |
+| `:timeout-ms` | Execution timeout. |
+| `:retry` | Retry count or retry options. |
+| `:to-model-output` | Project a rich result into the value shown to the model. |
+
+Tool input is validated before approval and execution. Tool output is validated
+before it becomes model-visible.
+
+## Approval
+
+Set `:approval` to request authorization before execution:
+
+```clojure
+(k/deftool delete-record
+  {:description "Delete one record permanently."
+   :input map?
+   :output map?
+   :approval :always}
+  [rt request]
+  (delete! (:db (k/context rt)) request))
+```
+
+Supply an approval handler to `run!`:
+
+```clojure
+(k/run! agent input
+        {:approval
+         (fn [{:keys [tool input]}]
+           (confirm? (:name tool) input))})
+```
+
+`:once` reuses an approval for the same Tool within a Run. `:always` requests
+approval for each call. `:never` executes without a request.
+
+## Local Tools
+
+```clojure
+(def tools
+  (k/local-tools
+   {:cwd "/workspace/project"
+    :approval {:read :never
+               :search :never
+               :write :always
+               :edit :always
+               :bash :always}}))
+```
+
+`local-tools` returns:
+
+| Tool | Operation |
+| --- | --- |
+| `read` | Read bounded UTF-8 file content. |
+| `write` | Create or replace a file. |
+| `edit` | Replace exact text in a file. |
+| `bash` | Run a bounded shell command. |
+| `search` | Search file contents with ripgrep. |
+
+File Tools reject paths outside `:cwd`, including symlink escapes. `bash` runs
+inside `:cwd` with time and output bounds, but it is not a sandbox. `search`
+requires `rg` on `PATH`.
+
+## Hosted Tools
+
+Hosted Tools are executed by a model provider rather than local Clojure code:
+
+```clojure
+(k/defagent researcher
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Research current information and cite sources."
+   :tools [(k/responses-web-search
+            {:search_context_size "medium"})]
+   :output string?})
+```
+
+The selected model endpoint must support the hosted capability.
+
+## MCP Tools
+
+Connect to a stdio MCP server and adapt its definitions into ordinary Tools:
+
+```clojure
+(def connection
+  (k/connect-mcp!
+   {:name "project"
+    :command "npx"
+    :args ["-y" "@example/project-mcp"]
+    :cwd "/workspace/project"}))
+
+(try
+  (let [remote-tools (k/mcp-tools connection)
+        agent (k/agent
+               {:name "project-agent"
+                :model {:transport :responses :id "gpt-5.6"}
+                :instructions "Inspect the project and answer the request."
+                :tools remote-tools
+                :output string?})]
+    (k/run! agent "Summarize the open work."))
+  (finally
+    (k/close-mcp! connection)))
+```
+
+MCP Tools require approval by default. Pass `{:approval :never}` to
+`mcp-tools` only for a server whose command and implementations you trust.
+The current client implements MCP `2025-11-25` over stdio.
+
+## Agents as Tools
+
+There are two Agent-related Tool patterns:
+
+```clojure
+;; The child Agent is already known.
+(k/as-tool billing-agent
+           {:name "billing"
+            :description "Handle billing questions."})
+
+;; The model supplies a new Agent definition at call time.
+(k/agent)
+```
+
+`as-tool` invokes the known Agent and returns control to the parent model.
+Zero-arity `(agent)` compiles and invokes the Agent supplied in the Tool call.
+See [Agents](/docs/agents) for both execution models.
+
+## Next
+
+- [Agents](/docs/agents) covers model-created and recursive Agents.
+- [Runtime](/docs/runtime) covers context, execution, and events.
+- [Library API](/docs/reference/api) lists all Tool options.

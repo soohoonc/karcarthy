@@ -10,19 +10,20 @@ The common API is exposed from `(require '[karcarthy :as k])`.
 ### `agent`
 
 ```clojure
-(k/agent)
 (k/agent config)
 (k/agent config [rt input] body ...)
+(k/agent)
 ```
+
+With a config, constructs an Agent value and retains its original and expanded
+forms. Without a body, the Agent uses the standard model/Tool loop. A
+model-backed Agent requires `:name`, `:model`, and `:instructions`. A custom-body
+Agent requires `:name` but may omit model configuration.
 
 With no arguments, returns the model-facing `agent` Tool. That Tool accepts
 `{:source <one (agent ...) form> :input <value>}`, compiles the form, verifies
-that it produced an Agent, and invokes it in the current run tree.
-
-With a config, constructs an Agent and retains its original and expanded
-forms. Without a body, the Agent uses the standard model/Tool loop. A
-model-backed Agent requires `:name`, `:model`, and `:instructions`. A
-custom-body Agent requires `:name` but may omit model configuration.
+that it produced an Agent, and invokes it in the current Run. See
+[Model-created Agents](/docs/agents#model-created-agents).
 
 Supported configuration keys are:
 
@@ -55,6 +56,8 @@ context value, not model-visible prompt text.
 ```
 
 Defines a var containing an Agent. The symbol supplies the default `:name`.
+This is definition syntax for the same value constructed by `agent`, not a
+different Agent type.
 
 ### Inspection
 
@@ -190,11 +193,10 @@ database format.
 ```
 
 `prompt` joins strings and Runtime-view functions. Each function returns a
-string or nil. `prompt-file` reads exactly the named UTF-8 file.
-`system-prompt` reads the packaged `resources/karcarthy/system.md`. These
-functions do not infer a directory, Tool set, date, or hidden prompt source.
+string or nil. `prompt-file` reads the named UTF-8 file. `system-prompt` reads
+the packaged `resources/karcarthy/system.md`.
 
-## Generated code
+## Generated Agents
 
 ```clojure
 (def form (k/read-agent-form source))
@@ -207,7 +209,8 @@ functions do not infer a directory, Tool set, date, or hidden prompt source.
 `check-agent-form!` macroexpands executable positions in the Runtime's
 evaluation namespace. `eval-agent-form!` intentionally evaluates the checked
 form as JVM Clojure and verifies the resulting Agent. `compile-agent!` composes
-the three phases and emits program lifecycle events.
+the three phases and emits program lifecycle events. See
+[Generated Agents](/docs/reference/generated-agents).
 
 ## Model access
 
@@ -217,9 +220,8 @@ the three phases and emits program lifecycle events.
 (k/model! rt normalized-request)
 ```
 
-Calls the active model adapter for a custom Agent program. Most Agents should
-use the standard loop or invoke a model-backed child. Provider-adapter
-construction is internal; it is not a public extension abstraction.
+Calls the active model transport for a custom Agent body. Most Agents use the
+standard loop or invoke a model-backed child.
 
 ### `fake-model`
 
@@ -285,12 +287,28 @@ directly rather than through a shell. Always close the connection.
 ## ACP
 
 ```clojure
-(k/serve-acp! {:agent agent-or-factory})
+(k/serve-acp!
+ {:models ["gpt-5.6" "gpt-5.5"]
+  :agent (fn [{:keys [cwd mcp-tools model-id]}]
+           (k/agent
+            {:name "acp-agent"
+             :model {:transport :responses :id model-id}
+             :instructions (k/system-prompt)
+             :tools (into (k/local-tools {:cwd cwd}) mcp-tools)
+             :output string?}))})
 ```
 
 Serves ACP v1 over stdio or supplied `:in` and `:out` streams. A factory
-receives `{:cwd ... :mcp-tools ... :session-id ...}` and returns an Agent.
-`:run-options` supplies base Run options.
+receives `{:cwd ... :mcp-tools ... :session-id ... :model-id ...}` and returns
+an Agent. For a static Agent, its configured model ID is advertised
+automatically. `:models` adds selectable model IDs; `:run-options` supplies base
+Run options.
+
+Model selection uses ACP session configuration options. The prompt response
+includes `inputTokens`, `outputTokens`, and `totalTokens` aggregated across the
+Run's model calls when each call reported usage. The field is currently marked
+unstable by ACP. Tool updates carry standard ACP content as well as raw inputs
+and outputs. Harbor's generic ACP adapter can convert these events into ATIF.
 
 ```bash
 clojure -M -m karcarthy.acp your.namespace/agent-var
@@ -315,4 +333,4 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 ```
 
 Contracts support Clojure specs, predicates, classes, sets, and basic JSON
-Schema. See [Contracts](/docs/reference/schema) for the runtime shapes.
+Schema. See [Data model](/docs/reference/schema) for the runtime shapes.

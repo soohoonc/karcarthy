@@ -1,63 +1,24 @@
 ---
 title: Examples
-description: Complete examples of authored programs, generated agents, and ACP clients.
+description: Runnable examples for REPL development and multi-Agent composition.
 ---
 
-The examples use one rule throughout: orchestration is Clojure code. Agents may
-write more Clojure code, and the harness records source, expanded forms, and
-execution events together.
-
-## Examples
-
-| Page | Shows |
-| --- | --- |
-| [Clojure](/docs/examples/clojure) | Tools, model-backed agents, a custom orchestration body, parallel children, generated agents, and event capture. |
-| [Python](/docs/examples/python) | The ACP client boundary for driving a running Clojure harness from Python or Harbor. |
-| [TypeScript](/docs/examples/typescript) | The same ACP boundary from a TypeScript application. |
-
-Python and TypeScript are clients, not alternative authoring languages for the
-agent program. The executable program remains Clojure; ACP carries prompts,
-events, approvals, and results across the process boundary.
-
-## Pattern: a model-backed leaf
-
-```clojure
-(k/defagent researcher
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Research carefully and cite evidence."
-   :tools [web-search fetch-page]
-   :output ::report})
-```
-
-## Pattern: orchestration as code
-
-```clojure
-(k/defagent research-team
-  {:input ::question
-   :output ::report}
-  [rt question]
-  (let [draft (k/invoke! rt researcher question)
-        checks (k/await-all!
-                [(k/spawn! rt fact-checker draft)
-                 (k/spawn! rt citation-checker draft)])]
-    (k/invoke! rt editor {:draft draft :checks checks})))
-```
-
-## Pattern: generated behavior
-
-```clojure
-(k/defagent architect
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Design and run a child Agent for the task."
-   :tools [(k/agent)]})
-```
-
-The model calls the same `agent` form used by authored Clojure. The harness
-reads, expands, checks, evaluates, and verifies its source before the child
-runs.
-
 <Cards>
-  <Card title="Clojure" href="/docs/examples/clojure" />
-  <Card title="Python over ACP" href="/docs/examples/python" />
-  <Card title="TypeScript over ACP" href="/docs/examples/typescript" />
+  <Card title="REPL development" href="/docs/examples/repl" />
+  <Card title="Multi-Agent review" href="/docs/examples/clojure" />
 </Cards>
+
+## REPL development
+
+The [REPL example](/docs/examples/repl) uses the included deterministic model,
+so it runs without a network connection or API key. It covers Agent execution,
+Run inspection, source inspection, redefinition, and the correct way to test an
+ACP server without giving it the REPL's own standard input.
+
+## Multi-Agent review
+
+The [Clojure example](/docs/examples/clojure) builds a coding review system from
+local Tools, model-backed reviewers, parallel child execution, an editor, and
+an optional architect that can create new Agents through the `agent` Tool.
+
+All examples use the public `(require '[karcarthy :as k])` API.

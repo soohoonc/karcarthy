@@ -4,6 +4,6 @@
     "index",
     "api",
     "schema",
-    "json"
+    "generated-agents"
   ]
 }

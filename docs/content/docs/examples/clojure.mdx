@@ -1,152 +1,146 @@
 ---
-title: Clojure
-description: A research team built from typed tools, executable agents, generated code, and observable child runs.
+title: Multi-Agent review
+description: Build a coding review system with local Tools, parallel reviewers, and optional model-created Agents.
 ---
 
-This example uses the implemented programming model. The concrete
-provider and search functions are application dependencies.
+This example builds a review system for a local repository. The returned Agent
+can be run directly or served over ACP.
 
-## Contracts
+## Build the system
 
 ```clojure
-(ns example.research
-  (:require [clojure.spec.alpha :as s]
-            [karcarthy :as k]))
+(ns example.review
+  (:require [karcarthy :as k]))
 
-(s/def ::question string?)
-(s/def ::request (s/keys :req-un [::question]))
-(s/def ::answer string?)
-(s/def ::sources (s/coll-of string? :kind vector?))
-(s/def ::report (s/keys :req-un [::answer ::sources]))
-(s/def ::accepted? boolean?)
-(s/def ::feedback string?)
-(s/def ::review (s/keys :req-un [::accepted?]
-                        :opt-un [::feedback]))
+(defn review-system [cwd]
+  (let [tools (k/local-tools
+               {:cwd cwd
+                :approval {:read :never
+                           :search :never
+                           :write :always
+                           :edit :always
+                           :bash :always}})
+
+        security-reviewer
+        (k/agent
+         {:name "security-reviewer"
+          :model {:transport :responses :id "gpt-5.6"}
+          :instructions
+          "Inspect the change for concrete security problems. Cite files."
+          :tools tools
+          :input map?
+          :output string?})
+
+        api-reviewer
+        (k/agent
+         {:name "api-reviewer"
+          :model {:transport :responses :id "gpt-5.6"}
+          :instructions
+          "Inspect the change for API compatibility problems. Cite files."
+          :tools tools
+          :input map?
+          :output string?})
+
+        editor
+        (k/agent
+         {:name "review-editor"
+          :model {:transport :responses :id "gpt-5.6"}
+          :instructions
+          "Combine the reviews. Remove duplicates and unsupported claims."
+          :input map?
+          :output string?})]
+
+    (k/agent
+     {:name "review-team"
+      :input map?
+      :output string?}
+     [rt change]
+     (let [reviews
+           (k/await-all!
+            [(k/spawn! rt security-reviewer change)
+             (k/spawn! rt api-reviewer change)])]
+       (k/invoke! rt editor {:change change
+                             :reviews reviews})))))
 ```
 
-## Tools
+The reviewers use the standard model/Tool loop. `review-team` has a Clojure
+body and coordinates them deterministically. All children share Run limits,
+cancellation, usage accounting, and event storage.
+
+## Run it
 
 ```clojure
-(k/deftool web-search
-  {:description "Search the web for evidence relevant to a question."
-   :input (s/keys :req-un [::question])
-   :output ::sources
-   :approval :never}
-  [rt {:keys [question]}]
-  (search-web! (:http (k/context rt)) question))
+(def team (review-system "/workspace/project"))
 
-(k/deftool fetch-page
-  {:description "Fetch a page selected from search results."
-   :input ::url-request
-   :output string?}
-  [rt {:keys [url]}]
-  (fetch! (:http (k/context rt)) url))
-```
-
-## Leaf agents
-
-```clojure
-(k/defagent researcher
-  {:description "Produce one evidence-backed report."
-   :model {:transport :responses :id "gpt-5.6" :reasoning :high}
-   :instructions "Research carefully. Separate evidence from inference."
-   :input ::request
-   :tools [web-search fetch-page]
-   :output ::report})
-
-(k/defagent fact-checker
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Check every factual claim against the supplied sources."
-   :input ::report
-   :tools [fetch-page]
-   :output ::review})
-
-(k/defagent citation-checker
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Check that each citation supports its associated claim."
-   :input ::report
-   :tools [fetch-page]
-   :output ::review})
-
-(k/defagent editor
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Revise the report using the reviews without inventing evidence."
-   :input ::edit-request
-   :output ::report})
-```
-
-## The program
-
-```clojure
-(k/defagent research-team
-  {:description "Research, independently verify, and revise a question."
-   :input ::request
-   :output ::report}
-  [rt request]
-  (let [draft (k/invoke! rt researcher request)
-        reviews
-        (k/await-all!
-         [(k/spawn! rt fact-checker draft)
-          (k/spawn! rt citation-checker draft)])]
-    (if (every? :accepted? reviews)
-      draft
-      (k/invoke! rt editor {:draft draft :reviews reviews}))))
-```
-
-`research-team` has no model configuration because its body is the program.
-Its children may be model-backed agents, custom programs, or generated agents.
-
-## A generated specialist
-
-An architect agent may return a Clojure source string:
-
-```clojure
-(agent
-  {:name "domain-specialist"
-   :model {:transport :responses :id "gpt-5.6"}
-   :instructions "Analyze the domain terminology before answering."
-   :tools [web-search fetch-page]
-   :input ::request
-   :output ::report})
-```
-
-The parent evaluates it like any other form:
-
-```clojure
-(let [source (k/invoke! rt architect request)
-      child  (k/compile-agent! rt source)]
-  (k/invoke! rt child request))
-```
-
-There is no generated-workflow protocol. The source is normal Clojure and may
-contain a custom body, macros, nested agent forms, or structural transformations.
-
-## Run and observe
-
-```clojure
-(def events (atom []))
-
-(def result
-  (k/run! research-team
-          {:question "How do language models use tool feedback?"}
-          {:context {:http http-client}
-           :limits {:model-calls 40
-                    :parallelism 2
-                    :agent-depth 5
+(def run
+  (k/run! team
+          {:request "Review the current working tree."
+           :base "origin/main"}
+          {:limits {:parallelism 2
+                    :model-calls 20
                     :deadline-ms 180000}
-           :observe #(swap! events conj %)}))
+           :approval
+           (fn [{:keys [tool input]}]
+             (confirm-tool-call? (:name tool) input))
+           :observe handle-event}))
 
-(:status result) ;=> :completed
-(:output result) ;=> {:answer "..." :sources [...]}
+(:status run)
+(:output run)
 ```
 
-The event stream contains model calls, tool calls, child lineage, usage, and
-any `:program/read`, `:program/expanded`, and `:program/evaluated` events from
-generated agents. A research harness can compare these events without changing
-the application program.
+Only the local Tools configured with `:always` call the approval handler.
+
+## Add an adaptive architect
+
+For tasks where the useful specialist is not known in advance, create a
+model-backed entry point with the Agent Tool:
+
+```clojure
+(defn adaptive-reviewer [cwd]
+  (let [tools (k/local-tools {:cwd cwd})]
+    (k/agent
+     {:name "adaptive-reviewer"
+      :model {:transport :responses :id "gpt-5.6"}
+      :instructions
+      (str "Review the repository. Call the agent Tool when a focused "
+           "specialist or multi-Agent plan would improve the review.")
+      :tools (conj tools (k/agent))
+      :output string?})))
+
+(k/run! (adaptive-reviewer "/workspace/project")
+        "Review the current change."
+        {:limits {:agent-depth 4
+                  :generated-forms 8
+                  :parallelism 3
+                  :model-calls 40}})
+```
+
+The model can supply a new model-backed Agent or an Agent with a Clojure body.
+Generated source can refer to application vars only when they are available in
+the Run's evaluation namespace.
+
+## Serve it over ACP
+
+Use an Agent factory so ACP supplies the session working directory and MCP
+Tools:
+
+```clojure
+(defn acp-reviewer [{:keys [cwd mcp-tools model-id]}]
+  (let [local (k/local-tools {:cwd cwd})]
+    (k/agent
+     {:name "reviewer"
+      :model {:transport :responses :id model-id}
+      :instructions (k/system-prompt)
+      :tools (into (conj local (k/agent)) mcp-tools)
+      :output string?})))
+```
+
+```bash
+clojure -M -m karcarthy.acp example.review/acp-reviewer
+```
 
 ## Next
 
-- [Programs](/docs/workflows) explains each control-flow pattern.
-- [Harness](/docs/runners) defines runtime and loop semantics.
-- [Generated Code](/docs/reference/json) specifies compilation and evaluation.
+- [Agents](/docs/agents) documents generated-Agent evaluation and recursion.
+- [Tools](/docs/tools) documents local Tool security and approvals.
+- [Runtime](/docs/runtime) documents ACP and event streaming.

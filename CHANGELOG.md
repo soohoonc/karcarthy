@@ -24,12 +24,16 @@ All notable changes are documented here, following
 - An MCP 2025-11-25 stdio client that discovers and adapts remote tools.
 - An ACP v1 stdio server with sessions, permissions, cancellation, tool-call
   updates, streaming Agent-message chunks, per-session conversation history,
-  and session-provided stdio MCP servers.
+  session-provided stdio MCP servers, selectable model configuration, and
+  aggregate prompt usage compatible with Harbor's ACP-to-ATIF conversion.
 - An explicit paid live test that asks GPT-5.6 to author and run a child Agent.
 - A paid Agent test that inspects and edits a temporary directory.
 
 ### Changed
 
+- Documentation is organized around Agents, Tools, Runtime, runnable examples,
+  and reference material, with model-created Agents presented as the primary
+  capability.
 - The harness now owns the model/tool loop; provider transports only translate
   model I/O.
 - Orchestration is normal Clojure control flow and Agent invocation rather than

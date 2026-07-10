@@ -1,0 +1,151 @@
+---
+title: REPL development
+description: Define, run, inspect, and redefine Agents interactively without requiring a live model.
+---
+
+karcarthy Agents and Tools are ordinary Clojure values, so the REPL is the
+fastest way to develop them.
+
+## Run the included offline Agent
+
+From a checkout of karcarthy:
+
+```bash
+clojure -M
+```
+
+```clojure
+(require '[karcarthy :as k]
+         '[karcarthy.demo :as demo])
+
+(def run
+  (k/run! demo/demo-agent "hello from the repl"))
+
+(select-keys run [:status :output :usage])
+;;=> {:status :completed,
+;;    :output "HELLO FROM THE REPL",
+;;    :usage {...}}
+```
+
+`demo-agent` uses `fake-model`, calls an `uppercase` Tool, and then returns the
+Tool result. It does not make a network request.
+
+## Inspect execution
+
+```clojure
+(k/events run)
+
+(->> (k/events run)
+     (map :type)
+     distinct)
+;;=> (:run/started :agent/started :model/requested ...)
+```
+
+Inspect the Agent definition and its macroexpansion:
+
+```clojure
+(k/source-form demo/demo-agent)
+(k/expanded-form demo/demo-agent)
+```
+
+## Define an Agent at the prompt
+
+```clojure
+(def model
+  (k/fake-model
+   (fn [_]
+     {:type :final
+      :output "deterministic response"
+      :usage {:input-tokens 4 :output-tokens 2}})))
+
+(def assistant
+  (k/agent
+   {:name "assistant"
+    :model {:id "offline" :transport model}
+    :instructions "Return the configured test response."
+    :output string?}))
+
+(k/run! assistant "test input")
+```
+
+Change the model function or Agent configuration, evaluate the changed form,
+and run it again. No registry or build step is required.
+
+## Reload a namespace
+
+For Agents in `src/example.clj`:
+
+```clojure
+(require '[example :as example] :reload)
+(k/run! example/agent "try the new definition")
+```
+
+`defagent` is useful in source files because it defines the var directly. At
+the REPL, `agent` is convenient when assigning values with `def` or passing an
+Agent to another function.
+
+## Test a live model
+
+Start the REPL with the model credential available to the process, then define
+an Agent using the Responses transport:
+
+```clojure
+(def live-agent
+  (k/agent
+   {:name "live-agent"
+    :model {:transport :responses :id "gpt-5.6"}
+    :instructions "Answer concisely."
+    :output string?}))
+
+(k/run! live-agent "Explain what this Agent can do.")
+```
+
+The default credential variables are `RESPONSES_API_KEY` and
+`OPENAI_API_KEY`.
+
+## Test recursive Agent creation
+
+Add the Agent Tool to any live model-backed Agent:
+
+```clojure
+(def architect
+  (k/agent
+   {:name "architect"
+    :model {:transport :responses :id "gpt-5.6"}
+    :instructions
+    "Create and run a focused child Agent to solve the user's task."
+    :tools [(k/agent)]
+    :output string?}))
+
+(def run
+  (k/run! architect "Create a specialist that explains this API."
+          {:limits {:agent-depth 3
+                    :generated-forms 5}}))
+
+(->> (k/events run)
+     (filter #(#{:program/read
+                 :program/expanded
+                 :program/evaluated}
+               (:type %))))
+```
+
+## ACP and the REPL
+
+`serve-acp!` uses standard input and output by default. Do not call it with
+those defaults in the same terminal REPL: the server and REPL would compete for
+input.
+
+For normal ACP testing, put the Agent or factory in a namespace and launch a
+separate process:
+
+```bash
+clojure -M -m karcarthy.acp example/acp-agent
+```
+
+From a REPL, pass dedicated `:in` and `:out` streams to `serve-acp!` when an
+in-process protocol test is required. The ACP test suite uses this pattern.
+
+## Next
+
+- [Agents](/docs/agents) covers recursive and generated Agents.
+- [Runtime](/docs/runtime) documents Run and event shapes.

@@ -14,7 +14,7 @@ follow-ups:
 
 ## Evaluation
 
-- Harbor smoke evaluation.
+- Package/register the ACP launcher and run Harbor benchmark tasks and scorers.
 - ACP session loading/resumption and incremental model streaming.
 - MCP Streamable HTTP transport.
 - Event export containing program hashes, forms, usage, latency, and scores.
