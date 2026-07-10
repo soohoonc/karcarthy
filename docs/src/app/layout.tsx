@@ -19,10 +19,10 @@ function metadataBase() {
 export const metadata: Metadata = {
   metadataBase: metadataBase(),
   title: {
-    default: 'karcarthy docs',
-    template: '%s | karcarthy docs',
+    default: 'McCarthy',
+    template: '%s | McCarthy',
   },
-  description: 'A homoiconic Clojure Agent harness.',
+  description: 'A small Clojure agent harness.',
 };
 
 export default function Layout({ children }: LayoutProps<'/'>) {
