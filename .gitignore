@@ -4,6 +4,7 @@
 /.lsp/
 /target/
 /classes/
+/examples/harbor/.cpcache/
 /examples/harbor/dist/
 /examples/harbor/jobs/
 *.jar

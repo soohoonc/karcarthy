@@ -1,4 +1,4 @@
-(ns karcarthy.demo.dynamic
+(ns karcarthy.examples.dynamic
   "Offline demonstrations of runtime Agent generation and metric search."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]

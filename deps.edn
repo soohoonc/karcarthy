@@ -7,8 +7,12 @@
 
  :aliases
  {;; Run the test suite:  clojure -M:test
-  :test {:extra-paths ["test"]
+  :test {:extra-paths ["test" "examples/src"]
          :main-opts   ["-m" "karcarthy.test-runner"]}
+
+  ;; Runnable examples are deliberately outside the library source path.
+  :examples {:extra-paths ["examples/src"]
+             :main-opts   ["-m" "karcarthy.examples"]}
 
   ;; Explicitly paid/networked: KARCARTHY_LIVE=1 OPENAI_API_KEY=... \
   ;; clojure -M:live-test

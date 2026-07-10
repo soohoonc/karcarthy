@@ -1,14 +1,16 @@
 # Examples
 
 These examples form one path from the core model/Tool loop to metric-driven
-evaluation. The documentation mirrors this order.
+evaluation. The documentation mirrors this order. `examples/src` is added only
+by the `:examples` and `:test` aliases; it is not part of the library source
+path or published artifacts.
 
 | Example | Command or source | Requires | Demonstrates |
 | --- | --- | --- | --- |
-| 1. Hello | `clojure -M -m karcarthy.demo "hello"` | Clojure | Offline model/Tool loop |
+| 1. Hello | `clojure -M:examples hello "hello"` | Clojure | Offline model/Tool loop |
 | 2. Chat | [`clojure/chat.clj`](clojure/chat.clj) | API key | Sessions and a terminal application |
 | 3. Agent composition | [`clojure/composition.clj`](clojure/composition.clj) | API key | Clojure functions and concurrency as orchestration |
-| 4. Dynamic Agents | `clojure -M -m karcarthy.demo.dynamic` | Clojure | Runtime generation and event lineage |
+| 4. Dynamic Agents | `clojure -M:examples dynamic` | Clojure | Runtime generation and event lineage |
 | 5. Hill Climbing | local command or [`harbor`](harbor) | Clojure; optionally Docker and Harbor | Metric-driven candidate selection |
 
 ## 1. Hello
@@ -16,7 +18,7 @@ evaluation. The documentation mirrors this order.
 Run the smallest offline proof from the repository root:
 
 ```bash
-clojure -M -m karcarthy.demo "hello"
+clojure -M:examples hello "hello"
 ```
 
 A deterministic model calls an `uppercase` Tool and prints `HELLO`.
@@ -42,7 +44,7 @@ returned Agent.
 Run the deterministic runtime-generation trace:
 
 ```bash
-clojure -M -m karcarthy.demo.dynamic
+clojure -M:examples dynamic
 ```
 
 The architect model calls karcarthy's built-in `agent` Tool. The command prints
@@ -54,7 +56,7 @@ event lineage.
 Run the three-candidate search locally:
 
 ```bash
-clojure -M -m karcarthy.demo.dynamic hill-climb
+clojure -M:examples hill-climb
 ```
 
 Repeat the same search in isolated Harbor tasks with verifier rewards, ATIF

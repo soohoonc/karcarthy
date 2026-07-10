@@ -40,9 +40,11 @@ From the repository root:
 examples/harbor/hillclimb.sh
 ```
 
-The script builds a local ACP distribution, uploads it through the small
-`local_acp_agent.py` development adapter, runs one Harbor job per candidate,
-reads the verifier rewards from each `result.json`, and writes
+The script builds a dedicated example application uberjar and local ACP
+distribution; it does not add the example Agent to karcarthy's library JAR. It
+uploads the distribution through the small `local_acp_agent.py` development
+adapter, runs one Harbor job per candidate, reads the verifier rewards from
+each `result.json`, and writes
 `examples/harbor/jobs/scoreboard.json`.
 
 Harbor's public ACP registry correctly requires HTTPS distribution URLs. The
@@ -85,5 +87,5 @@ and its explicit input. karcarthy's finer `:program/*` compilation events stay
 in its internal Run event stream and are demonstrated by the offline example:
 
 ```bash
-clojure -M -m karcarthy.demo.dynamic
+clojure -M:examples dynamic
 ```

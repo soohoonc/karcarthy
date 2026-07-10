@@ -1,6 +1,7 @@
-(ns karcarthy.dynamic-demo-test
+(ns karcarthy.examples-test
   (:require [clojure.test :refer [deftest is]]
-            [karcarthy.demo.dynamic :as dynamic])
+            [karcarthy.examples.dynamic :as dynamic]
+            [karcarthy.examples.hello :as hello])
   (:import [java.nio.file Files Path]
            [java.nio.file.attribute FileAttribute]))
 
@@ -11,6 +12,9 @@
 (defn- delete-tree! [^Path root]
   (doseq [file (reverse (file-seq (.toFile root)))]
     (Files/deleteIfExists (.toPath file))))
+
+(deftest offline-hello-calls-the-tool-loop
+  (is (= "HELLO\n" (with-out-str (hello/-main "hello")))))
 
 (deftest model-submits-and-runs-a-new-agent-form
   (let [root (temp-directory)]

@@ -7,7 +7,7 @@
     karcarthy.cli-test
     karcarthy.tools-test
     karcarthy.eval-test
-    karcarthy.dynamic-demo-test
+    karcarthy.examples-test
     karcarthy.responses-test
     karcarthy.mcp-test
     karcarthy.acp-test])

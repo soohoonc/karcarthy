@@ -1,4 +1,4 @@
-(ns karcarthy.demo
+(ns karcarthy.examples.hello
   "Offline demonstration of the native model/tool loop."
   (:require [karcarthy :as k]))
 
@@ -9,7 +9,7 @@
   [{:keys [text]}]
   (.toUpperCase ^String text))
 
-(def demo-model
+(def hello-model
   (k/fake-model
    (fn [{:keys [messages]}]
      (let [input messages]
@@ -20,12 +20,12 @@
                    :name "uppercase"
                    :input {:text (get-in input [0 :content])}}]})))))
 
-(k/defagent demo-agent
-  {:model {:id "offline" :transport demo-model}
+(k/defagent hello-agent
+  {:model {:id "offline" :transport hello-model}
    :instructions "Use the uppercase tool."
    :tools [uppercase]
    :output string?})
 
 (defn -main [& [input]]
-  (let [run (k/run! demo-agent (or input "hello from karcarthy"))]
+  (let [run (k/run! hello-agent (or input "hello from karcarthy"))]
     (println (:output run))))

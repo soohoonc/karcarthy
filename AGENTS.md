@@ -14,7 +14,7 @@ workflow bridge.
 ```bash
 clojure -M:test
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
-clojure -M -m karcarthy.demo
+clojure -M:examples hello
 clojure -M -e '(load-file "examples/clojure/generated_calculator.clj")'
 clojure -M -m karcarthy.acp your.namespace/agent-var
 clojure -T:build jar
@@ -36,7 +36,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `resources/karcarthy/agent.md` | Model-facing manual for generating Agent programs; runtime model, Tool, and Agent catalogs are interpolated into it. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
-| `src/karcarthy/demo.clj` | Offline fake-model/tool-loop demonstration. |
+| `examples/src/karcarthy/examples.clj` | Examples-only dispatcher for hello, dynamic-Agent, hill-climbing, and REPL commands. |
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
 | `test/karcarthy/core_test.clj` | Kernel, model loop, instructions/context, Sessions, streaming, composition, limits, and events. |
 | `test/karcarthy/eval_test.clj` | Generated-form lifecycle and recursion. |

@@ -11,15 +11,15 @@ fastest way to develop them.
 From a checkout of karcarthy:
 
 ```bash
-clojure -M
+clojure -M:examples repl
 ```
 
 ```clojure
 (require '[karcarthy :as k]
-         '[karcarthy.demo :as demo])
+         '[karcarthy.examples.hello :as hello])
 
 (def run
-  (k/run! demo/demo-agent "hello from the repl"))
+  (k/run! hello/hello-agent "hello from the repl"))
 
 (select-keys run [:status :output :usage])
 ;;=> {:status :completed,
@@ -27,7 +27,7 @@ clojure -M
 ;;    :usage {...}}
 ```
 
-`demo-agent` uses `fake-model`, calls an `uppercase` Tool, and then returns the
+`hello-agent` uses `fake-model`, calls an `uppercase` Tool, and then returns the
 Tool result. It does not make a network request.
 
 ## Inspect the Run
@@ -44,8 +44,8 @@ Tool result. It does not make a network request.
 Inspect the Agent definition and its macroexpansion:
 
 ```clojure
-(k/definition demo/demo-agent)
-(k/expansion demo/demo-agent)
+(k/definition hello/hello-agent)
+(k/expansion hello/hello-agent)
 ```
 
 ## Define an Agent at the prompt

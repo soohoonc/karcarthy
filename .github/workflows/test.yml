@@ -47,6 +47,13 @@ jobs:
       - name: Build library jar
         run: clojure -T:build jar
 
+      - name: Keep examples out of the library jar
+        run: |
+          if jar tf target/karcarthy-*.jar | rg -q '^karcarthy/(demo|examples)'; then
+            echo "Example namespaces must not ship in the library jar."
+            exit 1
+          fi
+
       - name: Check whitespace
         run: git diff --check
 

@@ -41,6 +41,9 @@ All notable changes are documented here, following
 
 ### Changed
 
+- Runnable examples now live on an explicit examples classpath and Harbor
+  builds a separate application artifact; library artifacts contain only the
+  harness and production CLI.
 - Documentation now introduces the harness from ordinary Agent use outward,
   separates prompt input from local context and Tool schemas, and presents the
   homoiconic motivation after the programming model.

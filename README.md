@@ -12,7 +12,7 @@ functions, macros, control flow, and concurrency compose them.
 JDK 21 and the Clojure CLI are required.
 
 ```bash
-clojure -M -m karcarthy.demo "hello"
+clojure -M:examples hello "hello"
 ```
 
 This calls a Clojure Tool through a deterministic fake model and prints
@@ -106,7 +106,7 @@ This executes model-authored JVM Clojure and is not a sandbox.
 
 ```bash
 clojure -M:test
-clojure -M -m karcarthy.demo
+clojure -M:examples hello
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 clojure -T:build all
 cd docs && npm ci && npm run lint && npm run types:check && npm run build
