@@ -14,11 +14,12 @@ All notable changes are documented here, following
   gives a model the same form as a recursive tool capability.
 - Model-authored Clojure reading, full executable-position macroexpansion,
   evaluation, Agent verification, recursive invocation, and trace events.
-- A direct OpenAI Responses API transport and deterministic in-process fake
-  model transport.
+- A Responses-compatible HTTP transport with configurable endpoint,
+  authentication environment, headers, and model IDs, plus a deterministic
+  in-process fake model transport.
 - Minimal workspace `read`, `write`, `edit`, `bash`, and ripgrep-backed
   `search` Tools plus separate capability-derived instructions.
-- OpenAI-hosted web search as a provider-native Tool.
+- Responses-hosted web search as an explicit endpoint capability.
 - An MCP 2025-11-25 stdio client that discovers and adapts remote tools.
 - An ACP v1 stdio server with sessions, permissions, cancellation, tool-call
   updates, and session-provided stdio MCP servers.

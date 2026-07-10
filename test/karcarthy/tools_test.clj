@@ -70,10 +70,10 @@
                      (reset! seen request)
                      {:type :final :output "ok"}))
             local-tools (tools/workspace {:cwd (str root)})
-            all-tools (conj local-tools (k/openai-web-search))
+            all-tools (conj local-tools (k/responses-web-search))
             agent (k/agent
                    {:name "workspace-agent"
-                    :model {:provider :openai :id "fake" :transport model}
+                    :model {:id "fake" :transport model}
                     :instructions
                     (prompt/workspace
                      {:cwd (str root)

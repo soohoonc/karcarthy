@@ -28,7 +28,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy.clj` | Public facade under one alias: `(require '[karcarthy :as k])`. |
 | `src/karcarthy/core.clj` | Recursive Agent/Tool macros and values, contracts, Runtime, native model/tool loop, child execution, limits, memory, approvals, events, and Runs. |
 | `src/karcarthy/eval.clj` | Model-authored source reading, macroexpansion, evaluation, verification, and program events. |
-| `src/karcarthy/model/openai.clj` | Direct OpenAI Responses API model transport. It translates model I/O only. |
+| `src/karcarthy/model/responses.clj` | Responses-compatible HTTP transport for OpenAI or compatible gateways. It translates model I/O only. |
 | `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a workspace. |
 | `src/karcarthy/prompt.clj` | Capability-derived workspace system instructions. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
@@ -37,7 +37,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
 | `test/karcarthy/core_test.clj` | Kernel, model loop, tools, contracts, composition, limits, memory, and events. |
 | `test/karcarthy/eval_test.clj` | Generated-form lifecycle and recursion. |
-| `test/karcarthy/openai_test.clj` | Pure Responses request/response translation. |
+| `test/karcarthy/responses_test.clj` | Pure translation plus an offline compatible-endpoint integration test. |
 | `test/karcarthy/tools_test.clj` | Workspace tools and capability-derived prompt. |
 | `test/karcarthy/mcp_test.clj` | MCP initialization, discovery, execution, and shutdown. |
 | `test/karcarthy/acp_test.clj` | ACP session lifecycle, permissions, updates, and MCP bridging. |

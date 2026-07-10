@@ -48,28 +48,28 @@ provider and search functions are application dependencies.
 ```clojure
 (k/defagent researcher
   {:description "Produce one evidence-backed report."
-   :model {:provider :openai :id "gpt-5.6" :reasoning :high}
+   :model {:transport :responses :id "gpt-5.6" :reasoning :high}
    :instructions "Research carefully. Separate evidence from inference."
    :input ::request
    :tools [web-search fetch-page]
    :output ::report})
 
 (k/defagent fact-checker
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Check every factual claim against the supplied sources."
    :input ::report
    :tools [fetch-page]
    :output ::review})
 
 (k/defagent citation-checker
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Check that each citation supports its associated claim."
    :input ::report
    :tools [fetch-page]
    :output ::review})
 
 (k/defagent editor
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Revise the report using the reviews without inventing evidence."
    :input ::edit-request
    :output ::report})
@@ -103,7 +103,7 @@ An architect agent may return a Clojure source string:
 ```clojure
 (agent
   {:name "domain-specialist"
-   :model {:provider :openai :id "gpt-5.6"}
+   :model {:transport :responses :id "gpt-5.6"}
    :instructions "Analyze the domain terminology before answering."
    :tools [web-search fetch-page]
    :input ::request

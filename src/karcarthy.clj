@@ -5,7 +5,7 @@
             [karcarthy.core :as core]
             [karcarthy.eval :as keval]
             [karcarthy.mcp :as mcp]
-            [karcarthy.model.openai :as openai]
+            [karcarthy.model.responses :as responses]
             [karcarthy.prompt :as prompt]
             [karcarthy.tools :as tools]))
 
@@ -49,7 +49,7 @@
 (def fake-model core/fake-model)
 (def workspace-tools tools/workspace)
 (def workspace-prompt prompt/workspace)
-(def openai-web-search openai/web-search)
+(def responses-web-search responses/web-search)
 (def connect-mcp! mcp/connect!)
 (def mcp-tools mcp/tools)
 (def close-mcp! mcp/close!)

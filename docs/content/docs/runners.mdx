@@ -55,7 +55,7 @@ This loop is implemented in Clojure and used by every provider.
 (k/agent
   {:name "researcher"
    :description "Research one question."
-   :model {:provider :openai
+   :model {:transport :responses
            :id "gpt-5.6"
            :reasoning :high
            :temperature 0.2}
@@ -115,7 +115,7 @@ make replay and comparison easier.
 
 Provider-hosted capabilities are represented as hosted Tools. They are lowered
 only by their matching model transport and never placed in the local execution
-map. For example, `openai-web-search` becomes the Responses API's native
+map. For example, `responses-web-search` becomes the Responses API's native
 `web_search` tool.
 
 ## Workspace tools and prompt
@@ -219,10 +219,12 @@ Sensitive payload recording is controlled independently from event emission.
 
 ## Provider integrations
 
-karcarthy includes a direct OpenAI Responses transport and an in-process fake
-transport. Additional providers may implement the same narrow request boundary. This is
-not runner portability: the harness semantics remain fixed, and provider
-adapters only translate model I/O.
+karcarthy includes a Responses-compatible HTTP transport and an in-process fake
+transport. The HTTP adapter defaults to OpenAI but can target compatible
+gateways without changing the model loop. Native provider adapters may
+implement the same narrow request boundary when their semantics cannot be
+represented by Responses. This is not runner portability: the harness
+semantics remain fixed, and adapters only translate model I/O.
 
 ACP sits outside this boundary. `serve-acp!` and the `karcarthy.acp` entry point
 expose an Agent or per-session Agent factory over ACP v1 stdio. The server maps

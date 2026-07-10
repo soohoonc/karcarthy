@@ -49,8 +49,7 @@
     (k/agent
      {:name "acp-test-agent"
       :model
-      {:provider :openai
-       :id "fake"
+      {:id "fake"
        :transport
        (k/fake-model
         (fn [_]

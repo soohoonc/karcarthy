@@ -57,7 +57,7 @@ sees.
 
 (k/defagent researcher
   {:description "Research a question and return a sourced report."
-   :model {:provider :openai
+   :model {:transport :responses
            :id "gpt-5.6"
            :reasoning :high}
    :instructions
@@ -73,6 +73,17 @@ sees.
 
 With no body after the configuration map, `defagent` installs the standard
 model/tool loop.
+
+The built-in `:responses` transport defaults to OpenAI. To use a compatible
+gateway, keep the Agent unchanged and configure its model boundary:
+
+```clojure
+{:transport :responses
+ :provider :anthropic
+ :id "anthropic/claude-model"
+ :base-url "https://ai-gateway.vercel.sh/v1"
+ :api-key-env "AI_GATEWAY_API_KEY"}
+```
 
 ## Run it
 
@@ -102,12 +113,12 @@ Tools and prompt explicitly:
 ```clojure
 (def tools
   (conj (k/workspace-tools {:cwd "/workspace/project"})
-        (k/openai-web-search)))
+        (k/responses-web-search)))
 
 (def coder
   (k/agent
    {:name "coder"
-    :model {:provider :openai
+    :model {:transport :responses
             :id "gpt-5.6"
             :reasoning :high}
     :instructions
@@ -121,8 +132,9 @@ Tools and prompt explicitly:
 
 `workspace-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
 `search`. `workspace-prompt` lists only the supplied capabilities, includes
-root `AGENTS.md` or `CLAUDE.md`, and can append caller instructions. OpenAI web
-search is an explicit hosted Tool. Neither function introduces a special Agent.
+root `AGENTS.md` or `CLAUDE.md`, and can append caller instructions. Hosted web
+search is an explicit Responses Tool whose availability depends on the endpoint
+and selected model. Neither function introduces a special Agent.
 
 ## Add MCP tools
 
@@ -141,7 +153,7 @@ MCP is an adapter into ordinary Tools:
                     (k/mcp-tools server {:approval :never}))
         coder (k/agent
                {:name "coder"
-                :model {:provider :openai :id "gpt-5.6"}
+                :model {:transport :responses :id "gpt-5.6"}
                 :instructions
                 (k/workspace-prompt {:cwd "/workspace/project"
                                      :tools tools})
@@ -166,7 +178,7 @@ session:
   (let [tools (into (k/workspace-tools {:cwd cwd}) mcp-tools)]
     (k/agent
      {:name "workspace-agent"
-      :model {:provider :openai :id "gpt-5.6"}
+      :model {:transport :responses :id "gpt-5.6"}
       :instructions (k/workspace-prompt {:cwd cwd :tools tools})
       :tools tools
       :output string?})))
@@ -204,7 +216,7 @@ Add the expansion capability to its tool set:
 
 ```clojure
 (k/defagent architect
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Design and run the smallest useful child Agent."
    :tools [(k/agent)]})
 ```

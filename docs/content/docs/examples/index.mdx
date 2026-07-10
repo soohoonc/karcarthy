@@ -23,7 +23,7 @@ events, approvals, and results across the process boundary.
 
 ```clojure
 (k/defagent researcher
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Research carefully and cite evidence."
    :tools [web-search fetch-page]
    :output ::report})
@@ -47,7 +47,7 @@ events, approvals, and results across the process boundary.
 
 ```clojure
 (k/defagent architect
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Design and run a child Agent for the task."
    :tools [(k/agent)]})
 ```

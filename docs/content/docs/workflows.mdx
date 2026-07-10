@@ -89,7 +89,7 @@ Expose a child agent to a model-backed parent with `as-tool`:
 
 ```clojure
 (k/defagent support-manager
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Help the user. Delegate specialized work when useful."
    :tools [(k/as-tool billing-agent
                       {:name "billing"

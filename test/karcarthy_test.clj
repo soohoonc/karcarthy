@@ -8,7 +8,7 @@
                 context model! emit! events model-transport fake-model
                 hosted-tool hosted-tool?
                 workspace-tools workspace-prompt
-                openai-web-search connect-mcp! mcp-tools close-mcp!
+                responses-web-search connect-mcp! mcp-tools close-mcp!
                 serve-acp!
                 read-agent-form check-agent-form! eval-agent-form!
                 compile-agent! source-form expanded-form]]

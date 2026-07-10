@@ -88,17 +88,17 @@ name.
 
 Returns true when the value satisfies the Tool contract.
 
-### `hosted-tool` and `openai-web-search`
+### `hosted-tool` and `responses-web-search`
 
 ```clojure
-(k/hosted-tool :openai {:type "web_search"})
-(k/openai-web-search)
-(k/openai-web-search {:search_context_size "low"})
+(k/hosted-tool :responses {:type "web_search"})
+(k/responses-web-search)
+(k/responses-web-search {:search_context_size "low"})
 ```
 
-A hosted Tool is executed by its matching provider rather than by karcarthy.
-The model/tool loop rejects a provider mismatch. `hosted-tool?` identifies this
-value type.
+A hosted Tool is executed by its matching transport rather than by karcarthy.
+The selected transport rejects hosted specifications it does not own.
+`hosted-tool?` identifies this value type.
 
 ### `as-tool`
 
@@ -241,6 +241,45 @@ agents should use the standard loop or invoke a model-backed child instead.
 Provider transports implement only the normalized model request boundary. They
 never execute tools or child agents.
 
+### Responses-compatible transport
+
+`:transport :responses` selects the built-in HTTP adapter. Direct OpenAI needs
+only a model ID and `OPENAI_API_KEY`:
+
+```clojure
+{:transport :responses
+ :provider :openai
+ :id "gpt-5.6"}
+```
+
+A compatible gateway changes endpoint and credentials, not harness semantics:
+
+```clojure
+{:transport :responses
+ :provider :anthropic
+ :id "anthropic/claude-model"
+ :base-url "https://ai-gateway.vercel.sh/v1"
+ :api-key-env "AI_GATEWAY_API_KEY"
+ :headers {"X-Application" "karcarthy"}}
+```
+
+Transport options:
+
+- `:base-url` — API root; defaults to `https://api.openai.com/v1`;
+- `:path` — endpoint path; defaults to `/responses`;
+- `:url` — complete URL override;
+- `:api-key` or `:api-key-env` — explicit credentials;
+- `RESPONSES_API_KEY`, then `OPENAI_API_KEY` — environment fallbacks;
+- `:headers` — additional or replacement HTTP headers;
+- `:auth? false` — omit automatic Bearer authentication for a trusted local
+  endpoint;
+- `:timeout-ms` — complete request timeout;
+- `:provider-options` — additional Responses request-body fields.
+
+Model IDs pass through unchanged. Endpoint-specific hosted Tools work only
+when the selected endpoint and model implement their specifications. `:provider`
+is optional descriptive metadata; `:transport` selects executable model I/O.
+
 ## Workspace capabilities
 
 ### `workspace-tools` and `workspace-prompt`
@@ -251,7 +290,7 @@ never execute tools or child agents.
   (k/workspace-prompt {:cwd "/workspace" :tools tools}))
 
 (k/agent {:name "workspace-agent"
-          :model {:provider :openai :id "gpt-5.6"}
+          :model {:transport :responses :id "gpt-5.6"}
           :instructions instructions
           :tools tools
           :output string?})

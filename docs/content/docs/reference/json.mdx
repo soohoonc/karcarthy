@@ -14,7 +14,7 @@ The source must contain one top-level form whose evaluation returns an Agent:
 ```clojure
 (agent
   {:name "generated-reviewer"
-   :model {:provider :openai :id "gpt-5.6"}
+   :model {:transport :responses :id "gpt-5.6"}
    :instructions "Review the change and return concrete findings."
    :tools [read-file search-code]
    :input ::change

@@ -14,7 +14,7 @@ orchestration are executable Clojure values and forms.
 (require '[karcarthy :as k])
 
 (k/defagent researcher
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Research carefully and cite evidence."
    :tools [web-search]
    :output ::report})
@@ -37,7 +37,7 @@ explicitly:
 
 ```clojure
 (k/defagent architect
-  {:model {:provider :openai :id "gpt-5.6"}
+  {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Design and run the smallest useful child Agent."
    :tools [(k/agent)]})
 ```
@@ -89,12 +89,12 @@ Agent, not a separate kind of coding Agent.
 ```clojure
 (def tools
   (conj (k/workspace-tools {:cwd "/workspace/project"})
-        (k/openai-web-search)))
+        (k/responses-web-search)))
 
 (def coder
   (k/agent
    {:name "coder"
-    :model {:provider :openai :id "gpt-5.6"}
+    :model {:transport :responses :id "gpt-5.6"}
     :instructions (k/workspace-prompt
                    {:cwd "/workspace/project" :tools tools})
     :tools tools
@@ -108,10 +108,22 @@ or care whether a function tool was authored locally or discovered from an MCP
 server. The ACP server exposes an Agent or per-session Agent factory to editors
 and evaluation clients such as Harbor.
 
+`:transport :responses` selects the built-in Responses-compatible transport. It
+defaults to OpenAI, while `:base-url`, `:api-key-env`, and the unchanged model
+ID can target a compatible gateway without adding a provider implementation:
+
+```clojure
+{:transport :responses
+ :provider :anthropic
+ :id "anthropic/claude-model"
+ :base-url "https://ai-gateway.vercel.sh/v1"
+ :api-key-env "AI_GATEWAY_API_KEY"}
+```
+
 ## Status
 
 The native kernel, model/tool loop, workspace tools, structured child execution,
-generated-form evaluation, direct OpenAI Responses transport, hosted web
+generated-form evaluation, a Responses-compatible HTTP transport, hosted web
 search, stdio MCP client, and ACP v1 server are implemented. The former
 Runner/EDN workflow implementation and JSON workflow bridge have been removed.
 

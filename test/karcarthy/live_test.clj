@@ -1,5 +1,5 @@
 (ns karcarthy.live-test
-  "Paid end-to-end verification of the OpenAI transport and homoiconic bridge."
+  "Paid end-to-end verification of the Responses transport and Agent bridge."
   (:require [clojure.string :as str]
             [clojure.test :as t :refer [deftest is]]
             [karcarthy :as k])
@@ -24,7 +24,7 @@
   (doseq [file (reverse (file-seq (.toFile root)))]
     (Files/deleteIfExists (.toPath file))))
 
-(deftest openai-expands-and-runs-an-agent
+(deftest responses-expands-and-runs-an-agent
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set OPENAI_API_KEY in the process environment.")
   (when (and (live?) (credentials?))
@@ -32,7 +32,8 @@
           architect
           (k/agent
            {:name "live-architect"
-            :model {:provider :openai
+            :model {:transport :responses
+                    :provider :openai
                     :id (configured-model)
                     :reasoning :low
                     :timeout-ms 180000}
@@ -65,7 +66,7 @@
                   (map :agent)
                   vec))))))
 
-(deftest openai-agent-inspects-and-edits-a-workspace
+(deftest responses-agent-inspects-and-edits-a-workspace
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set OPENAI_API_KEY in the process environment.")
   (when (and (live?) (credentials?))
@@ -78,7 +79,8 @@
               coder
               (k/agent
                {:name "live-workspace-agent"
-                :model {:provider :openai
+                :model {:transport :responses
+                        :provider :openai
                         :id (configured-model)
                         :reasoning :low
                         :timeout-ms 180000}

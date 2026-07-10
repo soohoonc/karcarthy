@@ -51,10 +51,11 @@ means the server and all adapted tools have been explicitly trusted.
 
 ## Model providers
 
-The OpenAI transport sends instructions, pending model input, tool schemas, and
-tool outputs to the configured Responses API endpoint. Keep `OPENAI_API_KEY`
-out of source control, review provider data handling, and avoid placing secrets
-in prompts or tool results.
+The Responses transport sends instructions, pending model input, tool schemas,
+and tool outputs to its configured endpoint. Keep API keys out of source
+control, review the endpoint and underlying model provider's data handling, and
+avoid placing secrets in prompts or tool results. Custom `:headers` may contain
+credentials and must not be recorded in events or logs.
 
 ## Denial of service
 

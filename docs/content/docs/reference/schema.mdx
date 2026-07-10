@@ -29,7 +29,7 @@ The public configuration surface is:
 | --- | --- |
 | `:name` | Stable identifier. Supplied from the symbol by `defagent`. |
 | `:description` | Model- and human-facing description used in delegation. |
-| `:model` | Provider, model identifier, reasoning, sampling, and provider options. May be a resolver. |
+| `:model` | Transport, optional provider metadata, model identifier, reasoning, sampling, and endpoint options. May be a resolver. |
 | `:instructions` | String or Runtime-dependent function producing model-visible instructions. |
 | `:context` | Contract for the local dependency-injection value. |
 | `:input` | Input contract. |
@@ -74,7 +74,7 @@ A Runtime is passed to agent programs, tools, resolvers, guardrails, and hooks:
  :limits {...}
  :usage {...}
  :memory memory-atom
- :model-transports {:provider transport}
+ :model-transports {:transport-name transport}
  :cancel token
  :approval handler
  :evaluation-namespace 'karcarthy.eval.run_...}

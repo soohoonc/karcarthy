@@ -105,7 +105,7 @@
   (let [key-fn (fn [tool]
                  (if (core/tool? tool)
                    [:function (:name tool)]
-                   [:hosted (:provider tool) (:spec tool)]))]
+                   [:hosted (:transport tool) (:spec tool)]))]
     (->> (concat left right)
          (reduce (fn [{:keys [seen result]} tool]
                    (let [key (key-fn tool)]

@@ -349,25 +349,25 @@
        (fn? (:execute x))))
 
 (defn hosted-tool
-  "Describe a provider-executed tool. The provider adapter lowers `spec` to
+  "Describe a transport-executed tool. The transport adapter lowers `spec` to
   its native API; karcarthy never pretends to execute it locally."
-  [provider spec]
-  (when-not (keyword? provider)
+  [transport spec]
+  (when-not (keyword? transport)
     (fail! :contract :configuration
-           "Hosted Tool provider must be a keyword"
-           {:provider provider}))
+           "Hosted Tool transport must be a keyword"
+           {:transport transport}))
   (when-not (map? spec)
     (fail! :contract :configuration
            "Hosted Tool spec must be a map"
            {:spec spec}))
   {:karcarthy/type :hosted-tool
-   :provider provider
+   :transport transport
    :spec spec})
 
 (defn hosted-tool? [x]
   (and (map? x)
        (= :hosted-tool (:karcarthy/type x))
-       (keyword? (:provider x))
+       (keyword? (:transport x))
        (map? (:spec x))))
 
 (declare invoke!)
@@ -560,16 +560,17 @@
   (if (fn? value) (value (runtime-view rt)) value))
 
 (defn- resolve-transport [rt model]
-  (let [transport (:transport model)
-        provider (:provider model)
-        transport (or transport
-                      (get (:model-transports rt) provider)
-                      (when (= :openai provider)
-                        (requiring-resolve 'karcarthy.model.openai/complete!)))]
+  (let [configured (:transport model)
+        transport
+        (if (keyword? configured)
+          (or (get (:model-transports rt) configured)
+              (when (= :responses configured)
+                (requiring-resolve 'karcarthy.model.responses/complete!)))
+          configured)]
     (or transport
         (fail! :model :configuration
                "No model transport is configured"
-               {:provider provider :model model}))))
+               {:transport configured :model model}))))
 
 (defn- call-transport [transport request]
   (cond
@@ -602,7 +603,7 @@
         request (assoc request :model model)
         started (System/nanoTime)]
     (emit! rt {:type :model/requested
-               :model (select-keys model [:provider :id])})
+               :model (select-keys model [:provider :transport :id])})
     (try
       (let [response (normalize-model-response (call-transport transport request))
             usage (:usage response)]
@@ -630,7 +631,7 @@
 (defn- default-json-schema []
   {:type "object" :properties {} :additionalProperties true})
 
-(defn- tool-descriptor [model tool]
+(defn- tool-descriptor [tool]
   (cond
     (tool? tool)
     (let [config (:config tool)]
@@ -643,14 +644,9 @@
                        (default-json-schema))})
 
     (hosted-tool? tool)
-    (if (= (:provider model) (:provider tool))
-      {:kind :hosted
-       :provider (:provider tool)
-       :spec (:spec tool)}
-      (fail! :tool :configuration
-             "Hosted Tool provider does not match the Agent model"
-             {:tool-provider (:provider tool)
-              :model-provider (:provider model)}))
+    {:kind :hosted
+     :transport (:transport tool)
+     :spec (:spec tool)}
 
     :else
     (fail! :tool :configuration "Agent contains an invalid Tool"
@@ -842,7 +838,7 @@
                           :messages messages
                           :input pending
                           :state provider-state
-                          :tools (mapv #(tool-descriptor model %) tools)
+                          :tools (mapv tool-descriptor tools)
                           :output-schema (or (:output-schema config)
                                              (contract->json-schema
                                               (:output config)))

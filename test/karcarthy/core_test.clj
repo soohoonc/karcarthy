@@ -67,6 +67,25 @@
     (is (= 3 (get-in run [:usage :input-tokens])))
     (is (= 2 (get-in run [:usage :output-tokens])))))
 
+(deftest named-transport-is-resolved-independently-from-provider
+  (let [transport (scripted-model "done")
+        agent (k/agent {:name "routed"
+                        :model {:id "provider/model"
+                                :provider :example-provider
+                                :transport :example-transport}
+                        :instructions "answer"
+                        :output string?})
+        run (k/run! agent nil
+                    {:model-transports {:example-transport transport}})
+        requested (first (filter #(= :model/requested (:type %))
+                                 (:events run)))]
+    (is (= :completed (:status run)))
+    (is (= "done" (:output run)))
+    (is (= {:provider :example-provider
+            :transport :example-transport
+            :id "provider/model"}
+           (:model requested)))))
+
 (deftest memory-can-carry-conversation-between-runs
   (let [memory (atom {})
         seen (atom [])

@@ -23,7 +23,7 @@
     (str "- " (or (get-in tool [:spec :name])
                    (get-in tool [:spec :type])
                    "hosted-tool")
-         ": provider-executed capability")
+         ": transport-executed capability")
     :else "- unknown tool"))
 
 (defn- project-guidance [root]

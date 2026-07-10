@@ -1,5 +1,5 @@
-(ns karcarthy.model.openai
-  "Direct OpenAI Responses API transport. It only translates model I/O; the
+(ns karcarthy.model.responses
+  "Responses-compatible HTTP transport. It only translates model I/O; the
   karcarthy core owns the loop and executes function tools locally."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
@@ -44,18 +44,24 @@
 
 (defn- request-tool [tool]
   (case (:kind tool)
-    :hosted (:spec tool)
+    :hosted
+    (if (= :responses (:transport tool))
+      (:spec tool)
+      (core/fail! :model :configuration
+                  "Hosted Tool belongs to a different transport"
+                  {:tool-transport (:transport tool)
+                   :model-transport :responses}))
     :function (function-tool tool)
     (core/fail! :model :configuration
-                "OpenAI received an unsupported normalized Tool"
+                "Responses transport received an unsupported normalized Tool"
                 {:tool tool})))
 
 (defn web-search
-  "Create OpenAI's server-executed web-search capability. Options are merged
-  into the provider-native tool definition."
+  "Create a Responses server-executed web-search capability. The configured
+  endpoint and selected model must support this hosted Tool."
   ([] (web-search {}))
   ([options]
-   (core/hosted-tool :openai (merge {:type "web_search"} options))))
+   (core/hosted-tool :responses (merge {:type "web_search"} options))))
 
 (defn- api-name [x]
   (str/replace (name x) "-" "_"))
@@ -126,7 +132,7 @@
     (json/read-str (or arguments "{}") :key-fn keyword)
     (catch Throwable t
       (core/fail! :model :response
-                  "OpenAI returned invalid function-call arguments"
+                  "Responses endpoint returned invalid function-call arguments"
                   {:arguments arguments} t))))
 
 (defn- output-text [output]
@@ -142,8 +148,13 @@
   [payload]
   (when-let [error (:error payload)]
     (core/fail! :model :response
-                (or (:message error) "OpenAI response failed")
+                (or (:message error) "Responses request failed")
                 {:error error}))
+  (when (and (:status payload) (not= "completed" (:status payload)))
+    (core/fail! :model :response
+                (str "Responses request ended with status " (:status payload))
+                {:status (:status payload)
+                 :incomplete-details (:incomplete_details payload)}))
   (let [calls (->> (:output payload)
                    (filter #(= "function_call" (:type %)))
                    (mapv (fn [item]
@@ -166,35 +177,61 @@
        :usage usage
        :raw payload})))
 
+(defn- request-url [model]
+  (if-let [url (:url model)]
+    (str url)
+    (let [base-url (str/replace
+                    (or (:base-url model) "https://api.openai.com/v1")
+                    #"/$" "")
+          path (or (:path model) "/responses")]
+      (str base-url (if (str/starts-with? path "/") path (str "/" path))))))
+
+(defn- configured-headers [model]
+  (into {} (map (fn [[name value]] [(str name) (str value)]))
+        (:headers model)))
+
+(defn- authorization-header? [headers]
+  (some #(= "authorization" (str/lower-case %)) (keys headers)))
+
+(defn- api-key [model]
+  (or (:api-key model)
+      (when-let [name (:api-key-env model)] (System/getenv (str name)))
+      (System/getenv "RESPONSES_API_KEY")
+      (System/getenv "OPENAI_API_KEY")))
+
 (defn complete!
-  "Execute one OpenAI Responses API model request. Configure OPENAI_API_KEY or
-  provide `:api-key` in the Agent's :model map."
+  "Execute one Responses-compatible HTTP request.
+
+  `:base-url` defaults to OpenAI. Gateways may set `:base-url`, `:api-key` or
+  `:api-key-env`, and `:headers`. Set `:auth? false` for a trusted endpoint
+  that requires no Authorization header. `:url` overrides the complete URL."
   [normalized-request]
   (let [model (:model normalized-request)
-        api-key (or (:api-key model) (System/getenv "OPENAI_API_KEY"))
-        base-url (str/replace (or (:base-url model) "https://api.openai.com/v1")
-                              #"/$" "")
+        headers (configured-headers model)
+        key (api-key model)
+        default-auth? (and (not= false (:auth? model))
+                           (not (authorization-header? headers)))
         timeout-ms (long (or (:timeout-ms model) 120000))]
-    (when (str/blank? api-key)
+    (when (and default-auth? (str/blank? key))
       (core/fail! :model :configuration
-                  "OPENAI_API_KEY is not set"
-                  {:provider :openai}))
+                  "Responses API key is not configured"
+                  {:transport :responses
+                   :api-key-env (:api-key-env model)}))
     (when (str/blank? (:id model))
       (core/fail! :model :configuration
-                  "OpenAI model configuration requires :id"
+                  "Responses model configuration requires :id"
                   {:model model}))
     (let [body (json/write-str (request normalized-request))
           builder (doto (HttpRequest/newBuilder)
-                    (.uri (URI/create (str base-url "/responses")))
+                    (.uri (URI/create (request-url model)))
                     (.timeout (Duration/ofMillis timeout-ms))
-                    (.header "Authorization" (str "Bearer " api-key))
                     (.header "Content-Type" "application/json")
                     (.header "Accept" "application/json")
                     (.POST (HttpRequest$BodyPublishers/ofString body)))
-          _ (when-let [organization (:organization model)]
-              (.header builder "OpenAI-Organization" organization))
-          _ (when-let [project (:project model)]
-              (.header builder "OpenAI-Project" project))
+          _ (when default-auth?
+              (.header builder "Authorization" (str "Bearer " key)))
+          _ (doseq [[name value] headers]
+              (.setHeader builder name value))
           http-request (.build builder)
           http-response (.send ^HttpClient @http-client http-request
                                (HttpResponse$BodyHandlers/ofString))
@@ -207,12 +244,12 @@
                     (json/read-str response-body :key-fn keyword)
                     (catch Throwable t
                       (core/fail! :model :response
-                                  "OpenAI returned non-JSON content"
+                                  "Responses endpoint returned non-JSON content"
                                   {:status status :body response-body} t)))]
       (when-not (<= 200 status 299)
                     (core/fail! :model :request
                     (or (get-in payload [:error :message])
-                        (str "OpenAI request failed with HTTP " status))
+                        (str "Responses request failed with HTTP " status))
                     {:status status
                      :request-id request-id
                      :response payload}))
