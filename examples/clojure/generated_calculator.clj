@@ -41,4 +41,4 @@
 (let [run (k/run! architect {:question "What is 20 + 22?"}
                   {:observe #(println (:type %) (or (:agent %) ""))})]
   (println "output:" (:output run))
-  (println "generated forms:" (get-in run [:usage :generated-forms])))
+  (println "Agent forms:" (get-in run [:usage :agent-forms])))

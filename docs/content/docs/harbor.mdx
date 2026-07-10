@@ -1,0 +1,130 @@
+---
+title: Harbor
+description: Evaluate a packaged karcarthy ACP Agent with Harbor and ATIF.
+---
+
+[Harbor](https://www.harborframework.com/) is an evaluation framework for
+running Agents against tasks in isolated environments, applying verifiers,
+and collecting trial results. karcarthy integrates at Harbor's generic ACP
+boundary:
+
+```text
+Harbor task and environment
+  -> Harbor ACP runner
+  -> packaged karcarthy ACP process
+  -> karcarthy Agent
+  -> ACP messages, Tool updates, and usage
+  -> Harbor result, reward, logs, and ATIF trajectory
+```
+
+Harbor owns task execution, environments, rewards, experiment storage, and
+trajectory conversion. karcarthy owns the Agent program and its model/Tool
+loop. Neither project needs a second shared workflow format.
+
+## Current integration status
+
+karcarthy implements the ACP behavior Harbor's runner consumes, including
+session creation, prompt turns, streamed messages, Tool updates, permissions,
+model selection, cancellation, usage, and session closure. The protocol path
+is covered by karcarthy's offline ACP integration test.
+
+karcarthy does **not** yet publish a distribution in the ACP registry. There is
+therefore no valid `acp:karcarthy` shorthand today. Harbor needs a packaged
+Agent distribution before it can install and launch karcarthy inside each task
+environment.
+
+This distinction matters: speaking ACP makes the systems compatible; packaging
+and registry publication make the integration reproducible.
+
+## Package the Agent
+
+A Harbor-ready distribution must contain:
+
+1. karcarthy and the application namespace that defines the Agent or factory;
+2. a JVM suitable for the target task environment, or an explicit JVM runtime
+   dependency;
+3. a launcher that starts `karcarthy acp namespace/var` and leaves stdout
+   exclusively for ACP; and
+4. an ACP registry record describing an installable `binary`, `npx`, or `uvx`
+   distribution.
+
+The natural Clojure artifact is an application uberjar containing the Agent
+namespace, not the library-only standalone JAR. The launcher ultimately runs:
+
+```bash
+java -jar application-standalone.jar acp example.coding-agent/agent
+```
+
+Harbor can consume a local registry record before publication:
+
+```yaml
+agents:
+  - name: acp
+    model_name: openai/gpt-5.6
+    kwargs:
+      registry_entry_path: /absolute/path/to/karcarthy-agent.json
+      auth_policy: auto
+      permission_mode: allow
+```
+
+The registry record must point to a distribution Harbor can install inside the
+task environment. See Harbor's current [ACP Agent documentation](https://www.harborframework.com/docs/agents/acp)
+for its registry schema, distribution options, and CLI shorthand.
+
+Once a karcarthy distribution is published, the intended command becomes:
+
+```bash
+harbor run \
+  --path path/to/tasks \
+  --agent acp:karcarthy@<version> \
+  --model openai/gpt-5.6 \
+  --ae OPENAI_API_KEY=$OPENAI_API_KEY
+```
+
+That command is illustrative until the registry entry exists.
+
+## What Harbor records
+
+Harbor's current ACP runner writes the Agent output, raw ACP events, an ACP
+summary, and `trajectory.json` under the trial's Agent log directory. Harbor
+constructs the trajectory from the protocol messages; karcarthy does not write
+ATIF itself.
+
+The ACP updates include raw Tool inputs and outputs. A model-created Agent
+therefore appears observably as a call to the `agent` Tool whose input contains
+the submitted Clojure source and explicit Agent input. Harbor can use that
+record to verify behavior without karcarthy defining a Harbor-specific event
+or storage format.
+
+ATIF is the versioned, JSON-based interchange format Harbor uses for messages,
+Tool calls, observations, metrics, and multi-Agent traces. See Harbor's
+[ATIF documentation](https://www.harborframework.com/docs/agents/trajectory-format)
+for the current schema and exporters.
+
+## What to measure
+
+A useful experiment separates three questions:
+
+1. **Task outcome:** Did the verifier pass, and what reward did the trial earn?
+2. **Protocol-visible behavior:** Did the Agent call `agent`, which forms did
+   it submit, which Tools ran, and what token usage was reported?
+3. **Experimental condition:** Which karcarthy commit, Agent definition,
+   system prompt, model, task version, and limits produced the trial?
+
+Harbor owns the first two records through results and ATIF. Put the third in
+the Harbor job configuration, Agent version, and task metadata so runs are
+comparable. Model-call counts and other karcarthy-only metrics belong in the
+internal event record described below. A research use of karcarthy does not
+need to claim improvement; the same setup can test whether a model exhibits a
+specified orchestration behavior.
+
+## Important boundary
+
+karcarthy's internal Run events contain details such as Agent lineage and
+macro-expansion phases. ACP exposes model text, Tool activity, permissions,
+and aggregate usage—not the complete internal Run event vector. Do not assume
+Harbor's ATIF trajectory is a lossless serialization of karcarthy internals.
+Use Harbor for portable behavioral evaluation. When an experiment requires
+harness-internal instrumentation, supply an `:observe` callback through ACP
+`:run-options` and persist the selected karcarthy events as an additional trial
+artifact.

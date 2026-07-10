@@ -15,11 +15,69 @@ instructions, Tools, and an output contract:
    :output string?})
 ```
 
-Call it with `run!`:
+## Run an Agent
+
+`run!` passes one input value to an Agent and returns a Run:
 
 ```clojure
-(k/run! researcher "What changed in the latest Java release?")
+(def run
+  (k/run! researcher "What changed in the latest Java release?"))
+
+(:status run) ;=> :completed
+(:output run) ;=> "..."
 ```
+
+The Run retains the input, output, usage, events, and a structured failure when
+execution does not complete:
+
+```clojure
+{:karcarthy/type :run
+ :id "run_..."
+ :status :completed
+ :agent "researcher"
+ :input "What changed in the latest Java release?"
+ :output "..."
+ :usage {:model-calls 4
+         :input-tokens 12000
+         :output-tokens 900
+         :agent-forms 0
+         :duration-ms 4200.0}
+ :events [...]
+ :error nil}
+```
+
+Status is `:completed`, `:failed`, or `:cancelled`. Check it before using
+`:output`; failed and cancelled Runs retain their usage, events, and `:error`.
+
+For an Agent with a model, karcarthy validates the input, calls the model with
+the Agent's instructions and callable schemas, executes requested Tools or
+Agents, returns their results to the model, and repeats until the model returns
+a final answer or the Run stops.
+
+## Run options
+
+Local dependencies belong in `:context`. They are available to Tools and
+Clojure Agent programs through `(k/context)` but are not inserted into model
+messages:
+
+```clojure
+(k/run! account-agent "Summarize account 123."
+        {:context {:account-id "123" :db db}
+         :limits {:model-calls 100
+                  :input-tokens 1000000
+                  :output-tokens 100000
+                  :depth 8
+                  :parallelism 6
+                  :agent-forms 20
+                  :deadline-ms 300000}
+         :cancel cancelled?})
+```
+
+`:cancel` may be a Boolean, predicate, atom, or another dereferenceable value.
+Cancellation is checked around Agent, model, and Tool calls. Other options are
+`:session`, `:observe`, `:approval`, `:metadata`, `:model-transports`, and
+`:evaluation-namespace`; the [Library API](/docs/reference/api#run) defines
+their exact shapes.
 
 ## Two ways to declare an Agent
 
@@ -169,3 +227,6 @@ recursive and bounded by Run limits.
 This executes model-authored JVM Clojure. Use it only in a process or sandbox
 with the authority you intend to grant. See [Generated
 Agents](/docs/reference/generated-agents) for the exact pipeline.
+
+For conversation history across root Runs, see [Sessions](/docs/sessions). For
+incremental output and the event tree, see [Streaming and events](/docs/streaming).

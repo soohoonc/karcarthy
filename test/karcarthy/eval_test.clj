@@ -26,7 +26,7 @@
         run (k/run! parent "hello")]
     (is (= :completed (:status run)))
     (is (= "hello!" (:output run)))
-    (is (= 1 (get-in run [:usage :generated-forms])))
+    (is (= 1 (get-in run [:usage :agent-forms])))
     (is (= #{:program/read :program/expanded :program/checked
              :program/evaluated}
            (->> (:events run)
@@ -59,13 +59,13 @@
     (is (= :evaluation (get-in run [:error :phase])))
     (is (re-find #"missing-symbol" (get-in run [:error :message])))))
 
-(deftest generated-form-budget
+(deftest agent-form-budget
   (let [parent (k/agent {:name "parent" :output string?}
                         [_]
                         (k/compile-agent!
                          "(agent {:name \"child\" :output string?} [_] \"ok\")")
                         "unreachable")
-        run (k/run! parent nil {:limits {:generated-forms 0}})]
+        run (k/run! parent nil {:limits {:agent-forms 0}})]
     (is (= :failed (:status run)))
     (is (= :budget (get-in run [:error :kind])))))
 
@@ -102,7 +102,7 @@
         run (k/run! parent nil)]
     (is (= :completed (:status run)))
     (is (= 42 (:output run)))
-    (is (= 1 (get-in run [:usage :generated-forms])))
+    (is (= 1 (get-in run [:usage :agent-forms])))
     (is (= ["architect" "answer"]
            (->> (:events run)
                 (filter #(= :agent/started (:type %)))
@@ -234,7 +234,7 @@
                                         :child child-model}})]
     (is (= :completed (:status run)) (pr-str (:error run)))
     (is (= 42 (:output run)))
-    (is (= 2 (get-in run [:usage :generated-forms])))
+    (is (= 2 (get-in run [:usage :agent-forms])))
     (is (= ["parent" "child" "answer"]
            (->> (:events run)
                 (filter #(= :agent/started (:type %)))

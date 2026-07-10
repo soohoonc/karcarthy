@@ -91,7 +91,13 @@ Starts a Run and returns its complete result.
 ```clojure
 {:context {...}
  :session session
- :limits {...}
+ :limits {:model-calls 100
+          :input-tokens 1000000
+          :output-tokens 100000
+          :depth 8
+          :parallelism 6
+          :agent-forms 20
+          :deadline-ms 300000}
  :observe event-fn
  :approval approval-handler
  :cancel cancellation-token
@@ -175,7 +181,7 @@ Use a deterministic model in tests:
 (k/model! normalized-request)
 ```
 
-## Tools supplied by integrations
+## Supplied Tools
 
 ```clojure
 (k/responses-web-search)
@@ -190,7 +196,9 @@ Use a deterministic model in tests:
 ```
 
 `local-tools` supplies `read`, `write`, `edit`, `bash`, and `search`. MCP uses
-stdio and must be closed by the caller.
+stdio and must be closed by the caller. See [Tools](/docs/tools),
+[Models](/docs/models), and [MCP](/docs/mcp) for execution and lifecycle
+semantics.
 
 ## ACP
 
@@ -203,14 +211,17 @@ Or provide an Agent factory:
 ```clojure
 (k/serve-acp!
  {:models ["gpt-5.6"]
-  :agent (fn [{:keys [cwd mcp-tools model-id]}]
+  :agent (fn [{:keys [cwd model-id]}]
            (k/agent
             {:name "acp-agent"
              :model {:transport :responses :id model-id}
              :instructions "Complete the coding request."
-             :tools (into (k/local-tools {:cwd cwd}) mcp-tools)
+             :tools (k/local-tools {:cwd cwd})
              :output string?}))})
 ```
+
+Client-provided MCP Tools are appended automatically. See [ACP](/docs/acp) for
+the complete session factory and supported protocol surface.
 
 ## Events and contracts
 

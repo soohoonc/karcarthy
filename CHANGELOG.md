@@ -55,6 +55,8 @@ All notable changes are documented here, following
 - Loop controls are top-level Agent options: `:max-turns` and `:stop-when`.
 - Agent input contracts may be paired with a model-facing `:input-schema` when
   the Agent is available to another Agent.
+- Run limits use Lisp-native vocabulary: `:depth` bounds nested Agent calls and
+  `:agent-forms` bounds submitted runtime Agent forms.
 
 ### Removed
 

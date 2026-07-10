@@ -17,7 +17,7 @@ entirely offline and demonstrates:
 - an Agent written as a Clojure program;
 - model-authored Clojure read, expansion, checking, and evaluation;
 - recursive Agent creation;
-- run events and generated-form usage.
+- Run events and Agent-form usage.
 
 Run it from the repository root:
 
@@ -31,6 +31,6 @@ The paid end-to-end test lets GPT-5.6 write a new `agent` form and run it:
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 ```
 
-Python and TypeScript applications can launch
+Any ACP client can launch
 `clojure -M -m karcarthy.acp namespace/agent-var` and speak ACP over stdio.
-They are protocol clients rather than authors of JSON workflow graphs.
+See the dedicated [ACP documentation](../docs/content/docs/acp.mdx).

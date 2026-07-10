@@ -116,8 +116,8 @@ new Agent instead of hard-coding the review team:
 
 (k/run! (adaptive-reviewer "/workspace/project")
         "Review the current change."
-        {:limits {:agent-depth 4
-                  :generated-forms 8
+        {:limits {:depth 4
+                  :agent-forms 8
                   :parallelism 3
                   :model-calls 40}})
 ```

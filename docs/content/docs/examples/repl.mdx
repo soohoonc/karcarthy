@@ -118,8 +118,8 @@ Allow a live Agent to write and run a new Agent:
 
 (def run
   (k/run! architect "Create a specialist that explains this API."
-          {:limits {:agent-depth 3
-                    :generated-forms 5}}))
+          {:limits {:depth 3
+                    :agent-forms 5}}))
 
 (->> (k/events run)
      (filter #(#{:program/read
@@ -132,5 +132,5 @@ Allow a live Agent to write and run a new Agent:
 
 - [Chat from the REPL](/docs/examples/chat) adds conversation history.
 - [Agents](/docs/agents) covers recursive and generated Agents.
-- [Running agents](/docs/running-agents) documents Run results and limits.
-- [Integrations](/docs/integrations#acp) documents ACP serving.
+- [Agents](/docs/agents#run-an-agent) documents Run results and limits.
+- [ACP](/docs/acp) documents serving an Agent to another process.

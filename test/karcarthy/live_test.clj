@@ -47,14 +47,14 @@
             :max-turns 3})
           run (k/run! architect nil
                       {:limits {:model-calls 3
-                                :generated-forms 1
-                                :agent-depth 2
+                                :agent-forms 1
+                                :depth 2
                                 :parallelism 2
                                 :deadline-ms 180000}})
           event-types (set (map :type (:events run)))]
       (is (= :completed (:status run)) (pr-str (:error run)))
       (is (= "42" (some-> (:output run) str/trim)))
-      (is (= 1 (get-in run [:usage :generated-forms])))
+      (is (= 1 (get-in run [:usage :agent-forms])))
       (is (contains? event-types :tool/completed))
       (is (contains? event-types :program/evaluated))
       (let [agents (->> (:events run)
