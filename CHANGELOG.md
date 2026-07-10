@@ -33,11 +33,11 @@ All notable changes are documented here, following
 - An explicit paid live test that asks GPT-5.6 to author and run a new Agent.
 - A paid Agent test that inspects and edits a temporary directory.
 - A minimal REPL chat example built from an Agent, `run!`, and a Session.
-- A live Coding Agent that inspects repositories with local Tools, creates a
-  focused specialist from evidence, edits code, and verifies the result.
-- A packaged Harbor hill-climb that compares direct and specialist
-  configurations of the same live Coding Agent by mean verifier reward on an
-  open-ended repository-debugging task, with a scoreboard and ATIF trajectories.
+- A live Coding Agent that inspects repositories with local Tools, chooses its
+  own strategy, edits code, and verifies the result.
+- A packaged Harbor and GEPA search that evolves complete executable Clojure
+  Agent programs from verifier feedback and ATIF trajectories, selects by mean
+  validation reward, and reports performance on an untouched test split.
 
 ### Changed
 

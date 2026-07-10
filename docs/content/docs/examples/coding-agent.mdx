@@ -7,10 +7,9 @@ The Coding Agent is a live Responses Agent with repository-rooted `read`,
 `write`, `edit`, `bash`, and `search` Tools. It inspects an unfamiliar
 repository, runs tests, makes focused changes, and verifies the result.
 
-Karcarthy's built-in `agent` Tool is available automatically. After its initial
-inspection, the Coding Agent creates one focused specialist whose assignment is
-based on the evidence it found. The specialist is another ordinary Clojure
-Agent form, compiled and run by the same kernel.
+Karcarthy's built-in `agent` Tool is available automatically, but the Coding
+Agent is not required to use it. It may work directly, create another Agent,
+run review in parallel, or choose another strategy based on the task.
 
 ## Run it on a repository
 
@@ -27,20 +26,19 @@ The implementation is the `coding-agent` factory in
 the supplied directory and uses `KARCARTHY_OPENAI_MODEL`, defaulting to
 `gpt-5.6`.
 
-## What the trace establishes
+## What the trace records
 
 The Run event stream records:
 
 - repository Tool calls and observations;
-- the parent Coding Agent;
-- the submitted specialist source and explicit input;
-- `:program/read`, `:program/expanded`, `:program/checked`, and
-  `:program/evaluated` events;
-- the specialist Agent's nested lineage; and
+- the Coding Agent and repository Tool activity;
+- any submitted Agent source and explicit input;
+- `:program/*` compiler events and nested lineage when an Agent is generated;
+- model and Tool failures; and
 - aggregate model usage.
 
-The specialist is not selected from a host-language list. The live model writes
-its assignment and Agent form after inspecting the repository.
+The trace reports what happened; it does not prescribe what a successful
+workflow must look like.
 
 ## Verify the live example
 
@@ -51,12 +49,11 @@ KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 ```
 
 The live test creates a temporary repository, runs the public Coding Agent,
-checks that it inspected and repaired the repository, verifies its tests, and
-asserts that a generated specialist entered the Run.
+checks that it inspected and repaired the repository, and verifies its tests.
 
 ## Evaluate it with Harbor
 
-The [Harbor guide](/docs/harbor#run-the-coding-agent) packages this same factory
-behind karcarthy's production ACP server. Harbor supplies the isolated task,
-reward, logs, and ATIF trajectory; karcarthy continues to own the model/Tool and
-Agent-generation loop.
+The [Harbor guide](/docs/harbor#from-demonstration-to-search) starts from this
+Agent, then lets reflective search propose complete replacement Clojure Agent
+programs. Harbor supplies isolated tasks, verifier rewards, and ATIF
+trajectories; validation reward selects the best program.

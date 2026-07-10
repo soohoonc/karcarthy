@@ -11,20 +11,20 @@ offline unit suite, where they make kernel behavior deterministic and free.
 | [Basic Agent](/docs/quickstart#run-the-live-example) | One live model Run |
 | [Chat](/docs/examples/chat) | Sessions and an interactive application |
 | [Agent composition](/docs/examples/composition) | Predefined Agents coordinated with Clojure |
-| [Coding Agent](/docs/examples/coding-agent) | Repository tools and a model-authored specialist |
-| [Harbor](/docs/harbor#run-the-coding-agent) | Metric-driven evaluation of the same Coding Agent through ACP |
+| [Coding Agent](/docs/examples/coding-agent) | Open-ended repository work with optional Agent generation |
+| [Harbor](/docs/harbor#from-demonstration-to-search) | Search over executable Agent programs using rewards and trajectories |
 
 <Cards>
   <Card title="Basic Agent" href="/docs/quickstart#run-the-live-example" />
   <Card title="Chat" href="/docs/examples/chat" />
   <Card title="Agent composition" href="/docs/examples/composition" />
   <Card title="Coding Agent" href="/docs/examples/coding-agent" />
-  <Card title="Harbor" href="/docs/harbor#run-the-coding-agent" />
+  <Card title="Harbor" href="/docs/harbor#from-demonstration-to-search" />
 </Cards>
 
-The Coding Agent is the main end-to-end example. Run it directly while
-developing an Agent, then run the same factory through Harbor when you need an
-isolated environment, verifier reward, repeated rollouts, or trajectory viewer.
+The Coding Agent is the main end-to-end application example. The Harbor example
+then treats a complete Clojure Agent form as the search artifact and uses
+isolated tasks, verifier rewards, and trajectories to evolve it.
 
 The [REPL guide](/docs/repl) covers interactive development. Integration details
 for [MCP](/docs/mcp) and [ACP](/docs/acp) remain in their dedicated guides.

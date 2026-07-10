@@ -10,8 +10,8 @@ library artifacts.
 | Basic Agent | `clojure -M:examples basic <prompt>` | One live model Run |
 | Chat | [`clojure/chat.clj`](clojure/chat.clj) | Sessions and a terminal application |
 | Agent composition | [`clojure/composition.clj`](clojure/composition.clj) | Predefined Agents coordinated with Clojure |
-| Coding Agent | `clojure -M:examples coding <directory> <task>` | Repository tools and a model-authored specialist |
-| Harbor | [`harbor`](harbor) | Isolated evaluation of the same Coding Agent through ACP |
+| Coding Agent | `clojure -M:examples coding <directory> <task>` | Open-ended repository work with optional Agent generation |
+| Harbor | [`harbor`](harbor) | Reflective search over executable Agent programs |
 
 Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running an example. Use
 `KARCARTHY_OPENAI_MODEL` to override the default model.
@@ -46,8 +46,9 @@ clojure -M:examples coding /workspace/project \
   "Investigate the failing integration tests, fix the cause, and verify it."
 ```
 
-The Agent inspects the repository, runs tests, creates a focused specialist
-based on the evidence it found, makes changes, and verifies the result.
+The Agent inspects the repository, runs tests, chooses its own working strategy,
+makes changes, and verifies the result. It can create other Agents when useful,
+but the example does not force a topology.
 
 Run the opt-in paid verification of the public live examples with:
 
@@ -57,13 +58,14 @@ KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 
 ## Harbor
 
-The Harbor example packages the same Coding Agent factory behind ACP and runs
-it in an isolated repository-debugging environment:
+The Harbor example starts from the Coding Agent, then uses Harbor rewards,
+verifier feedback, ATIF trajectories, and GEPA reflection to evolve complete
+Clojure Agent programs on a real multi-task dataset:
 
 ```bash
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/hillclimb.sh
 ```
 
-The script compares direct and specialist configurations by mean Harbor
-verifier reward. See [`harbor/README.md`](harbor/README.md) for task validation,
-the resulting scoreboard, artifacts, and the trajectory viewer.
+Candidate selection uses mean validation reward; the selected Agent is evaluated
+once on an untouched test split. See [`harbor/README.md`](harbor/README.md) for
+the search loop, metrics, artifacts, and limitations.

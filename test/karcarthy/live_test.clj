@@ -37,7 +37,7 @@
       (is (= :completed (:status run)) (pr-str (:error run)))
       (is (= "ready" (some-> (:output run) str/trim str/lower-case))))))
 
-(deftest coding-example-inspects-delegates-edits-and-verifies
+(deftest coding-example-inspects-edits-and-verifies
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
   (when (and (live?) (credentials?))
@@ -75,13 +75,10 @@
               used-tools (->> (:events run)
                               (filter #(= :tool/started (:type %)))
                               (map :tool)
-                              set)
-              event-types (set (map :type (:events run)))]
+                              set)]
           (is (= :completed (:status run)) (pr-str (:error run)))
           (is (zero? (:exit check)) (:err check))
-          (is (contains? used-tools "bash") (pr-str used-tools))
-          (is (contains? event-types :program/evaluated))
-          (is (pos? (get-in run [:usage :agent-forms] 0))))
+          (is (contains? used-tools "bash") (pr-str used-tools)))
         (finally
           (delete-tree! root))))))
 

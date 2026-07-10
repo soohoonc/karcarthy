@@ -16,6 +16,7 @@ clojure -M:test
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 OPENAI_API_KEY=... clojure -M:examples basic "Say hello."
 OPENAI_API_KEY=... clojure -M:examples coding /path/to/repo "Fix the failing tests."
+examples/harbor/hillclimb.sh --help
 clojure -M -m karcarthy.acp your.namespace/agent-var
 clojure -T:build jar
 cd docs && npm run lint && npm run types:check && npm run build
@@ -36,7 +37,9 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `resources/karcarthy/agent.md` | Model-facing manual for generating Agent programs; runtime model, Tool, and Agent catalogs are interpolated into it. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
-| `examples/src/karcarthy/examples.clj` | Examples-only dispatcher for the live Basic and Coding Agents plus the REPL. |
+| `examples/src/karcarthy/examples.clj` | Examples-only dispatcher for live Agents, candidate validation, and the REPL. |
+| `examples/src/karcarthy/examples/search.clj` | Compiles complete candidate Agent forms for Harbor evaluation. |
+| `examples/harbor/optimize.py` | GEPA search over candidate Agent programs using Harbor train/validation/test rollouts. |
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
 | `test/karcarthy/core_test.clj` | Kernel, model loop, instructions/context, Sessions, streaming, composition, limits, and events. |
 | `test/karcarthy/eval_test.clj` | Generated-form lifecycle and recursion. |
