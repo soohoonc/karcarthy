@@ -1,3 +1,4 @@
+;; An offline Agent that constructs and invokes a generated calculator Agent.
 (require '[karcarthy :as k])
 
 (k/deftool add

@@ -1,8 +1,7 @@
 # Examples
 
-The canonical example is
-[`clojure/homoiconic.clj`](clojure/homoiconic.clj). It runs entirely offline
-and demonstrates:
+[`clojure/generated_calculator.clj`](clojure/generated_calculator.clj) runs
+entirely offline and demonstrates:
 
 - a contracted Clojure Tool;
 - a model-backed Agent using the native model/tool loop;
@@ -14,7 +13,7 @@ and demonstrates:
 Run it from the repository root:
 
 ```bash
-clojure -M -e '(load-file "examples/clojure/homoiconic.clj")'
+clojure -M -e '(load-file "examples/clojure/generated_calculator.clj")'
 ```
 
 The paid end-to-end test lets GPT-5.6 call the `agent` form, generate a child

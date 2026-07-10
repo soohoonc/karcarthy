@@ -15,7 +15,7 @@ workflow bridge.
 clojure -M:test
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 clojure -M -m karcarthy.demo
-clojure -M -e '(load-file "examples/clojure/homoiconic.clj")'
+clojure -M -e '(load-file "examples/clojure/generated_calculator.clj")'
 clojure -M -m karcarthy.acp your.namespace/agent-var
 clojure -T:build jar
 cd docs && npm run lint && npm run types:check && npm run build
