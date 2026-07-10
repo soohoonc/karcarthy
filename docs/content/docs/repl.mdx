@@ -1,34 +1,33 @@
 ---
 title: REPL development
-description: Define, run, inspect, and redefine Agents interactively without requiring a live model.
+description: Define, run, inspect, and redefine live Agents interactively.
 ---
 
 karcarthy Agents and Tools are ordinary Clojure values, so the REPL is the
 fastest way to develop them.
 
-## Run the included offline Agent
+## Run the included live Agent
 
-From a checkout of karcarthy:
+From a checkout of karcarthy with `RESPONSES_API_KEY` or `OPENAI_API_KEY` set:
 
 ```bash
-clojure -M
+clojure -M:examples repl
 ```
 
 ```clojure
 (require '[karcarthy :as k]
-         '[karcarthy.demo :as demo])
+         '[karcarthy.examples.basic :as basic])
 
-(def run
-  (k/run! demo/demo-agent "hello from the repl"))
+(def assistant (basic/basic-agent))
+(def run (k/run! assistant "Explain what an Agent value is."))
 
 (select-keys run [:status :output :usage])
 ;;=> {:status :completed,
-;;    :output "HELLO FROM THE REPL",
+;;    :output "...",
 ;;    :usage {...}}
 ```
 
-`demo-agent` uses `fake-model`, calls an `uppercase` Tool, and then returns the
-Tool result. It does not make a network request.
+The Agent uses the same live Responses transport as the other public examples.
 
 ## Inspect the Run
 
@@ -44,28 +43,21 @@ Tool result. It does not make a network request.
 Inspect the Agent definition and its macroexpansion:
 
 ```clojure
-(k/definition demo/demo-agent)
-(k/expansion demo/demo-agent)
+(k/definition assistant)
+(k/expansion assistant)
 ```
 
 ## Define an Agent at the prompt
 
 ```clojure
-(def model
-  (k/fake-model
-   (fn [_]
-     {:type :final
-      :output "deterministic response"
-      :usage {:input-tokens 4 :output-tokens 2}})))
-
 (def assistant
   (k/agent
    {:name "assistant"
-    :model {:id "offline" :transport model}
-    :instructions "Return the configured test response."
+    :model {:transport :responses :id "gpt-5.6"}
+    :instructions "Answer concisely."
     :output string?}))
 
-(k/run! assistant "test input")
+(k/run! assistant "Explain what this Agent can do.")
 ```
 
 Change the model function or Agent configuration, evaluate the changed form,
@@ -83,25 +75,6 @@ For Agents in `src/example.clj`:
 `defagent` is useful in source files because it defines the var directly. At
 the REPL, `agent` is convenient when assigning values with `def` or passing an
 Agent to another function.
-
-## Test a live model
-
-Start the REPL with the model credential available to the process, then define
-an Agent using the Responses transport:
-
-```clojure
-(def live-agent
-  (k/agent
-   {:name "live-agent"
-    :model {:transport :responses :id "gpt-5.6"}
-    :instructions "Answer concisely."
-    :output string?}))
-
-(k/run! live-agent "Explain what this Agent can do.")
-```
-
-The default credential variables are `RESPONSES_API_KEY` and
-`OPENAI_API_KEY`.
 
 ## Test generated Agent creation
 
@@ -130,7 +103,7 @@ Allow a live Agent to write and run a new Agent:
 
 ## Next
 
-- [Chat from the REPL](/docs/examples/chat) adds conversation history.
-- [Agents](/docs/agents) covers recursive and generated Agents.
+- [Chat](/docs/examples/chat) adds conversation history.
+- [Coding Agent](/docs/examples/coding-agent) applies live repository Tools and chooses its own strategy.
 - [Agents](/docs/agents#run-an-agent) documents Run results and limits.
 - [ACP](/docs/acp) documents serving an Agent to another process.

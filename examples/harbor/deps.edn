@@ -1,0 +1,11 @@
+{:paths []
+
+ :deps
+ {io.github.soohoonc/karcarthy {:local/root "../.."}}
+
+ :aliases
+ {:build
+  {:deps
+   {io.github.clojure/tools.build
+    {:git/tag "v0.9.6" :git/sha "b7258d84b36b7762b770819443042fdb8edca776"}}
+   :ns-default build}}}

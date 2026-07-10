@@ -7,16 +7,16 @@ functions, macros, control flow, and concurrency compose them.
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Run the offline example
+## Run the live example
 
-JDK 21 and the Clojure CLI are required.
+JDK 21, the Clojure CLI, and `RESPONSES_API_KEY` or `OPENAI_API_KEY` are
+required.
 
 ```bash
-clojure -M -m karcarthy.demo "hello"
+clojure -M:examples basic "Explain what an Agent value is."
 ```
 
-This calls a Clojure Tool through a deterministic fake model and prints
-`HELLO`. It does not require a network call.
+Fake models are used only by the offline unit tests.
 
 ## Define and run an Agent
 
@@ -93,19 +93,20 @@ This executes model-authored JVM Clojure and is not a sandbox.
 
 - [Home](docs/content/docs/index.mdx)
 - [Quickstart](docs/content/docs/quickstart.mdx)
+- [REPL development](docs/content/docs/repl.mdx)
 - [Agents](docs/content/docs/agents.mdx)
 - [Tools](docs/content/docs/tools.mdx)
 - [MCP](docs/content/docs/mcp.mdx)
 - [ACP](docs/content/docs/acp.mdx)
 - [Harbor](docs/content/docs/harbor.mdx)
-- [Chat from the REPL](docs/content/docs/examples/chat.mdx)
+- [Examples](docs/content/docs/examples/index.mdx)
 - [Reference](docs/content/docs/reference/index.mdx)
 
 ## Development
 
 ```bash
 clojure -M:test
-clojure -M -m karcarthy.demo
+OPENAI_API_KEY=... clojure -M:examples basic "Say hello."
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 clojure -T:build all
 cd docs && npm ci && npm run lint && npm run types:check && npm run build

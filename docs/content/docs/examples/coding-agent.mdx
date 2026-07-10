@@ -1,0 +1,59 @@
+---
+title: Coding Agent
+description: Run one live coding Agent directly or evaluate it through Harbor.
+---
+
+The Coding Agent is a live Responses Agent with repository-rooted `read`,
+`write`, `edit`, `bash`, and `search` Tools. It inspects an unfamiliar
+repository, runs tests, makes focused changes, and verifies the result.
+
+Karcarthy's built-in `agent` Tool is available automatically, but the Coding
+Agent is not required to use it. It may work directly, create another Agent,
+run review in parallel, or choose another strategy based on the task.
+
+## Run it on a repository
+
+Set `RESPONSES_API_KEY` or `OPENAI_API_KEY`, then provide a repository and an
+open-ended task:
+
+```bash
+clojure -M:examples coding /workspace/project \
+  "Investigate the failing integration tests, fix the cause, and verify it."
+```
+
+The implementation is the `coding-agent` factory in
+`examples/src/karcarthy/examples/coding.clj`. The factory roots local Tools at
+the supplied directory and uses `KARCARTHY_OPENAI_MODEL`, defaulting to
+`gpt-5.6`.
+
+## What the trace records
+
+The Run event stream records:
+
+- repository Tool calls and observations;
+- the Coding Agent and repository Tool activity;
+- any submitted Agent source and explicit input;
+- `:program/*` compiler events and nested lineage when an Agent is generated;
+- model and Tool failures; and
+- aggregate model usage.
+
+The trace reports what happened; it does not prescribe what a successful
+workflow must look like.
+
+## Verify the live example
+
+Paid live verification is explicit and opt-in:
+
+```bash
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
+```
+
+The live test creates a temporary repository, runs the public Coding Agent,
+checks that it inspected and repaired the repository, and verifies its tests.
+
+## Evaluate it with Harbor
+
+The [Harbor guide](/docs/harbor#from-demonstration-to-search) starts from this
+Agent, then lets reflective search propose complete replacement Clojure Agent
+programs. Harbor supplies isolated tasks, verifier rewards, and ATIF
+trajectories; validation reward selects the best program.

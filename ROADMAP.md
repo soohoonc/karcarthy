@@ -19,7 +19,7 @@ karcarthy is a native Clojure agent harness. The implemented kernel includes:
 - richer retry, backoff, and effect-idempotency policy;
 - ACP session loading and resumption;
 - MCP Streamable HTTP transport;
-- packaging and evaluation of the ACP launcher with Harbor tasks and scorers;
+- publication of the locally verified ACP launcher in the ACP registry;
 - program hashes and exportable event records for experiments.
 
 ## Research tooling

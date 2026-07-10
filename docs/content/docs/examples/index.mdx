@@ -1,29 +1,30 @@
 ---
 title: Examples
-description: Examples for REPL development, chat, and Agent composition.
+description: Live examples from a basic Agent to repository coding through Harbor.
 ---
 
+The public examples use the live Responses transport. Fake models stay in the
+offline unit suite, where they make kernel behavior deterministic and free.
+
+| Example | What it demonstrates |
+| --- | --- |
+| [Basic Agent](/docs/quickstart#run-the-live-example) | One live model Run |
+| [Chat](/docs/examples/chat) | Sessions and an interactive application |
+| [Agent composition](/docs/examples/composition) | Predefined Agents coordinated with Clojure |
+| [Coding Agent](/docs/examples/coding-agent) | Open-ended repository work with optional Agent generation |
+| [Harbor](/docs/harbor#from-demonstration-to-search) | Search over executable Agent programs using rewards and trajectories |
+
 <Cards>
-  <Card title="REPL development" href="/docs/examples/repl" />
-  <Card title="Chat from the REPL" href="/docs/examples/chat" />
-  <Card title="Agent composition" href="/docs/examples/clojure" />
+  <Card title="Basic Agent" href="/docs/quickstart#run-the-live-example" />
+  <Card title="Chat" href="/docs/examples/chat" />
+  <Card title="Agent composition" href="/docs/examples/composition" />
+  <Card title="Coding Agent" href="/docs/examples/coding-agent" />
+  <Card title="Harbor" href="/docs/harbor#from-demonstration-to-search" />
 </Cards>
 
-## REPL development
+The Coding Agent is the main end-to-end application example. The Harbor example
+then treats a complete Clojure Agent form as the search artifact and uses
+isolated tasks, verifier rewards, and trajectories to evolve it.
 
-The [REPL example](/docs/examples/repl) uses the included deterministic model,
-so it runs without a network connection or API key. It covers Agent execution,
-Run inspection, Agent definition inspection, and redefinition.
-
-## Chat from the REPL
-
-The [chat example](/docs/examples/chat) adds a small `read-line` loop and a
-Session around `run!`. It keeps the interface in application code while making
-conversation history, Run inspection, reset, and exit behavior explicit.
-
-## Agent composition
-
-The [Clojure example](/docs/examples/clojure) contrasts independent `run!`
-composition with a model-created Agent tree that shares one Run.
-
-All examples use the public `(require '[karcarthy :as k])` API.
+The [REPL guide](/docs/repl) covers interactive development. Integration details
+for [MCP](/docs/mcp) and [ACP](/docs/acp) remain in their dedicated guides.

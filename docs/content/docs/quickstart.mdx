@@ -5,21 +5,17 @@ description: Run karcarthy, then define and call an Agent.
 
 karcarthy requires JDK 21 and the Clojure CLI.
 
-## Run the offline example
+## Run the live example
 
-From a checkout:
+Set `RESPONSES_API_KEY` or `OPENAI_API_KEY`, then run from a checkout:
 
 ```bash
-clojure -M -m karcarthy.demo "hello"
+clojure -M:examples basic "Explain what an Agent value is."
 ```
 
-The example uses a deterministic fake model, calls a Clojure Tool, and prints:
-
-```text
-HELLO
-```
-
-No API key or network call is required.
+The example constructs an ordinary Agent value, runs it through the live
+Responses transport, and prints the model's answer. Use
+`KARCARTHY_OPENAI_MODEL` to override the default model.
 
 ## Add karcarthy to a project
 
@@ -88,5 +84,5 @@ On each model turn, karcarthy sends the Tool's name, description, and input
 schema. A Tool call is validated, executed, and returned to the model before
 the next turn.
 
-Next, read [Agents](/docs/agents) for available Agents and generated Clojure,
-or [Chat from the REPL](/docs/examples/chat) for a complete interactive example.
+Next, use the [REPL guide](/docs/repl) to inspect and redefine Agents, or follow
+the [examples](/docs/examples) from chat through metric-driven evaluation.

@@ -2,8 +2,8 @@
   "title": "Examples",
   "pages": [
     "index",
-    "repl",
     "chat",
-    "clojure"
+    "composition",
+    "coding-agent"
   ]
 }
