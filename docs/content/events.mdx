@@ -1,6 +1,6 @@
 ---
-title: Streaming and events
-description: Receive model text and lifecycle events while an Agent is running.
+title: Events
+description: Stream model output and observe Agent, model, Tool, Session, and compiler activity.
 ---
 
 Pass `:observe` to `run!` to receive events as they occur:
@@ -42,6 +42,12 @@ Tool, model, Session, and generated-program activity.
 Every event has a Run ID. Agent events also have an Agent ID, parent ID, and
 depth, so recursive and parallel children can be reconstructed as a tree.
 
+The `:program/*` family is narrower than its name may suggest: it describes the
+compiler lifecycle for dynamically submitted Clojure Agent source. It is not
+the lifecycle of every Agent Run. See [Agent forms: compiler
+events](/docs/reference/agent-forms#compiler-events) for each event's
+meaning and payload.
+
 ## Inspect events after a Run
 
 The Run result contains the complete event vector. `events` works with the
@@ -64,11 +70,11 @@ Agent bodies and Tools may add application events with `emit!`:
 `emit!` adds the current Run and Agent lineage before recording and publishing
 the event.
 
-Generated-Agent compilation uses the `:program/*` family. See [Generated
-Agents](/docs/reference/generated-agents) for those events.
+Agent-form compilation uses the `:program/*` family. See
+[Agent forms](/docs/reference/agent-forms) for those events.
 
 ## Next
 
-- [REPL development](/docs/repl) inspects retained events interactively.
-- [Examples](/docs/examples) applies events to chat, composition, coding, and evaluation.
-- [Generated Agents](/docs/reference/generated-agents) defines every compiler phase and limit.
+- [Quickstart](/docs/quickstart#develop-at-the-repl) inspects retained events at the REPL.
+- [Guides](/docs/guides) applies events to chat, composition, coding, and evaluation.
+- [Agent forms](/docs/reference/agent-forms) defines every compiler phase and limit.

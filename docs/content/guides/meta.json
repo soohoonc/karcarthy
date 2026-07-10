@@ -1,9 +1,10 @@
 {
-  "title": "Examples",
+  "title": "Guides",
   "pages": [
     "index",
     "chat",
     "composition",
-    "coding-agent"
+    "coding",
+    "harbor"
   ]
 }

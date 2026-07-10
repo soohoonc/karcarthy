@@ -58,6 +58,28 @@ clojure -M
 (:output run) ;=> "..."
 ```
 
+## Develop at the REPL
+
+Agents and Tools are ordinary Clojure values, so they can be inspected and
+redefined without a registry or build step:
+
+```clojure
+(k/events run)
+(k/definition example/assistant)
+(k/expansion example/assistant)
+```
+
+After editing `src/example.clj`, reload it and run the new definition:
+
+```clojure
+(require '[example :as example] :reload)
+(k/run! example/assistant "Try the new definition.")
+```
+
+From a karcarthy checkout, `clojure -M:examples repl` starts a plain
+`clojure.main` REPL with the Basic and Coding examples loaded. Starting it does
+not require credentials; only live model calls do.
+
 ## Give it a Tool
 
 Add this Tool above the Agent:
@@ -87,11 +109,11 @@ the next turn.
 ## Next
 
 1. Read [Agents](/docs/agents) to choose how models, predefined specialists,
-   Clojure programs, and generated Agents fit together.
+   Clojure programs, and Agent forms authored at runtime fit together.
 2. Read [Tools](/docs/tools) for contracts, context, approvals, local Tools,
    hosted Tools, and MCP Tools.
-3. Use the [REPL guide](/docs/repl) to inspect and redefine the resulting
-   values interactively.
+3. Use the [REPL workflow](#develop-at-the-repl) to inspect and redefine the
+   resulting values interactively.
 
-When those concepts are familiar, follow the [examples](/docs/examples) from
+When those concepts are familiar, follow the [guides](/docs/guides) from
 chat through open-ended coding and metric-driven evaluation.

@@ -130,7 +130,7 @@ based on who should decide the structure:
 | --- | --- | --- | --- |
 | `:agents [specialist]` | The parent model | A known specialist should be callable when useful. | The child stays inside the parent Run and shares its limits and events. |
 | Clojure body with `run!` | Application code | The topology, ordering, branching, or concurrency is known in advance. | Each explicit `run!` starts an independent Run. |
-| Built-in `agent` capability | The model at runtime | The useful role or workflow cannot be known before seeing the task. | Generated Agents stay inside the current Run and share its limits and events. |
+| Built-in `agent` capability | The model at runtime | The useful role or workflow cannot be known before seeing the task. | Agent forms authored at runtime stay inside the current Run and share its limits and events. |
 
 These mechanisms can be combined, but none is a required abstraction layer.
 A single autonomous Agent is often the right program.
@@ -239,12 +239,12 @@ generated model Agent has the same `agent` capability, so generation is
 recursive and bounded by Run limits.
 
 This executes model-authored JVM Clojure. Use it only in a process or sandbox
-with the authority you intend to grant. See [Generated
-Agents](/docs/reference/generated-agents) for the exact pipeline.
+with the authority you intend to grant. See [Agent
+forms](/docs/reference/agent-forms) for the exact pipeline.
 
 ## Next
 
 - [Tools](/docs/tools) covers callable functions, contracts, context, and approvals.
-- [Agent composition](/docs/examples/composition) shows fixed Clojure coordination beside runtime Agent generation.
+- [Agent composition](/docs/guides/composition) shows fixed Clojure coordination beside runtime Agent generation.
 - [Sessions](/docs/sessions) adds conversation history across root Runs.
-- [Streaming and events](/docs/streaming) exposes output and the complete execution tree.
+- [Events](/docs/events) exposes output and the complete execution tree.

@@ -3,7 +3,7 @@
   "pages": [
     "index",
     "api",
-    "schema",
-    "generated-agents"
+    "data",
+    "agent-forms"
   ]
 }

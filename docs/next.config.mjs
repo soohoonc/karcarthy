@@ -39,7 +39,47 @@ const config = {
       },
       {
         source: '/docs/reference/json',
-        destination: '/docs/reference/generated-agents',
+        destination: '/docs/reference/agent-forms',
+        permanent: true,
+      },
+      {
+        source: '/docs/reference/generated-agents',
+        destination: '/docs/reference/agent-forms',
+        permanent: true,
+      },
+      {
+        source: '/docs/reference/model-authored-agents',
+        destination: '/docs/reference/agent-forms',
+        permanent: true,
+      },
+      {
+        source: '/docs/reference/schema',
+        destination: '/docs/reference/data',
+        permanent: true,
+      },
+      {
+        source: '/docs/repl',
+        destination: '/docs/quickstart#develop-at-the-repl',
+        permanent: true,
+      },
+      {
+        source: '/docs/streaming',
+        destination: '/docs/events',
+        permanent: true,
+      },
+      {
+        source: '/docs/harbor',
+        destination: '/docs/guides/harbor',
+        permanent: true,
+      },
+      {
+        source: '/docs/mcp',
+        destination: '/docs/protocols/mcp',
+        permanent: true,
+      },
+      {
+        source: '/docs/acp',
+        destination: '/docs/protocols/acp',
         permanent: true,
       },
       {
@@ -50,6 +90,21 @@ const config = {
       {
         source: '/docs/examples/typescript',
         destination: '/docs/models',
+        permanent: true,
+      },
+      {
+        source: '/docs/examples/coding-agent',
+        destination: '/docs/guides/coding',
+        permanent: true,
+      },
+      {
+        source: '/docs/examples',
+        destination: '/docs/guides',
+        permanent: true,
+      },
+      {
+        source: '/docs/examples/:path*',
+        destination: '/docs/guides/:path*',
         permanent: true,
       },
     ];
