@@ -1,255 +1,201 @@
 ---
-title: Data Shapes
-description: EDN shapes for agents, workflows, and results.
+title: Contracts
+description: Agent, tool, runtime, run, event, limit, and failure values.
 ---
 
-Look up the exact EDN shape of every karcarthy value. Each value is a plain
-map tagged with `:karcarthy/type`, and the schema references are themselves
-data:
+karcarthy values are ordinary Clojure values. Some contain functions, closures,
+protocol implementations, or compiled code and are intentionally not EDN/JSON
+portable.
 
-```clojure
-(require '[karcarthy :as k])
-
-k/edn-schema
-k/json-schema
-```
-
-Validate EDN workflows with `workflow?`.
+The shapes here describe the native harness. Some implementation maps carry
+additional internal fields.
 
 ## Agent
+
+An Agent is a self-describing executable value:
 
 ```clojure
 {:karcarthy/type :agent
  :name "researcher"
- :description "Use for research tasks."
- :instructions "Research the question and cite sources."
- :model "sonnet"
- :tools ["mcp__feedback__search"]
- :config {:temperature 0.2}}
+ :config {...}
+ :source-form '(agent {...})
+ :expanded-form '(...)
+ :invoke #object[clojure.lang.IFn ...]}
 ```
 
-Required keys: `:name`, `:instructions`. `:model`, `:tools`, and `:config` are
-interpreted by the runner passed to `run`.
+The public configuration surface is:
 
-## Subagent
-
-Subagents are runner configuration, not workflow nodes:
-
-```clojure
-{:karcarthy/type :subagent
- :name "security-reviewer"
- :description "Use for auth, secrets, injection, permission, and data exposure review."
- :instructions "Review like a security owner. Return concrete findings with file refs."
- :model "sonnet"
- :tools ["Read" "Grep" "Glob"]
- :disallowed-tools ["Write" "Edit"]
- :mcp-servers ["github"]
- :permission-mode :plan
- :max-turns 4
- :skills ["review"]
- :effort :high
- :background? true
- :isolation :worktree}
-```
-
-Required keys: `:name`, `:description`, `:instructions`.
-
-## pipe
-
-Runs each step in order. The `:text` from one result becomes the input for the
-next step.
-
-```clojure
-{:karcarthy/type :pipe
- :steps [WORKFLOW ...]}
-```
-
-## step
-
-Runs a host Clojure function inside a workflow:
-
-```clojure
-{:karcarthy/type :step
- :f clojure.string/trim
- :name "trim"
- :call? false}
-```
-
-`step` is Clojure-only because `:f` is a function value. It is not represented
-in the JSON schema.
-
-## branch
-
-Runs a collection of branches on the same input:
-
-```clojure
-{:karcarthy/type :branch
- :branches [WORKFLOW ...]
- :max-concurrency 16}
-```
-
-## delegate
-
-Runs a worker once per subtask from a planner:
-
-```clojure
-{:karcarthy/type :delegate
- :planner PLANNER
- :worker WORKFLOW
- :max-concurrency 16}
-```
-
-`PLANNER` is a workflow whose result text is EDN:
-
-```clojure
-{:subtasks ["first" "second"]}
-```
-
-## reduce
-
-Runs branch or delegate work, then passes an EDN summary to a reducer
-workflow.
-
-```clojure
-{:karcarthy/type :reduce
- :source {:karcarthy/type :branch ...}
- :reducer WORKFLOW}
-```
-
-The reducer receives EDN shaped like:
-
-```clojure
-{:input "original input"
- :subtasks ["first" "second"]
- :results [{:agent "worker" :ok? true :text "..."}]}
-```
-
-## revise
-
-Runs a worker and evaluator until accepted or the round limit is reached.
-
-```clojure
-{:karcarthy/type :revise
- :worker WORKFLOW
- :evaluator EVALUATOR
- :max-rounds 3}
-```
-
-`EVALUATOR` is a workflow whose result text is an EDN verdict:
-
-```clojure
-{:accept? true}
-{:accept? false :feedback "specific revision feedback"}
-```
-
-## route
-
-Routes by the source result:
-
-```clojure
-{:karcarthy/type :route
- :source WORKFLOW
- :routes {:label WORKFLOW}
- :default WORKFLOW}
-```
-
-`:source` replies with EDN `{:route :label}`, and the selected workflow
-receives the original input. Route matching is exact. `:default` is optional;
-without it, an unmatched label yields a result with `:error :no-route`.
-
-## continue
-
-Continues from one workflow to another:
-
-```clojure
-{:karcarthy/type :continue
- :source WORKFLOW
- :to WORKFLOW
- :prompt "optional override"}
-```
-
-`:to` receives the source result's `:text` unless `:prompt` overrides it.
-When the source result carries a `:session-id`, the second run receives
-`:resume`, so runners that support sessions continue the same conversation.
-
-## dynamic
-
-> **Experimental.** The dynamic op protocol and prompt format may change
-> between releases.
-
-Lets an agent define, patch, remove, call, spawn, and complete work while a
-workflow run is in progress:
-
-```clojure
-{:karcarthy/type :dynamic
- :agent AGENT
- :max-steps 25}
-```
-
-The agent emits EDN ops:
-
-```clojure
-{:op :define
- :agent {:name "reader"
-         :instructions "..."
-         :model "sonnet"
-         :tools ["Read"]
-         :config {}}}
-{:op :define :name "review" :workflow WORKFLOW}
-{:op :patch :agent "reader" :merge {:instructions "..."}}
-{:op :remove :agent "reader"}
-{:op :remove :workflow "review"}
-{:op :call :workflow "review" :input "..."}
-{:op :spawn :agent "reader" :inputs ["a" "b"]}
-{:op :complete :text "final answer"}
-```
-
-Refs are only resolved inside a dynamic run:
-
-```clojure
-{:karcarthy/type :agent-ref :name "reader"}
-{:karcarthy/type :workflow-ref :name "review"}
-```
-
-## Malformed EDN replies
-
-`delegate` planners, `revise` evaluators, `route` sources, and `dynamic`
-agents all reply in EDN, and models flub EDN. When a reply fails to parse or
-validate, the node re-asks the model with the error and the failed reply
-appended so it can correct itself. Set the retry budget with the
-`:edn-retries` option to `run` (default `1`; `0` fails fast). `dynamic`
-applies the same budget to consecutive invalid ops.
-
-`run` validates the complete workflow before execution. Use
-`(k/workflow? value)` to check workflow data without running it.
-
-## Result
-
-```clojure
-{:karcarthy/type :result
- :ok? true
- :agent "name"
- :text "final reply"
- :raw {...}}
-```
-
-`:ok?` is always Boolean. Rejected revision, incomplete protocols, nonzero
-process exits, timeouts, and malformed runner results fail closed.
-
-Composite nodes add more fields:
-
-| Node | Extra fields |
+| Key | Meaning |
 | --- | --- |
-| `pipe` | last child result fields. |
-| `branch` | `:results`, `:text`. |
-| `delegate` | `:subtasks`, `:results`, `:text`. |
-| `reduce` | `:source`, `:reduced`, reducer `:text`. |
-| `revise` | `:rounds`, `:accepted?`. |
-| `route` | selected child result fields, or `:error :no-route`. |
-| `continue` | continued workflow result fields. |
-| `dynamic` | `:state`, `:steps`, `:value` on `:complete`; `:error :max-steps` when the step budget is exceeded. |
+| `:name` | Stable identifier. Supplied from the symbol by `defagent`. |
+| `:description` | Model- and human-facing description used in delegation. |
+| `:model` | Provider, model identifier, reasoning, sampling, and provider options. May be a resolver. |
+| `:instructions` | String or Runtime-dependent function producing model-visible instructions. |
+| `:context` | Contract for the local dependency-injection value. |
+| `:input` | Input contract. |
+| `:tools` | Tool values or a Runtime-dependent tool resolver. |
+| `:output` | Output contract. Text is the default. |
+| `:loop` | Turn limit, stop predicate, and per-step preparation. |
+| `:memory` | Optional conversation-memory atom for this Agent. |
+| `:guardrails` | Input and output guardrails. |
+| `:limits` | Limits narrower than the current Runtime grant. |
+| `:hooks` | Agent lifecycle observers. |
+
+A custom-body Agent may omit `:model` and `:instructions`.
+
+## Tool
+
+```clojure
+{:karcarthy/type :tool
+ :name "web-search"
+ :description "Search the web."
+ :input ::search-input
+ :output ::search-output
+ :approval :never
+ :enabled? #object[clojure.lang.IFn ...]
+ :execute #object[clojure.lang.IFn ...]
+ :source-form '(tool {...} [rt input] ...)}
+```
+
+Tool inputs are validated before approval. Tool outputs are validated before
+they enter memory or become visible to the model. `:to-model-output` may
+project a rich application result into a smaller model-visible value.
+
+## Runtime
+
+A Runtime is passed to agent programs, tools, resolvers, guardrails, and hooks:
+
+```clojure
+{:karcarthy/type :runtime
+ :run-id "run_..."
+ :agent-id "agent_..."
+ :parent-id "agent_..."
+ :context {...}
+ :limits {...}
+ :usage {...}
+ :memory memory-atom
+ :model-transports {:provider transport}
+ :cancel token
+ :approval handler
+ :evaluation-namespace 'karcarthy.eval.run_...}
+```
+
+The actual implementation may use a record or protocol-backed object. Public
+access goes through functions such as `context`, `emit!`, `invoke!`, and
+`compile-agent!`, not direct mutation of this representation.
+
+## Limits
+
+```clojure
+{:model-calls 100
+ :input-tokens 1000000
+ :output-tokens 100000
+ :agent-depth 8
+ :parallelism 6
+ :generated-forms 20
+ :deadline-ms 300000}
+```
+
+Limits and usage counters are shared across the root run tree. A child may
+lower inherited ceilings but cannot raise them.
+
+## Run
+
+`run!` returns:
+
+```clojure
+{:karcarthy/type :run
+ :id "run_..."
+ :status :completed
+ :agent "research-team"
+ :input {...}
+ :output {...}
+ :usage {:model-calls 7
+         :input-tokens 42000
+         :output-tokens 3900
+         :duration-ms 12800}
+ :trace-id "trace_..."
+ :events [...]
+ :error nil}
+```
+
+Statuses:
+
+| Status | Meaning |
+| --- | --- |
+| `:completed` | Output satisfied the Agent's contract. |
+| `:cancelled` | Root or ancestor cancellation propagated to the run. |
+| `:failed` | Compilation, model, tool, contract, policy, or program failure. |
+
+Completion is distinct from evaluation quality. An evaluator may score a
+completed output poorly without treating the harness run as a protocol failure.
+
+## Events
+
+Every event contains `:type`, `:time-ms`, `:run-id`, and trace lineage. Events for
+specific steps add `:agent-id`, `:parent-id`, `:depth`, or
+`:tool-call-id`.
+
+Stable event families:
+
+```clojure
+:run/started          :run/completed
+:run/failed           :run/cancelled
+
+:agent/started        :agent/completed
+:agent/failed         :agent/handoff
+
+:model/requested
+:model/completed      :model/failed
+
+:tool/approval-requested
+:tool/started         :tool/completed
+:tool/failed
+
+:program/read         :program/expanded
+:program/checked      :program/evaluated
+:program/failed
+```
+
+Observers may redact or export events as they are emitted. Configurable
+in-runtime payload retention remains roadmap work.
+
+## Failure
+
+```clojure
+{:karcarthy/type :failure
+ :kind :contract
+ :phase :tool-output
+ :message "Tool output did not satisfy ::search-output"
+ :data {...}
+ :cause exception
+ :recoverable? false}
+```
+
+Failure kinds include `:read`, `:expand`, `:evaluation`,
+`:contract`, `:model`, `:tool`, `:guardrail`, `:approval`, `:budget`,
+`:deadline`, `:cancellation`, and `:program`.
+
+## Mathematical view
+
+Let a Clojure Agent program be `p`, a task be `τ`, and its stochastic execution
+trace be:
+
+```text
+ξ ~ Exec(p, τ)
+```
+
+An optimizer may search program forms under resource constraints:
+
+```text
+p* = argmaxₚ E[R(τ, ξ) - λ·cost(ξ) - μ·latency(ξ)]
+```
+
+The trace and program forms are first-class experimental data. Research can
+measure behavior, invariants, or regressions without assuming that a candidate
+program is an improvement.
 
 ## Next
 
-Read [CLI + JSON](/docs/reference/json) for the same shapes over the JSON
-bridge.
+- [Generated Code](/docs/reference/json) specifies form compilation.
+- [Harness](/docs/runners) explains how these values interact during a run.

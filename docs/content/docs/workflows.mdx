@@ -1,304 +1,179 @@
 ---
-title: Workflows
-description: Compose agents with pipe, branch, route, revise, delegate, reduce, continue, step, and dynamic.
+title: Programs
+description: Express sequencing, branching, parallelism, recursion, and generated agents as ordinary Clojure.
 ---
 
-A workflow is data that describes work, and `run` interprets that data through
-the runner you pass in. This page walks each workflow node in the order you are
-likely to reach for them, with one example each.
+karcarthy programs are Clojure programs. The library supplies agent-specific
+effects and observation; it does not introduce a workflow AST or interpreter.
+
+## Sequential work
+
+Use `let` when one result feeds another agent:
 
 ```clojure
-(k/run {:runner runner
-        :workflow workflow
-        :input {:task "review" :subject "launch plan"}})
+(k/defagent research-then-write
+  {:input ::question
+   :output ::article}
+  [rt question]
+  (let [research (k/invoke! rt researcher question)
+        outline  (k/invoke! rt outliner research)]
+    (k/invoke! rt writer {:question question
+                          :research research
+                          :outline outline})))
 ```
 
-An agent is already a workflow:
+Every `invoke!` creates a child span and enforces the child's input, context,
+output, budget, and guardrail contracts.
+
+## Branching and routing
+
+Use the host language:
 
 ```clojure
-(k/defagent reviewer
-  {:instructions "Review the input and return concrete issues."})
-
-(k/run {:runner (k/mock-runner)
-        :workflow reviewer
-        :input "check this design"})
+(case (:kind request)
+  :incident (k/invoke! rt incident-agent request)
+  :launch   (k/invoke! rt launch-agent request)
+  (k/invoke! rt general-agent request))
 ```
 
-Use the composition nodes only when there is actual composition.
+The decision may come from normal data, a tool result, structured model output,
+or another agent. No model-specific routing protocol is built into the
+harness.
 
-## pipe
+## Parallel work
 
-Use `pipe` when steps happen in order:
+`spawn!` creates a child agent execution and `await-all!` joins children while
+preserving cancellation, budgets, and trace lineage:
 
 ```clojure
-(k/defagent researcher
-  {:instructions "List the important facts."})
-
-(k/defagent summarizer
-  {:instructions "Summarize the previous answer in one sentence."})
-
-(def workflow
-  (k/pipe researcher summarizer))
-
-(k/run {:runner (k/mock-runner)
-        :workflow workflow
-        :input "why does Lisp use code as data?"})
+(let [jobs (for [reviewer reviewers]
+             (k/spawn! rt reviewer change))
+      reviews (k/await-all! jobs)]
+  (k/invoke! rt editor {:change change :reviews reviews}))
 ```
 
-The first agent receives the original input. The second agent receives the
-first result's `:text`:
+Parallelism is bounded by runtime policy:
+
+```clojure
+(k/run! review-team change
+        {:limits {:parallelism 4
+                  :agent-depth 6
+                  :model-calls 80}})
+```
+
+## Iteration and revision
+
+Use `loop/recur` for feedback cycles:
+
+```clojure
+(loop [draft (k/invoke! rt writer request)
+       round 1]
+  (let [{:keys [accepted? feedback]}
+        (k/invoke! rt critic draft)]
+    (cond
+      accepted? draft
+      (= round 3) draft
+      :else (recur (k/invoke! rt writer
+                              {:request request
+                               :draft draft
+                               :feedback feedback})
+                    (inc round)))))
+```
+
+The application decides whether an unaccepted final draft is usable. That
+policy is visible in code rather than hidden in node semantics.
+
+## Agents as tools
+
+Expose a child agent to a model-backed parent with `as-tool`:
+
+```clojure
+(k/defagent support-manager
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Help the user. Delegate specialized work when useful."
+   :tools [(k/as-tool billing-agent
+                      {:name "billing"
+                       :description "Handle billing questions."})
+           (k/as-tool refund-agent
+                      {:name "refund"
+                       :description "Evaluate refund requests."})]})
+```
+
+The manager retains control. `handoff!` records an `:agent/handoff` event and
+invokes the selected child with the same Runtime lineage. Full conversational
+state transfer is still roadmap work.
+
+## Generated programs
+
+Give a model-backed Agent `(k/agent)` in its tool set when it should be able to
+produce and run source like this:
+
+```clojure
+(agent
+  {:name "adaptive-review"
+   :input ::change
+   :output ::review}
+  [rt change]
+  (let [risk (invoke! rt risk-classifier change)]
+    (if (= :high (:level risk))
+      (let [reviews (await-all!
+                     [(spawn! rt security-reviewer change)
+                      (spawn! rt reliability-reviewer change)])]
+        (invoke! rt editor {:change change :reviews reviews}))
+      (invoke! rt general-reviewer change))))
+```
+
+The compilation path is:
 
 ```text
-researcher input: why does Lisp use code as data?
-summarizer input: [researcher] why does Lisp use code as data?
+source → read → macroexpand → contracts → eval → Agent → invoke!
 ```
 
-If a step returns `:ok? false`, the pipe stops and returns that result.
+The evaluated child may itself receive `(agent)` and recursively create more
+children. Depth and resource limits belong to the runtime, not to a special
+language mode.
 
-## branch
+## Structural rewriting
 
-Use `branch` when several workflows should inspect the same input:
+Because source is a Clojure form, transformations use `clojure.walk` or macros:
 
 ```clojure
-(def reviewers
-  (k/branch [product-reviewer engineering-reviewer security-reviewer]))
-
-(k/run {:runner runner
-        :workflow reviewers
-        :input "enterprise SSO beta"})
+(defn replace-model [form model]
+  (clojure.walk/postwalk
+   (fn [x]
+     (if (and (map? x) (contains? x :model))
+       (assoc x :model model)
+       x))
+   form))
 ```
 
-Pass `:max-concurrency` to cap how many branch calls run at once:
+A search procedure may quote an existing program, mutate it, compile the
+candidate, and evaluate its behavior. The stored source and expanded forms
+make the transformation auditable.
+
+## Macros as reusable patterns
+
+Repeated patterns may become normal macros:
 
 ```clojure
-(k/branch [product-reviewer engineering-reviewer security-reviewer]
-          :max-concurrency 2)
+(defmacro with-review [[draft binding] & body]
+  `(let [~binding (k/invoke! rt critic ~draft)]
+     ~@body))
 ```
 
-The result keeps each child result and joins their text into labeled sections
-(`## <agent>` headers, with `## <agent> (failed)` for failures), so a
-downstream workflow reading the flowing text can attribute each part:
+Macros extend Clojure rather than adding workflow node kinds. Model-authored
+code can use the same macros available in its evaluation namespace.
 
-```clojure
-{:karcarthy/type :result
- :ok? true
- :results [{:agent "product-reviewer" :text "..."}
-           {:agent "engineering-reviewer" :text "..."}
-           {:agent "security-reviewer" :text "..."}]
- :text "## product-reviewer\n...\n\n## engineering-reviewer\n..."}
-```
+## Failure, cancellation, and suspension
 
-## route
-
-Use `route` when one workflow chooses the next workflow:
-
-```clojure
-(def workflow
-  (k/route classifier
-           {:launch launch-brief
-            :incident incident-plan}
-           :default launch-brief))
-```
-
-The classifier replies with EDN:
-
-```clojure
-{:route :launch}
-```
-
-Matching is exact. The selected workflow receives the original input, not the
-classifier's output. When the label matches no route, the `:default` workflow
-runs; without a default, the route returns `:ok? false`.
-
-`route` is the first node here that reads EDN from a model. Every EDN-reading
-node — `route`, `revise`, `delegate`, and `dynamic` — self-repairs: when a
-reply fails to parse or validate, the node re-asks the model with the error and
-its previous reply before failing (`:edn-retries` in run options, default 1).
-
-## revise
-
-Use `revise` for draft, critique, revise loops:
-
-```clojure
-(def launch-brief
-  (k/revise brief-writer critic :max-rounds 2))
-```
-
-The loop stops when the evaluator accepts or `:max-rounds` (default 3) is
-reached. The evaluator replies with EDN:
-
-```clojure
-{:accept? true}
-{:accept? false :feedback "name the missing rollback owner"}
-```
-
-The result includes loop metadata:
-
-```clojure
-{:karcarthy/type :result
- :ok? true
- :text "final draft"
- :rounds 2
- :accepted? true}
-```
-
-Reaching `:max-rounds` without acceptance is fail-closed: the last draft is
-preserved in `:text`, but the result has `:ok? false`, `:accepted? false`, and
-`:error :not-accepted`. Evaluator runner or protocol failure stops the loop.
-
-## delegate
-
-Use `delegate` when a planner should create subtasks for a worker:
-
-```clojure
-(def workflow
-  (k/delegate planner worker :max-concurrency 4))
-```
-
-The planner replies with EDN:
-
-```clojure
-{:subtasks ["audit logs" "rollback plan" "support docs"]}
-```
-
-The worker runs once per subtask.
-
-## reduce
-
-Use `reduce` when branch or delegate output needs synthesis:
-
-```clojure
-(def review-packet
-  (k/reduce
-   (k/branch [product-reviewer engineering-reviewer security-reviewer])
-   brief-writer))
-```
-
-The reducer receives an EDN summary:
-
-```clojure
-{:input "original input"
- :results [{:agent "product-reviewer" :ok? true :text "..."}
-           {:agent "engineering-reviewer" :ok? true :text "..."}]}
-```
-
-The reducer is a workflow, not a host function, so this remains portable data
-unless you add local `step` nodes. Pass a plain collection of workflows as the
-source and `reduce` wraps it in a `branch`. `reduce` also accepts
-`:max-concurrency`, which it forwards onto its source node.
-
-## continue
-
-Use `continue` for a direct handoff:
-
-```clojure
-(k/continue triage-agent specialist-agent)
-```
-
-The second workflow receives the first result's `:text`. Pass `:prompt` to
-override that handoff text:
-
-```clojure
-(k/continue triage-agent specialist-agent
-            :prompt "Apply the specialist checklist to the triage above.")
-```
-
-`continue` differs from a two-step `pipe` in one way: it preserves conversation
-sessions. When the first result carries a `:session-id`, the second run
-receives it as the `:resume` option, so a runner that supports sessions
-continues the same conversation instead of starting fresh.
-
-## step
-
-Use `step` for a local Clojure transform inside a workflow:
-
-```clojure
-(def workflow
-  (k/pipe
-   writer
-   (k/step clojure.string/trim :name "trim")
-   reviewer))
-```
-
-By default the function receives the flowing input string. Pass `:call? true`
-when it needs the full step call map, `{:input input :options options :node node}`:
-
-```clojure
-(k/step
- (fn [{:keys [input node]}]
-   (str (:name node) ": " input))
- :name "tag"
- :call? true)
-```
-
-`step` stores a Clojure function, so it is not EDN/JSON portable.
-
-## dynamic
-
-> **Experimental.** The dynamic op protocol and prompt format may change
-> between releases.
-
-Use `dynamic` when an agent should define, patch, remove, call, spawn, and
-complete work while the run is in progress:
-
-```clojure
-(def workflow
-  (k/dynamic workflow-agent :max-steps 25))
-
-(k/run {:runner runner
-        :workflow workflow
-        :input "audit this migration"})
-```
-
-`:max-steps` caps the op loop; the default is 25. The dynamic agent emits one
-EDN op at a time:
-
-```clojure
-{:op :define
- :agent {:name "reader"
-         :instructions "Inspect one file."
-         :model "sonnet"
-         :tools ["Read"]
-         :config {}}}
-{:op :define :name "review"
- :workflow {:karcarthy/type :pipe
-            :steps [{:karcarthy/type :agent-ref :name "reader"}]}}
-{:op :call :workflow "review" :input "src/foo.clj"}
-{:op :patch :agent "reader" :merge {:instructions "Inspect one file and list risks."}}
-{:op :spawn :agent "reader" :inputs ["src/a.clj" "src/b.clj"]}
-{:op :remove :agent "reader"}
-{:op :complete :text "done"}
-```
-
-After a failed `:call` or `:spawn`, the agent must successfully retry work
-before `:complete`; unresolved failed work cannot be replaced by a fresh
-success result.
-
-`agent-ref` and `workflow-ref` are late-bound within that dynamic run. If the
-agent patches `"reader"`, later calls to workflows containing
-`(k/agent-ref "reader")` use the patched agent.
-
-## Rewrite before running
-
-Because workflows are data, application code can inspect and rewrite them
-before `run`:
-
-```clojure
-(def production-workflow
-  (->> (k/pipe researcher summarizer)
-       (k/configure {:model "claude-sonnet-4"
-                     :instructions/suffix "State assumptions before final answer."})))
-
-(map #(select-keys % [:name :model])
-     (k/agents production-workflow))
-;=> ({:name "researcher", :model "claude-sonnet-4"}
-;    {:name "summarizer", :model "claude-sonnet-4"})
-```
-
-Rewrites change workflow data. They do not choose the runner. Choose the runner
-when you call `run`.
+Agent effects throw structured exceptions inside a custom program. Use normal
+`try`/`catch` when the program can recover. Runtime cancellation propagates to
+children, model calls, and tools. Approval is checked before tool execution;
+durable suspension and resumption remain roadmap work.
 
 ## Next
 
-- [Runners](/docs/runners) covers every execution backend and runner-native subagents.
-- [Examples](/docs/examples) composes these nodes into runnable launch-readiness and deep-research workflows.
+- [Harness](/docs/runners) describes what happens inside a model-backed agent.
+- [Clojure example](/docs/examples/clojure) combines generated agents,
+  parallel review, and tracing.
+- [Generated Code](/docs/reference/json) specifies the read/check/eval path.

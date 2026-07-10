@@ -1,126 +1,79 @@
 ---
-title: Python
-description: Configure realistic agents in Python and run them through karcarthy.
+title: Python over ACP
+description: Drive and evaluate a running karcarthy harness from Python without turning the program into JSON.
 ---
 
-Python sends workflow JSON to `bin/karcarthy`. The workflow is a plain Python
-dictionary, but the agents are built from richer product-level profiles before
-they become JSON. The runnable file is `examples/python/launch.py`.
+Python is an external client of the Clojure harness. It does not reconstruct an
+agent program from JSON or select a runner. The Clojure process loads and
+executes the program, while Agent Client Protocol (ACP) carries session input,
+events, approvals, cancellation, and results.
 
-## Run the finished workflow
+## Start the harness
+
+The command is:
 
 ```bash
-python3 examples/python/launch.py
+clojure -M -m karcarthy.acp example.research/research-team
 ```
 
-The example prints the configured agents, then a launch brief. It runs offline
-with deterministic `mock-responses`.
+The process speaks ACP over stdio. The selected var must contain an Agent or a
+function that builds an Agent from session context.
 
-## Configure agents
+## Connect from Python
 
-The helper renders a profile into one instruction string. This keeps the
-cross-language boundary simple while letting your app expose a better agent
-configuration UI.
+The exact names depend on the ACP client library. Conceptually:
 
 ```python
-def render_instructions(profile):
-    sections = [
-        f"Role: {profile['role']}",
-        f"Mission: {profile['mission']}",
-    ]
-    if profile.get("context"):
-        sections.append("Operating context:\n" + bullet_list(profile["context"]))
-    if profile.get("tools"):
-        sections.append(
-            "Tool allowlist:\n"
-            + bullet_list(profile["tools"])
-            + "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
-            + "\nkarcarthy passes the allowlist; it does not create tool servers. The mock runner ignores tools."
-        )
-    else:
-        sections.append("Tool allowlist: none. The offline mock runner ignores tool calls.")
-    sections.extend(
-        [
-            "Responsibilities:\n" + bullet_list(profile["responsibilities"]),
-            "Output contract:\n" + profile["output"],
-            "Interaction style:\n" + profile["tone"],
-        ]
+async with acp.spawn(
+    ["clojure", "-M", "-m", "karcarthy.acp",
+     "example.research/research-team"]
+) as agent:
+    session = await agent.new_session(
+        cwd="/workspace",
     )
-    if profile.get("boundaries"):
-        sections.append("Boundaries:\n" + bullet_list(profile["boundaries"]))
-    if profile.get("self_check"):
-        sections.append("Before finalizing, verify:\n" + bullet_list(profile["self_check"]))
-    return "\n\n".join(sections)
 
-
-def configured_agent(profile):
-    agent = {
-        "type": "agent",
-        "name": profile["name"],
-        "instructions": render_instructions(profile),
-    }
-    if profile.get("tools"):
-        agent["tools"] = profile["tools"]
-    return agent
+    async for event in session.prompt([
+        {"type": "text",
+         "text": "How do language models use tool feedback?"}
+    ]):
+        record(event)
 ```
 
-Example specialist profile:
+The client sees tool-call updates, permission requests, one or more message
+chunks, and the prompt stop reason. The server retains
+the Clojure source form, expanded form, local context, model credentials, tools,
+and memory.
 
-```python
-product_reviewer = configured_agent(
-    {
-        "name": "product-reviewer",
-        "role": "Product launch reviewer",
-        "mission": "Assess user value, launch narrative, customer segmentation, and adoption risk.",
-        "context": launch_context,
-        "tools": ["mcp__feedback__search", "mcp__roadmap__read"],
-        "responsibilities": [
-            "Identify the primary user promise in one sentence.",
-            "Call out unclear customer value or missing beta evidence.",
-            "Recommend a launch decision from the product perspective.",
-        ],
-        "output": "Three bullets: Product signal, Product risk, Product recommendation.",
-        "tone": "Direct, constructive, and grounded in user impact.",
-        "boundaries": ["Do not discuss infrastructure, security, or support unless it affects user value."],
-        "self_check": ["Includes a concrete recommendation.", "Names any missing evidence."],
-    }
-)
-```
+## Harbor evaluation
 
-## Compose workflow data
+Harbor can launch the same ACP server for every task. An experiment varies the
+loaded agent var, model configuration, generated-code policy, or source
+transformation while keeping the protocol stable.
 
-The profile helper only changes how agents are configured. The workflow stays the
-same JSON shape:
+Useful measurements include:
 
-```python
-reviewers = {
-    "type": "branch",
-    "branches": [product_reviewer, engineering_reviewer, security_reviewer, support_reviewer],
-}
+- task reward or verifier outcome;
+- tool and model call counts;
+- token cost and latency;
+- generated program count and depth;
+- approval, cancellation, and failure behavior;
+- differences between source and expanded forms;
+- behavioral invariants across program variants.
 
-launch_brief = {
-    "type": "revise",
-    "worker": {"type": "pipe", "steps": [reviewers, brief_writer]},
-    "evaluator": critic,
-    "max-rounds": 2,
-}
+The evaluation boundary does not require a portability abstraction inside the
+harness.
 
-workflow = {
-    "type": "route",
-    "source": classifier,
-    "routes": {"launch": launch_brief, "incident": incident_responder},
-    "default": launch_brief,
-}
-```
+## What crosses ACP
 
-## Swap runners
+| Crosses the boundary | Stays in Clojure |
+| --- | --- |
+| prompts and structured task input | executable agent bodies |
+| ACP tool and message updates | function values and closures |
+| approval and input responses | tools and local dependencies |
+| cancellation | macroexpansion and evaluation |
+| final Agent message and stop reason | memory, usage, and provider credentials |
 
-With a live runner, the same configured agents and workflow delegate each
-single-agent call to the selected Agent SDK or CLI.
+## Next
 
-## Why replies are EDN
-
-The JSON bridge carries workflow shape, not host-language functions. Router and
-critic agents still return EDN text, such as `{:route "launch"}` or
-`{:accept? true}`, because the Clojure interpreter can parse and validate those
-EDN replies the same way for Python, TypeScript, and Clojure callers.
+- [Clojure](/docs/examples/clojure) shows the program the server loads.
+- [Harness](/docs/runners) explains the runtime ACP exposes.

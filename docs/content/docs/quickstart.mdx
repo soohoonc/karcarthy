@@ -1,179 +1,228 @@
 ---
 title: Quickstart
-description: Run one agent, compose a workflow, and choose a runner.
+description: Define a typed tool, run a model-backed agent, and compose agents with Clojure.
 ---
 
-In this guide you run one agent on the offline mock runner, compose two agents
-into a workflow, and run the same thing from the command line. Nothing here
-needs an API key until the final section, which is marked as paid.
+This guide introduces the native karcarthy API.
 
 ## Requirements
 
 - JDK 21 or newer
 - Clojure CLI
-- A checkout of `soohoonc/karcarthy`
+- an API key for the model provider you configure
 
-## Run one agent
-
-Start a REPL in the checkout and run:
+During development, depend on karcarthy from Git:
 
 ```clojure
-(require '[karcarthy :as k])
-
-(k/defagent echo
-  {:instructions "Echo the input."})
-
-(k/run {:runner (k/mock-runner)
-        :workflow echo
-        :input "hi"})
+;; deps.edn
+io.github.soohoonc/karcarthy
+{:git/url "https://github.com/soohoonc/karcarthy"
+ :git/sha "<commit sha>"}
 ```
 
-The mock runner answers offline by echoing the prompt, tagged with the agent
-name:
+## Define a tool
+
+A tool is a Clojure function with model-facing documentation and contracts at
+its input and output boundaries:
 
 ```clojure
-{:karcarthy/type :result
- :ok? true
- :agent "echo"
- :text "[echo] hi"
- :raw {:runner :mock}}
+(require '[clojure.spec.alpha :as s]
+         '[karcarthy :as k])
+
+(s/def ::query string?)
+(s/def ::search-input (s/keys :req-un [::query]))
+(s/def ::search-output vector?)
+
+(k/deftool web-search
+  {:description "Search the web for relevant sources."
+   :input ::search-input
+   :output ::search-output}
+  [rt {:keys [query]}]
+  (search! (:http (k/context rt)) query))
 ```
 
-That is the smallest workflow: one request, one agent node, one runner.
+The harness validates tool arguments before execution and validates the return
+value before exposing it to the model. Tools may also declare `:approval`,
+`:enabled?`, guardrails, timeouts, and a projection controlling what the model
+sees.
 
-## Compose two agents
-
-`pipe` runs workflows in sequence and feeds the first result's `:text` into
-the second agent:
+## Define an agent
 
 ```clojure
+(s/def ::question string?)
+(s/def ::request (s/keys :req-un [::question]))
+(s/def ::answer string?)
+(s/def ::sources vector?)
+(s/def ::report (s/keys :req-un [::answer ::sources]))
+
 (k/defagent researcher
-  {:instructions "Research the question and list the important facts."})
-
-(k/defagent summarizer
-  {:instructions "Summarize the previous answer in one sentence."})
-
-(def workflow
-  (k/pipe researcher summarizer))
-
-(k/run {:runner (k/mock-runner)
-        :workflow workflow
-        :input "why does Lisp use code as data?"})
+  {:description "Research a question and return a sourced report."
+   :model {:provider :openai
+           :id "gpt-5.6"
+           :reasoning :high}
+   :instructions
+   (fn [{:keys [context]}]
+     (str "Research carefully for user " (:user-id context)
+          ". Distinguish evidence from inference."))
+   :context ::run-context
+   :input ::request
+   :tools [web-search]
+   :output ::report
+   :loop {:max-turns 20}})
 ```
 
-## The request map
+With no body after the configuration map, `defagent` installs the standard
+model/tool loop.
 
-Every run — including the two above — is one request map:
+## Run it
 
 ```clojure
-(k/run {:runner runner
-        :workflow workflow
-        :input input
-        :options options})
+(def run
+  (k/run! researcher
+          {:question "What makes Lisp homoiconic?"}
+          {:context {:user-id "u_123"
+                     :http http-client}
+           :limits {:model-calls 20
+                    :deadline-ms 120000}
+           :observe println}))
+
+(:status run) ;=> :completed
+(:output run) ;=> {:answer "..." :sources [...]}
 ```
 
-| Key | Meaning |
-| --- | --- |
-| `:runner` | The backend used for each agent call, such as mock, ACP, Claude, Codex, OpenAI, a process, or a local function. |
-| `:workflow` | The agent or workflow data to run. A single agent is already a workflow. |
-| `:input` | The initial workflow value. A string is a prompt; EDN is rendered before the first agent call. |
-| `:options` | Runtime controls such as `:observe`, run-wide `:max-concurrency`, `:run-timeout-ms`, `:cancel?`, or runner-specific overrides. |
+`run!` returns the complete run record. Tools and parent programs normally use
+`invoke!`, which returns the child output while attaching the child's run to
+the same trace tree.
 
-## Input shapes
+## Use the minimal coding profile
 
-The common case is a string prompt:
+For a Codex/Pi/Claude-Code-shaped local agent, use the provided profile instead
+of rebuilding its prompt and file tools:
 
 ```clojure
-(k/run {:runner runner
-        :workflow workflow
-        :input "review this change"})
+(def coder
+  (k/coding-agent
+   {:name "coder"
+    :cwd "/workspace/project"
+    :model {:provider :openai
+            :id "gpt-5.6"
+            :reasoning :high}
+    :web-search? true}))
+
+(k/run! coder "Fix the failing test and verify the smallest relevant target.")
 ```
 
-Use a map when the initial task has structure:
+The profile exposes `read`, `write`, `edit`, `bash`, and ripgrep-backed
+`search`. The prompt lists only installed tools, includes root `AGENTS.md` or
+`CLAUDE.md`, and appends any caller-supplied `:instructions`. OpenAI web search
+is provider-hosted and is added only with `:web-search? true`.
+
+## Add MCP tools
+
+MCP is an adapter into ordinary Tools:
 
 ```clojure
-(k/run {:runner runner
-        :workflow workflow
-        :input {:prompt "review this change"
-                :ticket 42
-                :risk :high}})
+(def server
+  (k/connect-mcp!
+   {:name "project"
+    :command "npx"
+    :args ["-y" "@example/project-mcp"]}))
+
+(try
+  (let [coder (k/coding-agent
+               {:name "coder"
+                :cwd "/workspace/project"
+                :model {:provider :openai :id "gpt-5.6"}
+                ;; :never means this MCP server is explicitly trusted.
+                :tools (k/mcp-tools server {:approval :never})})]
+    (k/run! coder "Inspect the project service."))
+  (finally
+    (k/close-mcp! server)))
 ```
 
-That starts the first agent with:
+The implemented MCP transport is stdio using protocol version `2025-11-25`.
+MCP tools require approval by default. The inner model loop has no special MCP
+branch.
 
-```text
-review this change
+## Serve an Agent over ACP
 
-INPUT EDN:
-{:ticket 42, :risk :high}
+Use a factory when the Agent's workspace and MCP tools depend on the ACP
+session:
+
+```clojure
+(defn acp-coder [{:keys [cwd mcp-tools]}]
+  (k/coding-agent
+   {:name "coder"
+    :cwd cwd
+    :model {:provider :openai :id "gpt-5.6"}
+    :tools mcp-tools}))
 ```
-
-A map without `:prompt` is passed as EDN text. Put execution configuration in
-`:options`, runner construction, or agent fields such as `:model` and `:tools`,
-not inside `:input`.
-
-## Run from the command line
-
-In a repo checkout, `./bin/karcarthy` runs through the Clojure CLI directly.
-Build a standalone jar for faster startup or installed copies:
 
 ```bash
-clojure -T:build uber
+clojure -M -m karcarthy.acp your.namespace/acp-coder
 ```
 
-Run one mock agent:
+The ACP v1 stdio server supports initialization, new/prompt/close sessions,
+cancellation, tool-call updates, client permissions, and session-provided
+stdio MCP servers. HTTP/SSE MCP and resumable ACP sessions are not advertised.
 
-```bash
-./bin/karcarthy agent echo --instructions "Echo the input." hi
-```
-
-Expected output:
-
-```text
-[echo] hi
-```
-
-## Run a live model (paid)
-
-Everything above runs offline and free. The calls below invoke real model
-backends: `claude-runner` shells out to the `claude` CLI and `codex-runner` to
-`codex exec`, so each needs its CLI installed and authenticated — and each call
-costs money.
-
-Agents stay runner-agnostic; they never carry a backend:
+## Compose agents with Clojure
 
 ```clojure
-(k/defagent reviewer
-  {:instructions "Review the input and return concrete issues."
-   :model "sonnet"})
-
-(defn review [runner input]
-  (k/run {:runner runner
-          :workflow reviewer
-          :input input}))
-
-(review (k/mock-runner) "check this design")                            ; offline
-(review (k/claude-runner {}) "check this design")                       ; paid: claude CLI
-(review (k/codex-runner {:dir "."}) "check this design")                ; paid: codex exec
-(review (k/acp-runner {:command ["my-acp-agent"]}) "check this design") ; your ACP agent
+(k/defagent answer-and-review
+  {:input ::request
+   :output ::report}
+  [rt request]
+  (let [report (k/invoke! rt researcher request)
+        review (k/invoke! rt fact-checker report)]
+    (if (:accepted? review)
+      report
+      (k/invoke! rt researcher
+                 (assoc request :feedback (:feedback review))))))
 ```
 
-If the runner changes at runtime, pass a different runner value.
+This is not lowered into `pipe`, `route`, or `revise` nodes. It is compiled and
+executed as the Clojure program shown.
 
-The same switch exists on the CLI with `--runner`:
+## Let an agent create another agent
 
-```bash
-./bin/karcarthy agent reviewer \
-  --runner claude \
-  --instructions "Review the input and return concrete issues." \
-  "check this design"
+Add the expansion capability to its tool set:
+
+```clojure
+(k/defagent architect
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Design and run the smallest useful child Agent."
+   :tools [(k/agent)]})
 ```
 
-The CLI's `claude` runner uses lean sub-agent defaults — system-prompt replace
-mode, tools disabled — so agents answer directly.
+The same `agent` form is both constructor and capability. With a config it
+constructs an Agent; with no arguments it returns the model-facing `agent`
+Tool. That Tool accepts `{:source <one agent form> :input <value>}` and reads,
+expands, checks, evaluates, and invokes the child inside the same trace and
+budgets.
+
+The source may contain a normal agent form with arbitrary Clojure control
+flow:
+
+```clojure
+(agent
+  {:name "review-team"
+   :input ::request
+   :output ::report}
+  [rt request]
+  (let [draft (invoke! rt researcher request)
+        checks (await-all!
+                [(spawn! rt fact-checker draft)
+                 (spawn! rt citation-checker draft)])]
+    (invoke! rt editor {:draft draft :checks checks})))
+```
+
+There is no separate dynamic mode or expansion node. The application grants
+the language's own `agent` form to the model.
 
 ## Next
 
-- [Workflows](/docs/workflows) walks every workflow node with one example each.
-- [Runners](/docs/runners) covers mock, function, process, Claude, Codex, ACP, and OpenAI runners.
-- [Examples](/docs/examples) has runnable launch-readiness and deep-research workflows.
+- [Programs](/docs/workflows) covers ordinary control flow, parallelism,
+  recursion, code generation, and structural rewrites.
+- [Harness](/docs/runners) specifies the model/tool loop and run lifecycle.
+- [Reference](/docs/reference) lists the implemented API and contracts.

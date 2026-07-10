@@ -1,113 +1,131 @@
 ---
 title: Introduction
-description: Data-first agent orchestration for Clojure and command-line workflows.
+description: A homoiconic Clojure harness in which agents can write, check, evaluate, and run new agents.
 ---
 
-karcarthy coordinates multi-agent workflows while keeping the whole plan as
-plain data. You describe agents as maps and workflows as EDN values. A runner —
-Claude, Codex, OpenAI, ACP, a process command, or the offline mock — owns the
-model/tool loop underneath; karcarthy owns the coordination value above it.
+karcarthy is a small agent harness written in Clojure. It owns the model/tool
+loop, and its orchestration language is Clojure itself.
 
 ```clojure
 (require '[karcarthy :as k])
 
 (k/defagent researcher
-  {:instructions "Research the question and cite sources."})
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Research carefully and cite evidence."
+   :tools [web-search]
+   :output ::report})
 
-(k/defagent summarizer
-  {:instructions "Summarize the findings in one sentence."})
-
-(k/run {:runner (k/mock-runner)
-        :workflow (k/pipe researcher summarizer)
-        :input "what is a monad?"})
+(k/run! researcher
+        {:question "Why are Lisp programs represented as lists?"}
+        {:context {:user-id "u_123"}})
 ```
 
-## Everything is data
+The native Agent/Tool kernel, model loop, child execution, generated-form
+evaluation, contracts, limits, memory, events, direct OpenAI transport, minimal
+coding profile, stdio MCP client, and ACP v1 server are implemented. Durable
+suspension and richer incremental streaming remain on the roadmap.
 
-Most agent frameworks make the workflow a host-language object. In karcarthy
-the workflow is a value. You inspect it, diff it, store it, generate it, and
-rewrite it:
+## The premise
+
+An agent is an executable Clojure value. It carries model configuration,
+instructions, context contracts, tools, output contracts, loop policy, and
+optionally an arbitrary Clojure body.
 
 ```clojure
-{:karcarthy/type :pipe
- :steps [{:karcarthy/type :agent
-          :name "researcher"
-          :instructions "Research the question and cite sources."}
-         {:karcarthy/type :agent
-          :name "summarizer"
-          :instructions "Summarize the findings in one sentence."}]}
+(k/defagent review-team
+  {:input ::review-request
+   :output ::review}
+  [rt request]
+  (let [draft   (k/invoke! rt writer request)
+        reviews (k/await-all!
+                 (for [reviewer [security-reviewer api-reviewer]]
+                   (k/spawn! rt reviewer draft)))]
+    (k/invoke! rt editor {:draft draft :reviews reviews})))
 ```
 
-That value can live as EDN, cross a JSON boundary, or be produced by an agent
-and parsed without `eval`. You can also rewrite it before execution:
+There is no workflow data language above Clojure. Sequencing is `let`, routing
+is `if` or `case`, parallelism is a runtime function, and recursion is ordinary
+function or agent invocation.
+
+## Dynamic behavior is already built in
+
+karcarthy does not have a separate `dynamic` feature. A model may write an
+`(agent ...)` form, after which the harness reads, expands, checks, evaluates,
+and invokes it. The form is recursive: zero-arity `agent` is the model-facing
+Tool that accepts another configured `agent` form.
 
 ```clojure
-(->> workflow
-     (k/configure {:model "claude-sonnet-4"
-                   :instructions/suffix "State assumptions before final answer."}))
+(k/defagent architect
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Design and run the smallest useful child Agent."
+   :tools [(k/agent)]})
 ```
 
-## The inner loop belongs to runners
+Evaluation causes normal macroexpansion. The resulting child is an ordinary
+agent and may construct more agents subject to the run's depth, model-call,
+token, concurrency, and time budgets.
 
-karcarthy does not implement model calls or tool execution. The runner you pass
-to `run` owns that loop. karcarthy owns the visible coordination value and the
-small interpreter that walks it. The workflow structure stays portable when
-the selected runners advertise matching capabilities.
+## The four values
 
-## Why Clojure
-
-karcarthy borrows a practical benefit from Lisp's homoiconicity: representing
-program structure as ordinary data. Agents are maps, workflows are EDN trees,
-and constructors such as `pipe`, `branch`, and `revise` return values you can
-print, store, diff, walk, rewrite, validate, or have another agent generate.
-
-That does not mean karcarthy evaluates arbitrary agent-written code. Dynamic
-workflows parse EDN operations with `clojure.edn`, validate them, and interpret
-them through the same workflow interpreter. The homoiconic-inspired move is
-that the language for describing coordination is available as ordinary data,
-not hidden inside an opaque object graph.
-
-Clojure fits because EDN is native, maps and vectors are the default building
-blocks, structural rewrites are ordinary code, macros such as `defagent` add
-ergonomic entry points without changing the data model, and multimethods
-dispatch cleanly on tagged workflow nodes.
-
-## What you can build
-
-| Task | Start here |
+| Value | Meaning |
 | --- | --- |
-| Run one agent and compose the first workflow | [Quickstart](/docs/quickstart) |
-| Understand how data moves through `pipe`, `branch`, `route`, `revise`, `delegate`, `reduce`, `continue`, `step`, and the experimental `dynamic` | [Workflows](/docs/workflows) |
-| Swap mock execution for ACP, Claude, Codex, OpenAI, or a process command | [Runners](/docs/runners) |
-| Copy realistic launch-readiness and deep-research patterns | [Examples](/docs/examples) |
-| Look up signatures and JSON shapes | [Reference](/docs/reference) |
+| Agent | Configuration plus an executable body. Without a custom body, the harness supplies its model/tool loop. |
+| Tool | A described, contracted Clojure function the model may invoke. |
+| Runtime | Context, budgets, cancellation, memory, model access, and observation for one run tree. |
+| Run | Status, typed output, usage, events, and the source/expanded forms involved in execution. |
 
-## Core surfaces
+Agent and tool values retain their source forms. Programs are therefore
+executable behavior and inspectable research artifacts at the same time.
 
-| Surface | Description |
+## The harness owns the loop
+
+For a model-backed agent, karcarthy:
+
+1. resolves dynamic instructions, tools, and model options from runtime context;
+2. calls the configured model;
+3. validates and executes requested tools;
+4. appends results to conversation state;
+5. stores conversation state and enforces budgets;
+6. repeats until a typed output, failure, cancellation, deadline, or stop condition;
+7. emits a trace for every decision and effect.
+
+The model-provider boundary only performs model I/O. It is not a runner and
+does not own tools, delegation, memory, or orchestration.
+
+## Engineering and research
+
+Agents retain original and macroexpanded forms; generated programs also place
+both forms in the trace. Every run records model and tool events, child-agent
+lineage, token usage, latency, approvals, failures, and final output. That makes
+the same system suitable for applications and behavioral experiments.
+
+Harbor can evaluate the stable ACP surface. Experiments may compare quality,
+cost, failure modes, trace structure, or invariants; they do not need to claim
+that a generated program improves anything.
+
+## A small coding profile, not a second harness
+
+`coding-agent` installs `read`, `write`, `edit`, `bash`, and `search`. Its
+instructions are assembled from the capabilities actually present plus the
+workspace's `AGENTS.md` or `CLAUDE.md`. This follows the small-kernel pattern
+used by [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent):
+keep the loop fixed and make capabilities explicit. Hosted web search and MCP
+tools use the same Tool boundary; ACP remains outside the loop.
+
+## Start here
+
+| Goal | Page |
 | --- | --- |
-| Agents | Plain maps tagged with `:karcarthy/type :agent`; usually defined with `defagent`. |
-| Workflows | `pipe`, `branch`, `route`, `revise`, `delegate`, `reduce`, `continue`, `step`, and `dynamic` (`step` is the host-local Clojure escape hatch; `dynamic` is experimental). |
-| Subagents | Runner-native delegation config built with `subagent`/`defsubagent`, passed to runners that support native delegation. Distinct from workflow nodes. See [Runners](/docs/runners#subagents). |
-| Rewrites | `agents`, `over`, and `configure`. |
-| Runners | Mock, Clojure function, process command, ACP, Claude, Codex, and OpenAI. |
-| CLI | `bin/karcarthy agent`, `run`, `demo`, and `json`. |
-
-## Current status
-
-karcarthy is early and not yet published as a stable release. The docs treat
-the small public vocabulary as the product surface and keep implementation
-internals out of the main path.
-
-## Next
-
-Start with the [Quickstart](/docs/quickstart) — you run your first workflow
-offline in about two minutes.
+| Define and execute the first agent | [Quickstart](/docs/quickstart) |
+| Write orchestration with normal Clojure | [Programs](/docs/workflows) |
+| Understand the model/tool loop and runtime | [Harness](/docs/runners) |
+| See complete programs | [Examples](/docs/examples) |
+| Look up the API and value contracts | [Reference](/docs/reference) |
 
 <Cards>
   <Card title="Quickstart" href="/docs/quickstart" />
-  <Card title="Workflows" href="/docs/workflows" />
-  <Card title="Runners" href="/docs/runners" />
+  <Card title="Programs" href="/docs/workflows" />
+  <Card title="Harness" href="/docs/runners" />
   <Card title="Examples" href="/docs/examples" />
   <Card title="Reference" href="/docs/reference" />
 </Cards>

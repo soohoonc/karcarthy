@@ -1,24 +1,15 @@
 (ns karcarthy.test-runner
-  "Zero-dependency test runner (no Clojars needed). Add new test namespaces to
-  `test-namespaces` below."
   (:require [clojure.test :as t]))
 
 (def test-namespaces
- '[karcarthy-test
-   karcarthy.core-test
-   karcarthy.cli-test
-   karcarthy.proc-test
-   karcarthy.runner.acp-test
-   karcarthy.runner.claude-test
-   karcarthy.runner.codex-test
-   karcarthy.runner.process-test
-   karcarthy.runner.openai-test
-   karcarthy.orchestrate-test
-   karcarthy.dynamic-test
-   karcarthy.schema-test
-   karcarthy.rewrite-test
-   karcarthy.self-test
-   karcarthy.terminal-test])
+  '[karcarthy-test
+    karcarthy.core-test
+    karcarthy.cli-test
+    karcarthy.coding-test
+    karcarthy.eval-test
+    karcarthy.openai-test
+    karcarthy.mcp-test
+    karcarthy.acp-test])
 
 (defn -main [& _]
   (doseq [ns test-namespaces] (require ns))

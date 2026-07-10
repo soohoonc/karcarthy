@@ -1,179 +1,63 @@
 ---
-title: Introduction
-description: Run and study complete karcarthy workflows.
+title: Examples
+description: Complete examples of authored programs, generated agents, and ACP clients.
 ---
 
-This section is for complete workflows you can run or copy. It starts with the
-shape of the workflow, then links to language-specific walkthroughs when the
-example needs more explanation.
+The examples use one rule throughout: orchestration is Clojure code. Agents may
+write more Clojure code, and the harness records both source and expanded forms
+alongside the execution trace.
 
-## Launch Readiness
+## Examples
 
-This is the main product-style example. Given a product-change prompt, it:
+| Page | Shows |
+| --- | --- |
+| [Clojure](/docs/examples/clojure) | Tools, model-backed agents, a custom orchestration body, parallel children, generated agents, and trace capture. |
+| [Python](/docs/examples/python) | The ACP client boundary for driving a running Clojure harness from Python or Harbor. |
+| [TypeScript](/docs/examples/typescript) | The same ACP boundary from a TypeScript application. |
 
-1. classifies the request as launch or incident,
-2. runs product, engineering, security, and support reviewers,
-3. synthesizes their notes into a launch brief,
-4. asks a critic to accept or request revisions.
+Python and TypeScript are clients, not alternative authoring languages for the
+agent program. The executable program remains Clojure; ACP carries prompts,
+events, approvals, and results across the process boundary.
 
-The workflow shape is small:
-
-```clojure
-(def reviewers
-  [product-reviewer engineering-reviewer security-reviewer support-reviewer])
-
-(def review-packet
-  (k/branch reviewers :max-concurrency 4))
-
-(def launch-brief
-  (k/revise
-   (k/pipe review-packet brief-writer)
-   critic
-   :max-rounds 2))
-
-(def workflow
-  (k/route classifier
-           {:launch launch-brief
-            :incident incident-responder}
-           :default launch-brief))
-```
-
-Then the caller chooses a runner. The offline run uses `mock-runner`, which
-takes a respond fn of `{:agent :prompt :options} -> String` — not a map of
-canned responses:
+## Pattern: a model-backed leaf
 
 ```clojure
-;; respond: fn of {:agent :prompt :options} -> reply string.
-;; launch.clj dispatches on (:name agent) to return canned reviewer notes.
-(k/run {:runner (k/mock-runner respond)
-        :workflow workflow
-        :input "Prepare the launch brief for a new enterprise SSO feature."})
+(k/defagent researcher
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Research carefully and cite evidence."
+   :tools [web-search fetch-page]
+   :output ::report})
 ```
 
-Run the same example in each host language:
+## Pattern: orchestration as code
 
-```bash
-clojure -M -e '(load-file "examples/clojure/launch.clj")'
-python3 examples/python/launch.py
-npx tsx examples/typescript/launch.ts
+```clojure
+(k/defagent research-team
+  {:input ::question
+   :output ::report}
+  [rt question]
+  (let [draft (k/invoke! rt researcher question)
+        checks (k/await-all!
+                [(k/spawn! rt fact-checker draft)
+                 (k/spawn! rt citation-checker draft)])]
+    (k/invoke! rt editor {:draft draft :checks checks})))
 ```
+
+## Pattern: generated behavior
+
+```clojure
+(k/defagent architect
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Design and run a child Agent for the task."
+   :tools [(k/agent)]})
+```
+
+The model calls the same `agent` form used by authored Clojure. The harness
+reads, expands, checks, evaluates, and verifies its source before the child
+runs.
 
 <Cards>
-  <Card title="Clojure Walkthrough" href="/docs/examples/clojure" />
-  <Card title="Python Walkthrough" href="/docs/examples/python" />
-  <Card title="TypeScript Walkthrough" href="/docs/examples/typescript" />
+  <Card title="Clojure" href="/docs/examples/clojure" />
+  <Card title="Python over ACP" href="/docs/examples/python" />
+  <Card title="TypeScript over ACP" href="/docs/examples/typescript" />
 </Cards>
-
-Expected final brief:
-
-```text
-Decision: launch to a staged enterprise beta cohort.
-Rationale: product demand is strong, rollout is reversible, and support can prepare clear admin guidance.
-Top risks: SSO latency, unverified audit logs, and missing rollback messaging.
-Required owners: engineering for latency monitoring, security for audit-log signoff, support for FAQ and escalation macro.
-Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.
-```
-
-## Deep Research
-
-This example models the public shape of a deep-research agent loop as EDN:
-
-```text
-question
-  -> research-planner
-  -> delegate(max 4)
-       source-scout -> evidence-reader -> source-judge
-  -> report-writer
-  -> report-critic
-       accept, or send feedback into another writer round
-```
-
-The workflow itself is just a value:
-
-```clojure title="examples/clojure/deep_research.clj"
-(def investigation-pipeline
-  (k/pipe source-scout evidence-reader source-judge))
-
-(def deep-research-workflow
-  (k/revise
-   (k/reduce
-    (k/delegate research-planner investigation-pipeline :max-concurrency 4)
-    report-writer)
-   report-critic
-   :max-rounds 2))
-```
-
-Run the deterministic offline version:
-
-```bash
-clojure -M -e '(load-file "examples/clojure/deep_research.clj")'
-```
-
-The file also includes a live `codex-runner` path. karcarthy still owns only
-the workflow value; Codex owns the inner model/tool loop:
-
-```bash
-KARCARTHY_CODEX_LIVE=1 clojure -M -e '(load-file "examples/clojure/deep_research.clj")'
-```
-
-## More Examples
-
-The repository ships more complete examples than the two walkthroughs above.
-Unless marked live, each runs offline with no API keys.
-
-- `examples/clojure/claude_dynamic_agents.clj` — Claude dynamic-workflow style
-  orchestration: a lead agent sharpens its own instructions with the
-  experimental `evolve`, a
-  planner creates workstreams at runtime (`delegate` into a worker `pipe`,
-  synthesized with `reduce`), and a critic accepts or requests one revision
-  (`revise`). Offline by default; set `KARCARTHY_CLAUDE_LIVE=1` to run through
-  the Claude CLI.
-- `examples/javascript/claude_dynamic_agents.mjs` — the `delegate`/`reduce`/
-  `revise` core of the same workflow built as JSON and sent through
-  `bin/karcarthy` (the `evolve` lead stage is Clojure-only); `--print` shows
-  the workflow JSON without invoking Clojure.
-- `examples/clojure/rewrite.clj` — build a workflow once, then `configure` a
-  model and an instruction suffix onto every agent before interpreting the
-  rewritten value. The runnable version of the rewrites row below.
-- `examples/clojure/openai_deep_research.clj` — wraps OpenAI Deep Research
-  (the Responses API) as a karcarthy leaf. Offline by default; set
-  `KARCARTHY_OPENAI_LIVE=1` with `OPENAI_API_KEY` for a live background
-  research job.
-- `examples/javascript/openai_deep_research.mjs` — the JavaScript variant;
-  `--request` prints the live request JSON without calling the API.
-- `examples/clojure/evolve.clj` — a live `evolve` run (paid `claude -p`): an
-  agent patches its own instructions via EDN at runtime, then answers with the
-  new behavior.
-- `examples/clojure/live.clj` — a live `delegate`/`reduce` run through
-  `claude-runner` (paid `claude -p`), showing the CLI tuning
-  (`:system-prompt-mode :replace`, tools disabled) that makes Claude answer
-  directly instead of inheriting Claude Code's interactive persona.
-- `examples/java/Demo.java`, `examples/kotlin/Demo.kt`, and
-  `examples/scala/Demo.scala` — JVM host demos: build two agents, compose a
-  `pipe`, and run it on the mock runner through the Clojure Java API.
-
-## What These Prove
-
-| Capability | Why it matters |
-| --- | --- |
-| Workflow as EDN/JSON data | The plan can be generated by code or by an agent and checked before execution. |
-| Small workflow vocabulary | `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, and `dynamic` cover sequencing, fan-out, synthesis, loops, routing, handoff, and adapting a run in progress. |
-| Runners at the leaves | Claude, Codex, OpenAI, ACP, a process command, or a mock can run the same agent nodes. |
-| Rewrites before execution | Add models or instruction suffixes across a whole workflow with `configure`, or make arbitrary structural edits with `over`. |
-| Observable runs | `:observe` receives structured start/end/error events for agents and composite nodes. |
-
-## Small Checks
-
-Use these only when you want to verify installation:
-
-```bash
-./bin/karcarthy agent echo --instructions "Echo the input." hi
-./bin/karcarthy run examples/workflows/echo.json hi
-clojure -M -m karcarthy.demo
-```
-
-Expected output for the first two commands:
-
-```text
-[echo] hi
-```

@@ -1,120 +1,133 @@
 # karcarthy
 
-> Agent orchestration as data, inspired by Lisp's homoiconicity.
+> A homoiconic Clojure harness in which agents can write, check, evaluate, and
+> run new agents.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-karcarthy coordinates many AI agents from Clojure. You write agents, tools,
-and the workflow itself as plain data (EDN), then run it through any runner.
-
-## Get started
-
-There is no published release yet, so depend on karcarthy from git:
+karcarthy is an agent harness, not a workflow DSL and not a portability layer
+over other harnesses. It owns the model/tool loop. Agents, tools, and
+orchestration are executable Clojure values and forms.
 
 ```clojure
-;; deps.edn
-io.github.soohoonc/karcarthy {:git/url "https://github.com/soohoonc/karcarthy"
-                              :git/sha "<commit sha>"}
-```
-
-Define two agents, compose them with `pipe`, and run the workflow:
-
-```clojure
-(require '[karcarthy :as k])   ; one alias re-exports the common API
+(require '[karcarthy :as k])
 
 (k/defagent researcher
-  {:instructions "Research the question and cite sources."})
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Research carefully and cite evidence."
+   :tools [web-search]
+   :output ::report})
 
-(k/defagent summarizer
-  {:instructions "Summarize the findings in one sentence."})
-
-;; the workflow is data; run it through any runner
-(k/run {:runner (k/mock-runner)
-        :workflow (k/pipe researcher summarizer)
-        :input "what is a monad?"})
-;=> {:karcarthy/type :result, :ok? true, :text "...", ...}
+(k/defagent research-team
+  {:input ::request
+   :output ::report}
+  [rt request]
+  (let [draft (k/invoke! rt researcher request)
+        checks (k/await-all!
+                [(k/spawn! rt fact-checker draft)
+                 (k/spawn! rt citation-checker draft)])]
+    (k/invoke! rt editor {:draft draft :checks checks})))
 ```
 
-The mock runner is offline and deterministic. Swap it for
-`(k/claude-runner {})`, `(k/codex-runner {:dir "."})`, `(k/openai-runner {})`,
-or `(k/acp-runner {:command [...]})` to run the same workflow on a live agent
-system.
+There is no `pipe`, `branch`, or separate `dynamic` subsystem. Sequencing is
+`let`, routing is `if` or `case`, parallelism is structured child execution,
+and dynamic behavior is normal Lisp evaluation. Give a model the capability
+explicitly:
 
-## Highlights
+```clojure
+(k/defagent architect
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Design and run the smallest useful child Agent."
+   :tools [(k/agent)]})
+```
 
-- **Runners** behind one protocol: `mock-runner`, `fn-runner`,
-  `process-runner`, `acp-runner`, `claude-runner`, `codex-runner`, and
-  `openai-runner`. Pass the runner you want to `run`.
-- **Workflows as data**: compose agents with `pipe`, `branch`, `delegate`,
-  `reduce`, `revise`, `route`, `continue`, and the experimental `dynamic`;
-  inspect and rewrite
-  those workflow values before running them.
-- **Host Clojure steps**: use `step` for local functions inside workflows; use
-  `process-runner` when the whole run should execute agent calls through a
-  fixed argv or shell command.
-- **Runner-native subagents**: define `subagent` maps for Claude Code
-  subagents, Codex custom-agent config, or OpenAI Agents SDK handoffs while
-  keeping workflow branches as explicit karcarthy orchestration.
-- **Structural rewrites**: stamp configuration onto every agent without changing the
-  original workflow:
-  ```clojure
-  (->> workflow
-       (k/configure {:model "claude-sonnet-4"
-                     :instructions/suffix "State assumptions before final answer."}))
-  ```
-- **Agents speak karcarthy**: advanced workflows parse EDN via `clojure.edn`,
-  never `eval`, so an agent can write a workflow before a run or adapt the
-  workflow while the run is in progress.
-- **Run controls**: `:max-concurrency` bounds leaf calls across the whole run,
-  `:run-timeout-ms` and `:cancel?` stop outstanding work, `:observe` streams
-  OTel-compatible events, and `:edn-retries` repairs malformed model EDN.
-- **Fail-closed results**: statuses are Boolean, rejected revisions are not-ok,
-  dynamic workflows cannot complete over unresolved failed work, and the CLI
-  exits nonzero for a not-ok result.
-- **Schemas as data**: `edn-schema` and `json-schema` keep generated workflows
-  inspectable without adding another runtime.
+`agent` is recursive at the interface: with a config it constructs an Agent;
+with no arguments it is the model-facing `agent` Tool. Its input is one
+`(agent ...)` form and a value. Underneath, `compile-agent!` reads the source,
+macroexpands it, checks compiler and boundary contracts, evaluates it, verifies
+that it produced an Agent, invokes it, and records every phase in the same run
+trace. The child may recursively expand into more agents within shared limits.
 
-## Why Lisp, and why runners
+## Why Clojure
 
-Running a single agent (the model-call and tool-call loop) is close to a
-commodity: Claude, Codex, the OpenAI Agents SDK, and local models all do it.
-The harder problem is coordinating *many* agents while keeping the plan
-something you can see and change.
+The agent program and its representation are the same thing. An Agent retains
+its source and expanded forms, so programs can be inspected, transformed,
+generated, evaluated, diffed, and studied with ordinary Clojure.
 
-Inspired by Lisp's code-as-data tradition, karcarthy makes the plan a value. A workflow is an
-EDN structure you generate, transform with `clojure.walk`, store, and diff like
-any other data. karcarthy delegates the inner loop to systems you already use —
-PydanticAI, Claude, Codex, the OpenAI Agents SDK, Clojure functions,
-subprocesses, shell commands, or a local mock — and keeps only the data-first
-coordination layer on top. Two things fall out of that:
+This is useful for engineering and research:
 
-- You swap provider, protocol, process, or mock runners without changing the
-  workflow structure when their declared capabilities match.
-- Because the plan is data in a Lisp, an agent can **write a workflow as EDN
-  that karcarthy runs, or rewrite its own definition at runtime**. The language
-  the agents are described in is available to the agents themselves.
+- applications get typed tools, context, memory, approvals, limits,
+  cancellation, and observable child agents;
+- experiments get exact program forms, model/tool traces, token usage, latency,
+  lineage, and failures;
+- optimizers can search over actual Clojure programs rather than a closed
+  workflow grammar;
+- Harbor will evaluate the harness through an ACP server without becoming the
+  runtime underneath it.
 
-## Next steps
+## The small kernel
 
-- Examples in Clojure, JavaScript, Java, Kotlin, Scala, Python, and TypeScript:
-  [`examples/`](examples/). Non-JVM languages drive karcarthy through
-  `bin/karcarthy` over JSON, since a workflow is just data.
-- Web docs (Fumadocs): [`docs/`](docs/) and
-  [`karcarthy.vercel.app/docs`](https://karcarthy.vercel.app/docs).
-- How karcarthy compares to PydanticAI, DSPy, Agno, and the Vercel AI SDK:
-  [`COMPARISON.md`](COMPARISON.md).
-- What is missing for a sharper core: [`ROADMAP.md`](ROADMAP.md).
-- `clojure -M:test` runs the offline tests; `clojure -M -m karcarthy.demo` runs a demo.
-- `clojure -T:build uber` builds `target/karcarthy-0.0.2-standalone.jar`;
-  `./bin/karcarthy agent echo --instructions "Echo the input." hi` runs it as a CLI.
-- Pre-release (0.0.2). JDK 21+; depends on `org.clojure/clojure` and
-  `org.clojure/data.json`.
+- `agent` / `defagent`
+- `tool` / `deftool`
+- `run!`
+- `invoke!`
+- `compile-agent!`
+- `emit!`
 
-karcarthy coordinates one in-memory run. Durable checkpoints, crash recovery,
-and exactly-once execution belong in the application or an external workflow
-system rather than this library's core.
+Conveniences such as `spawn!`, `await-all!`, `as-tool`, and `handoff!` build on
+those primitives. A model provider is a narrow model-I/O transport; it does not
+own tools or orchestration and is not a Runner.
 
-## License
+## Minimal coding harness
 
-[MIT](LICENSE).
+`coding-agent` is the batteries-included profile. Following Pi's small-kernel
+design, it adds five orthogonal local tools—`read`, `write`, `edit`, `bash`, and
+`search`—and generates its prompt from the tools actually present. OpenAI web
+search is an explicit hosted capability, not a pretend local function.
+
+```clojure
+(def coder
+  (k/coding-agent
+   {:name "coder"
+    :cwd "/workspace/project"
+    :model {:provider :openai :id "gpt-5.6"}
+    :web-search? true}))
+
+(k/run! coder "Fix the failing test and verify it.")
+```
+
+MCP tools enter through the same `:tools` vector. The inner loop does not know
+or care whether a function tool was authored locally or discovered from an MCP
+server. The ACP server exposes an Agent or per-session Agent factory to editors
+and evaluation clients such as Harbor.
+
+## Status
+
+The native kernel, model/tool loop, coding profile, structured child execution,
+generated-form evaluation, direct OpenAI Responses transport, hosted web
+search, stdio MCP client, and ACP v1 server are implemented. The former
+Runner/EDN workflow implementation and JSON workflow bridge have been removed.
+
+The documentation site describes the implemented programming model:
+
+- [`docs/content/docs/index.mdx`](docs/content/docs/index.mdx) — premise
+- [`docs/content/docs/quickstart.mdx`](docs/content/docs/quickstart.mdx) — API
+- [`docs/content/docs/workflows.mdx`](docs/content/docs/workflows.mdx) — programs as Clojure
+- [`docs/content/docs/runners.mdx`](docs/content/docs/runners.mdx) — the native harness
+- [`docs/content/docs/reference/`](docs/content/docs/reference/) — API, generated code, and contracts
+
+Remaining work, including durable suspension and richer streaming, lives in
+[`ROADMAP.md`](ROADMAP.md).
+
+## Development
+
+```bash
+clojure -M:test
+clojure -M -m karcarthy.demo
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
+clojure -M -m karcarthy.acp your.namespace/agent-var
+cd docs && npm ci && npm run build
+```
+
+JDK 21+. MIT licensed.

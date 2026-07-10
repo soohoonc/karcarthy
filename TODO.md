@@ -1,22 +1,27 @@
 # TODO
 
-Follow-ups from the ACP spec-compliance audits against
-<https://agentclientprotocol.com>. Confirmed implementation issues have been
-fixed; this file retains the one protocol-defined ambiguity worth watching and
-the live-test invocation. Direction and non-goals live in
-[ROADMAP.md](ROADMAP.md).
+The native harness and homoiconic execution path are implemented. Immediate
+follow-ups:
 
-## ACP runner (`src/karcarthy/runner/acp.clj`)
+## Runtime
 
-### Protocol watch item
+- Durable suspension/resumption for approvals and human input.
+- Observable context compaction.
+- Streaming transport events.
+- Retry/backoff and effect idempotency policy.
+- Conversational state transfer for `handoff!`.
 
-- **Permission fallback outcome.** When no `reject_*` option exists the
-  runner answers `cancelled`, which the spec ties to `session/cancel`. There
-  is no generic deny outcome in the protocol today; revisit if one is added.
+## Evaluation
 
-### Testing live ACP
+- Harbor smoke evaluation.
+- ACP session loading/resumption and incremental model streaming.
+- MCP Streamable HTTP transport.
+- Trace export containing program hashes, forms, usage, latency, and scores.
 
-The opt-in conformance test runs when `KARCARTHY_LIVE` is set and
-`KARCARTHY_ACP_COMMAND` contains an EDN argv vector such as
-`["claude-code-acp"]`. It remains opt-in so the normal suite is offline and
-free.
+## Research
+
+- Form mutation helpers.
+- Replay and differential trace comparison.
+- Search drivers over program variants.
+
+Direction and sequencing live in [ROADMAP.md](ROADMAP.md).

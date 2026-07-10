@@ -1,213 +1,306 @@
 (ns karcarthy.core-test
-  (:require [clojure.test :refer [deftest is testing]]
-            [karcarthy.core :as k]))
+  (:refer-clojure :exclude [run!])
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :refer [deftest is testing]]
+            [karcarthy :as k]))
 
-(deftest agent-construction
-  (testing "agent builds a tagged data map with optional fields"
-    (let [a (k/agent {:name "researcher"
-                      :description "Use for research."
-                      :instructions "Research thoroughly."
-                      :model "sonnet"
-                      :tools ["WebSearch" "WebFetch"]
-                      :config {:temperature 0.2}})]
-      (is (= :agent (:karcarthy/type a)))
-      (is (= "researcher" (:name a)))
-      (is (= "Use for research." (:description a)))
-      (is (= "sonnet" (:model a)))
-      (is (= ["WebSearch" "WebFetch"] (:tools a)))
-      (is (= {:temperature 0.2} (:config a)))
-      (is (k/agent? a))))
-  (testing "optional fields are omitted when not supplied"
-    (let [a (k/agent {:name "x" :instructions "y"})]
-      (is (= #{:karcarthy/type :name :instructions} (set (keys a))))
-      (is (k/agent? a))))
-  (testing "non-map specs are rejected"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                          #"agent expects a map"
-                          (k/agent "x"))))
-  (testing "agent variants can derive from existing agent data"
-    (let [base    (k/agent {:name "reviewer" :instructions "Review." :model "sonnet"})
-          variant (k/agent {:from base :model "gpt-5.2"})]
-      (is (= "reviewer" (:name variant)))
-      (is (= "Review." (:instructions variant)))
-      (is (= "gpt-5.2" (:model variant)))))
-  (testing "unknown keys are rejected"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (k/agent {:name "x" :instructions "y" :temperature 0.2}))))
-  (testing "missing required keys are rejected"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                          #"agent spec is invalid"
-                          (k/agent {:name "x"})))))
+(s/def ::text string?)
+(s/def ::tool-input (s/keys :req-un [::text]))
+(s/def ::value int?)
+(s/def ::context (s/keys :req-un [::value]))
 
-(deftest agent-validation
-  (testing "agent? rejects malformed values"
-    (is (not (k/agent? {:karcarthy/type :agent})))           ; missing fields
-    (is (not (k/agent? {:karcarthy/type :agent :name ""      ; blank name
-                        :instructions "i"})))
-    (is (some? (k/explain-agent {:karcarthy/type :agent})))
-    (is (nil? (k/explain-agent (k/agent {:name "a" :instructions "i"}))))))
+(defn scripted-model
+  [& responses]
+  (let [remaining (atom responses)]
+    (k/fake-model
+     (fn [_]
+       (let [response (first @remaining)]
+         (swap! remaining next)
+         (if (fn? response) (response) response))))))
 
-(deftest subagent-construction
-  (testing "subagent builds runner-native delegation config"
-    (let [s (k/subagent "security-reviewer"
-                        "Use for auth, secrets, and permission review."
-                        "Review like a security owner."
-                        :tools ["Read" "Grep" "Glob"]
-                        :disallowed-tools ["Write" "Edit"]
-                        :model "sonnet"
-                        :permission-mode :plan
-                        :mcp-servers ["github"]
-                        :max-turns 5
-                        :skills ["review"]
-                        :background? false
-                        :effort :high
-                        :reasoning-effort :medium
-                        :sandbox-mode :read-only
-                        :nicknames ["Sec"])]
-      (is (= :subagent (:karcarthy/type s)))
-      (is (= "security-reviewer" (:name s)))
-      (is (= "Use for auth, secrets, and permission review." (:description s)))
-      (is (= ["Read" "Grep" "Glob"] (:tools s)))
-      (is (= ["Write" "Edit"] (:disallowed-tools s)))
-      (is (false? (:background? s)))
-      (is (k/subagent? s)))))
+(k/deftool uppercase
+  {:description "Uppercase text."
+   :input ::tool-input
+   :output string?}
+  [_ {:keys [text]}]
+  (.toUpperCase ^String text))
 
-(deftest subagent-validation
-  (testing "subagent? rejects malformed values"
-    (is (not (k/subagent? {:karcarthy/type :subagent
-                           :name "x"
-                           :description "d"})))
-    (is (some? (k/explain-subagent {:karcarthy/type :subagent})))
-    (is (nil? (k/explain-subagent (k/subagent "a" "d" "i"))))))
+(deftest agent-and-tool-values
+  (let [leaf (k/agent {:name "leaf"
+                       :model {:id "fake" :transport (scripted-model "ok")}
+                       :instructions "answer"})
+        program (k/agent {:name "program" :input string? :output string?}
+                         [_ input] (str input "!"))]
+    (is (k/agent? leaf))
+    (is (k/agent? program))
+    (is (k/tool? uppercase))
+    (is (= "uppercase" (:name uppercase)))
+    (is (seq (k/source-form program)))
+    (is (seq (k/expanded-form program)))))
 
-(deftest run-via-mock-echo
-  (testing "default mock runner echoes the prompt tagged with agent name"
-    (let [r (k/run-agent (k/mock-runner)
-                         (k/agent {:name "echo" :instructions "e"})
-                         "hello")]
-      (is (k/ok? r))
-      (is (= :result (:karcarthy/type r)))
-      (is (= "echo" (:agent r)))
-      (is (= "[echo] hello" (:text r))))))
+(deftest configuration-fails-closed
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown"
+                        (k/agent {:name "bad"
+                                  :model :x
+                                  :instructions "x"
+                                  :wat true})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":model and :instructions"
+                        (k/agent {:name "bad"})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input contract"
+                        (k/tool {:name "x" :description "x"}
+                                [rt input] input))))
 
-(deftest run-with-custom-responder
-  (testing "mock runner can return scripted replies"
-    (let [runner (k/mock-runner (fn [{:keys [prompt]}] (str "got:" prompt)))
-          r       (k/run-agent runner (k/agent {:name "a" :instructions "i"}) "x")]
-      (is (= "got:x" (:text r))))))
+(deftest model-backed-agent-final-output
+  (let [agent (k/agent {:name "answer"
+                        :model {:id "fake"
+                                :transport (scripted-model
+                                            {:type :final :output "done"
+                                             :usage {:input-tokens 3
+                                                     :output-tokens 2}})}
+                        :instructions "answer"
+                        :input string?
+                        :output string?})
+        run (k/run! agent "task")]
+    (is (= :completed (:status run)))
+    (is (= "done" (:output run)))
+    (is (= 1 (get-in run [:usage :model-calls])))
+    (is (= 3 (get-in run [:usage :input-tokens])))
+    (is (= 2 (get-in run [:usage :output-tokens])))))
 
-(deftest run-validates-agent
-  (testing "run-agent throws on a malformed agent"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (k/run-agent (k/mock-runner)
-                              {:karcarthy/type :agent}
-                              "x")))))
+(deftest memory-can-carry-conversation-between-runs
+  (let [memory (atom {})
+        seen (atom [])
+        model (k/fake-model
+               (fn [request]
+                 (swap! seen conj (:messages request))
+                 {:type :final :output "ok"}))
+        agent (k/agent {:name "remembering"
+                        :model {:id "fake" :transport model}
+                        :instructions "remember"
+                        :output string?})]
+    (k/run! agent "first" {:memory memory})
+    (k/run! agent "second" {:memory memory})
+    (is (= 1 (count (first @seen))))
+    (is (= 3 (count (second @seen))))
+    (is (= "first" (get-in @seen [1 0 :content])))
+    (is (= "ok" (get-in @seen [1 1 :content])))
+    (is (= "second" (get-in @seen [1 2 :content])))))
 
-(deftest results-require-boolean-status
-  (testing "only the Boolean true represents success"
-    (is (k/ok? (k/result {:text "ok"})))
-    (is (not (k/ok? {:ok? "false"})))
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                          #":ok\? must be true or false"
-                          (k/result {:ok? "false"}))))
-  (testing "run-agent rejects malformed runner results"
-    (let [runner (reify k/Runner
-                   (-run [_ _ _ _]
-                     {:karcarthy/type :result :ok? "yes" :text "bad"}))]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                            #"invalid result"
-                            (k/run-agent runner
-                                         (k/agent {:name "a" :instructions "i"})
-                                         "x"))))))
+(deftest native-model-tool-loop
+  (let [seen (atom [])
+        model (k/fake-model
+               (fn [request]
+                 (swap! seen conj request)
+                 (if (= 1 (count @seen))
+                   {:type :tool-calls
+                    :calls [{:id "call_1"
+                             :name "uppercase"
+                             :input {:text "hello"}}]}
+                   {:type :final
+                    :output (get-in request [:input 0 :content])})))
+        agent (k/agent {:name "tool-user"
+                        :model {:id "fake" :transport model}
+                        :instructions "use the tool"
+                        :tools [uppercase]
+                        :output string?})
+        run (k/run! agent "hello")]
+    (is (= :completed (:status run)))
+    (is (= "HELLO" (:output run)))
+    (is (= 2 (count @seen)))
+    (is (= "object" (get-in @seen [0 :tools 0 :parameters :type])))
+    (is (= "string"
+           (get-in @seen [0 :tools 0 :parameters :properties "text" :type])))
+    (is (= ["text"]
+           (get-in @seen [0 :tools 0 :parameters :required])))
+    (is (= :tool (get-in @seen [1 :input 0 :role])))
+    (is (= [:model/requested :model/completed
+            :tool/started :tool/completed
+            :model/requested :model/completed]
+           (->> (:events run)
+                (map :type)
+                (filter #{:model/requested :model/completed
+                          :tool/started :tool/completed})
+                vec)))))
 
-(deftest run-agent-requires-a-tagged-agent
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                        #":karcarthy/type :agent"
-                        (k/run-agent (k/mock-runner)
-                                     {:name "a" :instructions "i"}
-                                     "x"))))
+(deftest structured-output-is-parsed-and-checked
+  (s/def ::answer string?)
+  (s/def ::report (s/keys :req-un [::answer]))
+  (let [agent (k/agent {:name "json"
+                        :model {:id "fake"
+                                :transport (scripted-model
+                                            "{\"answer\":\"yes\"}")}
+                        :instructions "json"
+                        :output ::report})
+        run (k/run! agent nil)]
+    (is (= :completed (:status run)))
+    (is (= {:answer "yes"} (:output run)))))
 
-(k/defagent test-researcher
-  {:instructions "Research questions thoroughly."
-   :model "sonnet"
-   :tools ["WebSearch" "WebFetch"]})
+(deftest contract-errors-become-failed-runs
+  (let [bad-input (k/agent {:name "input"
+                            :input string?
+                            :output string?}
+                           [_ x] x)
+        bad-output (k/agent {:name "output"
+                             :input any?
+                             :output string?}
+                            [_ _] 42)]
+    (is (= :contract (get-in (k/run! bad-input 42) [:error :kind])))
+    (is (= :agent-input (get-in (k/run! bad-input 42) [:error :phase])))
+    (is (= :contract (get-in (k/run! bad-output nil) [:error :kind])))
+    (is (= :agent-output (get-in (k/run! bad-output nil) [:error :phase])))))
 
-(k/defagent test-claude-researcher
-  {:from test-researcher
-   :model "opus"})
+(deftest context-and-resolvers
+  (let [seen (atom nil)
+        agent (k/agent {:name "context"
+                        :context ::context
+                        :input any?
+                        :output int?}
+                       [rt _]
+                       (:value (k/context rt)))]
+    (is (= 7 (:output (k/run! agent nil {:context {:value 7}
+                                         :observe #(reset! seen %)}))))
+    (is (= :run/completed (:type @seen)))
+    (is (= :contract (get-in (k/run! agent nil {:context {}})
+                             [:error :kind])))))
 
-(k/defsubagent test-reviewer
-  "Use for focused review."
-  "Review code and report concrete findings."
-  :tools ["Read" "Grep"])
+(deftest custom-program-composes-agents
+  (let [writer (k/agent {:name "writer" :input string? :output string?}
+                        [_ x] (str x " draft"))
+        editor (k/agent {:name "editor" :input string? :output string?}
+                        [_ x] (str x " edited"))
+        team (k/agent {:name "team" :input string? :output string?}
+                      [rt x]
+                      (k/invoke! rt editor (k/invoke! rt writer x)))
+        run (k/run! team "memo")]
+    (is (= "memo draft edited" (:output run)))
+    (is (= ["team" "writer" "editor"]
+           (->> (:events run)
+                (filter #(= :agent/started (:type %)))
+                (map :agent)
+                vec)))))
 
-(deftest defagent-macro
-  (testing "defagent defs a valid agent named after the symbol"
-    (is (k/agent? test-researcher))
-    (is (= "test-researcher" (:name test-researcher)))
-    (is (= "Research questions thoroughly." (:instructions test-researcher)))
-    (is (= "sonnet" (:model test-researcher)))
-    (is (= ["WebSearch" "WebFetch"] (:tools test-researcher))))
-  (testing "instructions become the var's docstring"
-    (is (= "Research questions thoroughly."
-           (:doc (meta #'test-researcher)))))
-  (testing "defagent can derive configured variants"
-    (is (k/agent? test-claude-researcher))
-    (is (= "test-claude-researcher" (:name test-claude-researcher)))
-    (is (= "Research questions thoroughly." (:instructions test-claude-researcher)))
-    (is (= "opus" (:model test-claude-researcher)))))
+(deftest structured-parallel-children-preserve-order
+  (let [child (fn [name delay-ms]
+                (k/agent {:name name :input int? :output int?}
+                         [_ x] (Thread/sleep delay-ms) x))
+        slow (child "slow" 30)
+        fast (child "fast" 1)
+        team (k/agent {:name "parallel" :output vector?}
+                      [rt _]
+                      (k/await-all! [(k/spawn! rt slow 1)
+                                     (k/spawn! rt fast 2)]))
+        run (k/run! team nil {:limits {:parallelism 2}})]
+    (is (= :completed (:status run)))
+    (is (= [1 2] (:output run)))))
 
-(deftest defsubagent-macro
-  (testing "defsubagent defs a valid subagent named after the symbol"
-    (is (k/subagent? test-reviewer))
-    (is (= "test-reviewer" (:name test-reviewer)))
-    (is (= "Use for focused review." (:description test-reviewer)))
-    (is (= ["Read" "Grep"] (:tools test-reviewer))))
-  (testing "instructions become the var's docstring"
-    (is (= "Review code and report concrete findings."
-           (:doc (meta #'test-reviewer))))))
+(deftest depth-and-call-budgets
+  (let [leaf (k/agent {:name "leaf" :output string?} [_ _] "ok")
+        parent (k/agent {:name "parent" :output string?}
+                        [rt _] (k/invoke! rt leaf nil))
+        looping (k/agent {:name "looping"
+                          :model {:id "fake"
+                                  :transport (scripted-model
+                                              {:type :tool-calls :calls []})}
+                          :instructions "loop"
+                          :loop {:max-turns 1}})]
+    (is (= :failed (:status (k/run! parent nil
+                                    {:limits {:agent-depth 0}}))))
+    (is (= :agent-depth
+           (get-in (k/run! parent nil {:limits {:agent-depth 0}})
+                   [:error :phase])))
+    (is (= :failed (:status (k/run! looping nil
+                                     {:limits {:model-calls 0}}))))
+    (is (= :budget
+           (get-in (k/run! looping nil {:limits {:model-calls 0}})
+                   [:error :kind])))))
 
-(deftest runner-must-be-a-runner
-  (testing "run-agent receives the runner value directly"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                          #"runner must implement"
-                          (k/run-agent {:not :a-runner}
-                                       (k/agent {:name "x" :instructions "i"})
-                                       "hi")))))
+(deftest cancellation-and-deadline
+  (let [agent (k/agent {:name "work" :output string?}
+                       [_ _] (Thread/sleep 20) "done")]
+    (is (= :cancelled (:status (k/run! agent nil {:cancel (atom true)}))))
+    (is (= :failed (:status (k/run! agent nil
+                                     {:limits {:deadline-ms 1}}))))))
 
-(deftest single-runner
-  (testing "passing one runner directly works"
-    (is (= "[e] hi" (:text (k/run-agent (k/mock-runner)
-                                        (k/agent {:name "e" :instructions "i"})
-                                        "hi"))))))
+(deftest approval-policy
+  (let [dangerous (k/tool {:name "dangerous"
+                           :description "Do a dangerous thing."
+                           :input map?
+                           :output string?
+                           :approval :always}
+                          [_ _] "done")
+        model #(k/fake-model
+                (let [n (atom 0)]
+                  (fn [request]
+                    (if (= 1 (swap! n inc))
+                      {:type :tool-calls
+                       :calls [{:id "c" :name "dangerous" :input {}}]}
+                      {:type :final :output (get-in request [:input 0 :content])}))))
+        make-agent #(k/agent {:name "approval"
+                              :model {:id "fake" :transport (model)}
+                              :instructions "call"
+                              :tools [dangerous]
+                              :output string?})]
+    (is (= :failed (:status (k/run! (make-agent) nil))))
+    (is (= "done" (:output (k/run! (make-agent) nil
+                                    {:approval (constantly true)}))))))
 
-(deftest fn-runner-coerces-clojure-return-values
-  (testing "a Clojure function receives input directly by default"
-    (let [runner (k/fn-runner (fn [input] (str "fn:" input)))
-          r      (k/run-agent runner (k/agent {:name "f" :instructions "i"}) "hi")]
-      (is (k/ok? r))
-      (is (= "fn:hi" (:text r)))))
-  (testing "a Clojure function can opt into the full call map"
-    (let [runner (k/fn-runner
-                  (fn [{:keys [agent input options]}]
-                    (str (:name agent) ":" input ":" (:suffix options)))
-                  {:call? true})
-          r      (k/run-agent runner
-                              (k/agent {:name "f" :instructions "i"})
-                              "hi"
-                              {:suffix "ok"})]
-      (is (= "f:hi:ok" (:text r)))))
-  (testing "a Clojure function may return a result map"
-    (let [runner (k/fn-runner (fn [_] (k/result {:agent "custom" :text "done"})))
-          r      (k/run-agent runner (k/agent {:name "f" :instructions "i"}) "hi")]
-      (is (= "custom" (:agent r)))
-      (is (= "done" (:text r))))))
+(deftest once-approval-is-reused-across-turns
+  (let [effect (k/tool {:name "effect"
+                        :description "Perform one approved effect."
+                        :input map?
+                        :output string?
+                        :approval :once}
+                       [_ _] "ok")
+        turn (atom 0)
+        approvals (atom 0)
+        model (k/fake-model
+               (fn [_]
+                 (case (swap! turn inc)
+                   1 {:type :tool-calls
+                      :calls [{:id "c1" :name "effect" :input {}}]}
+                   2 {:type :tool-calls
+                      :calls [{:id "c2" :name "effect" :input {}}]}
+                   {:type :final :output "done"})))
+        agent (k/agent {:name "once"
+                        :model {:id "fake" :transport model}
+                        :instructions "Call twice."
+                        :tools [effect]
+                        :output string?})
+        run (k/run! agent nil
+                    {:approval (fn [_] (swap! approvals inc) true)})]
+    (is (= :completed (:status run)))
+    (is (= 1 @approvals))
+    (is (= 1 (count (filter #(= :tool/approval-reused (:type %))
+                            (:events run)))))))
 
-(deftest observer-errors-do-not-break-agent-runs
-  (testing "observer hooks are best-effort"
-    (let [r (k/run-agent (k/mock-runner)
-                         (k/agent {:name "e" :instructions "i"})
-                         "hi"
-                         {:observe (fn [_] (throw (ex-info "observer failed" {})))})]
-      (is (k/ok? r))
-      (is (= "[e] hi" (:text r))))))
+(deftest agents-as-tools
+  (let [child (k/agent {:name "child" :input string? :output string?}
+                       [_ x] (str x "!"))
+        child-tool (k/as-tool child {:name "delegate"})
+        n (atom 0)
+        parent (k/agent {:name "parent"
+                         :model {:id "fake"
+                                 :transport
+                                 (k/fake-model
+                                  (fn [request]
+                                    (if (= 1 (swap! n inc))
+                                      {:type :tool-calls
+                                       :calls [{:id "c"
+                                                :name "delegate"
+                                                :input "hi"}]}
+                                      {:type :final
+                                       :output (get-in request [:input 0 :content])})))}
+                         :instructions "delegate"
+                         :tools [child-tool]
+                         :output string?})]
+    (is (= "hi!" (:output (k/run! parent nil))))))
+
+(deftest guardrails-reject
+  (let [agent (k/agent {:name "guarded"
+                        :input string?
+                        :output string?
+                        :guardrails {:input [(fn [_ value]
+                                               (not= value "blocked"))]}}
+                       [_ x] x)]
+    (is (= :completed (:status (k/run! agent "ok"))))
+    (is (= :guardrail (get-in (k/run! agent "blocked") [:error :kind])))))

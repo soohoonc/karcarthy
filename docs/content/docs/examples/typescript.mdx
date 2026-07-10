@@ -1,168 +1,69 @@
 ---
-title: TypeScript
-description: Configure realistic agents in TypeScript and run them through karcarthy.
+title: TypeScript over ACP
+description: Use a karcarthy agent from a TypeScript application through its ACP server.
 ---
 
-TypeScript sends workflow JSON to `bin/karcarthy`. The workflow is still a plain
-object, but the agent configuration should not be a set of one-line prompts.
-The runnable file is `examples/typescript/launch.ts`.
+TypeScript applications interact with a running karcarthy harness through ACP.
+The agent program remains Clojure code; TypeScript supplies tasks and handles
+events, approvals, cancellation, and results.
 
-## Run the finished workflow
+## Start a session
 
-```bash
-npx tsx examples/typescript/launch.ts
+The concrete method names depend on the ACP client package. Conceptually:
+
+```typescript
+await using process = await acp.spawn({
+  command: "clojure",
+  args: [
+    "-M",
+    "-m",
+    "karcarthy.acp",
+    "example.research/research-team",
+  ],
+});
+
+const session = await process.newSession({
+  cwd: "/workspace",
+});
+
+for await (const event of session.prompt([
+  { type: "text", text: "How do language models use tool feedback?" },
+])) {
+  render(event);
+}
 ```
 
-The offline example prints the configured agents, then a launch brief:
+The application can render tool progress and approvals without
+understanding or serializing the Clojure program.
+
+## Stable interface, evolvable program
+
+The server may load a handwritten agent, a macro-generated agent, or an agent
+that constructs more agents at runtime. All of them present the same ACP
+session interface:
 
 ```text
-Decision: launch to a staged enterprise beta cohort.
-Rationale: product demand is strong, rollout is reversible, and support can prepare clear admin guidance.
-Top risks: SSO latency, unverified audit logs, and missing rollback messaging.
-Required owners: engineering for latency monitoring, security for audit-log signoff, support for FAQ and escalation macro.
-Next actions: confirm audit-log coverage, assign rollback owner, publish support docs, and monitor p95 auth latency during rollout.
+TypeScript client
+        │ ACP
+        ▼
+Clojure harness ── run! ── Agent
+                         ├─ model calls
+                         ├─ tools
+                         ├─ child agents
+                         └─ generated Clojure forms
 ```
 
-## Agent configuration
+No JSON workflow schema sits between the client and the harness.
 
-The example uses a small application-side profile object. This mirrors the
-shape used by mature agent products: separate identity, workspace context, tool
-allowlist, safety boundaries, output contract, tone, and self-checks. karcarthy
-does not need a new API for that; the helper renders the profile into the
-agent's `instructions` string.
+## Cancellation, approvals, and MCP
 
-```ts
-type Workflow = Record<string, unknown>;
+The server translates `session/cancel` into the root Runtime's cancellation
+signal, sends approval decisions through `session/request_permission`, and
+maps Tool events to ACP updates. Stdio MCP servers supplied in `session/new`
+are initialized and their tools are added to the session Agent. Durable
+approval resumption and HTTP/SSE MCP are separate roadmap work.
 
-type AgentProfile = {
-  name: string;
-  role: string;
-  mission: string;
-  context?: string[];
-  tools?: string[];
-  responsibilities: string[];
-  output: string;
-  tone: string;
-  boundaries?: string[];
-  selfCheck?: string[];
-};
+## Next
 
-function renderInstructions(profile: AgentProfile): string {
-  const bulletList = (items: string[]) => items.map((item) => `- ${item}`).join("\n");
-
-  return [
-    `Role: ${profile.role}`,
-    `Mission: ${profile.mission}`,
-    profile.context?.length ? `Operating context:\n${bulletList(profile.context)}` : "",
-    profile.tools?.length
-      ? [
-          `Tool allowlist:\n${bulletList(profile.tools)}`,
-          "These names must already be bound in the selected Agent SDK, CLI, or MCP configuration.",
-          "karcarthy passes the allowlist; it does not create tool servers. The mock runner ignores tools.",
-        ].join("\n")
-      : "Tool allowlist: none. The offline mock runner ignores tool calls.",
-    `Responsibilities:\n${bulletList(profile.responsibilities)}`,
-    `Output contract:\n${profile.output}`,
-    `Interaction style:\n${profile.tone}`,
-    profile.boundaries?.length ? `Boundaries:\n${bulletList(profile.boundaries)}` : "",
-    profile.selfCheck?.length ? `Before finalizing, verify:\n${bulletList(profile.selfCheck)}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-function configuredAgent(profile: AgentProfile): Workflow {
-  return {
-    type: "agent",
-    name: profile.name,
-    instructions: renderInstructions(profile),
-    ...(profile.tools?.length ? { tools: profile.tools } : {}),
-  };
-}
-```
-
-## Specialist profiles
-
-The shared context acts like a compact workspace bootstrap. Each specialist gets
-its own job, tool allowlist for the selected runner, boundaries, and output contract.
-
-```ts
-const launchContext = [
-  "Audience: product, engineering, security, support, and launch leadership.",
-  "Artifact: a launch-readiness brief that can drive a go/no-go meeting.",
-  "Evidence packet: enterprise admins requested SSO; rollout is behind a tenant feature flag; p95 auth latency is the watch metric; audit-log signoff is not complete; support has a setup draft but no rollback macro.",
-  "Risk posture: be concise, specific, and explicit about missing evidence.",
-  "Use only facts from the user request, operating context, or tool results from the selected runner. Do not invent dates, owners, metrics, or policy claims.",
-];
-
-const productReviewer = configuredAgent({
-  name: "product-reviewer",
-  role: "Product launch reviewer",
-  mission: "Assess user value, launch narrative, customer segmentation, and adoption risk.",
-  context: launchContext,
-  tools: ["mcp__feedback__search", "mcp__roadmap__read"],
-  responsibilities: [
-    "Identify the primary user promise in one sentence.",
-    "Call out unclear customer value or missing beta evidence.",
-    "Recommend a launch decision from the product perspective.",
-  ],
-  output: "Three bullets: Product signal, Product risk, Product recommendation.",
-  tone: "Direct, constructive, and grounded in user impact.",
-  boundaries: ["Do not discuss infrastructure, security, or support unless it affects user value."],
-  selfCheck: ["Includes a concrete recommendation.", "Names any missing evidence."],
-});
-
-const briefWriter = configuredAgent({
-  name: "brief-writer",
-  role: "Launch-readiness brief writer",
-  mission: "Synthesize reviewer notes into a go/no-go brief that a launch lead can use immediately.",
-  context: launchContext,
-  responsibilities: [
-    "Preserve disagreements and uncertainty instead of smoothing them away.",
-    "State the decision, rationale, top risks, owners needed, and next actions.",
-    "Keep the brief compact enough for a live launch review.",
-  ],
-  output: "Markdown with sections: Decision, Rationale, Top risks, Required owners, Next actions. Use bullets.",
-  tone: "Executive concise, specific, and neutral.",
-  boundaries: ["Do not invent owner names, dates, or metrics."],
-  selfCheck: ["Contains Decision, Top risks, and Next actions.", "Flags missing evidence explicitly."],
-});
-```
-
-The full runnable file configures classifier, product, engineering, security,
-support, brief writer, critic, and incident-response agents the same way.
-
-## Workflow
-
-The orchestration stays small: configured agents become ordinary workflow nodes.
-
-```ts
-const reviewers: Workflow = {
-  type: "branch",
-  branches: [productReviewer, engineeringReviewer, securityReviewer, supportReviewer],
-};
-
-const launchBrief: Workflow = {
-  type: "revise",
-  worker: {
-    type: "pipe",
-    steps: [reviewers, briefWriter],
-  },
-  evaluator: critic,
-  "max-rounds": 2,
-};
-
-const workflow: Workflow = {
-  type: "route",
-  source: classifier,
-  routes: {
-    launch: launchBrief,
-    incident: incidentResponder,
-  },
-  default: launchBrief,
-};
-```
-
-This is the same executable path as the Python guide. Your product can own the
-agent configuration UI while karcarthy keeps orchestration as portable workflow
-data.
+- [Clojure](/docs/examples/clojure) shows the executable program.
+- [Contracts](/docs/reference/schema) lists the events available to clients.

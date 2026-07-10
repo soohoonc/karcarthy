@@ -1,30 +1,60 @@
 # Roadmap
 
-karcarthy is a small Clojure experiment: workflows are EDN, Clojure rewrites
-that EDN, and `run` interprets it through a runner. Future work should make
-that loop sharper, not broader.
+karcarthy now implements the native Clojure harness described in the docs. The
+Runner protocol, EDN/JSON workflow interpreter, workflow nodes, schemas, JSON
+bridge, and legacy examples have been removed without a compatibility layer.
 
-## Keep sharpening
+## Implemented kernel
 
-- Keep workflow validation aligned with constructors and schemas.
-- Add a printed canonical form for workflow EDN.
-- Keep generated workflow parsing data-only: `clojure.edn`, validation, no
-  `eval`.
-- Improve the rewrite API only when it removes real repetition.
-- Keep the CLI focused on running plain workflow JSON.
+- Executable Agent and Tool values retaining source and expanded forms.
+- Recursive `agent`—constructor with a config, model-facing Agent capability
+  with no arguments—plus `defagent`, `tool`, and `deftool`.
+- Native model/tool loop with local tool execution and repair through ordinary
+  model turns.
+- Direct OpenAI Responses API transport and an offline fake transport.
+- Capability-derived coding profile with bounded local file/search/process
+  tools and OpenAI hosted web search.
+- MCP 2025-11-25 stdio initialization, tool discovery, calls, and adaptation to
+  ordinary Tools.
+- ACP v1 stdio serving for an Agent or per-session Agent factory, including
+  session-provided stdio MCP, tool updates, permissions, and cancellation.
+- `run!`, `invoke!`, `spawn!`, `await!`, `await-all!`, `as-tool`, and
+  `handoff!`.
+- Context, Clojure specs, JSON Schema derivation, guardrails, approval checks,
+  cancellation, deadlines, hierarchical limits, memory, events, and traces.
+- `read-agent-form`, macroexpansion, evaluation, Agent verification, structured
+  failures, recursive generation limits, and trace lineage.
 
-## Runners
+## Complete harness semantics
 
-- Keep runners thin: one agent in, one result map out.
-- Keep live conformance tests opt-in: Claude, Codex, OpenAI, and ACP round trips
-  run only behind `KARCARTHY_LIVE` (ACP additionally reads an EDN argv vector
-  from `KARCARTHY_ACP_COMMAND`).
-- Avoid turning karcarthy into a tool host; tools stay in SDKs, CLIs, MCP
-  config, or subprocess-backed runners.
+- Add durable approval/input suspension and resumption.
+- Add observable compaction policies to the in-memory conversation store.
+- Add richer retry/backoff and idempotency policy for effects.
+- Add true conversational handoff state transfer beyond the current traced
+  child invocation.
+- Add streaming model events to the transport boundary.
+
+## Serve and evaluate
+
+- Add ACP session loading/resumption and richer incremental model/child events.
+- Add MCP Streamable HTTP after the stdio surface is proven in evaluation.
+- Connect Harbor tasks and scorers.
+- Store program hashes, source/expanded forms, trace metrics, and evaluator
+  results together.
+
+## Research tooling
+
+- Provide structural Clojure-form mutation helpers without creating a workflow
+  DSL.
+- Add replay and differential trace comparison.
+- Add search loops over program variants: random/evolutionary search, bandits,
+  Bayesian optimization, or model-proposed rewrites.
+- Treat behavioral verification and negative results as first-class outcomes.
 
 ## Non-goals
 
-- No compatibility layer for every agent framework.
-- No separate mutable runtime language.
-- No graph UI/runtime clone.
-- No legacy aliases during this pre-stable phase.
+- No Runner compatibility layer.
+- No EDN or JSON orchestration language.
+- No separate dynamic-workflow feature.
+- No reimplementation of Clojure control flow as node constructors.
+- No requirement that a research experiment demonstrate improvement.

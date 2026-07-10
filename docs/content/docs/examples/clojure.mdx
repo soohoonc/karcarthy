@@ -1,112 +1,152 @@
 ---
 title: Clojure
-description: Configure realistic agents in Clojure with pipe, branch, revise, route, and EDN replies.
+description: A research team built from typed tools, executable agents, generated code, and observable child runs.
 ---
 
-This guide builds a launch-readiness assistant directly in Clojure. The
-runnable file is `examples/clojure/launch.clj`.
+This example uses the implemented programming model. The concrete
+provider and search functions are application dependencies.
 
-## Run the finished workflow
-
-```bash
-clojure -M -e '(load-file "examples/clojure/launch.clj")'
-```
-
-The example prints the configured agents, then a launch brief. It runs offline
-with deterministic mock responses.
-
-## Goal
-
-Given a product-change prompt, produce a launch brief that includes product,
-engineering, security, and support review notes. If the request looks like an
-incident instead of a launch, route to an incident response agent.
-
-## Configure agents
-
-Instead of defining tiny role prompts, build agents from explicit profiles. The
-profile is ordinary application data; karcarthy still receives a normal agent
-map with an instruction string.
+## Contracts
 
 ```clojure
-(defn bullets [items]
-  (str/join "\n" (map #(str "- " %) items)))
+(ns example.research
+  (:require [clojure.spec.alpha :as s]
+            [karcarthy :as k]))
 
-(defn section [title value]
-  (when (seq value)
-    (str title ":\n" value)))
-
-(defn agent-instructions
-  [{:keys [role mission context tools responsibilities output tone boundaries self-check]}]
-  (->> [(str "Role: " role)
-        (str "Mission: " mission)
-        (section "Operating context" (bullets context))
-        (if (seq tools)
-          (str "Tool allowlist:\n" (bullets tools)
-               "\nThese names must already be bound in the selected Agent SDK, CLI, or MCP configuration."
-               "\nkarcarthy passes the allowlist; it does not create tool servers. The mock runner ignores tools.")
-          "Tool allowlist: none. The offline mock runner ignores tool calls.")
-        (section "Responsibilities" (bullets responsibilities))
-        (str "Output contract:\n" output)
-        (str "Interaction style:\n" tone)
-        (section "Boundaries" (bullets boundaries))
-        (section "Before finalizing, verify" (bullets self-check))]
-       (remove str/blank?)
-       (str/join "\n\n")))
-
-(defn configured-agent [{:keys [name tools] :as profile}]
-  (k/agent
-   {:name name
-    :instructions (agent-instructions profile)
-    :tools (vec tools)}))
+(s/def ::question string?)
+(s/def ::request (s/keys :req-un [::question]))
+(s/def ::answer string?)
+(s/def ::sources (s/coll-of string? :kind vector?))
+(s/def ::report (s/keys :req-un [::answer ::sources]))
+(s/def ::accepted? boolean?)
+(s/def ::feedback string?)
+(s/def ::review (s/keys :req-un [::accepted?]
+                        :opt-un [::feedback]))
 ```
 
-One specialist profile:
+## Tools
 
 ```clojure
-(def product-reviewer
-  (configured-agent
-   {:name "product-reviewer"
-    :role "Product launch reviewer"
-    :mission "Assess user value, launch narrative, customer segmentation, and adoption risk."
-    :context launch-context
-    :tools ["mcp__feedback__search" "mcp__roadmap__read"]
-    :responsibilities ["Identify the primary user promise in one sentence."
-                       "Call out unclear customer value or missing beta evidence."
-                       "Recommend a launch decision from the product perspective."]
-    :output "Three bullets: Product signal, Product risk, Product recommendation."
-    :tone "Direct, constructive, and grounded in user impact."
-    :boundaries ["Do not discuss infrastructure, security, or support unless it affects user value."]
-    :self-check ["Includes a concrete recommendation." "Names any missing evidence."]}))
+(k/deftool web-search
+  {:description "Search the web for evidence relevant to a question."
+   :input (s/keys :req-un [::question])
+   :output ::sources
+   :approval :never}
+  [rt {:keys [question]}]
+  (search-web! (:http (k/context rt)) question))
+
+(k/deftool fetch-page
+  {:description "Fetch a page selected from search results."
+   :input ::url-request
+   :output string?}
+  [rt {:keys [url]}]
+  (fetch! (:http (k/context rt)) url))
 ```
 
-## Compose workflow data
-
-Clojure keeps the coordination graph as data. `branch` gathers reviewer output;
-the brief writer receives the combined branch text in the next `pipe` step:
+## Leaf agents
 
 ```clojure
-(def reviewers
-  [product-reviewer engineering-reviewer security-reviewer support-reviewer])
+(k/defagent researcher
+  {:description "Produce one evidence-backed report."
+   :model {:provider :openai :id "gpt-5.6" :reasoning :high}
+   :instructions "Research carefully. Separate evidence from inference."
+   :input ::request
+   :tools [web-search fetch-page]
+   :output ::report})
 
-(def review-packet
-  (k/branch reviewers :max-concurrency 4))
+(k/defagent fact-checker
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Check every factual claim against the supplied sources."
+   :input ::report
+   :tools [fetch-page]
+   :output ::review})
 
-(def launch-brief
-  (k/revise
-   (k/pipe review-packet brief-writer)
-   critic
-   :max-rounds 2))
+(k/defagent citation-checker
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Check that each citation supports its associated claim."
+   :input ::report
+   :tools [fetch-page]
+   :output ::review})
 
-(def workflow
-  (k/route classifier
-           {:launch launch-brief
-            :incident incident-responder}
-           :default launch-brief))
+(k/defagent editor
+  {:model {:provider :openai :id "gpt-5.6"}
+   :instructions "Revise the report using the reviews without inventing evidence."
+   :input ::edit-request
+   :output ::report})
 ```
 
-## Swap runners
+## The program
 
-The offline runner returns deterministic specialist notes and a final launch
-brief. Swap the runner for `claude-runner`, `codex-runner`, `openai-runner`,
-`process-runner`, or another runner when you want the same configured workflow
-to call a live agent system.
+```clojure
+(k/defagent research-team
+  {:description "Research, independently verify, and revise a question."
+   :input ::request
+   :output ::report}
+  [rt request]
+  (let [draft (k/invoke! rt researcher request)
+        reviews
+        (k/await-all!
+         [(k/spawn! rt fact-checker draft)
+          (k/spawn! rt citation-checker draft)])]
+    (if (every? :accepted? reviews)
+      draft
+      (k/invoke! rt editor {:draft draft :reviews reviews}))))
+```
+
+`research-team` has no model configuration because its body is the program.
+Its children may be model-backed agents, custom programs, or generated agents.
+
+## A generated specialist
+
+An architect agent may return a Clojure source string:
+
+```clojure
+(agent
+  {:name "domain-specialist"
+   :model {:provider :openai :id "gpt-5.6"}
+   :instructions "Analyze the domain terminology before answering."
+   :tools [web-search fetch-page]
+   :input ::request
+   :output ::report})
+```
+
+The parent evaluates it like any other form:
+
+```clojure
+(let [source (k/invoke! rt architect request)
+      child  (k/compile-agent! rt source)]
+  (k/invoke! rt child request))
+```
+
+There is no generated-workflow protocol. The source is normal Clojure and may
+contain a custom body, macros, nested agent forms, or structural transformations.
+
+## Run and observe
+
+```clojure
+(def events (atom []))
+
+(def result
+  (k/run! research-team
+          {:question "How do language models use tool feedback?"}
+          {:context {:http http-client}
+           :limits {:model-calls 40
+                    :parallelism 2
+                    :agent-depth 5
+                    :deadline-ms 180000}
+           :observe #(swap! events conj %)}))
+
+(:status result) ;=> :completed
+(:output result) ;=> {:answer "..." :sources [...]}
+```
+
+The event stream contains model calls, tool calls, child lineage, usage, and
+any `:program/read`, `:program/expanded`, and `:program/evaluated` events from
+generated agents. A research harness can compare these traces without changing
+the application program.
+
+## Next
+
+- [Programs](/docs/workflows) explains each control-flow pattern.
+- [Harness](/docs/runners) defines runtime and loop semantics.
+- [Generated Code](/docs/reference/json) specifies compilation and evaluation.

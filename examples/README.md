@@ -1,121 +1,29 @@
 # Examples
 
-karcarthy is a Clojure library that runs on the JVM, so any JVM language can
-drive it. The Java, Kotlin, and Scala examples each build two agents, compose
-them with `pipe`, and run the workflow through the offline mock runner - identical work in three
-languages, to show the library is reachable from each.
+The canonical example is
+[`clojure/homoiconic.clj`](clojure/homoiconic.clj). It runs entirely offline
+and demonstrates:
 
-## Clojure
+- a contracted Clojure Tool;
+- a model-backed Agent using the native model/tool loop;
+- a custom Agent body;
+- model-authored Clojure read, expansion, checking, and evaluation;
+- recursive child invocation;
+- run events and generated-form usage.
 
-- `clojure/launch.clj` - the complete launch-readiness tutorial:
-  classify with an EDN route, branch reviewers, write a brief, and revise on
-  EDN critique verdicts.
-- `clojure/claude_dynamic_agents.clj` - a Claude dynamic-workflow style run:
-  a lead agent can patch its own instructions, a planner creates parallel
-  workstreams, workers verify each stream, and a critic accepts the memo.
-- `clojure/openai_deep_research.clj` - wraps the OpenAI Responses API Deep
-  Research shape as a karcarthy leaf runner. Offline by default; live calls are
-  gated by `KARCARTHY_OPENAI_LIVE=1` and `OPENAI_API_KEY`.
-- `clojure/deep_research.clj` - a Deep Research-shaped workflow:
-  plan research tracks, investigate them in parallel, filter evidence, write a
-  cited report, and critique/revise. Runs offline with canned evidence and
-  includes an opt-in live `codex-runner` path.
-- `clojure/adversarial_audit.clj` - a runner-neutral production stress test:
-  route a repository audit, plan and challenge three parallel tracks, synthesize
-  a verdict, and force one full revision when a strict critic rejects it.
-  Offline by default; select live Codex or Claude with
-  `KARCARTHY_STRESS_RUNNER=codex|claude`.
-- `clojure/rewrite.clj` - build a workflow once, rewrite the EDN to add
-  model and instruction configuration, then run the rewritten value.
-- `clojure/live.clj` - a live delegate/reduce run (paid `claude -p`).
-- `clojure/evolve.clj` - a live `evolve` run (paid `claude -p`): an agent
-  patches its own instructions via EDN before answering.
-- The offline demo ships in the library: `clojure -M -m karcarthy.demo`.
-
-## Python and TypeScript (via the executable)
-
-Non-JVM languages drive karcarthy through `bin/karcarthy`: send a workflow
-described as JSON on stdin, get the result as JSON. The workflow is data, so the
-language builds and can transform it before execution.
-
-- `python/launch.py`
-- `typescript/launch.ts`
+Run it from the repository root:
 
 ```bash
-python3 examples/python/demo.py            # offline (mock runner)
-python3 examples/python/launch.py
-
-bun run examples/typescript/demo.ts        # or: npx tsx … / ts-node …
-npx tsx examples/typescript/launch.ts
+clojure -M -e '(load-file "examples/clojure/homoiconic.clj")'
 ```
 
-Both build workflows as plain dicts/objects and run them through the offline
-mock runner. Tool names in the launch examples are runner allowlists: they
-must already exist in the selected Agent SDK, CLI, or MCP configuration. The
-mock runner ignores tools.
-
-## JavaScript
-
-- `javascript/claude_dynamic_agents.mjs` - builds a dynamic Claude-style
-  delegate/reduce/critic workflow as JSON and sends it through
-  `bin/karcarthy json`. Offline by default; set `KARCARTHY_CLAUDE_LIVE=1` for
-  the Claude runner.
-- `javascript/openai_deep_research.mjs` - calls the OpenAI Responses API Deep
-  Research shape directly with `background`, web search, code interpreter, and
-  optional vector-store or MCP data sources. Offline by default; set
-  `KARCARTHY_OPENAI_LIVE=1` and `OPENAI_API_KEY` for a live call.
+The paid end-to-end test lets GPT-5.6 call the `agent` form, generate a child
+Agent, and run it:
 
 ```bash
-node examples/javascript/claude_dynamic_agents.mjs --print
-node examples/javascript/openai_deep_research.mjs
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 ```
 
-Build the standalone CLI once when you want the examples to avoid invoking the
-Clojure CLI:
-
-```bash
-clojure -T:build uber
-./bin/karcarthy agent echo --instructions "Echo the input." hi
-./bin/karcarthy run examples/workflows/echo.json hi
-./bin/karcarthy json < request.json
-```
-
-`bin/karcarthy` honors `KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`
-for tests or installed copies; the Python, TypeScript, and JavaScript example
-helpers honor `KARCARTHY_BIN=/path/to/karcarthy` to point at an installed
-launcher instead.
-
-## Java (verified)
-
-```bash
-CP=$(clojure -Spath)
-javac -d /tmp/karc-java -cp "$CP" examples/java/Demo.java
-java  -cp "$CP:/tmp/karc-java" Demo
-# ok?  true
-# text [summarizer] [researcher] what is a monad?
-```
-
-## Kotlin
-
-```bash
-CP=$(clojure -Spath)
-kotlinc -cp "$CP" examples/kotlin/Demo.kt -include-runtime -d /tmp/karc.jar
-java -cp "$CP:/tmp/karc.jar" DemoKt
-```
-
-## Scala
-
-```bash
-CP=$(clojure -Spath)
-scalac -cp "$CP" -d /tmp/karc-scala examples/scala/Demo.scala
-java   -cp "$CP:/tmp/karc-scala" Demo
-```
-
-`clojure -Spath` puts the library and its deps on the classpath from source. To
-use a packaged jar instead, run `clojure -T:build jar` and put
-`target/karcarthy-0.0.2.jar` plus Clojure on the classpath.
-
-The non-Clojure examples use the
-[Clojure Java API](https://clojure.github.io/clojure/javadoc/clojure/java/api/Clojure.html):
-`Clojure.var` resolves a library function, `IFn.invoke` calls it. The Java
-example is verified here; Kotlin and Scala make the same calls.
+Python and TypeScript applications can launch
+`clojure -M -m karcarthy.acp namespace/agent-var` and speak ACP over stdio.
+They are protocol clients rather than authors of JSON workflow graphs.
