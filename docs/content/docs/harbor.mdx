@@ -7,6 +7,10 @@ description: Search executable karcarthy Agent programs with Harbor rewards and 
 isolated environments, invokes verifiers, and stores rewards and trajectories.
 karcarthy integrates at Harbor's generic ACP boundary:
 
+This is the last step in the example sequence, not the starting point. Read the
+[Coding Agent](/docs/examples/coding-agent) for the program being evaluated and
+[ACP](/docs/acp) for the process boundary Harbor launches.
+
 ```text
 Harbor task
   -> packaged karcarthy ACP process
@@ -19,6 +23,21 @@ Harbor task
 Harbor owns task execution, environments, rewards, experiment storage, and
 ACP-to-ATIF conversion. karcarthy owns the Agent program and model/Tool loop.
 There is no shared workflow DSL.
+
+## What this demonstrates
+
+The example is intended to make four claims observable:
+
+1. A candidate is a complete executable Clojure Agent program, not a prompt
+   fragment or a workflow JSON document.
+2. Harbor can run that program as an ordinary ACP Agent inside an isolated task.
+3. Verifier reward can select among programs that change prompts, topology,
+   concurrency, review, and runtime Agent generation.
+4. Harbor trajectories show model and Tool behavior, including runtime `agent`
+   calls, while karcarthy events retain compiler phases and exact nested lineage.
+
+The optimizer does not receive reward for creating more Agents. It receives
+reward only when the Harbor verifier says the task was solved.
 
 ## From demonstration to search
 
@@ -145,3 +164,9 @@ This is reflective evolutionary harness search, not model training. It does not
 update weights, calculate policy gradients, or provide token IDs and log
 probabilities. A full Harbor RL integration has additional rollout interface
 requirements described in Harbor's [RL workflow](https://harborframework.com/docs/training-workflows/rl).
+
+## Continue exploring
+
+- [`examples/harbor/README.md`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/README.md) is the operational guide for running and inspecting the experiment.
+- [Generated Agents](/docs/reference/generated-agents) documents compilation and internal program events.
+- [Data model](/docs/reference/schema) specifies Runs, limits, usage, events, and failures used in experiment instrumentation.

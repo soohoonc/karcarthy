@@ -1,6 +1,6 @@
 ---
 title: Home
-description: A small Clojure agent harness.
+description: Build, compose, observe, and evaluate Agents with ordinary Clojure.
 ---
 
 karcarthy is a small Clojure agent harness inspired by Lisp's homoiconicity.
@@ -28,6 +28,22 @@ engine.
 calls a Tool, karcarthy runs it and returns its result to the model. When the
 model answers, `run!` returns a Run containing the final output, usage, events,
 and any failure.
+
+## The mental model
+
+karcarthy has a small set of runtime concepts:
+
+| Concept | Role |
+| --- | --- |
+| Agent | Instructions, capabilities, contracts, and optionally a Clojure body. |
+| Tool | A model-callable Clojure function with an input schema. |
+| Run | One bounded execution with output, usage, events, and failure data. |
+| Session | Conversation history shared across otherwise independent Runs. |
+| Context | Local dependencies available to code and Tools, never exposed automatically. |
+| Model transport | Translation between the kernel's normalized request and a model API. |
+
+The harness owns the model/Tool loop. Clojure owns control flow. Sessions own
+conversation history. Transports only translate model I/O.
 
 ## Tools and available Agents
 
@@ -74,12 +90,37 @@ built-in `agent` capability. karcarthy reads, expands, evaluates, verifies, and
 runs the new Agent. Authored and generated orchestration therefore share one
 language and one representation; there is no second workflow format.
 
+## Choose a path
+
 <Cards>
-  <Card title="Quickstart" href="/docs/quickstart" />
-  <Card title="Agents" href="/docs/agents" />
-  <Card title="Tools" href="/docs/tools" />
-  <Card title="MCP" href="/docs/mcp" />
-  <Card title="ACP" href="/docs/acp" />
-  <Card title="Harbor" href="/docs/harbor" />
-  <Card title="Examples" href="/docs/examples" />
+  <Card
+    title="Run your first Agent"
+    description="Install karcarthy, call a model, and add a Tool."
+    href="/docs/quickstart"
+  />
+  <Card
+    title="Understand Agents"
+    description="Choose between callable specialists, Clojure coordination, and generated Agents."
+    href="/docs/agents"
+  />
+  <Card
+    title="Build an application"
+    description="Follow live examples from chat through open-ended coding."
+    href="/docs/examples"
+  />
+  <Card
+    title="Connect other systems"
+    description="Import Tools with MCP or serve an Agent over ACP."
+    href="/docs/mcp"
+  />
+  <Card
+    title="Run research evaluations"
+    description="Search executable Agent programs with Harbor rewards and trajectories."
+    href="/docs/harbor"
+  />
+  <Card
+    title="Look up exact shapes"
+    description="Use the API, data model, and generated-Agent references."
+    href="/docs/reference"
+  />
 </Cards>

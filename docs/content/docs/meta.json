@@ -3,16 +3,16 @@
   "pages": [
     "index",
     "quickstart",
-    "repl",
     "agents",
     "tools",
     "models",
+    "sessions",
+    "streaming",
+    "repl",
+    "examples",
     "mcp",
     "acp",
     "harbor",
-    "sessions",
-    "streaming",
-    "examples",
     "reference"
   ]
 }

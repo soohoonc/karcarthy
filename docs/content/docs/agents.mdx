@@ -121,6 +121,20 @@ The common keys are:
 reference](/docs/reference/api#agent-and-defagent) lists limits, guardrails,
 dynamic instructions, and other options.
 
+## Choose a composition mechanism
+
+karcarthy supports three distinct ways to involve more than one Agent. Choose
+based on who should decide the structure:
+
+| Mechanism | Who decides | Use it when | Execution boundary |
+| --- | --- | --- | --- |
+| `:agents [specialist]` | The parent model | A known specialist should be callable when useful. | The child stays inside the parent Run and shares its limits and events. |
+| Clojure body with `run!` | Application code | The topology, ordering, branching, or concurrency is known in advance. | Each explicit `run!` starts an independent Run. |
+| Built-in `agent` capability | The model at runtime | The useful role or workflow cannot be known before seeing the task. | Generated Agents stay inside the current Run and share its limits and events. |
+
+These mechanisms can be combined, but none is a required abstraction layer.
+A single autonomous Agent is often the right program.
+
 ## Make specialists available
 
 Put Agent values in `:agents`:
@@ -228,5 +242,9 @@ This executes model-authored JVM Clojure. Use it only in a process or sandbox
 with the authority you intend to grant. See [Generated
 Agents](/docs/reference/generated-agents) for the exact pipeline.
 
-For conversation history across root Runs, see [Sessions](/docs/sessions). For
-incremental output and the event tree, see [Streaming and events](/docs/streaming).
+## Next
+
+- [Tools](/docs/tools) covers callable functions, contracts, context, and approvals.
+- [Agent composition](/docs/examples/composition) shows fixed Clojure coordination beside runtime Agent generation.
+- [Sessions](/docs/sessions) adds conversation history across root Runs.
+- [Streaming and events](/docs/streaming) exposes output and the complete execution tree.
