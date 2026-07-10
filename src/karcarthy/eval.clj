@@ -81,9 +81,9 @@
       (walk/walk macroexpand-all identity expanded))))
 
 (defn check-agent-form!
-  "Macroexpand a form in the Runtime evaluation namespace. Returns a checked
-  representation. Compiler symbol/arity failures that require evaluation are
-  reported by `eval-agent-form!`."
+  "Macroexpand a form in the current Run's evaluation namespace. Returns a
+  checked representation. Compiler symbol/arity failures that require
+  evaluation are reported by `eval-agent-form!`."
   [rt form]
   (core/check-runtime! rt)
   (let [ns-obj (evaluation-ns! rt)]

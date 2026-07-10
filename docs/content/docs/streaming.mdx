@@ -1,0 +1,73 @@
+---
+title: Streaming and events
+description: Receive model text and lifecycle events while an Agent is running.
+---
+
+Pass `:observe` to `run!` to receive events as they occur:
+
+```clojure
+(def run
+  (k/run! agent input
+          {:observe
+           (fn [{:keys [type delta] :as event}]
+             (if (= type :model/text-delta)
+               (do (print delta) (flush))
+               (record-event! event)))}))
+```
+
+The built-in Responses transport streams by default. `:model/text-delta` is
+the event to render for incremental model text. Other events report Agent,
+Tool, model, Session, and generated-program activity.
+
+## Event families
+
+```clojure
+:run/started          :run/completed       :run/failed
+:run/cancelled
+
+:agent/started        :agent/completed     :agent/failed
+
+:model/requested      :model/text-delta    :model/tool-call-delta
+:model/stream-event   :model/completed     :model/failed
+
+:tool/approval-requested  :tool/approval-resolved
+:tool/started         :tool/completed      :tool/failed
+
+:session/updated
+
+:program/read         :program/expanded    :program/checked
+:program/evaluated    :program/failed
+```
+
+Every event has a Run ID. Agent events also have an Agent ID, parent ID, and
+depth, so recursive and parallel children can be reconstructed as a tree.
+
+## Inspect events after a Run
+
+The Run result contains the complete event vector. `events` works with the
+result directly:
+
+```clojure
+(k/events run)
+
+(->> (k/events run)
+     (filter #(= :tool/completed (:type %))))
+```
+
+Agent bodies and Tools may add application events with `emit!`:
+
+```clojure
+(k/emit! rt {:type :application/decision
+             :value decision})
+```
+
+`emit!` adds the current Run and Agent lineage before recording and publishing
+the event.
+
+## Next
+
+- [Running agents](/docs/running-agents) covers results, limits, and cancellation.
+- [Generated Agents](/docs/reference/generated-agents) documents program
+  lifecycle events.
+- [Integrations](/docs/integrations#acp-serving) explains how ACP streams Agent
+  activity.

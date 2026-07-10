@@ -1,6 +1,6 @@
 ---
 title: Data model
-description: Agent, Tool, Runtime, Session, Run, event, limit, and failure values.
+description: Agent, Tool, run context, Session, Run, event, limit, and failure values.
 ---
 
 karcarthy values are ordinary Clojure values. Agent and Tool values may contain
@@ -25,17 +25,17 @@ The public configuration surface is:
 | --- | --- |
 | `:name` | Stable identifier; `defagent` supplies it from the symbol. |
 | `:description` | Human- and model-facing description. |
-| `:model` | Model identifier and adapter-specific options, or a Runtime-view function. |
-| `:instructions` | Model-visible string or Runtime-view function returning a string. |
+| `:model` | Model identifier and adapter-specific options, or a run-context function. |
+| `:instructions` | Model-visible string or run-context function returning a string. |
 | `:context` | Contract for the local, non-model-visible context value. |
 | `:input` | Agent input contract. |
-| `:tools` | Tool values or a Runtime-view function. |
+| `:tools` | Tool values or a run-context function. |
 | `:output` | Agent output contract. |
 | `:output-schema` | Explicit model-facing JSON Schema. |
 | `:max-turns` | Maximum model turns; defaults to 20. |
-| `:stop-when` | Predicate accepting the Runtime view and final-response data. |
+| `:stop-when` | Predicate accepting the run context and final-response data. |
 | `:guardrails` | Input and output guardrail functions. |
-| `:limits` | Limits narrower than the current Runtime grant. |
+| `:limits` | Limits narrower than the current Run's grant. |
 | `:metadata` | Application metadata retained in configuration. |
 
 A custom-body Agent may omit `:model` and `:instructions`.
@@ -52,11 +52,11 @@ A custom-body Agent may omit `:model` and `:instructions`.
  :execute #object[clojure.lang.IFn ...]}
 ```
 
-Tool input is validated before approval and execution. Tool output is
+Tool input is validated before approval and the call. Tool output is
 validated before it becomes visible to the model. `:to-model-output` may
 project a rich application result into a smaller model-visible value.
 
-## Runtime view
+## Run context
 
 Dynamic instructions, model and Tool resolvers, and guardrails receive an
 immutable view:
@@ -73,9 +73,10 @@ immutable view:
  :agent agent}
 ```
 
-Agent programs and Tools receive the internal Runtime as `rt`. Use public
-functions such as `context`, `emit!`, `invoke!`, `model!`, and
-`compile-agent!` rather than mutating its internal fields.
+Agent programs and Tools receive the current run context as `rt`. Resolver and
+guardrail functions receive the immutable view above. Use public functions
+such as `context`, `emit!`, `invoke!`, `model!`, and `compile-agent!` rather
+than mutating `rt` fields.
 
 ## Session
 
@@ -91,7 +92,7 @@ A Session implements `karcarthy.session/Session`:
 
 Stored items are normalized message maps with roles such as `:user`,
 `:assistant`, and `:tool`. A Session stores conversation history; it does not
-serialize Runtime stacks or arbitrary effects. `memory-session` stores a vector
+serialize in-flight Run stacks or arbitrary effects. `memory-session` stores a vector
 in an atom; durable implementations choose their own storage.
 
 ## Limits
@@ -182,4 +183,4 @@ data and events but have no output.
 ## Next
 
 - [Generated Agents](/docs/reference/generated-agents) specifies form compilation.
-- [Execution](/docs/execution) explains how these values interact during a Run.
+- [Running agents](/docs/running-agents) explains how these values interact.

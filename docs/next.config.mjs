@@ -14,12 +14,17 @@ const config = {
       },
       {
         source: '/docs/runners',
-        destination: '/docs/execution',
+        destination: '/docs/running-agents',
         permanent: true,
       },
       {
         source: '/docs/runtime',
-        destination: '/docs/execution',
+        destination: '/docs/running-agents',
+        permanent: true,
+      },
+      {
+        source: '/docs/execution',
+        destination: '/docs/running-agents',
         permanent: true,
       },
       {

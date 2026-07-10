@@ -5,7 +5,7 @@ description: Define model-backed and custom Agents, expose known Agents as Tools
 
 An Agent is both an executable Clojure value and a retained Clojure form. That
 homoiconic representation is what lets authored and model-created Agents share
-the same definition, macro system, contracts, and execution path.
+the same definition, macro system, contracts, and invocation path.
 
 An Agent contains configuration, boundary contracts, source and expanded
 forms, and either the standard model/Tool loop or a custom Clojure body.
@@ -71,17 +71,17 @@ That Tool is covered in [Model-created Agents](#model-created-agents).
 | --- | --- |
 | `:name` | Stable Agent name. Required by `agent`; supplied by `defagent`. |
 | `:model` | Model ID, transport, and inference options. |
-| `:instructions` | Model-visible string or Runtime-view function. |
+| `:instructions` | Model-visible string or function of the current run context. |
 | `:context` | Contract for local, non-model-visible dependencies. |
 | `:input`, `:output` | Boundary contracts. |
-| `:tools` | Tool values or a Runtime-view function returning them. |
+| `:tools` | Tool values or a function of the current run context. |
 | `:max-turns` | Maximum model turns for the Agent. |
 | `:stop-when` | Predicate that can reject a premature final response. |
 | `:guardrails` | Input and output validation functions. |
 | `:limits` | Limits narrower than the current Run's grant. |
 
-`:model`, `:instructions`, and `:tools` may be functions of the immutable
-Runtime view, allowing per-request model routing and capability selection.
+`:model`, `:instructions`, and `:tools` may be functions of the immutable run
+context, allowing per-request model routing and capability selection.
 
 ## Model-backed Agents
 
@@ -117,9 +117,9 @@ Add `[rt input]` and a body when coordination should be explicit code:
     (k/invoke! rt editor {:change change :reviews reviews})))
 ```
 
-A custom-body Agent may omit `:model` and `:instructions`. `invoke!` executes a
+A custom-body Agent may omit `:model` and `:instructions`. `invoke!` calls a
 child in the current Run; `spawn!` and `await-all!` provide bounded parallel
-child execution. Normal Clojure supplies sequencing, branching, iteration, and
+child calls. Normal Clojure supplies sequencing, branching, iteration, and
 error handling.
 
 ## Expose a known Agent as a Tool
@@ -145,7 +145,7 @@ returns its output to the parent, which then continues its own loop.
 ## Model-created Agents
 
 Use zero-arity `(k/agent)` when the model should decide the child Agent's
-configuration or Clojure body at runtime:
+configuration or Clojure body during the Run:
 
 ```clojure
 (k/defagent architect
@@ -238,6 +238,7 @@ Generated-Agent compilation also emits `:program/read`, `:program/expanded`,
 ## Next
 
 - [Tools](/docs/tools) explains Tool contracts, approvals, and local Tools.
+- [Running agents](/docs/running-agents) covers `run!`, child Agents, and limits.
+- [Streaming and events](/docs/streaming) covers live observation and Run events.
 - [Integrations](/docs/integrations) covers model endpoints, MCP, ACP, and Harbor.
-- [Execution](/docs/execution) covers Runs, Sessions, limits, and events.
 - [Clojure example](/docs/examples/clojure) shows a complete multi-Agent system.

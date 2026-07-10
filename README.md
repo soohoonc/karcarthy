@@ -12,10 +12,10 @@ transformed, evaluated, and run.
 
 That homoiconic representation powers the central capability: add the built-in
 `agent` Tool to let a model submit a new Agent definition that karcarthy checks,
-evaluates, and runs inside the current execution tree.
+evaluates, and runs as a child of the current Run.
 
 The harness also provides a model/Tool loop, typed Tools, conversation Sessions,
-streaming events, child execution, MCP, and ACP.
+streaming events, structured child Agents, MCP, and ACP.
 
 ## Install
 
@@ -138,7 +138,9 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 - [Quickstart](docs/content/docs/quickstart.mdx)
 - [Agents](docs/content/docs/agents.mdx)
 - [Tools](docs/content/docs/tools.mdx)
-- [Execution](docs/content/docs/execution.mdx)
+- [Running agents](docs/content/docs/running-agents.mdx)
+- [Sessions](docs/content/docs/sessions.mdx)
+- [Streaming and events](docs/content/docs/streaming.mdx)
 - [Integrations](docs/content/docs/integrations.mdx)
 - [Examples](docs/content/docs/examples/index.mdx)
 - [Reference](docs/content/docs/reference/index.mdx)

@@ -1,0 +1,64 @@
+---
+title: Sessions
+description: Preserve model conversation history across root Runs.
+---
+
+Runs are independent unless you pass a Session:
+
+```clojure
+(def session (k/memory-session))
+
+(k/run! assistant "My preferred format is Markdown."
+        {:session session})
+
+(k/run! assistant "Reformat the previous answer."
+        {:session session})
+```
+
+A Session stores normalized conversation items from root model-backed Agents.
+Child Agent conversations are not added implicitly.
+
+## In-memory Sessions
+
+`memory-session` is thread-safe and process-local:
+
+```clojure
+(def session
+  (k/memory-session {:id "session_123"
+                     :items []}))
+
+(k/session-id session)
+(k/get-items session)
+(k/pop-item! session)
+(k/clear-session! session)
+```
+
+Use it for a REPL, tests, and processes where conversation history does not
+need to survive a restart.
+
+## Durable Sessions
+
+Applications that need durable history implement
+`karcarthy.session/Session`:
+
+```clojure
+(session-id session)       ; stable string
+(get-items session)        ; chronological messages
+(add-items! session items) ; append messages
+(pop-item! session)        ; remove the newest message
+(clear-session! session)   ; remove all messages
+```
+
+karcarthy does not prescribe a file, JSONL, or database format. The protocol
+is the boundary; storage and retention policy belong to the application.
+
+A Session is conversation history, not a snapshot of a Run. It does not store
+Tool side effects, Clojure stacks, Agent definitions, or arbitrary application
+state.
+
+## Next
+
+- [Running agents](/docs/running-agents) covers `run!`, results, and limits.
+- [Streaming and events](/docs/streaming) covers live observation and recorded
+  events.
+- [Data model](/docs/reference/schema#session) specifies Session items.

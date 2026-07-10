@@ -3,8 +3,8 @@ title: Integrations
 description: Connect model endpoints, hosted Tools, MCP servers, ACP clients, and Harbor evaluation.
 ---
 
-karcarthy's Agent and execution model is in-process Clojure. Integrations sit
-at its boundaries: model inference enters through a transport, external
+karcarthy's Agent loop runs in-process in Clojure. Integrations sit at its
+boundaries: model inference enters through a transport, external
 capabilities become Tools, and ACP exposes an Agent to another process.
 
 ## Model endpoints
@@ -152,7 +152,7 @@ trajectory.json
 Harbor converts ACP Tool calls, observations, Agent messages, selected model,
 and reported token usage into ATIF. Task configuration, verifier output,
 rewards, and experiment storage remain Harbor concepts; karcarthy provides the
-Agent execution and ACP event stream.
+Agent and ACP event stream.
 
 This keeps the homoiconic program inside the harness while giving evaluation
 infrastructure a standard process and trajectory boundary. The Run still
@@ -162,5 +162,6 @@ program structure.
 ## Next
 
 - [Tools](/docs/tools) covers Tool contracts and approval.
-- [Execution](/docs/execution) covers Runs, Sessions, limits, and events.
+- [Running agents](/docs/running-agents) covers `run!`, results, and limits.
+- [Streaming and events](/docs/streaming) covers live Run observation.
 - [REPL example](/docs/examples/repl) shows local and live-model testing.

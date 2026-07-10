@@ -75,7 +75,7 @@ karcarthy reads the form, macroexpands and checks it, evaluates it, verifies
 that it produced an Agent, and invokes the child:
 
 ```text
-Tool call → Clojure form → Agent value → child execution → Tool result
+Tool call → Clojure form → Agent value → child Run → Tool result
 ```
 
 The generated child is not a second-class workflow node. It is the same value
@@ -104,8 +104,8 @@ Because the intermediate value is an ordinary Clojure form:
 - a generated Agent can receive `(agent)` and repeat the process recursively.
 
 The Tool boundary is serialized, so a model submits the form as a string. The
-harness immediately reads it back into Clojure data before expansion,
-evaluation, and execution.
+harness immediately reads it back into Clojure data, expands it, checks it,
+evaluates it, and runs the resulting Agent.
 
 ## Why this is useful
 
@@ -119,7 +119,7 @@ during the run rather than on a graph fixed before the run starts.
 
 Known specialists can be exposed with `as-tool`. New specialists can be
 created with the `agent` Tool. Direct child calls use `invoke!`. All three paths
-produce ordinary child Agents in the same execution tree.
+produce ordinary child Agents in the same Run tree.
 
 ### Generated behavior stays inspectable
 
@@ -144,8 +144,8 @@ An Agent may have a normal Clojure body:
 ```
 
 The model can author the same form. `let`, `if`, functions, macros, and
-`loop/recur` already express the control flow; karcarthy adds Agent-specific
-execution, limits, and observation.
+`loop/recur` already express the control flow; karcarthy adds Agent calls,
+shared limits, and observation.
 
 ## The programming model
 
@@ -153,8 +153,7 @@ execution, limits, and observation.
 | --- | --- |
 | Agent | Model-backed loop or Clojure body with input/output contracts. |
 | Tool | Model-callable capability with contracts and approval policy. |
-| Run | One root execution result with output, usage, events, and failure data. |
-| Runtime | The execution context shared by one Run tree. |
+| Run | One root Agent call with output, usage, events, and failure data. |
 | Session | Optional conversation history across root Runs. |
 
 The everyday entry points are:
@@ -163,7 +162,7 @@ The everyday entry points are:
 (k/agent config)       ; construct an Agent value
 (k/defagent name ...)  ; define that value in a var
 (k/agent)              ; construct the model-facing Agent Tool
-(k/run! agent input)   ; start a root execution
+(k/run! agent input)   ; start a root Run
 (k/invoke! rt agent x) ; call a child from an Agent body
 ```
 
@@ -174,7 +173,7 @@ versus named definition. `defagent` does not create a different Agent type.
 
 - a streaming model/Tool loop;
 - typed local Tools and provider-hosted Tools;
-- structured child execution and shared limits;
+- structured child Agents and shared limits;
 - optional conversation Sessions;
 - source retention and generated-Agent evaluation;
 - MCP Tool discovery over stdio;
@@ -183,9 +182,11 @@ versus named definition. `defagent` does not create a different Agent type.
 <Cards>
   <Card title="Quickstart" href="/docs/quickstart" />
   <Card title="Agents" href="/docs/agents" />
-  <Card title="Execution" href="/docs/execution" />
+  <Card title="Running agents" href="/docs/running-agents" />
+  <Card title="Streaming and events" href="/docs/streaming" />
   <Card title="Integrations" href="/docs/integrations" />
 </Cards>
 
 Start with the [Quickstart](/docs/quickstart). Read [Agents](/docs/agents) for
-the full recursive model and [Execution](/docs/execution) for Run semantics.
+the full recursive model and [Running agents](/docs/running-agents) for
+`run!`, results, limits, and cancellation.

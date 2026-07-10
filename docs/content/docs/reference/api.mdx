@@ -44,7 +44,8 @@ Supported configuration keys are:
  :metadata {...}}
 ```
 
-`:model`, `:instructions`, and `:tools` may be functions of the Runtime view.
+`:model`, `:instructions`, and `:tools` may be functions of the immutable run
+context.
 Instructions must resolve to a string. `:context` is a contract for the local
 context value, not model-visible prompt text.
 
@@ -81,7 +82,7 @@ name from its symbol. Optional keys are `:input-schema`, `:output`,
 `:output-schema`, `:approval`, `:enabled?`, `:guardrails`, `:timeout-ms`,
 `:retry`, `:to-model-output`, and `:metadata`.
 
-Tool arguments are validated before approval and execution. Tool results are
+Tool arguments are validated before approval and the call. Tool results are
 validated before they are returned to the model. `tool?` identifies Tool
 values.
 
@@ -108,7 +109,7 @@ override `:name`, `:description`, `:input`, `:output`, and `:approval`. A
 `:context` function receives the parent context and Tool input and returns the
 local context for the child invocation.
 
-## Execution
+## Running agents
 
 ### `run!`
 
@@ -117,8 +118,8 @@ local context for the child invocation.
 (k/run! agent input options)
 ```
 
-Creates a root Runtime, validates local context and Agent input, executes the
-Agent, and returns a Run record.
+Starts a root Run, validates local context and Agent input, calls the Agent,
+and returns a Run value.
 
 ```clojure
 {:context {...}
@@ -139,11 +140,11 @@ Runs are stateless unless `:session` is supplied.
 (k/invoke! rt agent input {:context {...} :limits {...}})
 ```
 
-Executes a child Agent inside an existing Runtime tree and returns its typed
-output. Limits may only narrow inherited limits. A child invocation does not
+Calls a child Agent inside an existing Run and returns its typed output. Limits
+may only narrow inherited limits. A child invocation does not
 implicitly share the root Session.
 
-### Structured child execution
+### Structured child Agents
 
 ```clojure
 (def child (k/spawn! rt agent input))
@@ -160,7 +161,7 @@ parallelism with the root run tree.
 (k/context rt)
 ```
 
-Returns the local, non-model-visible context value for a Runtime.
+Returns the local, non-model-visible context value for the current Agent call.
 
 ## Sessions
 
@@ -192,7 +193,7 @@ database format.
      (str "Current user: " (:user-id context)))))
 ```
 
-`prompt` joins strings and Runtime-view functions. Each function returns a
+`prompt` joins strings and run-context functions. Each function returns a
 string or nil. `prompt-file` reads the named UTF-8 file. `system-prompt` reads
 the packaged `resources/karcarthy/system.md`.
 
@@ -206,7 +207,7 @@ the packaged `resources/karcarthy/system.md`.
 ```
 
 `read-agent-form` reads one form with reader evaluation disabled.
-`check-agent-form!` macroexpands executable positions in the Runtime's
+`check-agent-form!` macroexpands executable positions in the current Run's
 evaluation namespace. `eval-agent-form!` intentionally evaluates the checked
 form as JVM Clojure and verifies the resulting Agent. `compile-agent!` composes
 the three phases and emits program lifecycle events. See
@@ -322,7 +323,8 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 ```
 
 `emit!` adds Run and Agent lineage, records the event, and calls the Run's
-`:observe` function. `events` returns recorded events from a Run or Runtime.
+`:observe` function. `events` returns recorded events from a Run or an Agent's
+`rt` value.
 
 ## Contracts
 
@@ -333,4 +335,4 @@ clojure -M -m karcarthy.acp your.namespace/agent-var
 ```
 
 Contracts support Clojure specs, predicates, classes, sets, and basic JSON
-Schema. See [Data model](/docs/reference/schema) for the runtime shapes.
+Schema. See [Data model](/docs/reference/schema) for the value shapes.

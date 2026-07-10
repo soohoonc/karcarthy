@@ -1,6 +1,6 @@
 (ns karcarthy.core
   "The karcarthy kernel: executable Agents and Tools, a native model/tool loop,
-  structured child execution, contracts, limits, and observation."
+  structured child Agents, contracts, limits, and observation."
   (:refer-clojure :exclude [agent await run!])
   (:require [clojure.data.json :as json]
             [clojure.spec.alpha :as s]
@@ -403,7 +403,7 @@
        (invoke! rt child input)))))
 
 ;; ---------------------------------------------------------------------------
-;; Runtime, limits, and observation
+;; Run context, limits, and observation
 ;; ---------------------------------------------------------------------------
 
 (def default-limits
@@ -450,12 +450,12 @@
   (str prefix (UUID/randomUUID)))
 
 (defn context
-  "Return the local, non-model-visible context value for a Runtime."
+  "Return the local, non-model-visible context for the current Agent call."
   [rt]
   (:context rt))
 
 (defn runtime-view
-  "Public, immutable view passed to resolver functions."
+  "Public, immutable run-context view passed to resolver functions."
   [rt]
   {:runtime rt
    :run-id (:run-id rt)
@@ -481,7 +481,7 @@
     event))
 
 (defn events
-  "Return recorded events from a Run or Runtime."
+  "Return recorded events from a Run or Agent run context."
   [run-or-runtime]
   (let [v (:events run-or-runtime)]
     (if (instance? clojure.lang.IDeref v) @v (vec v))))
@@ -749,7 +749,7 @@
         call-id (or (:id call) (id "tool_"))
         enabled? (:enabled? config)]
     (when (and enabled? (not (enabled? (runtime-view rt))))
-      (fail! :tool :disabled "Tool is disabled in this Runtime"
+      (fail! :tool :disabled "Tool is disabled in the current Run"
              {:tool (:name tool)}))
     (check-contract! :tool-input (:input config) input)
     (run-guardrails! rt :tool-input (get-in config [:guardrails :input]) input)
@@ -1028,7 +1028,7 @@
                    {:agent (:name agent)} t)))))))
 
 (defn invoke!
-  "Execute a child Agent in an existing Runtime and return its typed output."
+  "Call a child Agent in an existing Run and return its typed output."
   ([rt agent input]
    (invoke! rt agent input {}))
   ([rt agent input options]
@@ -1074,7 +1074,7 @@
                                               (context rt) input)))))))))
 
 (defn run!
-  "Create a root Runtime, execute an Agent, and return a complete Run record."
+  "Start a root Run, call an Agent, and return the complete Run value."
   ([agent input]
    (run! agent input {}))
   ([agent input options]

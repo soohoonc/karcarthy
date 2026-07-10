@@ -84,7 +84,7 @@ than one top-level form.
 
 ### Expand and check
 
-`check-agent-form!` macroexpands executable positions in the Runtime's
+`check-agent-form!` macroexpands executable positions in the current Run's
 evaluation namespace. It preserves quoted forms and records both original and
 expanded forms. Agent configuration and referenced contracts are checked as
 the form is evaluated.
@@ -123,7 +123,7 @@ or interned in that namespace before generated code can use them.
 ## Recursion and limits
 
 A generated Agent can include `(agent)` in its own Tool set and create another
-Agent. The root Runtime enforces:
+Agent. The root Run enforces:
 
 ```clojure
 {:agent-depth 4

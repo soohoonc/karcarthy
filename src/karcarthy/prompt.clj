@@ -33,7 +33,7 @@
 (defn prompt
   "Compose strings and functions into dynamic Agent instructions.
 
-  Each function receives the Runtime context view and returns a string or nil."
+  Each function receives the immutable run context and returns a string or nil."
   [& parts]
   (fn [run-context]
     (->> parts

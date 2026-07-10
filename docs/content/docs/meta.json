@@ -4,8 +4,10 @@
     "index",
     "quickstart",
     "agents",
+    "running-agents",
     "tools",
-    "execution",
+    "sessions",
+    "streaming",
     "integrations",
     "examples",
     "reference"
