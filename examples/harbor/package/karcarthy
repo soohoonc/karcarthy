@@ -8,4 +8,4 @@ if [ ! -x "$java_bin" ]; then
 fi
 KARCARTHY_CANDIDATE_PATH="$script_dir/candidate.clj" \
   exec "$java_bin" -jar "$script_dir/karcarthy-example-standalone.jar" \
-  acp karcarthy.examples.search/harbor-agent
+  acp main/harbor-agent

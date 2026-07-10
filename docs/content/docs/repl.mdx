@@ -16,7 +16,7 @@ clojure -M:examples repl
 
 ```clojure
 (require '[karcarthy :as k]
-         '[karcarthy.examples.basic :as basic])
+         '[example.basic :as basic])
 
 (def assistant (basic/basic-agent))
 (def run (k/run! assistant "Explain what an Agent value is."))

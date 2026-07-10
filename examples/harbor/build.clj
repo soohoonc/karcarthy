@@ -12,12 +12,14 @@
 
 (defn uber [_]
   (clean nil)
-  (b/copy-dir {:src-dirs ["../../src" "../../resources" "../src"]
+  (b/copy-dir {:src-dirs ["../../src" "../../resources"]
                :target-dir class-dir})
+  (b/copy-file {:src "main.clj"
+                :target (str class-dir "/main.clj")})
   (b/compile-clj {:basis @basis
-                  :src-dirs ["../../src" "../src"]
+                  :src-dirs ["../../src" "."]
                   :class-dir class-dir
-                  :ns-compile ['karcarthy.cli]})
+                  :ns-compile ['karcarthy.cli 'main]})
   (b/uber {:class-dir class-dir
            :uber-file uber-file
            :basis @basis

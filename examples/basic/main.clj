@@ -1,4 +1,4 @@
-(ns karcarthy.examples.basic
+(ns example.basic
   "Small live Responses Agent example."
   (:require [clojure.string :as str]
             [karcarthy :as k]))

@@ -1,11 +1,14 @@
+(load-file "examples/basic/main.clj")
+(load-file "examples/coding/main.clj")
+
 (ns karcarthy.live-test
   "Paid verification of the public live examples."
   (:require [clojure.java.shell :as shell]
             [clojure.string :as str]
             [clojure.test :as t :refer [deftest is]]
             [karcarthy :as k]
-            [karcarthy.examples.basic :as basic]
-            [karcarthy.examples.coding :as coding])
+            [example.basic :as basic]
+            [example.coding :as coding])
   (:import [java.nio.charset StandardCharsets]
            [java.nio.file Files Path]
            [java.nio.file.attribute FileAttribute]))
