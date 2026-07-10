@@ -15,6 +15,7 @@ published artifact.
 | Example | Add this concept | Source |
 | --- | --- | --- |
 | [Basic Agent](/docs/quickstart#run-the-live-example) | One live model Run. | [`basic/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/basic/main.clj) |
+| [Agent creates Agents](/docs/guides/architect) | One Agent writes and runs two more Agents. | [`architect/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/architect/main.clj) |
 | [Chat](/docs/guides/chat) | Conversation history across Runs. | [`chat/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/chat/main.clj) |
 | [Agent composition](/docs/guides/composition) | Fixed coordination with ordinary Clojure, contrasted with runtime generation. | [`composition/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/composition/main.clj) |
 | [Coding](/docs/guides/coding) | Open-ended Tool use where the model chooses its own strategy. | [`coding/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/coding/main.clj) |
@@ -22,15 +23,17 @@ published artifact.
 
 <Cards>
   <Card title="Basic Agent" href="/docs/quickstart#run-the-live-example" />
+  <Card title="Agent creates Agents" href="/docs/guides/architect" />
   <Card title="Chat" href="/docs/guides/chat" />
   <Card title="Agent composition" href="/docs/guides/composition" />
   <Card title="Coding" href="/docs/guides/coding" />
   <Card title="Harbor" href="/docs/guides/harbor" />
 </Cards>
 
-The progression is additive rather than a taxonomy of competing demos. The
-Coding Agent is the main end-to-end application. Harbor then runs that fixed
-Agent on an isolated task and records its verifier reward and trajectory.
+The progression is additive. Architect shows one Agent creating two more.
+Composition shows a team written directly in Clojure. Coding lets the model
+choose its own approach. Harbor runs the Coding Agent on an isolated task and
+records its score and trace.
 
 The [Quickstart REPL section](/docs/quickstart#develop-at-the-repl) covers
 interactive development. MCP and ACP live under [Protocols](/docs/protocols/mcp).

@@ -1,0 +1,148 @@
+---
+title: Agent creates Agents
+description: Watch one Agent write and run two more Agents.
+---
+
+This demo starts one Agent called `architect`. After it reads the task, it
+writes two more Agents:
+
+- a failure analyst;
+- a rollout planner.
+
+It runs both, waits for their answers, and writes a final answer.
+
+## The parent
+
+The parent is a normal Agent:
+
+```clojure
+(k/agent
+ {:name "architect"
+  :model {:transport :responses
+          :id "gpt-5.6"
+          :reasoning :low}
+  :instructions
+  "Call the agent Tool twice. Create a failure analyst and a rollout
+   planner. Give both the full task. Use both answers in your answer."
+  :input string?
+  :output string?})
+```
+
+The demo tells the model to create exactly two Agents so every recording shows
+the feature. A normal Agent is free to create none, one, or several.
+
+## Run it
+
+Set `RESPONSES_API_KEY` or `OPENAI_API_KEY`, then run:
+
+```bash
+clojure -M:examples architect \
+  "Review a migration from synchronous writes to a queue."
+```
+
+The source is in
+[`examples/architect/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/architect/main.clj).
+
+## Read the trace
+
+The names and instructions will vary. A run looks like this:
+
+```text
+RUN    architect
+MODEL  -> new Agent
+
+(agent
+  {:name "failure-analyst"
+   :model {:transport :responses :id "gpt-5.6"}
+   :instructions "Find one hidden failure mode."
+   :input string?
+   :output string?})
+
+KERNEL read
+KERNEL expand
+KERNEL check
+KERNEL evaluate -> failure-analyst
+
+MODEL  -> new Agent
+
+(agent
+  {:name "rollout-planner"
+   :model {:transport :responses :id "gpt-5.6"}
+   :instructions "Propose a safe rollout plan."
+   :input string?
+   :output string?})
+
+KERNEL read
+KERNEL expand
+KERNEL check
+KERNEL evaluate -> rollout-planner
+
+  RUN    failure-analyst
+  RUN    rollout-planner
+  DONE   failure-analyst
+RETURN <- generated Agent
+  DONE   rollout-planner
+RETURN <- generated Agent
+DONE   architect
+```
+
+The two calls may interleave because they run at the same time.
+
+Here is what happened:
+
+1. The parent model wrote two `(agent ...)` forms.
+2. karcarthy turned each form into an Agent value.
+3. karcarthy ran both Agents.
+4. Their answers went back to the parent model.
+5. The parent used both answers to write its own answer.
+
+The parent did not describe a team for some other system to build. It wrote the
+team as Clojure, and that Clojure ran.
+
+## What each new Agent knows
+
+Each `agent` Tool call has two fields:
+
+```clojure
+{:source "(agent ...)"
+ :input "the complete task for this Agent"}
+```
+
+The new Agent gets that `input`. It does not get the parent's conversation or
+private reasoning. Its form contains its own instructions and Tools.
+
+This makes each call easy to inspect: the source says what the Agent is, and
+the input says what it should do.
+
+## It is the same Agent you would write
+
+A developer could write the failure analyst directly:
+
+```clojure
+(def failure-analyst
+  (k/agent
+   {:name "failure-analyst"
+    :model {:transport :responses :id "gpt-5.6"}
+    :instructions "Find one hidden failure mode."
+    :input string?
+    :output string?}))
+```
+
+The model-written form creates the same value. You can run it, pass it in
+`:agents`, call other Agents from its body, or let it create more Agents.
+
+## Limits and safety
+
+The two new Agents use the parent's Run limits. Their model calls, tokens, time,
+and events count toward the same Run. `:agent-forms` limits how many forms the
+model may submit; `:depth` limits nesting.
+
+The forms run as JVM Clojure. Do not evaluate source you do not trust in a
+process that holds sensitive files, credentials, or network access.
+
+## Next
+
+- [Agents](/docs/agents) explains Agent values and Runs.
+- [Agent forms](/docs/reference/agent-forms) lists the exact rules for submitted forms.
+- [Agent composition](/docs/guides/composition) shows a team written by the developer.
+- [Coding](/docs/guides/coding) lets the model decide whether more Agents will help.

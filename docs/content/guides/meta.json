@@ -2,6 +2,7 @@
   "title": "Guides",
   "pages": [
     "index",
+    "architect",
     "chat",
     "composition",
     "coding",

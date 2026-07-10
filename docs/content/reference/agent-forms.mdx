@@ -3,16 +3,33 @@ title: Agent forms
 description: Define, compile, evaluate, and run executable Clojure Agent forms.
 ---
 
-Every model Agent can write a new Clojure `agent` form and run it:
+This page specifies how a model submits the same Clojure `agent` form used by
+application code.
+
+A developer might write:
 
 ```clojure
-(k/defagent architect
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Solve the task. Write a specialist when it is useful."
-   :output string?})
+(k/agent
+ {:name "reviewer"
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Review the supplied change."
+  :input string?
+  :output string?})
 ```
 
-No generation flag or manually constructed Tool is required.
+A model submits the equivalent unqualified form as source:
+
+```clojure
+(agent
+ {:name "reviewer"
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Review the supplied change."
+  :input string?
+  :output string?})
+```
+
+The evaluation namespace supplies the real `agent` macro. Both forms create the
+same Agent value. No generation flag or manually constructed Tool is required.
 
 ## What the model sees
 

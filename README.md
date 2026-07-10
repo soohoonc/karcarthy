@@ -1,26 +1,72 @@
 # karcarthy
 
-karcarthy is a small Clojure agent harness inspired by Lisp's homoiconicity.
-Clojure itself is the workflow engine: Agents are values and forms, and normal
-functions, macros, control flow, and concurrency compose them.
+> **The agent architecture is the program.**
+
+karcarthy is a native, homoiconic Clojure agent harness. Agents are executable
+Clojure values and forms: developers, macros, and models all author the same
+program, and the same kernel runs it.
+
+There is no workflow graph or second orchestration language. Clojure functions,
+conditionals, recursion, and concurrency express fixed architectures. When the
+right architecture depends on the task, a running Agent can write and run a new
+`(agent ...)` form.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [Documentation](https://karcarthy.vercel.app/docs)
 
-## Run the live example
+## Watch an Agent write more Agents
 
 JDK 21, the Clojure CLI, and `RESPONSES_API_KEY` or `OPENAI_API_KEY` are
-required.
+required:
 
 ```bash
-clojure -M:examples basic "Explain what an Agent value is."
+clojure -M:examples architect \
+  "Review a migration from synchronous writes to a queue."
 ```
 
-Fake models are used only by the offline unit tests.
+The terminal trace makes the runtime path visible:
 
-## Define and run an Agent
+```text
+RUN    architect
+MODEL  -> new Agent
+
+(agent
+  {:name "failure-analyst"
+   ...})
+
+KERNEL read
+KERNEL expand
+KERNEL check
+KERNEL evaluate -> failure-analyst
+MODEL  -> new Agent
+
+(agent
+  {:name "rollout-planner"
+   ...})
+
+KERNEL read
+KERNEL expand
+KERNEL check
+KERNEL evaluate -> rollout-planner
+  RUN    failure-analyst
+  RUN    rollout-planner
+  DONE   failure-analyst
+RETURN <- generated Agent
+  DONE   rollout-planner
+RETURN <- generated Agent
+DONE   architect
+```
+
+The submitted source is not serialized workflow configuration. It is an
+ordinary Agent program. karcarthy reads, macroexpands, checks, evaluates, and
+runs it; each child receives only its explicit input, and both outputs return
+to the parent Agent.
+
+## One representation
+
+A developer can define a model-driven Agent:
 
 ```clojure
 (require '[karcarthy :as k])
@@ -30,71 +76,57 @@ Fake models are used only by the offline unit tests.
    :instructions "Answer clearly and concisely."
    :output string?})
 
-(def run
-  (k/run! assistant "Explain continuation-passing style."))
-
-(:status run) ;=> :completed
+(def run (k/run! assistant "Explain continuation-passing style."))
 (:output run) ;=> "..."
 ```
 
-The built-in Responses transport reads `RESPONSES_API_KEY` or
-`OPENAI_API_KEY`.
-
-## Add a Tool
+Or use ordinary Clojure to define a fixed architecture:
 
 ```clojure
-(k/deftool word-count
-  {:description "Count the words in text."
-   :input {:type "object"
-           :properties {"text" {:type "string"}}
-           :required ["text"]
-           :additionalProperties false}
-   :output integer?}
-  [{:keys [text]}]
-  (count (re-seq #"\S+" text)))
+(k/defagent review-team
+  {:input string? :output vector?}
+  [change]
+  (->> [security-reviewer api-reviewer]
+       (mapv #(future (k/run! % change)))
+       (mapv deref)
+       (mapv :output)))
 ```
 
-Put the Tool in an Agent with `:tools [word-count]`. The model receives its
-name, description, and schema; karcarthy validates and executes its calls.
+Every model-driven Agent also receives a built-in `agent` Tool. It accepts the
+source for exactly one `(agent ...)` form and an explicit input. Authored and
+runtime-generated architectures therefore share the same language, contracts,
+Run limits, events, and nested lineage.
 
-## Make another Agent available
+This is why karcarthy uses Clojure: an Agent's source is simultaneously an
+executable program and data that a developer, macro, or model can produce.
 
-```clojure
-(k/defagent editor
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Write the answer. Ask researcher when useful."
-   :agents [researcher]
-   :output string?})
-```
+## Examples
 
-The editor's model can call `researcher`. Its output returns to the
-editor, which continues to the final answer.
+The examples progress from the kernel to a complete evaluation:
 
-## Let a model write Clojure
+| Example | What it shows |
+| --- | --- |
+| [Basic](examples/basic/main.clj) | One model-driven Agent Run |
+| [Architect](examples/architect/main.clj) | A running Agent authors and calls a task-specific team |
+| [Composition](examples/composition/main.clj) | A fixed concurrent architecture written with Clojure |
+| [Coding](examples/coding/main.clj) | Open-ended repository work with task-dependent architecture |
+| [Harbor](examples/harbor/README.md) | The Coding Agent evaluated by a verifier with a recorded trajectory |
 
-```clojure
-(k/defagent architect
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Write and run a focused Agent when useful."
-   :output string?})
-```
+See [examples/README.md](examples/README.md) for commands and details.
 
-Every model Agent may submit a new `(agent ...)` form. karcarthy reads, expands,
-evaluates, verifies, and runs the resulting Agent. A generated form can use
-ordinary Clojure and call other Agents. Authored and generated orchestration
-therefore share one language and representation.
+## Boundaries
 
-The built-in `agent` Tool explains the exact grammar, when generation is
-useful, when it is unnecessary, and the model, Tool, and Agent symbols actually
-available. Its call contains the Clojure `source` and an explicit `input`.
-Agent forms submitted at runtime do not inherit the parent's model conversation.
+The harness owns the bounded model/Tool loop. Clojure owns control flow.
+Sessions own conversation history. Model transports only translate I/O.
 
-This executes model-authored JVM Clojure and is not a sandbox.
+Runtime Agent source is evaluated as full-trust JVM Clojure. karcarthy validates
+that it is one Agent form, but it is not a sandbox for untrusted code.
 
 ## Documentation
 
 - [Quickstart](https://karcarthy.vercel.app/docs/quickstart)
-- [Library](https://karcarthy.vercel.app/docs/agents)
+- [Agents](https://karcarthy.vercel.app/docs/agents)
+- [Runtime Agent forms](https://karcarthy.vercel.app/docs/reference/agent-forms)
 - [Guides](https://karcarthy.vercel.app/docs/guides)
 - [Protocols](https://karcarthy.vercel.app/docs/protocols/mcp)
 - [Reference](https://karcarthy.vercel.app/docs/reference)

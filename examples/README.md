@@ -7,6 +7,7 @@ folder and `main.clj`; none of them are part of published library artifacts.
 | Example | Command or source | Demonstrates |
 | --- | --- | --- |
 | Basic Agent | [`basic/main.clj`](basic/main.clj) | One live model Run |
+| Architect | [`architect/main.clj`](architect/main.clj) | A running Agent authors and calls a task-specific team |
 | Chat | [`chat/main.clj`](chat/main.clj) | Sessions and a terminal application |
 | Agent composition | [`composition/main.clj`](composition/main.clj) | Predefined Agents coordinated with Clojure |
 | Coding Agent | [`coding/main.clj`](coding/main.clj) | Open-ended repository work with optional Agent generation |
@@ -20,6 +21,23 @@ Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running an example. Use
 ```bash
 clojure -M:examples basic "Explain what an Agent value is."
 ```
+
+## Architect
+
+Run the smallest live demonstration of karcarthy's central idea:
+
+```bash
+clojure -M:examples architect \
+  "Review a migration from synchronous writes to a queue."
+```
+
+The parent must use the automatic `agent` Tool to author two complementary
+Agents after seeing the task. The example prints both Clojure forms, the
+kernel's read/expand/check/evaluate phases, the concurrent child Runs, and their
+return to the parent. This terminal output is designed to be recorded directly
+as the project's short GIF or video.
+See the [recording guide](architect/README.md) for the shot sequence and export
+settings.
 
 ## Chat
 
