@@ -18,20 +18,19 @@ published artifact.
 | [Chat](/docs/guides/chat) | Conversation history across Runs. | [`chat/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/chat/main.clj) |
 | [Agent composition](/docs/guides/composition) | Fixed coordination with ordinary Clojure, contrasted with runtime generation. | [`composition/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/composition/main.clj) |
 | [Coding](/docs/guides/coding) | Open-ended Tool use where the model chooses its own strategy. | [`coding/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/coding/main.clj) |
-| [Harbor](/docs/guides/harbor#from-demonstration-to-search) | Search over complete Agent programs using verifier rewards and trajectories. | [`harbor/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/main.clj) |
+| [Harbor](/docs/guides/harbor) | Evaluate the Coding Agent with a verifier reward and trajectory. | [`harbor/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/main.clj) |
 
 <Cards>
   <Card title="Basic Agent" href="/docs/quickstart#run-the-live-example" />
   <Card title="Chat" href="/docs/guides/chat" />
   <Card title="Agent composition" href="/docs/guides/composition" />
   <Card title="Coding" href="/docs/guides/coding" />
-  <Card title="Harbor" href="/docs/guides/harbor#from-demonstration-to-search" />
+  <Card title="Harbor" href="/docs/guides/harbor" />
 </Cards>
 
 The progression is additive rather than a taxonomy of competing demos. The
-Coding Agent is the main end-to-end application. Harbor then treats a complete
-Clojure Agent form as the search artifact and evaluates replacements for that
-application on isolated tasks.
+Coding Agent is the main end-to-end application. Harbor then runs that fixed
+Agent on an isolated task and records its verifier reward and trajectory.
 
 The [Quickstart REPL section](/docs/quickstart#develop-at-the-repl) covers
 interactive development. MCP and ACP live under [Protocols](/docs/protocols/mcp).

@@ -20,19 +20,11 @@ karcarthy is a native Clojure agent harness. The implemented kernel includes:
 - ACP session loading and resumption;
 - MCP Streamable HTTP transport;
 - publication of the locally verified ACP launcher in the ACP registry;
-- program hashes and exportable event records for experiments.
-
-## Research tooling
-
-- structural Clojure-form mutation helpers;
-- replay and differential event comparison;
-- search over program variants;
-- behavioral verification and negative-result reporting.
+- program hashes and exportable event records.
 
 ## Non-goals
 
 - no EDN or JSON orchestration language;
 - no workflow-node interpreter;
 - no separate dynamic-workflow feature;
-- no second child-call API alongside `run!` and `:agents`;
-- no requirement that an experiment demonstrate improvement.
+- no second child-call API alongside `run!` and `:agents`.

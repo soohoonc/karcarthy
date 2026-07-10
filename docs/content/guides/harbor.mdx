@@ -1,172 +1,95 @@
 ---
 title: Harbor
-description: Search executable karcarthy Agent programs with Harbor rewards and trajectories.
+description: Evaluate one fixed karcarthy Coding Agent with a Harbor verifier and trajectory.
 ---
 
-[Harbor](https://www.harborframework.com/) runs Agents against tasks in
-isolated environments, invokes verifiers, and stores rewards and trajectories.
-karcarthy integrates at Harbor's generic ACP boundary:
+[Harbor](https://www.harborframework.com/) runs Agents in isolated task
+environments, invokes verifiers, and stores rewards and trajectories. The
+karcarthy example exposes one fixed Coding Agent through ACP:
 
-This is the last step in the example sequence, not the starting point. Read the
-[Coding Agent](/docs/guides/coding) for the program being evaluated and
-[ACP](/docs/protocols/acp) for the process boundary Harbor launches.
+This is the last step in the guide sequence. Read [Coding](/docs/guides/coding)
+for the Agent being evaluated and [ACP](/docs/protocols/acp) for the process
+boundary Harbor launches.
 
 ```text
 Harbor task
   -> packaged karcarthy ACP process
-  -> executable Clojure Agent program
-  -> repository Tools, model calls, and nested Agents
+  -> fixed Coding Agent and repository Tools
   -> Harbor verifier
   -> reward, logs, and ATIF trajectory
 ```
 
-Harbor owns task execution, environments, rewards, experiment storage, and
-ACP-to-ATIF conversion. karcarthy owns the Agent program and model/Tool loop.
-There is no shared workflow DSL.
+This is an evaluation example. It has no optimizer, training loop, or program
+search.
 
-## What this demonstrates
+## What it demonstrates
 
-The example is intended to make four claims observable:
+1. A normal karcarthy Agent can be packaged and served through ACP.
+2. Harbor can run that Agent inside an isolated repository task.
+3. A task verifier can define a metric over the Agent's work.
+4. Harbor can store the reward and convert the ACP interaction into an ATIF
+   trajectory.
 
-1. A candidate is a complete executable Clojure Agent program, not a prompt
-   fragment or a workflow JSON document.
-2. Harbor can run that program as an ordinary ACP Agent inside an isolated task.
-3. Verifier reward can select among programs that change prompts, topology,
-   concurrency, review, and runtime Agent generation.
-4. Harbor trajectories show model and Tool behavior, including runtime `agent`
-   calls, while karcarthy events retain compiler phases and exact nested lineage.
+Harbor owns the task environment, verifier, result storage, and trajectory.
+karcarthy owns the Agent and model/Tool loop.
 
-The optimizer does not receive reward for creating more Agents. It receives
-reward only when the Harbor verifier says the task was solved.
+## Bundled task and metric
 
-## From demonstration to search
+The bundled `scheduler` task contains a small SQLite-backed delivery scheduler
+with transaction and retry bugs. The Coding Agent receives a production
+symptom, inspects the repository, makes changes, and runs its tests.
 
-The Harbor example does not compare two hand-written labels such as `direct`
-and `specialist`. It searches complete Clojure Agent forms.
-
-The initial [`seed.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/seed.clj)
-is a normal Coding Agent. An optimizer can replace its instructions, add or
-remove Agents, introduce review and revision, use concurrency, or discover a
-different structure. Every candidate remains exactly one executable
-`(agent ...)` form compiled by karcarthy.
-
-This follows the important shape of several research systems:
-
-- [AFlow](https://openreview.net/forum?id=z5uVAKwmjf) treats workflow design as
-  search over executable code and evaluates generated candidates.
-- [Meta Context Engineering](https://arxiv.org/abs/2601.21557) evolves artifacts
-  from rollout history and retains the best candidate by validation score.
-- [GEPA](https://arxiv.org/abs/2507.19457) uses verifier feedback and full
-  trajectories for reflective mutation rather than relying only on sparse
-  scalar rewards.
-
-The example uses GEPA's general text-evolution engine, with the text constrained
-to a valid Clojure Agent program.
-
-Candidate forms are full-trust JVM Clojure. Harbor isolates the task workspace,
-not the host-side candidate compilation step. Use a trusted optimizer and do
-not treat this example as a sandbox for adversarial source.
-
-## Experimental loop
-
-`examples/harbor/hillclimb.sh` performs the following loop:
-
-1. Download a published Harbor dataset, defaulting to Terminal-Bench 2.
-2. Create deterministic, disjoint train, validation, and test splits.
-3. Evaluate the seed and later candidates in isolated Harbor tasks.
-4. Feed sampled training rewards, verifier output, and ATIF trajectories to the
-   reflective optimizer.
-5. Generate and compile a complete offspring Agent form.
-6. Rank candidates by mean validation reward and retain the best-so-far.
-7. After search, evaluate the selected Agent on the untouched test split.
-
-The optimizer never receives a rule requiring an `agent` Tool call. If a
-multi-Agent workflow helps, search can discover it. If it does not, the best
-candidate may remain a single Agent.
-
-## Metric
-
-The primary objective is:
+After the Agent exits, Harbor runs hidden behavioral tests. The verifier's
+`reward` metric is:
 
 ```text
-validation score = mean Harbor verifier reward over validation tasks
+1  all hidden tests pass
+0  one or more hidden tests fail
 ```
 
-By default, the runner reads the verifier's `reward` field. `--metric` selects
-another named reward for datasets with multiple metrics.
-
-Training rewards and trajectories generate proposals. Validation rewards select
-candidates. Test rewards are reported only after selection. This separation is
-what prevents the optimizer from simply choosing the candidate that memorized
-its training examples.
-
-ATIF trajectories, verifier output, compile failures, Tool activity, Agent
-calls, aggregate tokens, and runtime are diagnostic signals. They help explain
-why a candidate worked, but do not earn reward merely for looking agentic.
-
-## Run the search
-
-The search is paid and explicitly opt-in:
+The task also includes an oracle solution so its environment and verifier can
+be checked without a model call:
 
 ```bash
-KARCARTHY_LIVE=1 OPENAI_API_KEY=... \
-  examples/harbor/hillclimb.sh \
-  --train-size 8 --val-size 8 --test-size 8 \
-  --max-evals 40 --max-iterations 5
+uvx --python 3.13 --from harbor harbor run \
+  --path examples/harbor/tasks/scheduler \
+  --agent oracle \
+  --jobs-dir examples/harbor/jobs \
+  --job-name oracle \
+  --yes
 ```
 
-The default output is `examples/harbor/runs/search`:
+## Run the live evaluation
 
-```text
-best.clj       selected Agent program
-split.json     exact task IDs in every split
-summary.json   validation and held-out test metrics
-trials/        Harbor results, verifier logs, ACP events, and ATIF trajectories
-```
-
-The built-in scheduler task remains only as a free packaging and verifier smoke
-test. Research evaluation uses a multi-task Harbor dataset.
-
-## Packaging boundary
-
-karcarthy implements the ACP sessions, prompts, streamed messages, Tool updates,
-permissions, model selection, cancellation, usage, and closure used by Harbor's
-ACP runner. The normal library artifact contains no examples.
-
-The Harbor directory builds a separate application uberjar containing the
-candidate compiler and starts:
+Docker, JDK 21, the Clojure CLI, `uv`, and an OpenAI credential are required.
+The model-backed run is paid and explicitly opt-in:
 
 ```bash
-java -jar karcarthy-example-standalone.jar \
-  acp main/harbor-agent
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh
 ```
 
-The development adapter uploads both that application and the candidate source
-into each task. It also caches and uploads the matching Linux Temurin 21 JRE, so
-benchmark images do not need Java preinstalled. A published karcarthy ACP
-distribution could bundle that runtime and remove the local adapter.
+Set `KARCARTHY_OPENAI_MODEL` to select another Responses-compatible model and
+`KARCARTHY_ATTEMPTS` to repeat the evaluation.
 
-## Trace boundary
+The development adapter builds and uploads a Harbor-only application plus a
+Java 21 runtime. The published karcarthy library artifact remains unchanged.
 
-Harbor's [ATIF format](https://www.harborframework.com/docs/agents/trajectory-format)
-records portable messages, Tool calls, observations, and metrics. A runtime
-Agent creation appears as an `agent` Tool call containing the submitted Clojure
-source and explicit input.
+## Inspect the result
 
-ATIF is not a lossless copy of karcarthy's internal Run events. Compiler phases
-and exact nested lineage remain karcarthy events. Use Harbor for portable
-behavioral evaluation and persist selected internal events separately when an
-experiment needs kernel-level instrumentation.
+Harbor stores the result, verifier logs, ACP events, and
+[`trajectory.json`](https://www.harborframework.com/docs/agents/trajectory-format)
+under `examples/harbor/jobs`. Open the viewer with:
 
-## What this is not
+```bash
+uvx --python 3.13 --from harbor harbor view examples/harbor/jobs
+```
 
-This is reflective evolutionary harness search, not model training. It does not
-update weights, calculate policy gradients, or provide token IDs and log
-probabilities. A full Harbor RL integration has additional rollout interface
-requirements described in Harbor's [RL workflow](https://harborframework.com/docs/training-workflows/rl).
+The ATIF trajectory records model messages, Tool calls, observations, usage,
+and any runtime `agent` calls. karcarthy's internal Run events retain finer
+compiler phases and nested lineage when those details are needed.
 
 ## Continue exploring
 
-- [`examples/harbor/README.md`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/README.md) is the operational guide for running and inspecting the experiment.
-- [Agent forms](/docs/reference/agent-forms) documents compilation and internal program events.
-- [Data](/docs/reference/data) specifies Runs, limits, usage, events, and failures used in experiment instrumentation.
+- [Coding](/docs/guides/coding) describes the Agent being run.
+- [ACP](/docs/protocols/acp) documents the process boundary Harbor launches.
+- [`examples/harbor/README.md`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/README.md) is the operational guide.
