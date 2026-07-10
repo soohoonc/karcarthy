@@ -1,41 +1,30 @@
 ---
 title: Examples
-description: A path from the core model/Tool loop to metric-driven Agent evaluation.
+description: Live examples from a basic Agent to repository coding through Harbor.
 ---
 
-The examples form one progression. Start with the first unfamiliar capability;
-each later example builds on the earlier execution model.
+The public examples use the live Responses transport. Fake models stay in the
+offline unit suite, where they make kernel behavior deterministic and free.
 
-| Example | Requires | What it demonstrates |
-| --- | --- | --- |
-| [Hello](/docs/quickstart#run-the-offline-example) | Clojure | Offline model/Tool loop |
-| [Chat](/docs/examples/chat) | API key | Sessions and an interactive application |
-| [Agent composition](/docs/examples/composition) | API key | Ordinary Clojure as orchestration |
-| [Dynamic Agents](/docs/examples/dynamic-agents) | Clojure | Runtime Agent generation and event lineage |
-| [Hill Climbing](/docs/examples/hill-climbing) | Clojure; optionally Docker and Harbor | Metric-driven candidate selection |
+| Example | What it demonstrates |
+| --- | --- |
+| [Basic Agent](/docs/quickstart#run-the-live-example) | One live model Run |
+| [Chat](/docs/examples/chat) | Sessions and an interactive application |
+| [Agent composition](/docs/examples/composition) | Predefined Agents coordinated with Clojure |
+| [Coding Agent](/docs/examples/coding-agent) | Repository tools and a model-authored specialist |
+| [Harbor](/docs/harbor#run-the-coding-agent) | Metric-driven evaluation of the same Coding Agent through ACP |
 
 <Cards>
-  <Card title="1. Hello" href="/docs/quickstart#run-the-offline-example" />
-  <Card title="2. Chat" href="/docs/examples/chat" />
-  <Card title="3. Agent composition" href="/docs/examples/composition" />
-  <Card title="4. Dynamic Agents" href="/docs/examples/dynamic-agents" />
-  <Card title="5. Hill Climbing" href="/docs/examples/hill-climbing" />
+  <Card title="Basic Agent" href="/docs/quickstart#run-the-live-example" />
+  <Card title="Chat" href="/docs/examples/chat" />
+  <Card title="Agent composition" href="/docs/examples/composition" />
+  <Card title="Coding Agent" href="/docs/examples/coding-agent" />
+  <Card title="Harbor" href="/docs/harbor#run-the-coding-agent" />
 </Cards>
 
-## Two kinds of orchestration
+The Coding Agent is the main end-to-end example. Run it directly while
+developing an Agent, then run the same factory through Harbor when you need an
+isolated environment, verifier reward, repeated rollouts, or trajectory viewer.
 
-[Agent composition](/docs/examples/composition) shows orchestration written by
-a developer with functions, `future`, and `run!`. [Dynamic
-Agents](/docs/examples/dynamic-agents) shows a model submitting a new Clojure
-Agent form through the same kernel. Both use ordinary Agent values; there is no
-separate workflow representation.
-
-## One evaluation, two execution modes
-
-[Hill Climbing](/docs/examples/hill-climbing) runs one candidate search in two
-ways. The local mode is fast and deterministic. The Harbor mode repeats it in
-isolated tasks and adds verifier rewards, ATIF trajectories, and a viewer.
-
-The [REPL guide](/docs/repl) is a development workflow rather than another
-example. Integration details for [MCP](/docs/mcp), [ACP](/docs/acp), and
-[Harbor](/docs/harbor) live in their dedicated guides.
+The [REPL guide](/docs/repl) covers interactive development. Integration details
+for [MCP](/docs/mcp) and [ACP](/docs/acp) remain in their dedicated guides.

@@ -7,7 +7,7 @@
 
  :aliases
  {;; Run the test suite:  clojure -M:test
-  :test {:extra-paths ["test" "examples/src"]
+  :test {:extra-paths ["test"]
          :main-opts   ["-m" "karcarthy.test-runner"]}
 
   ;; Runnable examples are deliberately outside the library source path.
@@ -16,7 +16,7 @@
 
   ;; Explicitly paid/networked: KARCARTHY_LIVE=1 OPENAI_API_KEY=... \
   ;; clojure -M:live-test
-  :live-test {:extra-paths ["test"]
+  :live-test {:extra-paths ["test" "examples/src"]
               :main-opts   ["-m" "karcarthy.live-test"]}
 
   ;; Build/install jars:  clojure -T:build jar | uber | all | install

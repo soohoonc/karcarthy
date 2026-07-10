@@ -1,20 +1,21 @@
 (ns karcarthy.live-test
-  "Paid end-to-end verification of the Responses transport and Agent bridge."
-  (:require [clojure.string :as str]
+  "Paid verification of the public live examples."
+  (:require [clojure.java.shell :as shell]
+            [clojure.string :as str]
             [clojure.test :as t :refer [deftest is]]
-            [karcarthy :as k])
+            [karcarthy :as k]
+            [karcarthy.examples.basic :as basic]
+            [karcarthy.examples.coding :as coding])
   (:import [java.nio.charset StandardCharsets]
            [java.nio.file Files Path]
            [java.nio.file.attribute FileAttribute]))
-
-(defn- configured-model []
-  (or (System/getenv "KARCARTHY_OPENAI_MODEL") "gpt-5.6"))
 
 (defn- live? []
   (= "1" (System/getenv "KARCARTHY_LIVE")))
 
 (defn- credentials? []
-  (not (str/blank? (System/getenv "OPENAI_API_KEY"))))
+  (or (not (str/blank? (System/getenv "RESPONSES_API_KEY")))
+      (not (str/blank? (System/getenv "OPENAI_API_KEY")))))
 
 (defn- temp-directory []
   (Files/createTempDirectory "karcarthy-live-coding-"
@@ -24,97 +25,72 @@
   (doseq [file (reverse (file-seq (.toFile root)))]
     (Files/deleteIfExists (.toPath file))))
 
-(deftest responses-expands-and-runs-an-agent
-  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
-  (is (credentials?) "Set OPENAI_API_KEY in the process environment.")
-  (when (and (live?) (credentials?))
-    (let [architect
-          (k/agent
-           {:name "live-architect"
-            :model {:transport :responses
-                    :provider :openai
-                    :id (configured-model)
-                    :reasoning :low
-                    :timeout-ms 180000}
-            :instructions
-            (str
-             "This is an end-to-end test of the Agent-program capability. "
-             "Write and run one Clojure-program Agent that computes 20 + 22. "
-             "Choose the valid Agent source yourself; do not answer before "
-             "using the agent Tool. After it returns, answer with only the "
-             "decimal result.")
-            :output string?
-            :max-turns 3})
-          run (k/run! architect nil
-                      {:limits {:model-calls 3
-                                :agent-forms 1
-                                :depth 2
-                                :parallelism 2
-                                :deadline-ms 180000}})
-          event-types (set (map :type (:events run)))]
-      (is (= :completed (:status run)) (pr-str (:error run)))
-      (is (= "42" (some-> (:output run) str/trim)))
-      (is (= 1 (get-in run [:usage :agent-forms])))
-      (is (contains? event-types :tool/completed))
-      (is (contains? event-types :program/evaluated))
-      (let [agents (->> (:events run)
-                        (filter #(= :agent/started (:type %)))
-                        (map :agent)
-                        vec)]
-        (is (= 2 (count agents)) (pr-str agents))
-        (is (= "live-architect" (first agents)))
-        (is (not (str/blank? (second agents))))))))
+(defn- write! [^Path root name content]
+  (Files/writeString (.resolve root name) content StandardCharsets/UTF_8
+                     (make-array java.nio.file.OpenOption 0)))
 
-(deftest responses-agent-inspects-and-edits-local-files
+(deftest basic-example-uses-the-live-transport
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
-  (is (credentials?) "Set OPENAI_API_KEY in the process environment.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
   (when (and (live?) (credentials?))
-    (let [root (temp-directory)
-          file (.resolve root "greeting.txt")]
+    (let [run (k/run! (basic/basic-agent) "Reply with only the word ready.")]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (= "ready" (some-> (:output run) str/trim str/lower-case))))))
+
+(deftest coding-example-inspects-delegates-edits-and-verifies
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [root (temp-directory)]
       (try
-        (Files/writeString file "hello PLACEHOLDER\n" StandardCharsets/UTF_8
-                           (make-array java.nio.file.OpenOption 0))
-        (let [tools (k/local-tools {:cwd (str root)})
-              coder
-              (k/agent
-               {:name "live-local-agent"
-                :model {:transport :responses
-                        :provider :openai
-                        :id (configured-model)
-                        :reasoning :low
-                        :timeout-ms 180000}
-                :instructions
-                (k/prompt
-                 "For this test, inspect the target before changing it and use the edit tool for the change.")
-                :tools tools
-                :input any?
-                :output string?
-                :max-turns 6})
-              run
-              (k/run! coder
-                      (str "In greeting.txt, replace the exact text PLACEHOLDER "
-                           "with karcarthy. Read the result, then briefly confirm.")
-                      {:limits {:model-calls 6
-                                :parallelism 2
-                                :deadline-ms 180000}})
+        (write! root "README.md"
+                "# Scheduler\n\nRun `python3 -m unittest -v` before submitting changes.\n")
+        (write! root "scheduler.py"
+                (str "def due_jobs(jobs, now):\n"
+                     "    return [job for job in jobs if job['run_at'] <= now]\n"))
+        (write! root "test_scheduler.py"
+                (str "import unittest\n\n"
+                     "from scheduler import due_jobs\n\n"
+                     "class SchedulerTest(unittest.TestCase):\n"
+                     "    def test_only_pending_due_jobs_in_priority_order(self):\n"
+                     "        jobs = [\n"
+                     "            {'id': 'late', 'run_at': 20, 'state': 'pending', 'priority': 1},\n"
+                     "            {'id': 'done', 'run_at': 5, 'state': 'completed', 'priority': 9},\n"
+                     "            {'id': 'high', 'run_at': 10, 'state': 'pending', 'priority': 5},\n"
+                     "            {'id': 'low', 'run_at': 10, 'state': 'pending', 'priority': 1},\n"
+                     "        ]\n"
+                     "        self.assertEqual(\n"
+                     "            ['high', 'low'],\n"
+                     "            [job['id'] for job in due_jobs(jobs, 10)],\n"
+                     "        )\n\n"
+                     "if __name__ == '__main__':\n"
+                     "    unittest.main()\n"))
+        (let [run (coding/run-coding!
+                   (str root)
+                   (str "A scheduler deployment is returning completed jobs and "
+                        "processing equal-time jobs in the wrong order. Investigate "
+                        "the repository, fix the implementation, and verify it."))
+              check (shell/sh "python3" "-m" "unittest" "-v"
+                              :dir (str root))
               used-tools (->> (:events run)
                               (filter #(= :tool/started (:type %)))
                               (map :tool)
-                              vec)]
+                              set)
+              event-types (set (map :type (:events run)))]
           (is (= :completed (:status run)) (pr-str (:error run)))
-          (is (= "hello karcarthy\n"
-                 (Files/readString file StandardCharsets/UTF_8)))
-          (is (some #{"read"} used-tools) (pr-str used-tools))
-          (is (some #{"edit"} used-tools) (pr-str used-tools)))
+          (is (zero? (:exit check)) (:err check))
+          (is (contains? used-tools "bash") (pr-str used-tools))
+          (is (contains? event-types :program/evaluated))
+          (is (pos? (get-in run [:usage :agent-forms] 0))))
         (finally
           (delete-tree! root))))))
 
 (defn -main [& _]
   (when-not (live?)
-    (println "Set KARCARTHY_LIVE=1 to authorize this paid test.")
+    (println "Set KARCARTHY_LIVE=1 to authorize the paid live tests.")
     (System/exit 2))
   (when-not (credentials?)
-    (println "Set OPENAI_API_KEY in the process environment; do not put it in source.")
+    (println "Set RESPONSES_API_KEY or OPENAI_API_KEY; do not put it in source.")
     (System/exit 2))
   (let [{:keys [fail error]} (t/run-tests 'karcarthy.live-test)]
     (shutdown-agents)

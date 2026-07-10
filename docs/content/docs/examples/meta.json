@@ -4,7 +4,6 @@
     "index",
     "chat",
     "composition",
-    "dynamic-agents",
-    "hill-climbing"
+    "coding-agent"
   ]
 }

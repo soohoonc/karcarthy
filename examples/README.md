@@ -1,89 +1,69 @@
 # Examples
 
-These examples form one path from the core model/Tool loop to metric-driven
-evaluation. The documentation mirrors this order. `examples/src` is added only
-by the `:examples` and `:test` aliases; it is not part of the library source
-path or published artifacts.
+Public examples use the live Responses transport. Fake models remain in the
+offline unit tests, not in the example applications. `examples/src` is added
+only by the `:examples` and `:live-test` aliases and is not part of published
+library artifacts.
 
-| Example | Command or source | Requires | Demonstrates |
-| --- | --- | --- | --- |
-| 1. Hello | `clojure -M:examples hello "hello"` | Clojure | Offline model/Tool loop |
-| 2. Chat | [`clojure/chat.clj`](clojure/chat.clj) | API key | Sessions and a terminal application |
-| 3. Agent composition | [`clojure/composition.clj`](clojure/composition.clj) | API key | Clojure functions and concurrency as orchestration |
-| 4. Dynamic Agents | `clojure -M:examples dynamic` | Clojure | Runtime generation and event lineage |
-| 5. Hill Climbing | local command or [`harbor`](harbor) | Clojure; optionally Docker and Harbor | Metric-driven candidate selection |
+| Example | Command or source | Demonstrates |
+| --- | --- | --- |
+| Basic Agent | `clojure -M:examples basic <prompt>` | One live model Run |
+| Chat | [`clojure/chat.clj`](clojure/chat.clj) | Sessions and a terminal application |
+| Agent composition | [`clojure/composition.clj`](clojure/composition.clj) | Predefined Agents coordinated with Clojure |
+| Coding Agent | `clojure -M:examples coding <directory> <task>` | Repository tools and a model-authored specialist |
+| Harbor | [`harbor`](harbor) | Isolated evaluation of the same Coding Agent through ACP |
 
-## 1. Hello
+Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running an example. Use
+`KARCARTHY_OPENAI_MODEL` to override the default model.
 
-Run the smallest offline proof from the repository root:
+## Basic Agent
 
 ```bash
-clojure -M:examples hello "hello"
+clojure -M:examples basic "Explain what an Agent value is."
 ```
 
-A deterministic model calls an `uppercase` Tool and prints `HELLO`.
+## Chat
 
-## 2. Chat
-
-With `OPENAI_API_KEY` available, start a REPL and load the terminal chat:
+Start a REPL, then load the terminal chat:
 
 ```clojure
 (load-file "examples/clojure/chat.clj")
 (example.chat/chat!)
 ```
 
-## 3. Agent composition
+## Agent composition
 
 [`clojure/composition.clj`](clojure/composition.clj) defines two reviewers that
 run concurrently and an editor that combines their results. Load it from a
-REPL, construct a team with `example.composition/review-system`, and run the
-returned Agent.
+REPL and construct a team with `example.composition/review-system`.
 
-## 4. Dynamic Agents
+## Coding Agent
 
-Run the deterministic runtime-generation trace:
-
-```bash
-clojure -M:examples dynamic
-```
-
-The architect model calls karcarthy's built-in `agent` Tool. The command prints
-the submitted source and the read, expansion, checking, evaluation, and Agent
-event lineage.
-
-## 5. Hill Climbing
-
-Run the three-candidate search locally:
+Run the live Coding Agent on an unfamiliar repository and an open-ended task:
 
 ```bash
-clojure -M:examples hill-climb
+clojure -M:examples coding /workspace/project \
+  "Investigate the failing integration tests, fix the cause, and verify it."
 ```
 
-Repeat the same search in isolated Harbor tasks with verifier rewards, ATIF
-trajectories, and Harbor's results viewer:
+The Agent inspects the repository, runs tests, creates a focused specialist
+based on the evidence it found, makes changes, and verifies the result.
 
-```bash
-examples/harbor/hillclimb.sh
-```
-
-See [`harbor/README.md`](harbor/README.md) for requirements and artifacts.
-
-## Additional compiler example
-
-[`clojure/calculator/main.clj`](clojure/calculator/main.clj) is a
-compact, low-level example of `compile-agent!`. It is useful when studying the
-compiler API, but it is not another step in the main example path:
-
-```bash
-clojure -M -e '(load-file "examples/clojure/calculator/main.clj")'
-```
-
-The paid end-to-end test is also deliberately outside the example path. It
-lets GPT-5.6 author and run a new Agent form:
+Run the opt-in paid verification of the public live examples with:
 
 ```bash
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 ```
 
-For serving an Agent to another process, see the [ACP
-documentation](../docs/content/docs/acp.mdx).
+## Harbor
+
+The Harbor example packages the same Coding Agent factory behind ACP and runs
+it in an isolated repository-debugging environment:
+
+```bash
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/hillclimb.sh
+```
+
+The script compares direct and specialist configurations by mean Harbor
+verifier reward. See [`harbor/README.md`](harbor/README.md) for task validation,
+the resulting scoreboard, artifacts, and the trajectory viewer.

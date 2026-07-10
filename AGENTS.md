@@ -14,8 +14,8 @@ workflow bridge.
 ```bash
 clojure -M:test
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
-clojure -M:examples hello
-clojure -M -e '(load-file "examples/clojure/calculator/main.clj")'
+OPENAI_API_KEY=... clojure -M:examples basic "Say hello."
+OPENAI_API_KEY=... clojure -M:examples coding /path/to/repo "Fix the failing tests."
 clojure -M -m karcarthy.acp your.namespace/agent-var
 clojure -T:build jar
 cd docs && npm run lint && npm run types:check && npm run build
@@ -36,7 +36,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `resources/karcarthy/agent.md` | Model-facing manual for generating Agent programs; runtime model, Tool, and Agent catalogs are interpolated into it. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
-| `examples/src/karcarthy/examples.clj` | Examples-only dispatcher for hello, dynamic-Agent, hill-climbing, and REPL commands. |
+| `examples/src/karcarthy/examples.clj` | Examples-only dispatcher for the live Basic and Coding Agents plus the REPL. |
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
 | `test/karcarthy/core_test.clj` | Kernel, model loop, instructions/context, Sessions, streaming, composition, limits, and events. |
 | `test/karcarthy/eval_test.clj` | Generated-form lifecycle and recursion. |
@@ -44,7 +44,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `test/karcarthy/tools_test.clj` | Local tools and generic prompt composition. |
 | `test/karcarthy/mcp_test.clj` | MCP initialization, discovery, execution, and shutdown. |
 | `test/karcarthy/acp_test.clj` | ACP session lifecycle, permissions, updates, and MCP bridging. |
-| `test/karcarthy/live_test.clj` | Opt-in paid OpenAI test of recursive `(agent)` generation. |
+| `test/karcarthy/live_test.clj` | Opt-in paid verification of the public Basic and Coding Agent examples. |
 
 ## Conventions
 

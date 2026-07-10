@@ -7,16 +7,16 @@ functions, macros, control flow, and concurrency compose them.
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Run the offline example
+## Run the live example
 
-JDK 21 and the Clojure CLI are required.
+JDK 21, the Clojure CLI, and `RESPONSES_API_KEY` or `OPENAI_API_KEY` are
+required.
 
 ```bash
-clojure -M:examples hello "hello"
+clojure -M:examples basic "Explain what an Agent value is."
 ```
 
-This calls a Clojure Tool through a deterministic fake model and prints
-`HELLO`. It does not require a network call.
+Fake models are used only by the offline unit tests.
 
 ## Define and run an Agent
 
@@ -106,7 +106,7 @@ This executes model-authored JVM Clojure and is not a sandbox.
 
 ```bash
 clojure -M:test
-clojure -M:examples hello
+OPENAI_API_KEY=... clojure -M:examples basic "Say hello."
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 clojure -T:build all
 cd docs && npm ci && npm run lint && npm run types:check && npm run build

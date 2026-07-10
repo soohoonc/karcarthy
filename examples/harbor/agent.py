@@ -1,4 +1,4 @@
-"""Local-development Harbor adapter for the packaged karcarthy ACP demo.
+"""Local-development Harbor adapter for the packaged karcarthy Coding Agent.
 
 Harbor's public ACP registry intentionally requires HTTPS distribution URLs.
 This adapter changes only the installation step: it uploads a locally built
@@ -26,10 +26,10 @@ class Agent(AcpAgent):
             "cmd": "./karcarthy",
         }
         registry_entry = {
-            "id": "karcarthy-hill-climb",
-            "name": "karcarthy hill-climbing demo",
+            "id": "karcarthy-coding-agent",
+            "name": "karcarthy Coding Agent",
             "version": "0.0.2",
-            "description": "Locally packaged runtime-generated Clojure Agents",
+            "description": "Locally packaged live Clojure Coding Agent",
             "distribution": {
                 "binary": {
                     "linux-aarch64": target,

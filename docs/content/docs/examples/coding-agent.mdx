@@ -1,0 +1,62 @@
+---
+title: Coding Agent
+description: Run one live coding Agent directly or evaluate it through Harbor.
+---
+
+The Coding Agent is a live Responses Agent with repository-rooted `read`,
+`write`, `edit`, `bash`, and `search` Tools. It inspects an unfamiliar
+repository, runs tests, makes focused changes, and verifies the result.
+
+Karcarthy's built-in `agent` Tool is available automatically. After its initial
+inspection, the Coding Agent creates one focused specialist whose assignment is
+based on the evidence it found. The specialist is another ordinary Clojure
+Agent form, compiled and run by the same kernel.
+
+## Run it on a repository
+
+Set `RESPONSES_API_KEY` or `OPENAI_API_KEY`, then provide a repository and an
+open-ended task:
+
+```bash
+clojure -M:examples coding /workspace/project \
+  "Investigate the failing integration tests, fix the cause, and verify it."
+```
+
+The implementation is the `coding-agent` factory in
+`examples/src/karcarthy/examples/coding.clj`. The factory roots local Tools at
+the supplied directory and uses `KARCARTHY_OPENAI_MODEL`, defaulting to
+`gpt-5.6`.
+
+## What the trace establishes
+
+The Run event stream records:
+
+- repository Tool calls and observations;
+- the parent Coding Agent;
+- the submitted specialist source and explicit input;
+- `:program/read`, `:program/expanded`, `:program/checked`, and
+  `:program/evaluated` events;
+- the specialist Agent's nested lineage; and
+- aggregate model usage.
+
+The specialist is not selected from a host-language list. The live model writes
+its assignment and Agent form after inspecting the repository.
+
+## Verify the live example
+
+Paid live verification is explicit and opt-in:
+
+```bash
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
+```
+
+The live test creates a temporary repository, runs the public Coding Agent,
+checks that it inspected and repaired the repository, verifies its tests, and
+asserts that a generated specialist entered the Run.
+
+## Evaluate it with Harbor
+
+The [Harbor guide](/docs/harbor#run-the-coding-agent) packages this same factory
+behind karcarthy's production ACP server. Harbor supplies the isolated task,
+reward, logs, and ATIF trajectory; karcarthy continues to own the model/Tool and
+Agent-generation loop.
