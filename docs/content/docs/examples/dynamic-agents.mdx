@@ -1,0 +1,88 @@
+---
+title: Dynamic Agent proof
+description: Watch a model submit, compile, and run a new Agent form offline.
+---
+
+This deterministic example proves the complete runtime-generation path without
+an API key. The architect is a model Agent. Its model calls karcarthy's built-in
+`agent` Tool with a new Clojure form and an explicit input. The harness reads,
+expands, checks, evaluates, and runs the generated Agent before returning its
+result to the architect.
+
+## Run it
+
+```bash
+clojure -M -m karcarthy.demo.dynamic
+```
+
+The observed event trace is:
+
+```text
+run/started
+  agent/started  architect-target-parser
+  tool/started  agent
+  program/read
+  program/expanded
+  program/checked
+  program/evaluated  generated-target-parser
+    agent/started  generated-target-parser
+    agent/completed  generated-target-parser
+  tool/completed  agent
+  agent/completed  architect-target-parser
+run/completed
+output: seoul-42
+```
+
+The generated child writes `target/dynamic-agent-demo/answer.txt`. The example
+also prints the exact source submitted in the Tool call:
+
+```clojure
+(agent {:name "generated-target-parser" :input string? :output string?}
+  [task]
+  (let [answer (or (second (re-find #"(?m)^TARGET=([A-Za-z0-9_-]+)$" task))
+                   "missing")
+        cwd (:cwd (context))
+        path (str cwd "/answer.txt")]
+    (spit path (str answer "\n"))
+    answer))
+```
+
+This is not a mocked compiler path: `:agent-forms` is `1`, two Agent instances
+appear in the Run lineage, and all four successful `:program/*` lifecycle events
+are present. The deterministic model controls only which Tool call is proposed;
+the ordinary karcarthy kernel performs compilation and execution.
+
+## Evaluate candidate programs locally
+
+The companion example submits three different Agent forms and scores their
+artifacts with an exact-match evaluator:
+
+```bash
+clojure -M -m karcarthy.demo.dynamic hill-climb
+```
+
+Observed output:
+
+```text
+metric: exact answer.txt match
+constant       [#..] 1/3
+first-line     [...] 0/3
+target-parser  [###] 3/3
+winner: target-parser
+```
+
+The result and individual trial records are written under
+`target/hill-climb-results/`. For isolated environments, verifier rewards, ATIF
+trajectories, and a viewer, run the same search through the [Harbor
+example](/docs/harbor#reproducible-local-evaluation).
+
+## Live model generation
+
+The paid live test asks GPT-5.6 to author an Agent form rather than using the
+deterministic proposer:
+
+```bash
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
+```
+
+Live tests remain opt-in so the normal suite stays deterministic and free.

@@ -4,6 +4,8 @@
 /.lsp/
 /target/
 /classes/
+/examples/harbor/dist/
+/examples/harbor/jobs/
 *.jar
 .nrepl-port
 

@@ -33,6 +33,11 @@ All notable changes are documented here, following
 - An explicit paid live test that asks GPT-5.6 to author and run a new Agent.
 - A paid Agent test that inspects and edits a temporary directory.
 - A minimal REPL chat example built from an Agent, `run!`, and a Session.
+- Offline visual proof of a model calling the built-in `agent` Tool, including
+  generated-program lifecycle events and Agent lineage.
+- A deterministic metric search over generated Agent forms, plus a packaged
+  Harbor example with isolated tasks, verifier rewards, ATIF trajectories, and
+  score-based candidate selection.
 
 ### Changed
 

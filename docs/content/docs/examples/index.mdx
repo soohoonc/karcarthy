@@ -7,6 +7,7 @@ description: Examples for REPL development, chat, and Agent composition.
   <Card title="REPL development" href="/docs/examples/repl" />
   <Card title="Chat from the REPL" href="/docs/examples/chat" />
   <Card title="Agent composition" href="/docs/examples/clojure" />
+  <Card title="Dynamic Agent proof" href="/docs/examples/dynamic-agents" />
 </Cards>
 
 ## REPL development
@@ -25,5 +26,13 @@ conversation history, Run inspection, reset, and exit behavior explicit.
 
 The [Clojure example](/docs/examples/clojure) contrasts independent `run!`
 composition with a model-created Agent tree that shares one Run.
+
+## Dynamic Agent proof
+
+The [dynamic Agent example](/docs/examples/dynamic-agents) prints the actual
+Agent and program event lineage while a model submits and runs a new Clojure
+Agent form. Its companion evaluator scores three generated programs locally;
+the Harbor example repeats the search in isolated tasks with verifier rewards
+and ATIF trajectories.
 
 All examples use the public `(require '[karcarthy :as k])` API.

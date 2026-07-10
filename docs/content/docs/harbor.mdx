@@ -36,6 +36,47 @@ environment.
 This distinction matters: speaking ACP makes the systems compatible; packaging
 and registry publication make the integration reproducible.
 
+## Reproducible local evaluation
+
+The repository contains a complete local proof under `examples/harbor`. It
+packages the standalone JAR as an ACP distribution and evaluates three
+runtime-generated Agent programs against three isolated Harbor tasks:
+
+```bash
+examples/harbor/hillclimb.sh
+```
+
+Harbor's public ACP registry requires HTTPS distribution URLs. Until a release
+archive and registry record exist, the example uses a small local-development
+subclass of Harbor's generic ACP Agent to upload the archive. Harbor still owns
+the ACP runner, session, logs, verifier, result model, and ATIF conversion.
+
+The verified Harbor 0.18.0 run completed nine trials with zero exceptions:
+
+| Candidate | Passed | Mean reward |
+| --- | ---: | ---: |
+| `constant` | 1 / 3 | 0.333 |
+| `first-line` | 0 / 3 | 0.000 |
+| `target-parser` | 3 / 3 | 1.000 |
+
+The driver selects `target-parser`, the highest-scoring candidate, and writes
+the full score data to `examples/harbor/jobs/scoreboard.json`.
+
+Every trial includes `result.json`, verifier logs, raw ACP events, an ACP
+summary, and `agent/trajectory.json`. In the ATIF trajectory, the model's call
+to `agent` contains the complete generated Clojure source and explicit task
+input; its observation contains the generated Agent's result.
+
+Use Harbor's built-in viewer rather than a karcarthy-specific trace UI:
+
+```bash
+uvx --python 3.13 --from harbor \
+  harbor view examples/harbor/jobs
+```
+
+The [Dynamic Agent proof](/docs/examples/dynamic-agents) is the lighter offline
+view of karcarthy's internal `:program/*` compilation events.
+
 ## Package the Agent
 
 A Harbor-ready distribution must contain:

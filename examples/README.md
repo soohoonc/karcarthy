@@ -25,6 +25,25 @@ Run it from the repository root:
 clojure -M -e '(load-file "examples/clojure/generated_calculator.clj")'
 ```
 
+[`clojure/dynamic_agent.clj`](clojure/dynamic_agent.clj) is the most direct
+runtime-generation proof. A deterministic model calls karcarthy's built-in
+`agent` Tool with a new Clojure form, the harness compiles and runs it, and the
+example prints the Agent/program event tree plus the submitted source:
+
+```bash
+clojure -M -e '(load-file "examples/clojure/dynamic_agent.clj")'
+```
+
+[`clojure/hill_climb.clj`](clojure/hill_climb.clj) evaluates three generated
+Agent programs on the same exact-match metric and retains the best candidate:
+
+```bash
+clojure -M -e '(load-file "examples/clojure/hill_climb.clj")'
+```
+
+The [`harbor`](harbor) example runs the same candidates as isolated Harbor
+jobs, using Harbor's verifier rewards, ATIF trajectories, and results viewer.
+
 The paid end-to-end test lets GPT-5.6 write a new `agent` form and run it:
 
 ```bash

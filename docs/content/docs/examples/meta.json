@@ -4,6 +4,7 @@
     "index",
     "repl",
     "chat",
-    "clojure"
+    "clojure",
+    "dynamic-agents"
   ]
 }
