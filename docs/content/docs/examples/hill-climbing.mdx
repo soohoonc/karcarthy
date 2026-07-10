@@ -7,13 +7,19 @@ The Dynamic Agents example proves that karcarthy can compile and run a
 model-authored Agent. This example asks the next research question: can an
 outer search retain a better Agent program using an outcome metric?
 
-Three deterministic candidates receive the same three tasks:
+Three deterministic candidates receive the same three maintenance tasks:
 
 | Candidate | Generated behavior | Expected reward |
 | --- | --- | ---: |
-| `constant` | Always writes `alpha`. | 1 / 3 |
-| `first-line` | Writes the first instruction line. | 0 / 3 |
-| `target-parser` | Extracts the `TARGET=...` value. | 3 / 3 |
+| `noop` | Leaves the workspace unchanged. | 0 / 3 |
+| `literal` | Repairs only retry backoff. | 1 / 3 |
+| `patcher` | Repairs all three implementations. | 3 / 3 |
+
+Each task contains a broken `main.py`: `retry` covers capped exponential
+backoff, `redact` covers recursive secret masking, and `ledger` covers settled
+transaction reconciliation. Harbor grades behavior with Python assertions
+rather than comparing a hidden answer string. Each task also carries an oracle
+solution for validating the environment and verifier independently.
 
 The candidates are intentionally simple. The point is to expose the complete
 generate → run → measure → select loop without attributing random model
@@ -30,16 +36,16 @@ clojure -M:examples hill-climb
 Observed output:
 
 ```text
-metric: exact answer.txt match
-constant       [#..] 1/3
-first-line     [...] 0/3
-target-parser  [###] 3/3
-winner: target-parser
+metric: exact reference patch match
+noop           [...] 0/3
+literal        [#..] 1/3
+patcher        [###] 3/3
+winner: patcher
 ```
 
 Every candidate is submitted through the built-in `agent` Tool and run by the
-ordinary karcarthy kernel. The evaluator reads each `answer.txt`, awards an
-exact-match score, and writes trial records under
+ordinary karcarthy kernel. The fast local evaluator compares the resulting
+`main.py` with a reference patch and writes trial records under
 `target/hill-climb-results/`.
 
 Use this mode while developing the Agent forms or metric. It is deterministic,
@@ -54,9 +60,10 @@ environments:
 examples/harbor/hillclimb.sh
 ```
 
-It adds verifier-owned rewards, job metadata, raw ACP events, and ATIF
-trajectories. The verified Harbor 0.18.0 run completed all nine trials without
-exceptions and selected the same `target-parser` candidate.
+It replaces the local source comparison with behavioral unit tests and adds
+verifier-owned rewards, job metadata, raw ACP events, and ATIF trajectories.
+The verified Harbor 0.18.0 run completed all nine trials without exceptions and
+selected the same `patcher` candidate.
 
 Use Harbor when isolation, portable trajectories, or a results UI matters.
 Inspect the completed jobs with Harbor's built-in viewer:

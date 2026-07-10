@@ -19,32 +19,36 @@ The observed event trace is:
 
 ```text
 run/started
-  agent/started  architect-target-parser
+  agent/started  architect-patcher
   tool/started  agent
   program/read
   program/expanded
   program/checked
-  program/evaluated  generated-target-parser
-    agent/started  generated-target-parser
-    agent/completed  generated-target-parser
+  program/evaluated  generated-patcher
+    agent/started  generated-patcher
+    agent/completed  generated-patcher
   tool/completed  agent
-  agent/completed  architect-target-parser
+  agent/completed  architect-patcher
 run/completed
-output: seoul-42
+output: patched
 ```
 
-The generated child writes `target/dynamic-agent-demo/answer.txt`. The example
-also prints the exact source submitted in the Tool call:
+The generated child repairs retry logic in
+`target/dynamic-agent-demo/main.py`. The command prints the exact source
+submitted in the Tool call; its essential shape is:
 
 ```clojure
-(agent {:name "generated-target-parser" :input string? :output string?}
+(agent {:name "generated-patcher" :input string? :output string?}
   [task]
-  (let [answer (or (second (re-find #"(?m)^TARGET=([A-Za-z0-9_-]+)$" task))
-                   "missing")
-        cwd (:cwd (context))
-        path (str cwd "/answer.txt")]
-    (spit path (str answer "\n"))
-    answer))
+  (let [path (str (:cwd (context)) "/main.py")
+        source (slurp path)
+        patched (cond
+                  (clojure.string/includes? source "def retry_delays") ...
+                  (clojure.string/includes? source "SENSITIVE_KEYS") ...
+                  (clojure.string/includes? source "def balances") ...
+                  :else source)]
+    (spit path patched)
+    (if (= source patched) "unchanged" "patched")))
 ```
 
 This is not a mocked compiler path: `:agent-forms` is `1`, two Agent instances

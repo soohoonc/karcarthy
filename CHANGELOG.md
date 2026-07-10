@@ -35,9 +35,9 @@ All notable changes are documented here, following
 - A minimal REPL chat example built from an Agent, `run!`, and a Session.
 - Offline visual proof of a model calling the built-in `agent` Tool, including
   generated-program lifecycle events and Agent lineage.
-- A deterministic metric search over generated Agent forms, plus a packaged
-  Harbor example with isolated tasks, verifier rewards, ATIF trajectories, and
-  score-based candidate selection.
+- A deterministic metric search over generated maintenance Agents, plus a
+  packaged Harbor example with realistic code-repair tasks, behavioral
+  verifiers, ATIF trajectories, and score-based candidate selection.
 
 ### Changed
 

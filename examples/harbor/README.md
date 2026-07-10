@@ -1,17 +1,26 @@
 # Harbor hill-climbing demo
 
 This example evaluates three runtime-generated karcarthy Agent programs with
-Harbor 0.18.0. Each candidate receives the same three isolated tasks. Harbor's
-test scripts award `1` for an exact `answer.txt` match and `0` otherwise; the
-driver retains the candidate with the highest mean reward.
+Harbor 0.18.0. Each candidate receives the same three isolated maintenance
+tasks. Harbor's behavioral test scripts award `1` when the repaired Python
+module passes and `0` otherwise; the driver retains the candidate with the
+highest mean reward.
 
 The candidates are deliberately small and deterministic:
 
 | Candidate | Generated behavior | Expected reward |
 | --- | --- | --- |
-| `constant` | Always writes `alpha`. | `1/3` |
-| `first-line` | Writes the first instruction line. | `0/3` |
-| `target-parser` | Extracts the `TARGET=...` value. | `3/3` |
+| `noop` | Reads `main.py` but leaves it unchanged. | `0/3` |
+| `literal` | Repairs only the retry implementation. | `1/3` |
+| `patcher` | Recognizes and repairs all three implementations. | `3/3` |
+
+Each task is a small software-maintenance workspace with a broken `main.py`:
+
+| Task | Real-world behavior under test |
+| --- | --- |
+| `retry` | Exponential retry backoff with a cap |
+| `redact` | Recursive, case-insensitive secret redaction |
+| `ledger` | Settled transaction reconciliation by currency |
 
 All three still exercise the full dynamic path:
 
@@ -20,8 +29,8 @@ Harbor task
   -> karcarthy ACP process
   -> architect model calls the built-in agent Tool
   -> submitted Clojure form is read, expanded, checked, and evaluated
-  -> generated Agent runs and writes answer.txt
-  -> Harbor verifier produces a reward
+  -> generated Agent inspects and edits main.py
+  -> Harbor verifier runs behavioral Python tests
   -> Harbor converts the ACP stream to ATIF trajectory.json
 ```
 
@@ -31,6 +40,20 @@ Harbor task
 - JDK 21 or newer
 - Clojure CLI
 - `uv`
+
+Each task follows Harbor's `instruction.md` / environment / verifier / solution
+layout. Validate the task environments and behavioral tests independently with
+the bundled oracle solutions:
+
+```bash
+uvx --python 3.13 --from harbor harbor run \
+  --path examples/harbor/tasks \
+  --agent oracle \
+  --jobs-dir examples/harbor/jobs \
+  --job-name oracle \
+  --n-concurrent 3 \
+  --yes
+```
 
 ## Run the search
 
@@ -42,7 +65,7 @@ examples/harbor/hillclimb.sh
 
 The script builds a dedicated example application uberjar and local ACP
 distribution; it does not add the example Agent to karcarthy's library JAR. It
-uploads the distribution through the small `local_acp_agent.py` development
+uploads the distribution through the small `agent.py` development
 adapter, runs one Harbor job per candidate, reads the verifier rewards from
 each `result.json`, and writes
 `examples/harbor/jobs/scoreboard.json`.

@@ -20,13 +20,11 @@
   (let [root (temp-directory)]
     (try
       (let [trial (dynamic/run-candidate!
-                   :target-parser
-                   {:id "proof"
-                    :prompt "Write the target.\nTARGET=proof_42"
-                    :expected "proof_42"}
+                   :patcher
+                   (assoc (first dynamic/evaluation-tasks) :id "proof")
                    root)]
         (is (:passed? trial))
-        (is (= ["architect-target-parser" "generated-target-parser"]
+        (is (= ["architect-patcher" "generated-patcher"]
                (:agents trial)))
         (is (= 1 (:agent-forms trial)))
         (is (= #{":program/read" ":program/expanded" ":program/checked"
@@ -41,9 +39,9 @@
       (let [result (dynamic/hill-climb! root)
             scores (into {} (map (juxt :strategy :passed))
                          (:candidates result))]
-        (is (= {"constant" 1 "first-line" 0 "target-parser" 3}
+        (is (= {"noop" 0 "literal" 1 "patcher" 3}
                scores))
-        (is (= "target-parser" (:winner result)))
+        (is (= "patcher" (:winner result)))
         (is (= 1.0 (:score result))))
       (finally
         (delete-tree! root)))))

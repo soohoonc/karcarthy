@@ -56,11 +56,11 @@ The verified Harbor 0.18.0 run completed nine trials with zero exceptions:
 
 | Candidate | Passed | Mean reward |
 | --- | ---: | ---: |
-| `constant` | 1 / 3 | 0.333 |
-| `first-line` | 0 / 3 | 0.000 |
-| `target-parser` | 3 / 3 | 1.000 |
+| `noop` | 0 / 3 | 0.000 |
+| `literal` | 1 / 3 | 0.333 |
+| `patcher` | 3 / 3 | 1.000 |
 
-The driver selects `target-parser`, the highest-scoring candidate, and writes
+The driver selects `patcher`, the highest-scoring candidate, and writes
 the full score data to `examples/harbor/jobs/scoreboard.json`.
 
 Every trial includes `result.json`, verifier logs, raw ACP events, an ACP

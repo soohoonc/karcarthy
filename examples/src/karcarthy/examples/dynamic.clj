@@ -7,33 +7,98 @@
   (:import [java.nio.file Files Path Paths]
            [java.nio.file.attribute FileAttribute]))
 
+(def retry-broken
+  "def retry_delays(attempts, base=1, cap=30):\n    return [base for _ in range(attempts)]\n")
+
+(def retry-fixed
+  (str "def retry_delays(attempts, base=1, cap=30):\n"
+       "    if attempts <= 0:\n"
+       "        return []\n"
+       "    return [min(base * (2 ** index), cap) for index in range(attempts)]\n"))
+
+(def redact-broken
+  (str "SENSITIVE_KEYS = {\"password\"}\n\n"
+       "def redact(value):\n"
+       "    if not isinstance(value, dict):\n"
+       "        return value\n"
+       "    return {\n"
+       "        key: \"***\" if key in SENSITIVE_KEYS else item\n"
+       "        for key, item in value.items()\n"
+       "    }\n"))
+
+(def redact-fixed
+  (str "SENSITIVE_KEYS = {\"password\", \"token\", \"api_key\", \"authorization\"}\n\n"
+       "def redact(value):\n"
+       "    if isinstance(value, dict):\n"
+       "        return {\n"
+       "            key: \"***\" if str(key).lower() in SENSITIVE_KEYS else redact(item)\n"
+       "            for key, item in value.items()\n"
+       "        }\n"
+       "    if isinstance(value, list):\n"
+       "        return [redact(item) for item in value]\n"
+       "    return value\n"))
+
+(def ledger-broken
+  (str "def balances(transactions):\n"
+       "    return {\n"
+       "        item[\"currency\"]: item[\"amount_cents\"]\n"
+       "        for item in transactions\n"
+       "        if item[\"status\"] == \"settled\"\n"
+       "    }\n"))
+
+(def ledger-fixed
+  (str "def balances(transactions):\n"
+       "    result = {}\n"
+       "    for item in transactions:\n"
+       "        if item.get(\"status\") != \"settled\":\n"
+       "            continue\n"
+       "        currency = item[\"currency\"].upper()\n"
+       "        result[currency] = result.get(currency, 0) + item[\"amount_cents\"]\n"
+       "    return result\n"))
+
 (def strategy-order
-  "Candidate order used by the deterministic hill-climbing demos."
-  [:constant :first-line :target-parser])
+  "Candidate order used by the deterministic hill-climbing examples."
+  [:noop :literal :patcher])
 
 (def evaluation-tasks
-  [{:id "alpha"
-    :prompt "Store the requested value in answer.txt.\nTARGET=alpha"
-    :expected "alpha"}
-   {:id "seoul-42"
-    :prompt "Store the requested value in answer.txt.\nTARGET=seoul-42"
-    :expected "seoul-42"}
-   {:id "vector"
-    :prompt "Store the requested value in answer.txt.\nTARGET=vector_7"
-    :expected "vector_7"}])
+  [{:id "retry"
+    :prompt (str "Fix /app/main.py so retry_delays returns exponential backoff "
+                 "delays, capped by cap, and returns [] when attempts is not positive.")
+    :initial retry-broken
+    :expected retry-fixed}
+   {:id "redact"
+    :prompt (str "Fix /app/main.py so redact recursively masks password, token, "
+                 "api_key, and authorization keys case-insensitively in dictionaries "
+                 "and lists.")
+    :initial redact-broken
+    :expected redact-fixed}
+   {:id "ledger"
+    :prompt (str "Fix /app/main.py so balances totals settled transactions by "
+                 "upper-case currency, accumulates duplicates, ignores other statuses, "
+                 "and preserves negative refunds.")
+    :initial ledger-broken
+    :expected ledger-fixed}])
 
 (defn- strategy-expression [strategy]
   (case strategy
-    :constant
-    "\"alpha\""
+    :noop
+    "source"
 
-    :first-line
-    "(first (clojure.string/split-lines task))"
+    :literal
+    (str "(if (clojure.string/includes? source \"def retry_delays\") "
+         (pr-str retry-fixed) " source)")
 
-    :target-parser
-    "(or (second (re-find #\"(?m)^TARGET=([A-Za-z0-9_-]+)$\" task)) \"missing\")"
+    :patcher
+    (str "(cond\n"
+         "          (clojure.string/includes? source \"def retry_delays\") "
+         (pr-str retry-fixed) "\n"
+         "          (clojure.string/includes? source \"SENSITIVE_KEYS\") "
+         (pr-str redact-fixed) "\n"
+         "          (clojure.string/includes? source \"def balances\") "
+         (pr-str ledger-fixed) "\n"
+         "          :else source)")
 
-    (throw (ex-info "Unknown dynamic demo strategy"
+    (throw (ex-info "Unknown example strategy"
                     {:strategy strategy :known strategy-order}))))
 
 (defn candidate-source
@@ -42,11 +107,12 @@
   (str "(agent {:name \"generated-" (name strategy)
        "\" :input string? :output string?}\n"
        "  [task]\n"
-       "  (let [answer " (strategy-expression strategy) "\n"
-       "        cwd (:cwd (context))\n"
-       "        path (str cwd \"/answer.txt\")]\n"
-       "    (spit path (str answer \"\\n\"))\n"
-       "    answer))"))
+       "  (let [cwd (:cwd (context))\n"
+       "        path (str cwd \"/main.py\")\n"
+       "        source (slurp path)\n"
+       "        patched " (strategy-expression strategy) "]\n"
+       "    (spit path patched)\n"
+       "    (if (= source patched) \"unchanged\" \"patched\")))"))
 
 (defn- architect-model [strategy]
   (let [source (candidate-source strategy)]
@@ -65,24 +131,24 @@
   [strategy]
   (k/agent
    {:name (str "architect-" (name strategy))
-    :description "Generate and execute one candidate Agent program."
+    :description "Generate and execute one candidate maintenance Agent."
     :model {:id "offline" :transport (architect-model strategy)}
     :instructions
-    (str "Create the candidate Agent for strategy " (name strategy)
-         " and run it with the complete task input.")
+    (str "Create the maintenance Agent for strategy " (name strategy)
+         " and run it with the complete task instruction.")
     :input string?
     :output string?}))
 
 (defn run-candidate!
   "Run one strategy in `cwd` and return a compact, serializable trial record."
-  [strategy {:keys [id prompt expected]} cwd]
+  [strategy {:keys [id prompt initial expected]} cwd]
   (let [directory (.toFile ^Path cwd)
         _ (.mkdirs directory)
-        answer-file (io/file directory "answer.txt")
-        _ (Files/deleteIfExists (.toPath answer-file))
+        source-file (io/file directory "main.py")
+        _ (spit source-file initial)
         run (k/run! (dynamic-architect strategy) prompt
                     {:context {:cwd (.getAbsolutePath directory)}})
-        actual (when (.isFile answer-file) (str/trim (slurp answer-file)))
+        actual (when (.isFile source-file) (slurp source-file))
         agents (->> (:events run)
                     (filter #(= :agent/started (:type %)))
                     (mapv :agent))
@@ -93,6 +159,7 @@
     {:task id
      :strategy (name strategy)
      :status (name (:status run))
+     :output (:output run)
      :expected expected
      :actual actual
      :passed? (and (= :completed (:status run)) (= expected actual))
@@ -103,7 +170,7 @@
      :events (:events run)}))
 
 (defn evaluate-strategy!
-  "Evaluate one strategy over every demo task."
+  "Evaluate one strategy over every example task."
   [strategy root]
   (let [trials (mapv (fn [task]
                        (run-candidate! strategy task
@@ -126,7 +193,7 @@
                                     (.resolve root (name strategy))))
               strategy-order)
         winner (apply max-key :score candidates)]
-    {:metric "exact answer.txt match"
+    {:metric "exact reference patch match"
      :candidates candidates
      :winner (:strategy winner)
      :score (:score winner)}))
@@ -168,24 +235,18 @@
                      passed total)))
   (println "winner:" winner))
 
-(defn run-dynamic-demo!
-  ([]
-   (run-dynamic-demo! "Store the requested value in answer.txt.\nTARGET=seoul-42"))
-  ([prompt]
-   (let [cwd (-> (Paths/get "target/dynamic-agent-demo" (make-array String 0))
-                 .toAbsolutePath)
-         trial (run-candidate! :target-parser
-                               {:id "visual-proof"
-                                :prompt prompt
-                                :expected "seoul-42"}
-                               cwd)]
-     (println "runtime Agent trace")
-     (print-trace! trial)
-     (println "output:" (:actual trial))
-     (println "artifact:" (str (.resolve cwd "answer.txt")))
-     (println "submitted source:")
-     (println (:source trial))
-     trial)))
+(defn run-dynamic-demo! []
+  (let [cwd (-> (Paths/get "target/dynamic-agent-demo" (make-array String 0))
+                .toAbsolutePath)
+        task (assoc (first evaluation-tasks) :id "visual-proof")
+        trial (run-candidate! :patcher task cwd)]
+    (println "runtime Agent trace")
+    (print-trace! trial)
+    (println "output:" (:output trial))
+    (println "artifact:" (str (.resolve cwd "main.py")))
+    (println "submitted source:")
+    (println (:source trial))
+    trial))
 
 (defn run-hill-climb-demo! []
   (let [root (-> (Paths/get "target/hill-climb-results"
@@ -209,7 +270,7 @@
   "ACP Agent factory used by the Harbor example distribution."
   [_session-context]
   (let [strategy (keyword (or (System/getenv "KARCARTHY_STRATEGY")
-                              "target-parser"))]
+                              "patcher"))]
     (dynamic-architect strategy)))
 
 (defn -main [& [command]]

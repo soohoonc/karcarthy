@@ -13,7 +13,7 @@ from harbor.agents.installed import acp as harbor_acp
 from harbor.agents.installed.acp import AcpAgent
 
 
-class LocalKarcarthyAcpAgent(AcpAgent):
+class Agent(AcpAgent):
     def __init__(self, archive_path: str, *args: Any, **kwargs: Any) -> None:
         self._local_archive_path = Path(archive_path).resolve()
         if not self._local_archive_path.is_file():

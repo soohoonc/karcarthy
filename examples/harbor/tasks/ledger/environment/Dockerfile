@@ -1,3 +1,4 @@
+# Shared environment for the scoped Harbor task.
 FROM eclipse-temurin:21-jdk-jammy
 
 RUN apt-get update -qq \
@@ -9,4 +10,5 @@ RUN apt-get update -qq \
     && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app /logs/agent /logs/verifier \
     && chmod 0777 /app /logs/agent /logs/verifier
+COPY main.py /app/main.py
 WORKDIR /app

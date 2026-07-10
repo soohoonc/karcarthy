@@ -20,7 +20,7 @@
 (defn reward [result]
   (double (or (get-in result [:verifier_result :rewards :reward]) 0)))
 
-(def strategies ["constant" "first-line" "target-parser"])
+(def strategies ["noop" "literal" "patcher"])
 
 (def candidates
   (mapv (fn [strategy]

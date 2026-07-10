@@ -70,12 +70,12 @@ See [`harbor/README.md`](harbor/README.md) for requirements and artifacts.
 
 ## Additional compiler example
 
-[`clojure/generated_calculator.clj`](clojure/generated_calculator.clj) is a
+[`clojure/calculator/main.clj`](clojure/calculator/main.clj) is a
 compact, low-level example of `compile-agent!`. It is useful when studying the
 compiler API, but it is not another step in the main example path:
 
 ```bash
-clojure -M -e '(load-file "examples/clojure/generated_calculator.clj")'
+clojure -M -e '(load-file "examples/clojure/calculator/main.clj")'
 ```
 
 The paid end-to-end test is also deliberately outside the example path. It

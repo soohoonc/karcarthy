@@ -11,11 +11,11 @@ archive_path="$script_dir/dist/karcarthy-harbor.tgz"
 rm -rf "$jobs_dir"
 mkdir -p "$jobs_dir"
 
-for strategy in constant first-line target-parser; do
+for strategy in noop literal patcher; do
   PYTHONPATH="$script_dir${PYTHONPATH:+:$PYTHONPATH}" \
   uvx --python 3.13 --from harbor harbor run \
     --path "$tasks_dir" \
-    --agent local_acp_agent:LocalKarcarthyAcpAgent \
+    --agent agent:Agent \
     --agent-kwarg "archive_path=$archive_path" \
     --agent-kwarg auth_policy=disabled \
     --agent-env "KARCARTHY_STRATEGY=$strategy" \
