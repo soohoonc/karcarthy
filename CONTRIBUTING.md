@@ -1,37 +1,42 @@
-# Contributing to karcarthy
+# Contributing
 
-Thanks for your interest! karcarthy is a small, data-first agent orchestration
-library. See [CLAUDE.md](CLAUDE.md) for the architecture and conventions.
+karcarthy is pre-stable and intentionally small. Changes should sharpen the
+native Clojure harness rather than add a second orchestration language.
 
-## Development
+## Before opening a pull request
 
 ```bash
-clojure -M:test              # tests (offline; no API key or network needed)
-clojure -M -m karcarthy.demo # the offline demo
-clojure -T:build jar         # build a jar into target/
-cd docs && npm ci && npm run lint && npm run types:check && npm run build
+clojure -M:test
+clojure -T:build jar
+cd docs
+npm ci
+npm run lint
+npm run types:check
+npm run build
 ```
 
-## Guidelines
+The default test suite must remain offline and free. Put live model tests behind
+an explicit environment flag and keep the underlying request/response builders
+pure and offline-testable.
 
-- Dependencies must resolve from **Maven Central** (no Clojars).
-- Keep entities as plain data tagged with `:karcarthy/type`.
-- Prefer pure, offline-testable functions; gate live/paid calls behind env vars
-  (e.g. `KARCARTHY_LIVE`) so the default test run stays offline and free.
-- Add a test for new behavior, and register new test namespaces in
+## Architectural rules
+
+- Add Agent and Tool behavior to the native Runtime in
+  `src/karcarthy/core.clj`.
+- A provider integration is a narrow normalized model transport. It must not
+  run tools or child Agents.
+- Use normal Clojure for orchestration. Do not add workflow node constructors
+  or an interpreter.
+- Generated behavior goes through `karcarthy.eval`: read with reader evaluation
+  disabled, expand, evaluate, verify `agent?`, and emit program events.
+- Add contracts and structured failures at every new effect boundary.
+- Add event coverage for behavior that matters to replay or evaluation.
+- Preserve source and expanded forms.
+- Add tests and register new test namespaces in
   `test/karcarthy/test_runner.clj`.
-- Adding a workflow node: field grammar in `src/karcarthy/workflow.clj` + a
-  constructor and `run-node` defmethod in `src/karcarthy/orchestrate.clj` +
-  tests. EDN/JSON schemas and the CLI allowlist are derived from the grammar.
-  Nodes that parse model EDN replies should go through `elicit!` in
-  `orchestrate.clj` so they get the `:edn-retries` self-repair path.
-- Adding a runner: implement `karcarthy.core/Runner` and return a result map.
-
-Live conformance tests are opt-in and may spend API credits. Set
-`KARCARTHY_LIVE=1`; OpenAI additionally needs `OPENAI_API_KEY`, and ACP needs
-`KARCARTHY_ACP_COMMAND` as an EDN argv vector such as `["claude-code-acp"]`.
 
 ## Pull requests
 
-Keep PRs focused and make sure `clojure -M:test` passes. By contributing you
-agree your contributions are licensed under the project's [MIT license](LICENSE).
+Explain the behavior change, why it belongs in the kernel, the events and
+failure modes it introduces, and how it was verified. Keep unrelated edits out
+of the branch.

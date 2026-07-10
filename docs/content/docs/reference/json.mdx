@@ -1,304 +1,161 @@
 ---
-title: CLI + JSON
-description: Run agents and workflow files from the karcarthy command.
+title: Generated Code
+description: How model-authored Clojure is read, expanded, checked, evaluated, invoked, repaired, and recorded.
 ---
 
-Run agents and workflow files from the `karcarthy` command, and drive
-karcarthy from any language over a stdin/stdout JSON protocol. This page
-covers the commands, the request and response JSON, and every workflow shape
-the JSON bridge accepts.
+Generated behavior is Clojure source, not JSON or an EDN workflow language.
+The model usually returns a string because model tool-call boundaries are
+serialized, but the harness immediately reads that string into a Clojure form.
 
-Build the standalone CLI once:
+## Accepted source
 
-```bash
-clojure -T:build uber
-```
-
-Then use `bin/karcarthy` as a normal command:
-
-```bash
-./bin/karcarthy agent echo --instructions "Echo the input." hi
-./bin/karcarthy run examples/workflows/echo.json hi
-./bin/karcarthy demo
-./bin/karcarthy --help
-```
-
-In a source checkout, the launcher falls back to running from source when the
-standalone jar is not built. For installed copies, set
-`KARCARTHY_JAR=/path/to/karcarthy-0.0.2-standalone.jar`.
-
-## Commands
-
-### agent
-
-Run one agent without writing a workflow file:
-
-```bash
-./bin/karcarthy agent reviewer \
-  --instructions "Find the launch risk and answer in one sentence." \
-  "Enterprise SSO is ready for staged beta."
-```
-
-By default, the command prints the result text. Add `--json` when a caller
-needs the full result object:
-
-```bash
-./bin/karcarthy agent echo --instructions "Echo the input." hi --json
-```
-
-Useful options:
-
-- `--runner mock|claude`
-- `--model NAME`
-- `--tool NAME` (repeatable)
-- `--mock-response AGENT=TEXT` (repeatable)
-- `--input TEXT`
-
-### run
-
-Run a workflow JSON file. The file is either a raw workflow object:
-
-```json
-{
-  "type": "agent",
-  "name": "echo",
-  "instructions": "Echo the input."
-}
-```
-
-or a full request object with `workflow`, `input`, and runner fields.
-
-```bash
-./bin/karcarthy run examples/workflows/echo.json hi
-./bin/karcarthy run examples/workflows/echo.json --input "hi" --json
-```
-
-The JSON workflow schema covers portable workflow nodes. Runner configuration
-such as `subagent` definitions is supplied by Clojure runner construction or a
-runner-specific config file, not embedded as workflow nodes.
-
-### json
-
-The `json` command is the machine protocol: request JSON on stdin, result
-JSON on stdout.
-
-```bash
-./bin/karcarthy json < request.json
-```
-
-## Request shape
-
-```json
-{
-  "workflow": { "type": "agent", "name": "echo", "instructions": "Echo." },
-  "input": "hello",
-  "runner": "mock",
-  "mock-responses": {
-    "echo": "hello back"
-  },
-  "options": {
-    "max-concurrency": 4,
-    "run-timeout-ms": 120000,
-    "edn-retries": 1
-  }
-}
-```
-
-`runner` defaults to `mock`. `claude` uses the Claude runner with sub-agent
-defaults.
-
-`mock-responses` is optional. With the mock runner, it maps agent names to
-deterministic response text, which lets examples and tests show realistic
-output without calling a live model. Agents not listed fall back to the
-default echo-style mock response.
-
-`options` is optional. JSON-safe run options include `max-concurrency`,
-`run-timeout-ms` and `edn-retries`. Callback
-options such as `cancel?` and `observe` require Clojure function values, so
-they are available only through the Clojure API.
-
-`tools` is a per-agent field, not a top-level request key: set it on agent
-nodes inside `workflow`, or with repeated `--tool` flags on the `agent`
-command. It is a runner allowlist. The Claude runner enforces it, and ACP
-passes it as session metadata. Built-in runners that cannot enforce tools
-reject agents with non-empty tool lists. karcarthy does not create tool servers or bind
-MCP configuration. The mock and function runners have caller-defined tool
-semantics.
-
-Workflow objects reject unknown fields rather than silently ignoring typos.
-
-## Workflow shapes
-
-The same shapes are available as a JSON Schema value from Clojure:
+The source must contain one top-level form whose evaluation returns an Agent:
 
 ```clojure
-(require '[karcarthy :as k])
-
-k/json-schema
+(agent
+  {:name "generated-reviewer"
+   :model {:transport :responses :id "gpt-5.6"}
+   :instructions "Review the change and return concrete findings."
+   :tools [read-file search-code]
+   :input ::change
+   :output ::review})
 ```
 
-JSON workflows include portable workflow nodes only. Clojure-local `step`
-nodes store function values, so they are available from Clojure code but not
-from the JSON bridge.
+A custom program is equally valid:
 
-### agent
-
-```json
-{
-  "type": "agent",
-  "name": "reviewer",
-  "instructions": "Find launch risks.",
-  "model": "sonnet",
-  "tools": ["mcp__feedback__search"]
-}
+```clojure
+(agent
+  {:name "generated-team"
+   :input ::change
+   :output ::review}
+  [rt change]
+  (let [reviews (await-all!
+                 [(spawn! rt security-reviewer change)
+                  (spawn! rt api-reviewer change)])]
+    (invoke! rt editor {:change change :reviews reviews})))
 ```
 
-Runner selection is not an agent field. It comes from the top-level `runner`
-request key shown above.
+## Compilation pipeline
 
-### pipe
-
-Runs each step in order:
-
-```json
-{
-  "type": "pipe",
-  "steps": [
-    { "type": "agent", "name": "researcher", "instructions": "Research." },
-    { "type": "agent", "name": "writer", "instructions": "Write." }
-  ]
-}
+```text
+source string
+    │
+    ▼
+read-agent-form
+    │ Clojure form (data)
+    ▼
+macroexpand
+    │ expanded form (data)
+    ▼
+expand + validate contracts
+    │ checked form
+    ▼
+eval-agent-form!
+    │ executable value
+    ▼
+agent?
+    │
+    ▼
+invoke!
 ```
 
-### branch
+### Read
 
-Runs every branch on the same input:
+Reader evaluation is disabled while source is converted to a form. This
+prevents the reader itself from executing `#=` forms. Reading is not the
+security boundary—the program is intentionally evaluated later—but it keeps
+the compilation phases explicit and observable.
 
-```json
-{
-  "type": "branch",
-  "branches": [
-    { "type": "agent", "name": "api", "instructions": "Review API." },
-    { "type": "agent", "name": "docs", "instructions": "Review docs." }
-  ]
-}
+### Expand
+
+Normal Clojure macroexpansion runs in the configured evaluation namespace.
+Generated source can use `agent`, application macros, and ordinary Clojure
+macros available there. Both original and expanded forms are retained.
+
+### Check
+
+Checking and evaluation include:
+
+- valid Clojure syntax and symbol resolution;
+- macro argument contracts;
+- agent and tool configuration contracts;
+- input/output/context contract references;
+- policy checks selected by the Runtime;
+- compiler analysis during evaluation.
+
+Clojure is dynamically typed. “Type checking” here means compiler analysis and
+explicit contracts at Agent, Tool, model, and local-context boundaries. A static
+analyzer can add stronger checks without changing the source language.
+
+### Evaluate
+
+The checked form is evaluated as JVM Clojure. For a trusted local research
+harness, evaluation may have the full capabilities of its namespace and
+process. Applications may select a restricted namespace, classloader, process,
+or sandbox as policy, but the core programming model does not become a smaller
+workflow language.
+
+### Verify and invoke
+
+The resulting value must satisfy `agent?`. It then runs through `invoke!` like
+an authored Agent, inheriting Runtime lineage, cancellation, budgets,
+observation, and approval handling. Child Agents do not inherit the root
+Session implicitly.
+
+## Recursive generation
+
+A model-backed Agent may receive `(agent)` in its tool set; a custom program
+may call the lower-level `compile-agent!` directly. No special recursion
+feature is necessary:
+
+```clojure
+(let [child-source (k/invoke! rt architect task)
+      child (k/compile-agent! rt child-source)]
+  (k/invoke! rt child task))
 ```
 
-### delegate
+The Runtime constrains recursion with shared `:agent-depth`, `:model-calls`,
+`:generated-forms`, token, time, and concurrency budgets.
 
-Planner/worker shape:
+## Repair
 
-```json
-{
-  "type": "delegate",
-  "planner": { "type": "agent", "name": "planner", "instructions": "Reply with EDN: {:subtasks [\"...\"]}." },
-  "worker": { "type": "agent", "name": "worker", "instructions": "Handle one subtask." }
-}
+Compilation failures are structured data:
+
+```clojure
+{:phase :evaluation
+ :message "Unable to resolve symbol: fact-cheker"
+ :form '(...)
+ :line 8
+ :column 19}
 ```
 
-### reduce
+Compilation fails closed. The zero-arity `agent` Tool propagates that Tool
+failure, so the Run fails rather than silently executing or repairing invalid
+code. An application that wants model-driven repair can implement an explicit
+retrying Agent program that catches the structured failure and asks for a new
+candidate.
 
-Runs branch or delegate work, then passes an EDN summary to a reducer:
+## Recording and replay
 
-```json
-{
-  "type": "reduce",
-  "source": {
-    "type": "branch",
-    "branches": [
-      { "type": "agent", "name": "api", "instructions": "Review API." },
-      { "type": "agent", "name": "docs", "instructions": "Review docs." }
-    ]
-  },
-  "reducer": { "type": "agent", "name": "writer", "instructions": "Synthesize the EDN result summary." }
-}
-```
+Compilation events record:
 
-### revise
+- exact source text;
+- the read and macroexpanded forms;
+- the evaluation namespace;
+- parent Agent and Run lineage;
+- successful Agent identity or structured failure.
 
-Worker/evaluator loop:
+These events allow experiments to compare source mutations, reproduce a
+candidate, or verify that two Runs evaluated the same program. Content hashes
+and replay storage remain application-level research tooling.
 
-```json
-{
-  "type": "revise",
-  "worker": { "type": "agent", "name": "writer", "instructions": "Draft." },
-  "evaluator": { "type": "agent", "name": "critic", "instructions": "Reply with EDN: {:accept? true} or {:accept? false :feedback \"...\"}." },
-  "max-rounds": 3
-}
-```
+## What JSON is still for
 
-### route
-
-Choice map keyed by the source result:
-
-```json
-{
-  "type": "route",
-  "source": { "type": "agent", "name": "classifier", "instructions": "Classify." },
-  "routes": {
-    "launch": { "type": "agent", "name": "launch", "instructions": "Handle launch." },
-    "incident": { "type": "agent", "name": "incident", "instructions": "Handle incident." }
-  },
-  "default": { "type": "agent", "name": "fallback", "instructions": "Handle fallback." }
-}
-```
-
-The classifier result text should be EDN such as `{:route "launch"}` because
-JSON route labels are strings.
-
-### continue
-
-Direct handoff from one workflow to another:
-
-```json
-{
-  "type": "continue",
-  "source": { "type": "agent", "name": "triage", "instructions": "Triage." },
-  "to": { "type": "agent", "name": "specialist", "instructions": "Continue." }
-}
-```
-
-### dynamic
-
-> **Experimental.** The dynamic op protocol and prompt format may change
-> between releases.
-
-Agent-driven orchestration:
-
-```json
-{
-  "type": "dynamic",
-  "agent": { "type": "agent", "name": "lead", "instructions": "Orchestrate the review." },
-  "max-steps": 25
-}
-```
-
-`max-steps` is optional and defaults to `25`. The agent replies with EDN ops
-(`:define`, `:patch`, `:remove`, `:call`, `:spawn`, `:complete`); the op
-shapes are documented on the [Data Shapes](/docs/reference/schema#dynamic)
-page.
-
-## Response
-
-`karcarthy json` and command runs with `--json` return the karcarthy result
-map encoded as JSON:
-
-```json
-{
-  "type": "result",
-  "ok?": true,
-  "agent": "writer",
-  "text": "..."
-}
-```
-
-The EDN result tag `:karcarthy/type` serializes as `"type"`: the JSON encoder
-drops keyword namespaces.
-
-If a JSON request fails to parse or run, the protocol returns an object with
-`ok: false`, `error`, and `exception`.
+JSON remains useful at external boundaries: ACP messages, HTTP requests,
+observation export, evaluation datasets, and JSON-compatible outputs. It is
+not the representation of executable orchestration.
 
 ## Next
 
-Read the [Library API](/docs/reference/api) for public functions, runners, and
-result maps.
+- [Programs](/docs/workflows) shows generated agents using ordinary control flow.
+- [Contracts](/docs/reference/schema) defines Agent and Run values.

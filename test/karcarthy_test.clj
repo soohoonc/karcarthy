@@ -1,93 +1,30 @@
 (ns karcarthy-test
-  (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
-            [karcarthy :as kc]))
+  (:require [clojure.test :refer [deftest is]]
+            [karcarthy :as k]))
 
-(deftest facade-reexports-fns
-  (testing "core + orchestrate functions are reachable under one alias"
-    (let [a (kc/agent {:name "x" :instructions "i"})]
-      (is (kc/agent? a)))
-    (let [s (kc/subagent "reviewer" "Use for review." "Review carefully.")]
-      (is (kc/subagent? s)))
-    (let [r (kc/run {:runner (kc/mock-runner)
-                     :workflow (kc/pipe (kc/agent {:name "a" :instructions "i"}) (kc/agent {:name "b" :instructions "i"}))
-                     :input "hi"})]
-      (is (kc/ok? r))
-      (is (= "[b] [a] hi" (:text r))))
-    (is (kc/ok? (kc/run {:runner (kc/fn-runner identity)
-                         :workflow (kc/agent {:name "fn" :instructions "i"})
-                         :input "hi"})))
-    (is (= "[a] HI" (:text (kc/run {:runner (kc/mock-runner)
-                                    :workflow (kc/pipe (kc/step str/upper-case)
-                                                       (kc/agent {:name "a" :instructions "i"}))
-                                    :input "hi"}))))
-    (is (kc/ok? (kc/run {:runner (kc/process-runner "cat")
-                         :workflow (kc/agent {:name "process" :instructions "i"})
-                         :input "hi"})))
-    (is (some? (kc/codex-runner)))
-    (let [a (kc/agent {:name "a" :instructions "i"})
-          b (kc/agent {:name "b" :instructions "i"})]
-      (is (kc/workflow? (kc/branch [a b])))
-      (is (kc/workflow? (kc/route a {:next b})))
-      (is (kc/workflow? (kc/continue a b)))
-      (is (kc/workflow? (kc/dynamic a))))))
+(deftest facade-exposes-only-the-native-harness
+  (doseq [sym '[agent defagent tool deftool agent? tool?
+                run! invoke! spawn! await! await-all! as-tool context
+                memory-session session? session-id get-items add-items!
+                pop-item! clear-session!
+                model! emit! events fake-model
+                hosted-tool hosted-tool?
+                local-tools prompt prompt-file system-prompt
+                responses-web-search connect-mcp! mcp-tools close-mcp!
+                serve-acp!
+                read-agent-form check-agent-form! eval-agent-form!
+                compile-agent! source-form expanded-form]]
+    (is (some? (ns-resolve 'karcarthy sym)) (str "missing " sym)))
+  (doseq [removed '[run pipe branch delegate reduce revise route continue
+                    dynamic evolve mock-runner fn-runner process-runner
+                    claude-runner codex-runner openai-runner acp-runner
+                    handoff! environment conversation-state? model-transport
+                    workspace-tools workspace-prompt]]
+    (is (nil? (get (ns-publics 'karcarthy) removed))
+        (str "still exports " removed))))
 
-(deftest facade-reexports-macros
-  (testing "defagent and defworkflow are re-exported as working macros"
-    (kc/defagent facade-agent {:instructions "instr" :model "m"})
-    (is (= "facade-agent" (:name facade-agent)))
-    (is (= "m" (:model facade-agent)))
-    (kc/defsubagent facade-subagent "Use for review." "Review carefully.")
-    (is (= "facade-subagent" (:name facade-subagent)))
-    (kc/defworkflow facade-workflow (kc/pipe facade-agent))
-    (is (kc/workflow? facade-workflow))))
-
-(deftest facade-reexports-rewrites
-  (testing "workflow rewrites are reachable under the facade"
-    (let [workflow  (kc/pipe (kc/agent {:name "a" :instructions "i"}) (kc/agent {:name "b" :instructions "j"}))
-          rewritten (kc/configure {:model "m"} workflow)]
-      (is (kc/workflow? rewritten))
-      (is (= ["a" "b"] (map :name (kc/agents rewritten))))
-      (is (= ["m" "m"] (map :model (kc/agents rewritten))))
-      (is (= ["x" "x"]
-             (map :instructions
-                  (kc/agents
-                   (kc/over kc/agent?
-                            (fn [agent] (assoc agent :instructions "x"))
-                            workflow))))))))
-
-(deftest facade-reexports-values
-  (is (string? kc/dsl-reference))
-  (is (string? (kc/explain-agent {:karcarthy/type :agent})))
-  (is (string? (kc/explain-subagent {:karcarthy/type :subagent})))
-  (is (map? kc/edn-schema))
-  (is (map? kc/json-schema))
-  (is (kc/result? (kc/result {:text "ok"})))
-  (is (kc/agent? (kc/read-agent "{:karcarthy/type :agent :name \"x\" :instructions \"i\"}"))))
-
-(deftest facade-reexports-dynamic-workflow-helpers
-  (testing "the one-alias surface gets workflow builders, not the stepping API"
-    (is (kc/workflow? (kc/dynamic (kc/agent {:name "workflow" :instructions "emit EDN ops"}))))
-    (is (map? (kc/agent-ref "worker")))
-    (is (map? (kc/workflow-ref "draft")))
-    (is (nil? (ns-resolve 'karcarthy 'step!)))
-    (is (nil? (ns-resolve 'karcarthy 'state)))
-    (is (nil? (ns-resolve 'karcarthy 'text->op)))
-    (is (nil? (ns-resolve 'karcarthy 'dynamic-reference))))
-  (testing "the experimental tag survives the re-export"
-    (doseq [sym '[dynamic agent-ref workflow-ref]]
-      (is (:experimental (meta (ns-resolve 'karcarthy sym)))
-          (str "karcarthy/" sym " is tagged ^:experimental")))
-    (is (get-in kc/edn-schema [:dynamic :experimental?]))))
-
-(deftest facade-hides-low-level-execution-apis
-  (testing "normal users get one execution entrypoint: run"
-    (is (nil? (ns-resolve 'karcarthy 'run-agent)))
-    (is (nil? (ns-resolve 'karcarthy 'Runner)))
-    (is (nil? (ns-resolve 'karcarthy 'evolve)))
-    (is (nil? (ns-resolve 'karcarthy 'map)))
-    (is (nil? (ns-resolve 'karcarthy 'bind)))
-    (is (nil? (ns-resolve 'karcarthy 'iterate)))
-    (is (nil? (ns-resolve 'karcarthy 'config)))
-    (is (nil? (ns-resolve 'karcarthy 'shell-runner)))
-    (is (nil? (ns-resolve 'karcarthy '-run)))))
+(deftest forwarding-macros-capture-source
+  (let [agent (k/agent {:name "facade" :output string?}
+                       [_ x] (str x))]
+    (is (k/agent? agent))
+    (is (seq (k/source-form agent)))))

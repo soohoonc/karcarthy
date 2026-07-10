@@ -1,101 +1,69 @@
 (ns karcarthy
-  "A convenience facade: the common karcarthy API re-exported under one
-  namespace, so you can use a single alias instead of juggling several:
+  "The public karcarthy API: a native, homoiconic Clojure agent harness."
+  (:refer-clojure :exclude [agent await run!])
+  (:require [karcarthy.acp :as acp]
+            [karcarthy.core :as core]
+            [karcarthy.eval :as keval]
+            [karcarthy.mcp :as mcp]
+            [karcarthy.model.responses :as responses]
+            [karcarthy.prompt :as prompt]
+            [karcarthy.session :as session]
+            [karcarthy.tools :as tools]))
 
-      (require '[karcarthy :as k])
-      (k/run {:runner (k/claude-runner {})
-              :workflow (k/pipe a b)
-              :input \"hi\"})
+;; Agent and Tool macros are forwarding macros so callers need one alias.
+(defmacro agent
+  ([] `(core/agent))
+  ([config & body] `(core/agent ~config ~@body)))
 
-  The canonical homes are still `karcarthy.core`, `karcarthy.orchestrate`,
-  `karcarthy.dynamic`, `karcarthy.rewrite`, `karcarthy.schema`,
-  `karcarthy.self`, and the implementation runners; this namespace only
-  forwards the public surface."
-  ;; `map` and `iterate` are excluded but deliberately left undefined - the
-  ;; names are reserved for future combinators, so `k/map` fails loudly today
-  ;; instead of silently resolving to clojure.core (guarded by
-  ;; `facade-hides-low-level-execution-apis`).
-  (:refer-clojure :exclude [agent map iterate reduce])
-  (:require [karcarthy.core]
-            [karcarthy.orchestrate]
-            [karcarthy.dynamic]
-            [karcarthy.rewrite]
-            [karcarthy.schema]
-            [karcarthy.self]
-            [karcarthy.runner.acp]
-            [karcarthy.runner.claude]
-            [karcarthy.runner.codex]
-            [karcarthy.runner.process]
-            [karcarthy.runner.openai]))
+(defmacro defagent [sym config & body]
+  `(core/defagent ~sym ~config ~@body))
 
-(defmacro ^:private export
-  "Re-export the var named by the fully-qualified symbol `qsym` into this
-  namespace under its short name, preserving :doc, :arglists, and
-  :experimental. Macros are re-exported as forwarding macros."
-  [qsym]
-  (let [v (resolve qsym)]
-    (when (nil? v)
-      (throw (ex-info (str "export: cannot resolve " qsym) {:sym qsym})))
-    (let [m  (meta v)
-          nm (symbol (name qsym))]
-      `(do ~(if (:macro m)
-              `(defmacro ~nm [~'& args#] (cons '~qsym args#))
-              `(def ~nm @(var ~qsym)))
-           ;; copy the metadata as quoted data via alter-meta! (putting
-           ;; :arglists as symbol metadata would make the compiler evaluate it).
-           (alter-meta! (var ~nm) merge '~(select-keys m [:doc :arglists :experimental]))
-           (var ~nm)))))
+(defmacro tool [config bindings & body]
+  `(core/tool ~config ~bindings ~@body))
 
-;; data model + mock runner
-(export karcarthy.core/agent)
-(export karcarthy.core/agent?)
-(export karcarthy.core/explain-agent)
-(export karcarthy.core/defagent)
-(export karcarthy.core/subagent)
-(export karcarthy.core/subagent?)
-(export karcarthy.core/explain-subagent)
-(export karcarthy.core/defsubagent)
-(export karcarthy.core/mock-runner)
-(export karcarthy.core/fn-runner)
-(export karcarthy.core/result)
-(export karcarthy.core/result?)
-(export karcarthy.core/ok?)
+(defmacro deftool [sym config bindings & body]
+  `(core/deftool ~sym ~config ~bindings ~@body))
 
-;; orchestration
-(export karcarthy.orchestrate/pipe)
-(export karcarthy.orchestrate/step)
-(export karcarthy.orchestrate/branch)
-(export karcarthy.orchestrate/delegate)
-(export karcarthy.orchestrate/reduce)
-(export karcarthy.orchestrate/revise)
-(export karcarthy.orchestrate/route)
-(export karcarthy.orchestrate/continue)
-(export karcarthy.orchestrate/run)
-(export karcarthy.orchestrate/workflow?)
-(export karcarthy.orchestrate/defworkflow)
+(def agent? core/agent?)
+(def tool? core/tool?)
+(def hosted-tool core/hosted-tool)
+(def hosted-tool? core/hosted-tool?)
+(def source-form core/source-form)
+(def expanded-form core/expanded-form)
+(def contract-valid? core/contract-valid?)
+(def explain-contract core/explain-contract)
+(def contract->json-schema core/contract->json-schema)
 
-;; dynamic workflows (experimental)
-(export karcarthy.dynamic/dynamic)
-(export karcarthy.dynamic/agent-ref)
-(export karcarthy.dynamic/workflow-ref)
+(def run! core/run!)
+(def invoke! core/invoke!)
+(def spawn! core/spawn!)
+(def await! core/await!)
+(def await-all! core/await-all!)
+(def as-tool core/as-tool)
+(def context core/context)
+(def model! core/model!)
+(def emit! core/emit!)
+(def events core/events)
 
-;; schema reference values
-(export karcarthy.schema/edn-schema)
-(export karcarthy.schema/json-schema)
+(def fake-model core/fake-model)
+(def memory-session session/memory-session)
+(def session? session/session?)
+(def session-id session/session-id)
+(def get-items session/get-items)
+(def add-items! session/add-items!)
+(def pop-item! session/pop-item!)
+(def clear-session! session/clear-session!)
+(def local-tools tools/local)
+(def prompt prompt/prompt)
+(def prompt-file prompt/prompt-file)
+(def system-prompt prompt/system-prompt)
+(def responses-web-search responses/web-search)
+(def connect-mcp! mcp/connect!)
+(def mcp-tools mcp/tools)
+(def close-mcp! mcp/close!)
+(def serve-acp! acp/serve!)
 
-;; structural workflow rewrites
-(export karcarthy.rewrite/agents)
-(export karcarthy.rewrite/over)
-(export karcarthy.rewrite/configure)
-
-;; parsing generated agent/workflow data
-(export karcarthy.self/read-workflow)
-(export karcarthy.self/read-agent)
-(export karcarthy.self/dsl-reference)
-
-;; Provider/protocol/process runners
-(export karcarthy.runner.acp/acp-runner)
-(export karcarthy.runner.claude/claude-runner)
-(export karcarthy.runner.codex/codex-runner)
-(export karcarthy.runner.process/process-runner)
-(export karcarthy.runner.openai/openai-runner)
+(def read-agent-form keval/read-agent-form)
+(def check-agent-form! keval/check-agent-form!)
+(def eval-agent-form! keval/eval-agent-form!)
+(def compile-agent! keval/compile-agent!)

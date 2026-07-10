@@ -1,81 +1,97 @@
-# karcarthy vs. other agent builders
+# Configuration study
 
-Use this page to decide when karcarthy fits and when another agent framework
-serves you better. Most frameworks define agents, tools, and workflows as
-**objects or decorators in a host language**, and bundle the agent loop (model
-call to tool call to model, until done). karcarthy makes a different pair of
-choices: the workflow is **plain data** (EDN), and the loop is **delegated to
-an Agent SDK, agent framework, coding-agent CLI, Clojure function, subprocess,
-or shell runner**.
+karcarthy borrows the strongest agent-configuration primitives from current
+harnesses while making executable Clojure the orchestration language.
 
-The frameworks referenced:
+## Systems studied
 
-- **PydanticAI** ("pi") — type-safe Python agents, model-agnostic, the "FastAPI
-  feeling." ([pydantic-ai](https://github.com/pydantic/pydantic-ai))
-- **DSPy** — declarative LM programs built from typed signatures, modules,
-  metrics, and optimizers that compile prompts or weights.
-  ([dspy](https://dspy.ai/))
-- **Agno** — a high-performance multi-agent runtime with sessions, memory,
-  knowledge, MCP, and a prebuilt server (AgentOS). ([agno](https://github.com/agno-agi/agno))
-- **Vercel AI SDK** — TypeScript, optimized for streaming to a web UI, tool
-  calling, and conversation state. ([ai-sdk](https://ai-sdk.dev/))
-- (Also in this space: OpenAI Agents SDK, LangGraph, CrewAI, Mastra.)
-
-## Common patterns, side by side
-
-| Pattern | PydanticAI / DSPy / Agno / Vercel AI SDK | karcarthy |
+| System | Useful configuration and runtime primitives | What karcarthy changes |
 | --- | --- | --- |
-| Define an agent | a host-language object/module: `Agent(model, instructions, tools)`, a DSPy `Signature` + module, or `{ model, tools }` (TS) | a data map: `{:karcarthy/type :agent :name … :instructions … :model …}` |
-| The agent loop | the framework runs it for you | delegated to Claude, Codex, OpenAI, ACP, a local model, or another runner |
-| Tools | typed functions: Pydantic models / Zod schemas / Python callables; DSPy `ReAct` can use tools | a tool allowlist handed to the selected runner, when that system supports it |
-| Multi-agent | teams (Agno), handoffs (OpenAI), graphs (LangGraph) | functional workflow data: `pipe`, `branch`, `delegate`, `reduce`, `revise`, `route`, `continue`, `step`, `dynamic` |
-| Structured output | Pydantic model / Zod / `generateObject`; DSPy signatures type input/output fields | parse the reply yourself |
-| Optimization | DSPy optimizers compile programs against metrics; others mostly leave prompt tuning to the application | no optimizer yet; workflows are easy to transform because they are data |
-| Streaming | tokens/events, especially to a UI | Claude stream events and ACP session-update events via `:on-event` |
-| Sessions / memory | built in (Agno AgentOS, PydanticAI) | runner/session state is delegated; richer memory is out of scope today |
-| Observability | Logfire, AgentOS, DSPy tracing/debugging, etc. | OTel-compatible event maps via `:observe` |
+| [Pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | A deliberately small loop, four default local tools, a system prompt assembled from enabled tools, project instruction files, and extensions outside the core. | Use the same small-kernel discipline for ordinary Agents, while keeping local Tools and prompt construction separate and adding homoiconic Agent generation, contracts, events, MCP, and ACP. |
+| [Claude Code tools](https://code.claude.com/docs/en/tools-reference) and [OpenAI Codex](https://github.com/openai/codex) | Tool schemas and policy-bearing instructions around file inspection, editing, shell execution, search, delegation, and verification. | Preserve the capability-derived behavioral invariants without copying a private prompt or recreating every product-specific tool. |
+| [Vercel AI SDK](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent) | Model, instructions, typed tools, tool choice, active tools, structured output, stop conditions, per-step preparation, context, callbacks, retries, and timeouts. | Own the same loop controls in Clojure and allow an Agent to replace the default loop with an arbitrary program body. |
+| [Vercel Workflow](https://useworkflow.dev/docs/foundations/how-it-works) | Durable Runs reconstructed from an event log of steps, waits, retries, and external events. | Keep this vocabulary separate. karcarthy currently has Agent Runs and conversation Sessions, not durable workflow checkpoints. |
+| [Eve](https://eve.dev/docs/agent-config) | Model and reasoning settings, dynamic resolution, compaction, budgets, typed tools, approval, output schemas, subagents, sandbox, and instrumentation. Its [Workflow tool](https://eve.dev/docs/guides/dynamic-workflows) runs model-authored JavaScript that coordinates subagents. | Make generated executable code the central model rather than an optional root-only tool, and let generated Clojure use the complete harness API recursively. |
+| [OpenAI Agents SDK](https://openai.github.io/openai-agents-js/guides/agents/) | Dynamic instructions and prompts, typed local context, tools and MCP, structured output, guardrails, tool-use behavior, agents as tools, handoffs, Sessions, and lifecycle hooks. | Preserve its established distinction between local context, model-visible instructions, and conversation Sessions, but express larger programs directly in Clojure. |
+| [OpenAgents](https://openagents.org/docs/en/sdk/building-agents) | Event-driven lifecycle hooks, typed event context, channels, messages, files, discovery, and network mods. | Borrow the event vocabulary and external collaboration boundary; do not treat OpenAgents as the inner LLM harness. |
 
-## What karcarthy does differently
+## Resulting configuration surface
 
-- **The workflow is data.** You build it with functions or write it by hand,
-  then inspect, serialize, diff, generate, and transform it with ordinary code
-  (`clojure.walk`, etc.). The plan is a value, not a callgraph hidden in objects.
-- **The loop is delegated.** karcarthy doesn't reimplement the model/tool loop;
-  it drives an Agent SDK, agent framework, coding-agent CLI, Clojure function,
-  subprocess, or shell command.
-  That keeps it provider-neutral and thin, and it means karcarthy can sit *on
-  top of* the others: you can wrap PydanticAI, Agno, or a coding-agent CLI
-  through `process-runner`, `codex-runner`, `openai-runner`, or a small shim.
-- **The runtime state is an intermediate representation.** DSPy is strong
-  evidence for separating *what* a module should do from *how* its prompt or
-  weights are tuned. karcarthy applies the same pressure one level up: keep
-  agents, workflows, and operation history as data that Agent SDKs, CLIs, and
-  runners can execute while ordinary code can rewrite it.
-- **Agents can emit orchestration data.** Because workflows and runtime
-  operations are data parsed with `clojure.edn` (never `eval`), advanced APIs can
-  parse model output into workflows or patches and feed them into the same
-  runtime state without treating text as code.
-  Most frameworks let the model call tools and hand off; they don't usually make
-  the orchestration state itself data the model emits and edits.
-- **It's language-neutral.** Because the unit of exchange is data, you can drive
-  it from any language over a JSON bridge — see the Python and TypeScript
-  examples in [`examples/`](examples/), no Clojure required.
+An Agent may configure:
 
-## When to use what
+- identity: `:name`, `:description`;
+- cognition: `:model`, `:instructions`;
+- dependencies: `:context`;
+- contracts: `:input`, `:output`;
+- capabilities: `:tools`;
+- loop policy: `:max-turns`, `:stop-when`;
+- safety: `:guardrails`, approvals, and limits;
+- observation: Run events and an `:observe` callback;
+- behavior: an optional arbitrary Clojure body.
 
-- Typed tools, structured output, great Python DX: **PydanticAI**.
-- Declarative LM programs you want to optimize against examples and metrics:
-  **DSPy**.
-- A batteries-included multi-agent runtime with memory, knowledge, a server, and
-  observability: **Agno**.
-- A web app streaming to React: **Vercel AI SDK**.
-- Orchestration you want as inspectable, generatable, serializable data;
-  provider-neutral; on the JVM/Lisp; or where agents generate and rewrite
-  workflows themselves: **karcarthy** (early and minimal, and able to drive the
-  others through provider, protocol, process, or function runners).
+Tools are first-class values with input/output contracts, approval, enablement,
+guardrails, timeouts, and a Clojure implementation. Agents become tools through
+`as-tool`. Conversation history is a `Session` supplied to `run!`, not Agent
+configuration or generic workflow state. True handoffs are not implemented.
 
-These aren't strictly either/or: karcarthy is a thin coordination layer, and the
-frameworks above are good candidates to run *inside* it as runners.
+## Vocabulary decisions
 
-Next: run the quickstart in the [README](README.md), or copy a complete
-workflow from [`examples/`](examples/).
+The OpenAI and Vercel implementations make three different lifetimes explicit:
+
+| Name | Lifetime in karcarthy |
+| --- | --- |
+| Instructions | Model-visible policy resolved for one Agent invocation. |
+| Context | Local application dependencies carried by one Runtime tree. |
+| Session | Ordered conversation items shared across root Agent Runs. |
+| Run | One execution result with output, usage, events, or failure. |
+
+OpenAI's
+[Sessions](https://openai.github.io/openai-agents-js/guides/sessions/) are
+conversation stores, while its serializable
+[Run state](https://github.com/openai/openai-agents-js/blob/main/packages/agents-core/src/runState.ts)
+represents an interrupted execution. Vercel AI SDK leaves
+[chat persistence](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence)
+to the application, and Vercel Workflow uses an event log to reconstruct a
+durable Run. karcarthy implements the first concern through `Session`; it does
+not rename conversation history to state or claim durable checkpointing.
+
+Likewise, `as-tool` accurately describes a child call that returns control to
+the parent. The word “handoff” is reserved for a future operation with actual
+control and history transfer semantics.
+
+## The essential difference
+
+Most harnesses expose a configuration object around a fixed loop. Eve's
+generated JavaScript workflow is the closest precedent, but it deliberately
+limits the program to bridged subagent functions.
+
+karcarthy treats the program itself as the configurable object:
+
+```clojure
+(agent config [rt input]
+  ;; arbitrary Clojure, including construction and evaluation of new Agents
+  ...)
+```
+
+The source form, expanded form, contracts, and execution events are retained.
+That makes program transformations directly usable as experimental variables.
+
+## Optimization and verification
+
+For task `τ`, program `p`, local context `c`, Session history `h`, and
+stochastic event sequence `ξ`:
+
+```text
+(y, h', ξ) ~ Exec(p, τ, c, h)
+```
+
+An optimizer may search source forms for reward under cost and latency limits:
+
+```text
+p* = argmaxₚ E[R(τ, ξ) - λ·cost(ξ) - μ·latency(ξ)]
+```
+
+Improvement is not required. The same apparatus may verify invariants, compare
+behavioral distributions, characterize failure modes, or reproduce an agent's
+generated program. Harbor supplies evaluation tasks through ACP; karcarthy
+supplies the executable program and event record.

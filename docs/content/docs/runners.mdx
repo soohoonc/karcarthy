@@ -1,459 +1,207 @@
 ---
-title: Runners
-description: Choose the execution backend for a run.
+title: Harness
+description: The in-process model/tool loop, instructions, context, Sessions, streaming, limits, approvals, and events.
 ---
 
-A runner runs one agent to completion. Karcarthy uses that same runner for each
-agent it encounters while interpreting a workflow.
+karcarthy owns model calls, tool calls, child Agents, streaming events,
+guardrails, approvals, limits, and cancellation. A provider integration only
+translates model I/O; it does not execute tools or decide how an Agent proceeds.
+
+## Minimal kernel
+
+| Primitive | Responsibility |
+| --- | --- |
+| `agent` | Construct an Agent, or expose the same form to a model with `(agent)`. |
+| `tool` | Construct a contracted capability backed by Clojure code. |
+| `run!` | Create a root Runtime and execute an Agent. |
+| `invoke!` | Execute a child Agent in an existing Runtime tree. |
+| `compile-agent!` | Read, expand, check, evaluate, and return an Agent form. |
+| `emit!` | Record an event. |
+
+`defagent` and `deftool` name Agent and Tool values. `spawn!`, `await-all!`,
+and `as-tool` are small composition helpers. There is no Runner protocol,
+workflow interpreter, or placeholder handoff operation.
+
+## Default model loop
+
+An Agent without a custom Clojure body uses this loop:
+
+1. Validate its input and local Runtime context.
+2. Resolve its model, instructions, and tools.
+3. Load root conversation history from an optional Session.
+4. Send instructions, messages, tool schemas, and output schema to the model.
+5. Record streaming deltas when the model adapter supports them.
+6. If the model requests tools, validate, authorize, execute, and append their
+   results before the next model turn.
+7. If the model returns a final value, validate guardrails and the output
+   contract, append accepted history to the Session, and complete.
+
+The loop stops on completion, failure, cancellation, deadline, or
+`:max-turns`. A `:stop-when` predicate can reject a premature final response.
+
+## Agent configuration
 
 ```clojure
-(k/run {:runner runner
-        :workflow workflow
-        :input input})
+(k/agent
+ {:name "researcher"
+  :description "Research one question."
+  :model {:transport :responses
+          :id "gpt-5.6"
+          :reasoning {:effort :high}}
+  :instructions
+  (fn [{:keys [context]}]
+    (str "Research carefully for " (:user-id context) "."))
+  :context ::research-context
+  :input ::request
+  :tools [web-search fetch-page]
+  :output ::report
+  :max-turns 20
+  :stop-when accepted-final?
+  :guardrails {:input [safe-input?]
+               :output [grounded?]}
+  :limits {:model-calls 30}})
 ```
 
-Agents describe the work:
+`:model`, `:instructions`, and `:tools` may be functions of the immutable
+Runtime view. Instructions must resolve to a string. A custom-body Agent may
+omit `:model` and `:instructions` entirely.
+
+## Instructions and context
+
+The names follow the established split used by current Agent SDKs:
+
+- `:instructions` is model-visible policy and prompt text;
+- `:context` is local dependency injection and is never exposed to the model
+  automatically.
+
+Context may contain database handles, authenticated user data, clocks, or
+helper functions. The Agent's `:context` value is its contract; the concrete
+value enters through `run!` or a child invocation:
 
 ```clojure
-(k/defagent reviewer
-  {:instructions "Review the input and return concrete issues."
-   :model "sonnet"})
+(k/run! agent input
+        {:context {:user-id "u_123"
+                   :db db
+                   :http http-client}})
 ```
 
-The caller chooses the runner:
+Programs and Tools read it with `(k/context rt)`. Dynamic instructions receive
+it in the Runtime view. `prompt`, `prompt-file`, and `system-prompt` compose
+instruction text without inferring a directory or hidden policy source.
+
+## Sessions
+
+Runs are stateless unless the caller supplies a Session:
 
 ```clojure
-(k/run {:runner (k/mock-runner)
-        :workflow reviewer
-        :input "check this design"})
+(def session (k/memory-session))
 
-(k/run {:runner (k/claude-runner {})
-        :workflow reviewer
-        :input "check this design"})
-
-(k/run {:runner (k/codex-runner {:dir "."})
-        :workflow reviewer
-        :input "check this design"})
-
-(k/run {:runner (k/acp-runner {:command ["my-acp-agent"]})
-        :workflow reviewer
-        :input "check this design"})
+(k/run! researcher first-request {:session session})
+(k/run! researcher next-request {:session session})
 ```
 
-Agents do not carry a backend. If the backend changes at runtime, pass a
-different runner value.
+A Session is only an ordered conversation store. Its protocol consists of
+`session-id`, `get-items`, `add-items!`, `pop-item!`, and `clear-session!`.
+`memory-session` is thread-safe and process-local. Applications that need
+durability implement `karcarthy.session/Session` with their normal database.
 
-Runner configuration belongs in the runner value, agent fields, or run `:options`.
-Do not hide execution configuration inside `:input`; `:input` is the task or
-state being worked on.
+The Session belongs to the root model-backed Agent. Child Agents do not
+silently share it, and custom Clojure programs remain responsible for their own
+domain data. This is not a workflow checkpoint: Clojure stacks, closures, and
+arbitrary effects are not serialized or resumed.
 
-Claude enforces agent `:tools`; ACP forwards them as metadata; Codex, OpenAI,
-and process runners reject non-empty tool declarations because they cannot
-enforce that allowlist.
+Provider continuation identifiers are an internal optimization within one
+model/tool loop. Portable Session history remains normalized messages.
 
-## Runtime Selection
+## Tools and Agent composition
 
-Keep runner choice in application code:
+A Tool declares a model-facing name and description, input/output contracts,
+a Clojure implementation, and optional approval, guardrail, timeout, retry,
+enablement, and model-output projection policies.
+
+Zero-arity `(agent)` is itself a Tool. It accepts one ordinary `(agent ...)`
+source form and input, then reads, expands, checks, evaluates, and invokes it in
+the current run tree.
+
+`as-tool` exposes a known Agent to a model-backed parent while the parent keeps
+control. Arbitrary orchestration uses `invoke!`, `spawn!`, and ordinary Clojure
+control flow. karcarthy does not claim handoff semantics until it can define
+actual control and conversation transfer.
+
+## Local tools, MCP, and hosted tools
+
+`local-tools` returns `read`, `write`, `edit`, `bash`, and `search` Tools rooted
+at a caller-selected directory. File operations reject paths outside that
+root. `bash` is bounded but is not a sandbox.
+
+`mcp-tools` adapts discovered MCP definitions into the same Tool values. The
+current MCP client implements the `2025-11-25` stdio lifecycle. Provider-hosted
+capabilities such as `responses-web-search` are lowered only by their matching
+model adapter and are never pretended to be local functions.
+
+## Streaming
+
+Streaming model adapters emit normalized text and tool-call deltas before
+returning an authoritative final response. The Runtime records
+`:model/text-delta` and `:model/tool-call-delta` events. The Responses adapter
+uses typed SSE events; ACP forwards text deltas as `agent_message_chunk`
+updates.
+
+Model-adapter construction is internal. Applications select the built-in
+Responses adapter with `:transport :responses`; tests use `fake-model`.
+
+## Limits
+
+Limits apply to the whole root run tree unless a child receives a smaller
+grant:
 
 ```clojure
-(defn runner-for [env]
-  (case env
-    :test (k/mock-runner)
-    :local (k/process-runner "cat")
-    :claude (k/claude-runner {})
-    :codex (k/codex-runner {:dir "."})))
-
-(defn review [env input]
-  (k/run {:runner (runner-for env)
-          :workflow reviewer
-          :input input}))
+{:model-calls 100
+ :input-tokens 1000000
+ :output-tokens 100000
+ :agent-depth 8
+ :parallelism 6
+ :generated-forms 20
+ :deadline-ms 300000}
 ```
 
-This keeps the orchestration structure stable. The same agent can run through
-a mock in tests, Claude or Codex in a live run, or an ACP-compatible process in
-another environment when its runner-specific fields are supported.
+All descendants debit the same usage counters. A child may lower inherited
+ceilings but cannot raise them.
 
-## Mock Runner
+## Approval
 
-`mock-runner` is a fully offline runner for tests, docs, and local workflow
-design:
+Approval is evaluated after Tool-input validation and before the effect. The
+Run's `:approval` handler receives the Runtime view, Tool, and arguments.
+Missing or denied approval fails before execution. Durable approval suspension
+and resumption remain roadmap work.
+
+## Events
+
+`run!` retains emitted events and can send each event to an `:observe`
+callback. Stable families include:
 
 ```clojure
-(k/run {:runner (k/mock-runner)
-        :workflow (k/agent {:name "echo" :instructions "Echo the input."})
-        :input "hi"})
+:run/started          :run/completed       :run/failed
+:agent/started        :agent/completed     :agent/failed
+:model/requested      :model/text-delta    :model/completed
+:tool/started         :tool/completed      :tool/failed
+:session/updated
+:program/read         :program/expanded    :program/evaluated
 ```
 
-Output:
+Events carry a Run ID and Agent parent/child identifiers where applicable.
+There is no separate hook system or synthetic trace ID.
 
-```clojure
-{:karcarthy/type :result
- :ok? true
- :agent "echo"
- :text "[echo] hi"
- :raw {:runner :mock}}
-```
+## ACP boundary
 
-Instead of an options map, `mock-runner` takes one optional argument: a
-`respond` function of `{:agent :prompt :options}` returning the reply string.
-Pass one when tests need deterministic named behavior:
+`serve-acp!` exposes an Agent or per-session Agent factory over ACP v1 stdio.
+The server maps ACP prompts to `run!`, creates one in-memory Session per ACP
+session, forwards cancellation and permission requests, publishes Tool events,
+and merges session-provided MCP Tools. ACP is an external client boundary, not
+the harness underneath karcarthy.
 
-```clojure
-(def test-runner
-  (k/mock-runner
-   (fn [{:keys [agent prompt]}]
-     (case (:name agent)
-       "classifier" "{:route :launch}"
-       "brief-writer" "Decision: staged beta."
-       (str "[" (:name agent) "] " prompt)))))
-```
+## Next
 
-With no arguments it echoes the prompt tagged with the agent name, which is
-handy for asserting how orchestration routes work.
-
-## Function Runner
-
-`fn-runner` makes a Clojure function the backend for agent calls:
-
-```clojure
-(def uppercase
-  (k/fn-runner clojure.string/upper-case))
-
-(k/run {:runner uppercase
-        :workflow (k/agent {:name "shout" :instructions "Uppercase the input."})
-        :input "quiet please"})
-```
-
-Options:
-
-| Option | Default | Effect |
-| --- | --- | --- |
-| `:call?` | `false` | pass the full agent call map `{:agent agent :input input :options options}` to the function instead of just the input string |
-
-```clojure
-(def local-runner
-  (k/fn-runner
-   (fn [{:keys [agent input]}]
-     (str (:name agent) ": " input))
-   {:call? true}))
-```
-
-The function may return a plain string, a partial result map, or a full result
-map. Use `fn-runner` when the function is the backend. Use `step` when the
-function is just one local transform inside a larger workflow.
-
-## Process Runner
-
-`process-runner` wraps one fixed command as the backend. The command receives
-the input on stdin and returns text on stdout:
-
-```clojure
-(def upper
-  (k/process-runner ["tr" "a-z" "A-Z"]))
-
-(k/run {:runner upper
-        :workflow (k/agent {:name "shout" :instructions "Uppercase the input."})
-        :input "quiet please"})
-```
-
-An argv vector is executed directly. A string command goes through the shell
-configured by `:shell`:
-
-```clojure
-(k/run {:runner (k/process-runner "tr a-z A-Z")
-        :workflow (k/agent {:name "shout" :instructions "Uppercase the input."})
-        :input "quiet please"})
-```
-
-Options (a second argument after the command):
-
-| Option | Default | Effect |
-| --- | --- | --- |
-| `:trim?` | `true` | trim surrounding whitespace from stdout |
-| `:env` | - | extra environment variables, merged over the current environment |
-| `:dir` | - | working directory for the process |
-| `:timeout-ms` | - | kill the command if it runs longer than this (milliseconds) |
-| `:shell` | `["sh" "-c"]` | argv prefix used for string commands; pass `["bash" "-lc"]` if a command needs the login environment |
-
-The default `:shell` is deliberately not a login shell: profile scripts that
-write to stdout would corrupt the result text. A non-zero exit or a timeout
-yields `{:ok? false :error "..."}`, with stdout, stderr, and the exit code kept
-in `:raw`. Process runners reject agent `:tools` because the fixed command has
-no tool-enforcement contract. Different commands mean different runner values
-- choose the runner before calling `run`.
-
-## Claude Runner
-
-`claude-runner` runs Claude-backed agent calls. Each call is one invocation of
-`claude -p`, the Claude CLI's headless mode:
-
-```clojure
-(def claude
-  (k/claude-runner {:max-turns 4}))
-
-(k/run {:runner claude
-        :workflow (k/agent {:name "reviewer"
-                            :model "haiku"
-                            :instructions "Find one launch risk and one mitigation."
-                            :tools ["mcp__feedback__search"]})
-        :input "enterprise SSO beta"})
-```
-
-The runner reads `:instructions`, `:model`, and `:tools` from the agent map:
-`:instructions` becomes the system prompt, `:model` becomes `--model`, and
-`:tools` is an allowlist passed as `--allowedTools`. A runner-level `:model`
-overrides the agent model. The tool server, MCP config, and credentials must
-already exist in that runner's environment.
-
-Options:
-
-| Option | Default | Effect |
-| --- | --- | --- |
-| `:system-prompt-mode` | `:append` | `:append` sends `:instructions` as `--append-system-prompt`; `:replace` sends `--system-prompt` |
-| `:model` | agent model | model override passed as `--model` |
-| `:max-turns` | - | integer cap on agent turns |
-| `:output-format` | `"json"` | `"json"`, `"text"`, or `"stream-json"` |
-| `:prompt-via` | `:argv` | `:stdin` omits the prompt from the argv and pipes it to the process instead; use it for prompts that can exceed OS argv limits, such as `reduce` fan-in |
-| `:on-event` | - | function called with each stream event; switches the run to `--output-format stream-json` |
-| `:partial-messages?` | - | stream token-level chunks (`--include-partial-messages`, only meaningful with `"stream-json"`) |
-| `:resume` | - | session id to resume (`--resume`); the agent sees prior context |
-| `:continue?` | - | resume the most recent session (`--continue`) |
-| `:permission-mode` | - | e.g. `:acceptEdits`, `:bypassPermissions`, `:default` |
-| `:subagents` | - | vector of `subagent` values, lowered to Claude Code's `--agents` JSON |
-| `:dir` | - | working directory for the run |
-| `:timeout-ms` | - | force-kill a hung run after this many milliseconds |
-| `:claude-bin` | `"claude"` | path to the CLI |
-| `:extra-args` | - | strings appended verbatim; the escape hatch for `--add-dir`, `--mcp-config`, `--disallowedTools`, ... |
-
-When driving real Claude agents as direct responders, use
-`:system-prompt-mode :replace` and disable tools with
-`:extra-args ["--disallowedTools" "..."]` so they answer from their
-instructions instead of inheriting Claude Code's interactive persona.
-
-## Codex Runner
-
-`codex-runner` runs Codex-backed agent calls. Each call is one invocation of
-`codex exec`, Codex CLI's non-interactive mode:
-
-```clojure
-(def codex
-  (k/codex-runner {:dir "."
-                   :sandbox :read-only
-                   :timeout-ms 120000}))
-
-(k/run {:runner codex
-        :workflow (k/agent {:name "reviewer"
-                            :instructions "Review the current branch and return concrete issues."
-                            :model "gpt-5"})
-        :input "Check correctness and missing tests."})
-```
-
-Options:
-
-| Option | Default | Effect |
-| --- | --- | --- |
-| `:dir` / `:cwd` | - | working directory for the run (`--cd`) |
-| `:model` | - | model override; takes precedence over the agent's `:model` |
-| `:sandbox` | `:read-only` | sandbox mode, e.g. `:read-only` or `:workspace-write` |
-| `:env` | - | extra environment variables |
-| `:timeout-ms` | - | kill the subprocess after this many milliseconds |
-| `:trim?` | `true` | trim stdout before returning result text |
-| `:ephemeral?` | `true` | pass `--ephemeral` |
-| `:skip-git-repo-check?` | `true` | pass `--skip-git-repo-check` |
-| `:color` | `:never` | color mode |
-| `:codex-bin` | `"codex"` | CLI executable |
-| `:extra-args` | - | strings appended before the prompt; use for installed-version-specific flags |
-
-The full prompt - agent name, instructions, and the flowing workflow input -
-is written to stdin, with `-` as the `codex exec` positional prompt. (`codex
-exec` only reads stdin when the positional prompt is absent or `-`, and stdin
-also avoids OS argv-size limits on large fan-in prompts.) A non-zero exit or a
-timeout yields `{:ok? false :error "..."}`.
-
-`codex-runner` does not translate or enforce agent `:tools`; configure Codex's
-sandbox and installed capabilities on the runner instead. A non-empty agent
-tool list is rejected.
-
-## ACP Runner
-
-`acp-runner` runs any Agent Client Protocol agent process that speaks stdio
-JSON-RPC:
-
-```clojure
-(def acp
-  (k/acp-runner
-   {:command ["my-acp-agent"]
-    :cwd "."
-    :mcp-servers []
-    :permission-policy :reject}))
-
-(k/run {:runner acp
-        :workflow (k/agent {:name "reviewer"
-                            :instructions "Review the current branch."
-                            :model "sonnet"})
-        :input "Check for correctness and missing tests."})
-```
-
-The ACP agent is the subprocess. Karcarthy folds the agent's `:instructions`
-into the `session/prompt` text and sends `:model` through ACP session config
-options when the agent advertises a `model` option.
-
-The result maps the ACP `stopReason` onto `:ok?`: only an explicit `end_turn`
-is success. A missing reason or a turn that ends with `refusal`,
-`cancelled`, `max_tokens`, or `max_turn_requests` returns `{:ok? false}`
-with an `:error`, keeping `:stop-reason` and any partial `:text` — so
-`branch`, `route`, and `revise` treat a refusal as a failure, not an answer.
-
-Options:
-
-| Option | Default | Effect |
-| --- | --- | --- |
-| `:command` | - | argv vector for the ACP agent process |
-| `:connection` | - | a connection from `connect!` to reuse across runs |
-| `:cwd` / `:dir` | `"."` | working directory for the ACP session |
-| `:mcp-servers` | - | ACP MCP server specs; falls back to the agent's `:config :mcp-servers`, then `[]`. `http`/`sse` specs require the agent to advertise the matching `mcpCapabilities` flag; stdio specs always work |
-| `:client-capabilities` | `{}` | advertised ACP client capabilities. File reads/writes and terminals are served only when their corresponding capability is enabled |
-| `:auth-method` | - | id of an authentication method advertised during initialization; authentication runs before session creation |
-| `:auth-method-selector` | - | function of the advertised authentication method vector, returning an id |
-| `:prompt-content` | - | vector of additional ACP content blocks appended to the text prompt; image, audio, and embedded resource blocks are capability-gated |
-| `:config-options` | - | map of ACP session config option ids/categories to advertised values; refreshed option lists are used after each change |
-| `:strict-config?` | - | throw when a requested config option is unavailable |
-| `:permission-policy` | `:reject` | `:reject`, `:allow`, or `:cancel` |
-| `:permission-handler` | - | function of the permission request, returning an option id or ACP outcome map |
-| `:request-handler` | - | function handling custom ACP agent-to-client requests |
-| `:on-event` | - | function called with every ACP JSON-RPC message received |
-| `:timeout-ms` | - | max wait per ACP message before sending `session/cancel` for an active session |
-| `:cancel-grace-ms` | `1000` | wait after cancellation before force-killing an unresponsive ACP process |
-
-Without further configuration each run spawns its own agent process. ACP is
-designed for long-lived connections, so for repeated runs create one with
-`connect!` and pass it as `:connection` - each run then costs one
-`session/new` and one prompt turn instead of a process spawn plus
-`initialize`:
-
-```clojure
-(require '[karcarthy.runner.acp :as acp])
-
-(def conn (acp/connect! {:command ["my-acp-agent"]}))
-(def runner (k/acp-runner {:connection conn}))
-;; ... many runs ...
-(acp/close! conn)
-```
-
-Prompt turns on one connection are serialized; give parallel branches their
-own connections. When the agent advertises `sessionCapabilities.close`, each
-run closes its session after the prompt turn so long-lived connections do not
-accumulate agent-side resources. A malformed wire message marks a reused
-connection unusable instead of risking a desynchronized second run.
-
-Terminal execution is deliberately opt-in because it runs agent-requested
-commands on the client machine. Advertise `{:terminal true}` only when that is
-appropriate. Karcarthy implements `terminal/create`, `output`, `wait_for_exit`,
-`kill`, and `release`; output is UTF-8-safe and bounded by the request's
-`outputByteLimit`, and unreleased processes are killed when the run ends.
-
-## OpenAI Runner
-
-`openai-runner` runs OpenAI-backed agent calls through the OpenAI Agents SDK.
-The SDK is Python, so the runner shells out to a bundled bridge script,
-sending a JSON request on stdin and reading a JSON result on stdout:
-
-```clojure
-(k/run {:runner (k/openai-runner {})
-        :workflow (k/agent {:name "triage"
-                            :instructions "Route to refund, sales, or support."})
-        :input "I was charged twice."})
-```
-
-It requires a `python3` with the `openai-agents` package installed and
-`OPENAI_API_KEY` in the environment; the run fails without that setup.
-
-The bridge currently supports model selection and subagent handoffs, not agent
-tool allowlists. A non-empty agent `:tools` value is therefore rejected.
-
-Options:
-
-| Option | Default | Effect |
-| --- | --- | --- |
-| `:python-bin` | `"python3"` | python executable |
-| `:script` | bundled bridge script | path to an alternative bridge script |
-| `:model` | - | model override; takes precedence over the agent's `:model` |
-| `:subagents` | - | vector of `subagent` values, lowered to Agents SDK handoffs |
-| `:dir` / `:env` | - | working directory / extra environment for the process |
-| `:timeout-ms` | - | kill the subprocess after this many milliseconds |
-
-A timeout or unparseable bridge output yields `{:ok? false :error "..."}`,
-with stderr kept in `:raw`.
-
-## Mixed Backends
-
-Most workflows should use one runner for the whole run. If you truly need mixed
-backends, make that dispatch visible in a custom runner:
-
-```clojure
-(require '[karcarthy.core :as core])
-
-(def hybrid
-  (let [mock (k/mock-runner)
-        acp  (k/acp-runner {:command ["my-acp-agent"]})]
-    (reify core/Runner
-      (-run [_ agent input options]
-        (if (= "external-reviewer" (:name agent))
-          (core/run-agent acp agent input options)
-          (core/run-agent mock agent input options))))))
-
-(k/run {:runner hybrid
-        :workflow workflow
-        :input "review this release"})
-```
-
-That is ordinary host code, not workflow data. The workflow remains a visible
-description of the work; the runner remains the execution boundary.
-
-## Subagents
-
-Use `subagent` when the selected runner supports native delegation inside one
-agent session:
-
-```clojure
-(def security-reviewer
-  (k/subagent "security-reviewer"
-    "Use for auth, secrets, injection, permission, and data exposure review."
-    "Review like a security owner. Return concrete findings with file refs."
-    :tools ["Read" "Grep" "Glob"]
-    :model "sonnet"))
-
-(def claude
-  (k/claude-runner {:subagents [security-reviewer]}))
-
-(k/run {:runner claude
-        :workflow (k/agent {:name "review-coordinator"
-                            :instructions "Review this branch. Use the security-reviewer subagent where useful."
-                            :tools ["Agent" "Read" "Grep" "Glob"]})
-        :input "Review current changes."})
-```
-
-`openai-runner` accepts `:subagents` too. Each subagent is lowered to an
-OpenAI Agents SDK handoff - `:name`, `:instructions`, the description as the
-handoff description, and `:model` when set:
-
-```clojure
-(k/openai-runner {:subagents [security-reviewer]})
-```
-
-Codex custom agents are file-backed TOML definitions under `.codex/agents/`
-or `~/.codex/agents/`, so `codex-runner` has no `:subagents` option. Instead,
-`karcarthy.runner.codex/subagent->config` lowers a subagent to Codex
-custom-agent config keys and `agents->config` builds the global `[agents]`
-keys; both return maps for the caller to render and write - they do not write
-files.
-
-Beyond `:tools` and `:model`, `subagent` accepts `:disallowed-tools`,
-`:permission-mode`, `:sandbox-mode`, `:mcp-servers`, `:max-turns`, `:skills`,
-`:initial-prompt`, `:memory`, `:effort`, `:reasoning-effort`, `:background?`,
-`:isolation`, `:color`, `:nicknames`, `:hooks`, and `:config`. Unknown options
-throw, and each runner lowers the subset its backend understands.
-
-Subagents are runner configuration, not workflow nodes. A workflow `branch` is
-Karcarthy orchestration; a subagent is provider-native delegation inside one
-runner call.
+- [Programs](/docs/workflows) shows orchestration in ordinary Clojure.
+- [Library API](/docs/reference/api) lists the functions and macros.
+- [Contracts](/docs/reference/schema) specifies runtime values and events.

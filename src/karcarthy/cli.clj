@@ -1,334 +1,39 @@
 (ns karcarthy.cli
-  "Command-line entry point and language-agnostic JSON bridge.
-
-      ./bin/karcarthy agent echo --instructions \"Echo the input.\" hi
-      ./bin/karcarthy run workflow.json \"what is a monad?\"
-      ./bin/karcarthy json < request.json
-
-  A <workflow> is JSON mirroring the EDN workflow:
-    {\"type\":\"agent\" \"name\":_ \"instructions\":_ \"model\":?}
-    {\"type\":\"pipe\" \"steps\":[<workflow> ...]}
-    {\"type\":\"branch\" \"branches\":[<workflow> ...] \"max-concurrency\":?}
-    {\"type\":\"delegate\" \"planner\":<workflow> \"worker\":<workflow> \"max-concurrency\":?}
-    {\"type\":\"reduce\" \"source\":<branch-or-delegate-workflow> \"reducer\":<workflow>}
-    {\"type\":\"route\" \"source\":<workflow> \"routes\":{\"label\":<workflow>} \"default\":<workflow>?}
-    {\"type\":\"continue\" \"source\":<workflow> \"to\":<workflow> \"prompt\":?}
-    {\"type\":\"revise\" \"worker\":<workflow> \"evaluator\":<workflow> \"max-rounds\":?}
-    {\"type\":\"dynamic\" \"agent\":<agent> \"max-steps\":?}   (experimental)
-  Response is the karcarthy result map as JSON. \"runner\" is \"mock\" (default,
-  offline) or \"claude\". For deterministic offline demos, add
-  \"mock-responses\": {\"agent-name\":\"text\"}."
+  "Small executable entry point. Agent programs are authored in Clojure; the
+  former JSON workflow CLI has been removed."
   (:gen-class)
-  (:require [clojure.data.json :as json]
-            [clojure.string :as str]
-            [karcarthy.core :as k]
-            [karcarthy.dynamic :as dyn]
-            [karcarthy.orchestrate :as o]
-            [karcarthy.runner.claude :as cc]
-            [karcarthy.workflow :as wf]))
+  (:require [karcarthy.acp :as acp]
+            [karcarthy.demo :as demo]))
 
-(declare json->workflow)
-
-(defn- reject-json-unknown! [m type]
-  (when-let [supported ((wf/json-node-keys) type)]
-    (k/reject-unknown! (str "workflow " type) supported m))
-  m)
-
-(def ^:dynamic *exit-on-error*
-  "When true (the default), `-main` exits the JVM with status 1 after printing
-  an error. Rebind to false to keep failures in-process (REPL, tests)."
-  true)
-
-(def ^:private help-text
-  (str
-   "karcarthy\n"
-   "\n"
-   "Usage:\n"
-   "  karcarthy agent NAME [PROMPT...] --instructions TEXT [options]\n"
-   "  karcarthy run WORKFLOW.json [PROMPT...] [options]\n"
-   "  karcarthy json < request.json\n"
-   "  karcarthy demo\n"
-   "\n"
-   "Options:\n"
-   "  --runner NAME          Runner to use: mock (default) or claude\n"
-   "  --instructions TEXT     Agent instructions for `agent`\n"
-   "  --input TEXT            Input text instead of positional PROMPT\n"
-   "  --model NAME            Model hint on the agent node\n"
-   "  --tool NAME             Add a tool allowlist entry for the selected runner; repeatable\n"
-   "  --mock-response A=TEXT  Deterministic mock response for agent A; repeatable\n"
-   "  --json                  Print the full result JSON\n"
-   "  --pretty                Pretty-print JSON\n"
-   "  -h, --help              Show this help\n"
-   "\n"
-   "Examples:\n"
-   "  karcarthy agent echo --instructions \"Echo the input.\" hi\n"
-   "  karcarthy run launch.json \"Prepare a launch review.\"\n"
-   "  karcarthy run launch.json --input \"Prepare a launch review.\" --json\n"
-   "  karcarthy json < request.json\n"))
-
-(defn- json->routes [routes]
-  (reduce-kv (fn [acc label f] (assoc acc label (json->workflow f))) {} routes))
-
-(defn json->workflow
-  "Translate a JSON-parsed workflow map (string keys) into karcarthy workflow data.
-  Route labels stay strings."
-  [m]
-  (let [type             (get m "type")
-        _                (reject-json-unknown! m type)
-        g                #(get m %)
-        with-concurrency #(cond-> %
-                            (g "max-concurrency") (assoc :max-concurrency (g "max-concurrency")))]
-    (case type
-      "agent"       (k/agent (cond-> {:name         (g "name")
-                                      :instructions (g "instructions")}
-                       (g "description") (assoc :description (g "description"))
-                       (g "model")       (assoc :model (g "model"))
-                       (g "tools")       (assoc :tools (g "tools"))
-                       (g "config")      (assoc :config (g "config"))))
-      "pipe"        (apply o/pipe (map json->workflow (g "steps")))
-      "branch"      (with-concurrency
-                      (o/branch (map json->workflow (g "branches"))))
-      "delegate"    (with-concurrency
-                      (o/delegate (json->workflow (g "planner"))
-                                  (json->workflow (g "worker"))))
-      "reduce"      (o/reduce (json->workflow (g "source"))
-                               (json->workflow (g "reducer")))
-      "route"       (let [source (json->workflow (g "source"))
-                          routes (json->routes (g "routes"))]
-                      (if (contains? m "default")
-                        (o/route source routes :default (json->workflow (g "default")))
-                        (o/route source routes)))
-      "continue"    (let [source (json->workflow (g "source"))
-                          to     (json->workflow (g "to"))]
-                      (if (contains? m "prompt")
-                        (o/continue source to :prompt (g "prompt"))
-                        (o/continue source to)))
-      "revise"      (let [worker    (json->workflow (g "worker"))
-                          evaluator (json->workflow (g "evaluator"))]
-                      (if-let [n (g "max-rounds")]
-                        (o/revise worker evaluator :max-rounds n)
-                        (o/revise worker evaluator)))
-      "dynamic"     (if-let [n (g "max-steps")]
-                      (dyn/dynamic (json->workflow (g "agent")) :max-steps n)
-                      (dyn/dynamic (json->workflow (g "agent"))))
-      (throw (ex-info (str "unknown workflow type: " (pr-str (g "type"))) {:node m})))))
-
-(defn- mock [responses]
-  (if (map? responses)
-    (k/mock-runner
-     (fn [{:keys [agent prompt]}]
-       (if (contains? responses (:name agent))
-         (str (get responses (:name agent)))
-         (str "[" (:name agent) "] " prompt))))
-    (k/mock-runner)))
-
-(def ^:private claude-workdir "/tmp/karc")
-
-(defn- request->runner
-  "Build the runner named in the request. \"claude\" uses lean sub-agent
-  defaults (replace mode, tools off) so cross-language agents answer directly."
-  [req]
-  (case (get req "runner" "mock")
-    "mock" (mock (get req "mock-responses"))
-    "claude" (do (.mkdirs (java.io.File. ^String claude-workdir))
-                 (cc/claude-runner
-                  {:system-prompt-mode :replace
-                   :max-turns          4
-                   :model              "haiku"
-                   :dir                claude-workdir
-                   :extra-args         ["--disallowedTools"
-                                        "Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite"]}))
-    (throw (ex-info (str "unknown runner: " (pr-str (get req "runner")))
-                    {:runner (get req "runner")
-                     :supported ["mock" "claude"]}))))
-
-(defn- result->json [r]
-  (try
-    (json/write-str r)
-    (catch Throwable _
-      (json/write-str (select-keys r [:karcarthy/type :ok? :text :agent :rounds :subtasks])))))
-
-(defn- throwable->result [t]
-  (k/result {:ok? false
-             :error (.getMessage t)
-             :exception (.getName (class t))}))
-
-(defn- result->pretty-json [r]
-  (try
-    (with-out-str (json/pprint r))
-    (catch Throwable _
-      (with-out-str (json/pprint (select-keys r [:karcarthy/type :ok? :text :agent :rounds :subtasks]))))))
-
-(defn- result->text [r]
-  (let [text (or (:text r) (get r "text"))]
-    (if (k/ok? r)
-      (or text (result->json r))
-      (let [error (or (:error r) (get r "error") "run failed")
-            error-text (if (keyword? error) (name error) (str error))]
-        (str "karcarthy failed: " error-text
-             (when (and (seq text) (not= text error-text))
-               (str "\n" text)))))))
-
-(defn- invoke! [req]
-  (let [workflow (json->workflow (get req "workflow"))
-        input    (get req "input" "")
-        runner   (request->runner req)
-        options  (update-keys (get req "options" {}) keyword)]
-    (o/run {:runner runner
-            :workflow workflow
-            :input input
-            :options options})))
-
-(defn- render [result opts]
-  (cond
-    (:pretty? opts) (result->pretty-json result)
-    (:json? opts)   (result->json result)
-    :else           (str (result->text result) "\n")))
-
-(defn- json! [s]
-  (json/read-str s))
-
-(defn- source! [path]
-  (if (= "-" path)
-    (slurp *in*)
-    (slurp path)))
-
-(defn- value! [flag]
-  (throw (ex-info (str flag " requires a value") {:flag flag})))
-
-(defn- mock! [s]
-  (let [[k v] (str/split s #"=" 2)]
-    (when (or (str/blank? k) (nil? v))
-      (throw (ex-info "--mock-response expects AGENT=TEXT" {:value s})))
-    [k v]))
-
-(defn- args->opts [args]
-  (loop [args (seq args)
-         opts {:positionals [] :tools [] :mock-responses {}}]
-    (if-not args
-      opts
-      (let [[arg & more] args]
-        (case arg
-          "--runner"       (if-let [v (first more)]
-                              (recur (next more) (assoc opts :runner v))
-                              (value! arg))
-          "--instructions"  (if-let [v (first more)]
-                              (recur (next more) (assoc opts :instructions v))
-                              (value! arg))
-          "--input"         (if-let [v (first more)]
-                              (recur (next more) (assoc opts :input v))
-                              (value! arg))
-          "--model"         (if-let [v (first more)]
-                              (recur (next more) (assoc opts :model v))
-                              (value! arg))
-          "--tool"          (if-let [v (first more)]
-                              (recur (next more) (update opts :tools conj v))
-                              (value! arg))
-          "--mock-response" (if-let [v (first more)]
-                              (let [[k text] (mock! v)]
-                                (recur (next more) (assoc-in opts [:mock-responses k] text)))
-                              (value! arg))
-          "--json"          (recur more (assoc opts :json? true))
-          "--pretty"        (recur more (assoc opts :json? true :pretty? true))
-          "--help"          (recur more (assoc opts :help? true))
-          "-h"              (recur more (assoc opts :help? true))
-          "--"              (update opts :positionals into more)
-          (recur more (update opts :positionals conj arg)))))))
-
-(defn- input [opts prompt]
-  (or (:input opts)
-      (some->> prompt seq (str/join " "))
-      ""))
-
-(defn- request-opts [req opts]
-  (cond-> req
-    (:runner opts)                         (assoc "runner" (:runner opts))
-    (seq (:mock-responses opts))            (assoc "mock-responses" (:mock-responses opts))))
-
-(defn- agent->request [opts]
-  (let [[name & prompt] (:positionals opts)]
-    (when-not name
-      (throw (ex-info "agent requires NAME" {})))
-    (request-opts
-      {"workflow" (cond-> {"type"         "agent"
-                           "name"         name
-                           "instructions" (or (:instructions opts) "Respond to the input.")}
-                    (:model opts)       (assoc "model" (:model opts))
-                    (seq (:tools opts)) (assoc "tools" (:tools opts)))
-       "input"    (input opts prompt)}
-      opts)))
-
-(defn- json->request [m opts input]
-  (request-opts
-    (if (contains? m "workflow")
-      (assoc m "input" (or input (get m "input" "")))
-      {"workflow" m
-       "input"    (or input "")})
-    opts))
-
-(defn- file->request [opts]
-  (let [[path & prompt] (:positionals opts)]
-    (when-not path
-      (throw (ex-info "run requires WORKFLOW.json" {})))
-    (json->request (json! (source! path))
-                   opts
-                   (or (:input opts)
-                       (some->> prompt seq (str/join " "))))))
-
-(defn- json-command! []
-  (try
-    (invoke! (json! (slurp *in*)))
-    (catch Throwable t
-      (throwable->result t))))
-
-(defn- rendered [result opts]
-  {:out (render result opts)
-   :exit (if (k/ok? result) 0 1)})
-
-(defn- dispatch! [args]
-  (let [[cmd & rest] args
-        opts (args->opts rest)]
-    (cond
-      (or (:help? opts) (= cmd "help") (= cmd "--help") (= cmd "-h"))
-      {:out help-text :exit 0}
-
-      (= cmd "agent")
-      (rendered (invoke! (agent->request opts)) opts)
-
-      (= cmd "run")
-      (rendered (invoke! (file->request opts)) opts)
-
-      (= cmd "json")
-      (rendered (json-command!) (assoc opts :json? true))
-
-      (= cmd "demo")
-      (rendered (invoke! {"workflow" {"type" "agent"
-                                      "name" "echo"
-                                      "instructions" "Echo the input."}
-                          "input"    "hi"})
-                opts)
-
-      (nil? cmd)
-      {:out help-text :exit 0}
-
-      :else                            (throw (ex-info (str "unknown command: " cmd) {:command cmd})))))
-
-(defn- execute [args]
-  (try
-    (if (and (empty? args) (System/console))
-      {:out help-text :exit 0}
-      (dispatch! args))
-    (catch Throwable t
-      {:out ""
-       :err (str "karcarthy: " (.getMessage t) "\n\n" help-text)
-       :exit 1})))
+(def help
+  (str "karcarthy - native Clojure agent harness\n\n"
+       "Usage:\n"
+       "  karcarthy demo [input]   run the offline model/tool-loop demo\n"
+       "  karcarthy acp ns/var     serve an Agent or Agent factory over ACP\n"
+       "  karcarthy --help         show this help\n\n"
+       "Define programs with karcarthy/defagent and run them with karcarthy/run!.\n"))
 
 (defn -main [& args]
-  (let [{:keys [out err exit]} (execute args)]
-    (when err
-      (binding [*out* *err*] (print err) (flush)))
-    (print out)
-    (flush)
-    (when (and *exit-on-error* (pos? exit))
-      (System/exit exit))
-    exit))
+  (let [command (first args)]
+    (cond
+      (= "demo" command)
+      (apply demo/-main (rest args))
+
+      (= "acp" command)
+      (if-let [qualified-symbol (second args)]
+        (acp/serve-var! qualified-symbol)
+        (do
+          (binding [*out* *err*]
+            (println "Usage: karcarthy acp namespace/agent-var"))
+          (System/exit 2)))
+
+      (or (nil? command) (contains? #{"--help" "-h"} command))
+      (do (print help) (flush))
+
+      :else
+      (do
+        (binding [*out* *err*]
+          (println "Unknown command:" command)
+          (print help)
+          (flush))
+        (System/exit 2)))))

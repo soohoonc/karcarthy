@@ -10,6 +10,11 @@
   :test {:extra-paths ["test"]
          :main-opts   ["-m" "karcarthy.test-runner"]}
 
+  ;; Explicitly paid/networked: KARCARTHY_LIVE=1 OPENAI_API_KEY=... \
+  ;; clojure -M:live-test
+  :live-test {:extra-paths ["test"]
+              :main-opts   ["-m" "karcarthy.live-test"]}
+
   ;; Build/install jars:  clojure -T:build jar | uber | all | install
   :build {:deps {io.github.clojure/tools.build
                  {:git/tag "v0.9.6" :git/sha "b7258d84b36b7762b770819443042fdb8edca776"}}

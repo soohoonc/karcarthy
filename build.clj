@@ -25,7 +25,7 @@
                 :basis     @basis
                 :src-dirs  ["src"]
                 :scm       {:url "https://github.com/soohoonc/karcarthy"}})
-  ;; ship sources + resources (the openai runner) - Clojure libs distribute source
+  ;; Clojure libraries distribute source and packaged prompt resources.
   (b/copy-dir {:src-dirs ["src" "resources"] :target-dir class-dir}))
 
 (defn- compile-main []

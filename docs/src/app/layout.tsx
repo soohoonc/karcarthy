@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     default: 'karcarthy docs',
     template: '%s | karcarthy docs',
   },
-  description: "Agent orchestration as data, inspired by Lisp's homoiconicity.",
+  description: 'A homoiconic Clojure Agent harness.',
 };
 
 export default function Layout({ children }: LayoutProps<'/'>) {

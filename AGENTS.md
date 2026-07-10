@@ -1,68 +1,88 @@
 # karcarthy - guide for Codex
 
-Agent **orchestration as data**, inspired by Lisp's homoiconicity. Agents,
-tools, and workflows are plain EDN data; karcarthy delegates the inner agent
-loop (model calls + tool execution) to an external **runner** instead of
-reimplementing it.
+karcarthy is a native, homoiconic Clojure agent harness. It owns the model/tool
+loop. Agents, tools, and orchestration are executable Clojure values and forms;
+model-authored Agents are read, expanded, checked, evaluated, and invoked by
+the same Runtime.
+
+There is no Runner protocol, EDN/JSON workflow DSL, or separate dynamic system.
+Do not reintroduce `pipe`, `branch`, workflow nodes, runner adapters, or a JSON
+workflow bridge.
 
 ## Commands
 
 ```bash
-clojure -M:test                                    # offline test suite (no network/API)
-clojure -M -m karcarthy.demo                       # offline demo
-clojure -M -e '(load-file "examples/clojure/live.clj")'       # live demo (paid Claude CLI)
+clojure -M:test
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
+clojure -M -m karcarthy.demo
+clojure -M -e '(load-file "examples/clojure/generated_calculator.clj")'
+clojure -M -m karcarthy.acp your.namespace/agent-var
+clojure -T:build jar
+cd docs && npm run lint && npm run types:check && npm run build
 ```
 
 ## Layout
 
 | File | Role |
-|------|------|
-| `src/karcarthy.clj` | facade namespace re-exporting the public API under one alias (`(require '[karcarthy :as k])`) |
-| `src/karcarthy/core.clj` | data model (`agent`, `subagent`), spec validation, `result`, the `Runner` protocol, `mock-runner`, `fn-runner`, and the `defagent` / `defsubagent` macros |
-| `src/karcarthy/orchestrate.clj` | the workflow DSL - `pipe` / `step` / `branch` / `delegate` / `reduce` / `revise` / `route` / `continue`, the `run` interpreter (a `run-node` multimethod), and `defworkflow` / `workflow?` |
-| `src/karcarthy/dynamic.clj` | dynamic workflows: the `dynamic` op-loop node, `agent-ref` / `workflow-ref`, mutable run state, and op application (`step!`) |
-| `src/karcarthy/workflow.clj` | canonical declarative workflow grammar used by validation, EDN/JSON schemas, and the CLI wire allowlist |
-| `src/karcarthy/schema.clj` | EDN and JSON schema reference values for public workflow data |
-| `src/karcarthy/rewrite.clj` | structural workflow rewrites: `agents`, `over`, and `configure` |
-| `src/karcarthy/self.clj` | safe EDN parsing for agent-authored workflows and agents; `evolve` extension node |
-| `src/karcarthy/edn.clj` | internal helper extracting the first EDN map from model output (`clojure.edn`, never `eval`) |
-| `src/karcarthy/observe.clj` | internal observation-event helpers shared by `core` and `orchestrate` (`:observe` callback) |
-| `src/karcarthy/scope.clj` | execution scope for concurrency, deadlines, and cancellation shared by workflow nodes |
-| `src/karcarthy/terminal.clj` | internal lifecycle for capability-gated ACP client terminals and bounded output capture |
-| `src/karcarthy/proc.clj` | subprocess execution with timeout, shared by the subprocess-backed runners |
-| `src/karcarthy/cli.clj` | CLI entry point and language-agnostic JSON bridge behind `bin/karcarthy` |
-| `src/karcarthy/demo.clj` | offline demo (`clojure -M -m karcarthy.demo`) |
-| `src/karcarthy/runner/claude.clj` | Claude runner, backed by `claude -p` |
-| `src/karcarthy/runner/codex.clj` | Codex runner, backed by `codex exec`, plus Codex custom-agent config lowering |
-| `src/karcarthy/runner/acp.clj` | ACP (Agent Client Protocol) runner over stdio JSON-RPC |
-| `src/karcarthy/runner/process.clj` | process and shell runners; wrap CLIs or shell commands as agents (prompt → stdin, stdout → result) |
-| `src/karcarthy/runner/openai.clj` | OpenAI runner via `resources/karcarthy/openai_runner.py` |
-| `test/…` | mirrors `src/`; the test runner lists namespaces in `test/karcarthy/test_runner.clj` |
+| --- | --- |
+| `src/karcarthy.clj` | Public facade under one alias: `(require '[karcarthy :as k])`. |
+| `src/karcarthy/core.clj` | Recursive Agent/Tool macros and values, contracts, Runtime, model/tool loop, Session integration, child execution, limits, streaming events, approvals, and Runs. |
+| `src/karcarthy/prompt.clj` | Generic instruction composition, prompt-file loading, and access to the packaged `system.md`. |
+| `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `memory-session`. |
+| `src/karcarthy/eval.clj` | Model-authored source reading, macroexpansion, evaluation, verification, and program events. |
+| `src/karcarthy/model/responses.clj` | Complete and SSE-streaming Responses-compatible HTTP transport. It translates model I/O only. |
+| `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a local directory. |
+| `resources/karcarthy/system.md` | Readable system prompt packaged in library and standalone jars. |
+| `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
+| `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
+| `src/karcarthy/demo.clj` | Offline fake-model/tool-loop demonstration. |
+| `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
+| `test/karcarthy/core_test.clj` | Kernel, model loop, instructions/context, Sessions, streaming, composition, limits, and events. |
+| `test/karcarthy/eval_test.clj` | Generated-form lifecycle and recursion. |
+| `test/karcarthy/responses_test.clj` | Pure translation plus offline complete and SSE endpoint integration tests. |
+| `test/karcarthy/tools_test.clj` | Local tools and generic prompt composition. |
+| `test/karcarthy/mcp_test.clj` | MCP initialization, discovery, execution, and shutdown. |
+| `test/karcarthy/acp_test.clj` | ACP session lifecycle, permissions, updates, and MCP bridging. |
+| `test/karcarthy/live_test.clj` | Opt-in paid OpenAI test of recursive `(agent)` generation. |
 
 ## Conventions
 
-- **Dependencies: Maven Central only.** Clojars is blocked in the dev sandbox.
-  HTTP uses Java's built-in client or shelling out - no HTTP-client dep.
-- **Everything is data.** Each entity is a map tagged with `:karcarthy/type`
-  (`:agent`, `:result`, `:pipe`, `:branch`, …). Prefer plain maps over records.
-- **A runner** implements `karcarthy.core/Runner` (`-run`) and returns a
-  result map: `{:karcarthy/type :result :ok? … :text … :agent … :raw …}`.
-- **Failures are fail-closed.** `:ok?` is strictly Boolean, unaccepted revision
-  is failure, and process/protocol failure wins over success-looking payloads.
-- **Adding a workflow node:** add its field grammar in `workflow.clj`, a
-  constructor and `run-node` defmethod in `orchestrate.clj`, then tests. EDN/JSON
-  schema shapes and the CLI key allowlist are derived from the grammar.
-- **Model-facing EDN protocols self-repair.** Nodes that parse model replies
-  (planner, evaluator, router, dynamic ops) re-ask the model with the error and
-  its previous reply before failing (`:edn-retries` run option, default 1).
-  New protocol-reading nodes should go through `elicit!` in `orchestrate.clj`.
-- **Adding a test namespace:** register it in `test/karcarthy/test_runner.clj`
-  (zero-dependency test runner; no Clojars test libs).
-- **Prefer pure, offline-testable builders** (e.g. `karcarthy.runner.claude/command`,
-  `karcarthy.runner.openai/request`); gate any live/paid calls behind env vars
-  (`KARCARTHY_LIVE`) so `clojure -M:test` stays offline and free.
-- **Driving real Claude sub-agents:** use `:system-prompt-mode :replace` and
-  disable tools (`:extra-args ["--disallowedTools" "…"]`) so they answer
-  directly instead of inheriting Claude's interactive persona.
+- **The harness owns semantics.** A model transport accepts one normalized
+  request and returns `{:type :final ...}` or `{:type :tool-calls ...}`. A
+  streaming transport may emit deltas before returning that authoritative
+  response. It never executes tools, manages agents, or owns Sessions.
+- **Keep the inner loop small.** Coding capabilities, hosted provider tools,
+  MCP discovery, and ACP serving adapt to ordinary Tools around the kernel.
+  Prompts must describe the capabilities actually installed.
+- **Clojure is the orchestration language.** Use `let`, `if`, `case`,
+  `loop/recur`, functions, macros, `invoke!`, and structured child execution.
+- **Agents and Tools retain code.** Preserve `:source-form` and
+  `:expanded-form` when changing macros or evaluation.
+- **`agent` is recursive.** `(agent config ...)` constructs an Agent;
+  zero-arity `(agent)` is the model-facing tool that accepts and runs another
+  ordinary Agent form. Do not create a separate dynamic/expansion primitive.
+- **Instructions are model-visible; context is local.** `:instructions` is a
+  string or Runtime-view function. `:context` is dependency injection and is
+  never exposed automatically. Do not add request-mutation hooks such as
+  `prepare-step`.
+- **Conversation history belongs to a Session.** Runs are stateless unless the
+  caller supplies `:session`. `memory-session` is process-local; durable stores
+  implement `karcarthy.session/Session` outside the kernel. Do not call a
+  conversation store a checkpoint or general workflow state.
+- **Contracts fail closed.** Validate context, Agent input/output, and Tool
+  input/output. Model/tool/protocol failures become structured failed Runs.
+- **Generated code is intentionally evaluated.** Reader evaluation is disabled
+  during the read phase, but checked forms are later evaluated as JVM Clojure.
+  Full-trust evaluation is the default; do not replace it with an EDN
+  interpreter in the name of safety.
+- **Limits are shared.** Recursive children consume root model, token,
+  generated-form, depth, concurrency, cancellation, and deadline budgets.
+- **Observation is part of the product.** New effects need stable event types
+  and lineage.
+- **Dependencies: Maven Central only.** HTTP uses Java's built-in client.
+- Keep live/paid model tests opt-in. The normal suite must stay offline and
+  deterministic through `fake-model`.
+- Register new offline test namespaces in `test/karcarthy/test_runner.clj`;
+  paid tests belong behind the `:live-test` alias and `KARCARTHY_LIVE=1`.
 
-Contribution workflow and PR expectations: [CONTRIBUTING.md](CONTRIBUTING.md).
+Contribution expectations: [CONTRIBUTING.md](CONTRIBUTING.md).
