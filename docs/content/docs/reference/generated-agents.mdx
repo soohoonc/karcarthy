@@ -1,17 +1,35 @@
 ---
 title: Generated Agents
-description: Source format, compilation pipeline, evaluation namespace, limits, events, and security for model-created Agents.
+description: How a model writes and runs a new Clojure Agent.
 ---
 
-The zero-arity `(k/agent)` Tool is the model-facing use of karcarthy's
-homoiconic representation. It accepts the same Clojure Agent form a developer
-would write, treats that form as data through reading and macroexpansion, then
-evaluates and runs the resulting Agent. Applications can use the same
-compilation path directly with `compile-agent!`.
+Every model Agent can write a new Clojure `agent` form and run it:
 
-## Tool input
+```clojure
+(k/defagent architect
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Solve the task. Write a specialist when it is useful."
+   :output string?})
+```
 
-The Tool is named `agent` and accepts:
+No generation flag or manually constructed Tool is required.
+
+## What the model sees
+
+The built-in `agent` Tool is described as a small programming manual. It tells
+the model:
+
+- when a specialist or custom workflow is useful;
+- when direct Tool use or an existing Agent is preferable;
+- the two accepted `(agent ...)` forms;
+- which model configuration, Tools, and Agents generated code may reference;
+- what information a generated Agent receives; and
+- how its output and failures return.
+
+The actual model, Tool, and Agent catalog is generated for each Agent call, so
+the description never advertises an unavailable symbol.
+
+The call itself is:
 
 ```json
 {
@@ -20,109 +38,97 @@ The Tool is named `agent` and accepts:
 }
 ```
 
-`source` must contain exactly one top-level Clojure form whose evaluation
-returns an Agent. `input` is passed to that Agent unchanged. Use a prompt string
-for a model-backed Agent or any value accepted by a Clojure-body Agent.
+`source` is exactly one top-level Clojure `agent` form. `input` may be any JSON
+value; the generated Agent's `:input` contract validates it after compilation.
 
-## Accepted Agent forms
+## Accepted forms
 
-A standard model-backed Agent:
+A model-driven Agent:
 
 ```clojure
 (agent
  {:name "generated-reviewer"
+  :description "Review one proposed change."
   :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Review the change and return concrete findings."
+  :instructions "Review the supplied change and return concrete findings."
+  :tools [read search]
   :input string?
   :output string?})
 ```
 
-An Agent with a Clojure body:
+A Clojure Agent program:
 
 ```clojure
 (agent
  {:name "generated-review-team"
-  :input map?
-  :output string?}
+  :input string?
+  :output vector?}
  [change]
- (let [reviews (->> [security-reviewer api-reviewer]
-                    (mapv #(future (run! % change)))
-                    (mapv deref)
-                    (mapv :output))]
-   (:output (run! editor {:change change :reviews reviews}))))
+ (->> [security-reviewer api-reviewer]
+      (mapv #(future (run! % change)))
+      (mapv deref)
+      (mapv :output)))
 ```
 
-Symbols such as `security-reviewer` and `editor` must resolve in the evaluation
-namespace.
+The form must evaluate to an Agent. `defagent`, Markdown fences, prose, and
+multiple top-level forms are rejected. A program body has one input binding and
+may use ordinary Clojure, nested `agent` forms, and the symbols advertised in
+the Tool description.
 
-## Compilation pipeline
+## Information boundary
+
+A generated Agent receives exactly the value supplied in `input`. It does not
+receive the parent model's messages, reasoning, previous Tool results, or
+Session history.
+
+Run-local application context is still accessible to Clojure code and Tools
+through `context`. karcarthy does not insert it into the generated Agent's
+model messages.
+
+Its own definition supplies its instructions and capabilities. Its final
+output becomes the result of the `agent` Tool call; the parent model then
+continues and decides how to use that result.
+
+The parent and generated Agent share execution accounting—limits, token usage,
+deadline, cancellation, approvals, and events—but those are harness mechanics,
+not hidden prompt context.
+
+## Compilation
 
 ```text
 source string
-    │
-    ▼
-read-agent-form
-    │ Clojure form
-    ▼
-check-agent-form!
-    │ macroexpanded, checked representation
-    ▼
-eval-agent-form!
-    │ Agent value
-    ▼
-agent?
-    │
-    ▼
-verified Agent
+  → read one top-level Clojure agent list
+  → expand the real agent macro
+  → evaluate the expansion
+  → require an Agent value
+  → validate input
+  → run the Agent
+  → return its output to the parent model
 ```
 
-### Read
+Reader evaluation is disabled while reading. Macroexpansion and Clojure's
+compiler catch malformed forms; Agent and Tool contracts validate their
+boundaries. Clojure is dynamically typed, so this is not whole-program static
+type checking.
 
-`read-agent-form` disables reader evaluation and rejects empty input or more
-than one top-level form.
+## Available symbols
 
-### Expand and check
+Generated code runs in a fresh evaluation namespace. It receives Clojure core,
+the public Agent-program forms (`agent`, `tool`, `run!`, `context`, `model!`,
+and `emit!`), public vars from the selected application namespace, and the Tool
+and Agent values advertised in the dynamic catalog.
 
-`check-agent-form!` macroexpands executable positions in the current Run's
-evaluation namespace. It preserves quoted forms and records the original and
-expanded forms. Agent configuration and referenced contracts are validated
-when the checked form is evaluated.
-
-Clojure is dynamically typed. Boundary contracts validate Agent input/output,
-Tool input/output, and local context; they are not a whole-program static type
-system.
-
-### Evaluate and verify
-
-`eval-agent-form!` evaluates the checked form and requires the result to satisfy
-`agent?`. The resulting Agent retains its source form, expanded form, and
-definition namespace.
-
-### Run the Agent
-
-The `agent` Tool runs the generated Agent inside the current Run. It
-inherits shared usage, deadline, cancellation, approvals, event recording, and
-parallelism policy.
-
-## Evaluation namespace
-
-By default, generated code evaluates in the defining namespace of the parent
-Agent. A root Run may select another namespace:
+A Run may select the application namespace:
 
 ```clojure
 (k/run! architect task
         {:evaluation-namespace 'example.generated})
 ```
 
-The namespace receives Clojure core plus the public Agent-program forms needed
-for composition, including `agent`, `tool`, `run!`, `context`, `model!`, and
-`emit!`. Application Agents, Tools, macros, and contracts must be referred
-or interned in that namespace before generated code can use them.
-
 ## Recursion and limits
 
-A generated Agent can include `(agent)` in its own Tool set and create another
-Agent. The root Run enforces:
+A generated model Agent receives the same built-in `agent` Tool and can write
+another Agent. Bound recursive programs with Run limits:
 
 ```clojure
 {:agent-depth 4
@@ -134,53 +140,24 @@ Agent. The root Run enforces:
  :deadline-ms 300000}
 ```
 
-`generated-forms` is charged before compilation, including failed attempts.
-All descendants share token and model-call counters.
+Compilation emits `:program/read`, `:program/expanded`, `:program/checked`,
+`:program/evaluated`, or `:program/failed` events. `:generated-forms` is charged
+before compilation, including failed attempts.
 
-## Events
+## Direct compilation
 
-Compilation emits:
+A Clojure Agent program can use the same compiler directly:
 
 ```clojure
-:program/read
-:program/expanded
-:program/checked
-:program/evaluated
-:program/failed
+(def generated (k/compile-agent! source))
+(def result (k/run! generated input))
 ```
 
-These events include Run and Agent lineage. The read event contains exact
-source text; expanded and evaluated events identify the forms and namespace.
-
-## Failure behavior
-
-Read, expansion, evaluation, and Agent-verification errors are returned as
-structured Tool failures. The built-in Agent Tool does not retry or silently
-repair invalid source. A parent Agent may make another Tool call with corrected
-source within the remaining Run limits.
+Use this when application code controls where source and input come from.
 
 ## Security
 
-Generated source is intentionally evaluated as JVM Clojure. Reader evaluation
-is disabled, but evaluated code has the capabilities of its namespace,
-classloader, process, filesystem permissions, and network environment.
-
-Treat `(k/agent)` as a code-execution capability. For untrusted models or task
-input, run the harness in an appropriate OS process, container, or sandbox and
-expose only the namespaces and Tools the task requires.
-
-## Direct compilation API
-
-Custom Agent bodies can use the same phases directly:
-
-```clojure
-(def form (k/read-agent-form source))
-(def checked (k/check-agent-form! form))
-(def generated (k/eval-agent-form! checked))
-
-;; Equivalent convenience function:
-(def generated (k/compile-agent! source))
-```
-
-Use the zero-arity `agent` Tool for normal model-driven creation and the direct
-API when an application controls source acquisition or retry policy.
+Generated source is evaluated as JVM Clojure. It has the authority of its
+namespace and process. Reader restrictions, advertised symbols, and contracts
+are not a sandbox. Run untrusted generation in a process, container, or VM with
+only the filesystem, network, credentials, and namespaces it should have.

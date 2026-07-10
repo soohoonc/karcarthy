@@ -53,6 +53,13 @@
     (binding [*ns* ns-obj]
       (when-not existing
         (clojure.core/refer 'clojure.core)
+        (when-let [parent-sym (:evaluation-parent-namespace rt)]
+          (when-let [parent (find-ns parent-sym)]
+            (let [available (->> (keys (ns-publics parent))
+                                 (remove #(ns-resolve ns-obj %))
+                                 vec)]
+              (when (seq available)
+                (clojure.core/refer parent-sym :only available)))))
         nil)
       ;; These forms intentionally replace clojure.core names in generated code.
       (doseq [sym '[agent run!]]
@@ -61,12 +68,16 @@
             (ns-unmap ns-obj sym))))
       (clojure.core/refer
       'karcarthy.core
-      :only '[agent tool run! as-tool context model! emit!
-               source-form expanded-form])
+      :only '[agent tool run! context model! emit!
+               definition expansion])
       (clojure.core/refer
        'karcarthy.eval
        :only '[read-agent-form check-agent-form! eval-agent-form!
-               compile-agent!]))
+               compile-agent!])
+      (doseq [[sym value] (:evaluation-bindings rt)]
+        (when (ns-resolve ns-obj sym)
+          (ns-unmap ns-obj sym))
+        (intern ns-obj sym value)))
     ns-obj))
 
 (defn- macroexpand-all
@@ -89,15 +100,20 @@
   (core/check-run! rt)
   (let [ns-obj (evaluation-ns! rt)]
     (try
+      (when-not (and (seq? form)
+                     (contains? '#{agent karcarthy/agent karcarthy.core/agent}
+                                (first form)))
+        (throw (IllegalArgumentException.
+                "Agent source must be exactly one top-level (agent ...) form")))
       (let [expanded (binding [*ns* ns-obj]
                        (macroexpand-all form))
             checked {:karcarthy/type :checked-agent-form
                      :form form
-                     :expanded-form expanded
+                     :expansion expanded
                      :namespace (ns-name ns-obj)}]
         (core/emit! rt {:type :program/expanded
-                        :form form
-                        :expanded-form expanded
+                        :definition form
+                        :expansion expanded
                         :namespace (ns-name ns-obj)})
         (core/emit! rt {:type :program/checked
                         :namespace (ns-name ns-obj)})
@@ -126,8 +142,8 @@
                       "Generated form did not evaluate to an Agent"
                       {:form (:form checked) :value value}))
         (let [value (assoc value
-                           :source-form (:form checked)
-                           :expanded-form (:expanded-form checked)
+                           :definition (:form checked)
+                           :expansion (:expansion checked)
                            :definition-ns (ns-name ns-obj))]
           (core/emit! rt {:type :program/evaluated
                           :agent (:name value)
@@ -149,10 +165,14 @@
   "Read, expand, check, evaluate, and return an Agent."
   [rt source]
   (core/consume! rt :generated-forms 1)
-  (core/emit! rt {:type :program/read :source source})
-  (->> (read-agent-form rt source)
-       (check-agent-form-in-run! rt)
-       (eval-agent-form-in-run! rt)))
+  (let [ordinal (swap! (:evaluation-counter rt) inc)
+        rt (assoc rt :evaluation-namespace
+                  (symbol (str (:evaluation-namespace rt)
+                               ".form_" ordinal)))]
+    (core/emit! rt {:type :program/read :source source})
+    (->> (read-agent-form rt source)
+         (check-agent-form-in-run! rt)
+         (eval-agent-form-in-run! rt))))
 
 (defn check-agent-form!
   "Macroexpand an Agent form inside the current Agent body."

@@ -12,8 +12,8 @@
 
 ;; Agent and Tool macros are forwarding macros so callers need one alias.
 (defmacro agent
-  ([] `(core/agent))
-  ([config & body] `(core/agent ~config ~@body)))
+  [config & body]
+  `(core/agent ~config ~@body))
 
 (defmacro defagent [sym config & body]
   `(core/defagent ~sym ~config ~@body))
@@ -28,14 +28,13 @@
 (def tool? core/tool?)
 (def hosted-tool core/hosted-tool)
 (def hosted-tool? core/hosted-tool?)
-(def source-form core/source-form)
-(def expanded-form core/expanded-form)
+(def definition core/definition)
+(def expansion core/expansion)
 (def contract-valid? core/contract-valid?)
 (def explain-contract core/explain-contract)
 (def contract->json-schema core/contract->json-schema)
 
 (def run! core/run!)
-(def as-tool core/as-tool)
 (defn context [] (core/context))
 (defn model! [request] (core/model! request))
 (defn emit! [event] (core/emit! event))

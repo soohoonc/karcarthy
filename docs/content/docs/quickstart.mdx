@@ -1,11 +1,27 @@
 ---
 title: Quickstart
-description: Install karcarthy, define one Tool and Agent, and run them from a REPL.
+description: Run karcarthy, then define and call an Agent.
 ---
 
-## Install
+karcarthy requires JDK 21 and the Clojure CLI.
 
-karcarthy requires JDK 21 and the Clojure CLI. Add it to `deps.edn`:
+## Run the offline example
+
+From a checkout:
+
+```bash
+clojure -M -m karcarthy.demo "hello"
+```
+
+The example uses a deterministic fake model, calls a Clojure Tool, and prints:
+
+```text
+HELLO
+```
+
+No API key or network call is required.
+
+## Add karcarthy to a project
 
 ```clojure
 {:deps
@@ -15,9 +31,9 @@ karcarthy requires JDK 21 and the Clojure CLI. Add it to `deps.edn`:
  :paths ["src"]}
 ```
 
-The Responses transport reads `RESPONSES_API_KEY` or `OPENAI_API_KEY`.
+Set `OPENAI_API_KEY` to use the built-in Responses transport.
 
-## Define a Tool
+## Define an Agent
 
 Create `src/example.clj`:
 
@@ -25,10 +41,36 @@ Create `src/example.clj`:
 (ns example
   (:require [karcarthy :as k]))
 
+(k/defagent assistant
+  {:model {:transport :responses :id "gpt-5.6"}
+   :instructions "Answer clearly and concisely."
+   :output string?})
+```
+
+Start a REPL and run it:
+
+```bash
+clojure -M
+```
+
+```clojure
+(require '[example :as example] :reload)
+
+(def run (k/run! example/assistant "Why are Lisp macros unusual?"))
+
+(:status run) ;=> :completed
+(:output run) ;=> "..."
+```
+
+## Give it a Tool
+
+Add this Tool above the Agent:
+
+```clojure
 (k/deftool word-count
   {:description "Count the words in text."
    :input {:type "object"
-           :properties {:text {:type "string"}}
+           :properties {"text" {:type "string"}}
            :required ["text"]
            :additionalProperties false}
    :output integer?}
@@ -36,57 +78,15 @@ Create `src/example.clj`:
   (count (re-seq #"\S+" text)))
 ```
 
-A Tool body receives one input value. Its schema tells the model what to send;
-karcarthy validates the input before the call and the output afterward.
-
-## Define an Agent
-
-Add this to the same file:
+Then add it to the Agent:
 
 ```clojure
-(k/defagent editor
-  {:model {:transport :responses
-           :id "gpt-5.6"}
-   :instructions
-   "Edit the user's text. Use word-count when the user asks about length."
-   :tools [word-count]
-   :output string?})
+:tools [word-count]
 ```
 
-An Agent without a Clojure body uses karcarthy's model and Tool loop.
-`defagent` defines a var containing that Agent.
+On each model turn, karcarthy sends the Tool's name, description, and input
+schema. A Tool call is validated, executed, and returned to the model before
+the next turn.
 
-## Run it
-
-Start a REPL in the project directory:
-
-```bash
-clojure -M
-```
-
-```clojure
-(require '[karcarthy :as k]
-         '[example :as example] :reload)
-
-(def run
-  (k/run! example/editor
-          "Shorten this paragraph and report its original word count: ..."))
-
-(select-keys run [:status :output :usage])
-(k/events run)
-```
-
-`run!` returns a Run even when execution fails or is cancelled. Check
-`:status` before using `:output`.
-
-After changing `example.clj`, reload the namespace and run the Agent again.
-
-## Continue
-
-- [Agents](/docs/agents) explains Agent configuration, inputs, Clojure bodies,
-  and Agents as Tools.
-- [Tools](/docs/tools) explains schemas, contracts, approvals, and local Tools.
-- [Running agents](/docs/running-agents) explains Run results, context, limits,
-  and composition.
-- [Chat from the REPL](/docs/examples/chat) adds conversation history with a
-  Session.
+Next, read [Agents](/docs/agents) for available Agents and generated Clojure,
+or [Chat from the REPL](/docs/examples/chat) for a complete interactive example.

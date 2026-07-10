@@ -10,8 +10,13 @@ All notable changes are documented here, following
 
 - A native Clojure Agent/Tool harness with dynamic instructions, local context,
   optional Sessions, approvals, limits, cancellation, and events.
-- Homoiconic `agent`: `(agent config ...)` constructs an Agent while `(agent)`
-  gives a model the same form as a recursive tool capability.
+- Homoiconic `agent` forms: every model Agent can write and run the same Agent
+  form a developer would write.
+- A complete, dynamically generated `agent` Tool manual covering the Clojure
+  grammar, use and non-use cases, information boundary, execution behavior,
+  and the model, Tool, and Agent symbols actually available.
+- First-class `:agents`, which makes known specialists available to a parent
+  model without a public Agent-to-Tool adapter.
 - Model-authored Clojure reading, full executable-position macroexpansion,
   evaluation, Agent verification, recursive execution, and program events.
 - A Responses-compatible HTTP/SSE transport with configurable endpoint,
@@ -25,7 +30,7 @@ All notable changes are documented here, following
   updates, streaming Agent-message chunks, per-session conversation history,
   session-provided stdio MCP servers, selectable model configuration, and
   aggregate prompt usage compatible with Harbor's ACP-to-ATIF conversion.
-- An explicit paid live test that asks GPT-5.6 to author and run a child Agent.
+- An explicit paid live test that asks GPT-5.6 to author and run a new Agent.
 - A paid Agent test that inspects and edits a temporary directory.
 - A minimal REPL chat example built from an Agent, `run!`, and a Session.
 
@@ -40,10 +45,16 @@ All notable changes are documented here, following
   separate workflow or child-call API.
 - Model-visible `:instructions` is distinct from local `:context`; local
   context is never exposed automatically.
+- The packaged `system.md` prompt is prepended automatically; Agent
+  `:instructions` extend it.
+- Generated Agents receive only the explicit `input` in the `agent` Tool call,
+  never the parent model's conversation or Session history.
 - Conversation history follows the established Session abstraction. Runs are
   stateless unless supplied a Session; `memory-session` is the process-local
   implementation and applications may provide durable implementations.
 - Loop controls are top-level Agent options: `:max-turns` and `:stop-when`.
+- Agent input contracts may be paired with a model-facing `:input-schema` when
+  the Agent is available to another Agent.
 
 ### Removed
 
@@ -58,5 +69,6 @@ All notable changes are documented here, following
   now receive only their input and use ordinary Clojure plus `run!`.
 - The placeholder `handoff!`, Agent `:hooks`, Run `:trace-id`, public
   `model-transport`, and generic conversation-state snapshots.
+- Public `as-tool` and the overloaded zero-argument `agent` form.
 
 [Unreleased]: https://github.com/soohoonc/karcarthy

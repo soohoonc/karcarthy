@@ -28,8 +28,7 @@
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set OPENAI_API_KEY in the process environment.")
   (when (and (live?) (credentials?))
-    (let [agent-tool (k/agent)
-          architect
+    (let [architect
           (k/agent
            {:name "live-architect"
             :model {:transport :responses
@@ -39,13 +38,11 @@
                     :timeout-ms 180000}
             :instructions
             (str
-             "This is an end-to-end harness test. Call the agent tool exactly "
-             "once. Its source argument must be exactly: "
-             "(agent {:name \"increment\" :input int? :output int?} "
-             "[n] (inc n)) "
-             "Pass 41 as its input. After the tool returns, answer with only "
-             "the decimal result, with no explanation.")
-            :tools [agent-tool]
+             "This is an end-to-end test of the Agent-program capability. "
+             "Write and run one Clojure-program Agent that computes 20 + 22. "
+             "Choose the valid Agent source yourself; do not answer before "
+             "using the agent Tool. After it returns, answer with only the "
+             "decimal result.")
             :output string?
             :max-turns 3})
           run (k/run! architect nil
@@ -60,11 +57,13 @@
       (is (= 1 (get-in run [:usage :generated-forms])))
       (is (contains? event-types :tool/completed))
       (is (contains? event-types :program/evaluated))
-      (is (= ["live-architect" "increment"]
-             (->> (:events run)
-                  (filter #(= :agent/started (:type %)))
-                  (map :agent)
-                  vec))))))
+      (let [agents (->> (:events run)
+                        (filter #(= :agent/started (:type %)))
+                        (map :agent)
+                        vec)]
+        (is (= 2 (count agents)) (pr-str agents))
+        (is (= "live-architect" (first agents)))
+        (is (not (str/blank? (second agents))))))))
 
 (deftest responses-agent-inspects-and-edits-local-files
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
@@ -86,7 +85,6 @@
                         :timeout-ms 180000}
                 :instructions
                 (k/prompt
-                 (k/system-prompt)
                  "For this test, inspect the target before changing it and use the edit tool for the change.")
                 :tools tools
                 :input any?

@@ -108,10 +108,8 @@ Tools:
   (k/agent
    {:name "coding-agent"
     :model {:transport :responses :id model-id}
-    :instructions (k/system-prompt)
-    :tools (into (conj (k/local-tools {:cwd cwd})
-                       (k/agent))
-                 mcp-tools)
+    :instructions "Complete the coding request."
+    :tools (into (k/local-tools {:cwd cwd}) mcp-tools)
     :output string?}))
 
 (k/serve-acp! {:agent acp-agent

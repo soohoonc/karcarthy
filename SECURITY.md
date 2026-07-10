@@ -12,9 +12,9 @@ binds `*read-eval*` to false so the reader cannot execute `#=` forms, but
 default full-trust mode it can access everything available to its evaluation
 namespace and process.
 
-Treat generated source as trusted code. Giving a model zero-arity `(agent)` in
-its tool set grants this evaluation capability; calling `compile-agent!` from a
-custom body does the same. Do neither when the process contains capabilities
+Treat generated source as trusted code. Every model Agent has this evaluation
+capability; calling `compile-agent!` from a Clojure Agent program does the
+same. Do not run one when the process contains capabilities
 the source must not exercise. Applications needing isolation should place the
 entire harness in a process, container, VM, restricted classloader, or a future
 alternate evaluation policy. Do not mistake macroexpansion or contracts for a

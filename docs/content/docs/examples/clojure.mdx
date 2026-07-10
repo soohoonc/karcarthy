@@ -101,8 +101,8 @@ Runs with their own limits and events.
 
 ## Let the model choose the specialists
 
-When the useful decomposition is not known in advance, use the `agent` Tool
-instead of hard-coding the review team:
+When the useful decomposition is not known in advance, let the model write a
+new Agent instead of hard-coding the review team:
 
 ```clojure
 (defn adaptive-reviewer [cwd]
@@ -111,7 +111,7 @@ instead of hard-coding the review team:
     :model {:transport :responses :id "gpt-5.6"}
     :instructions
     "Review the repository. Create a focused Agent when specialization helps."
-    :tools (conj (k/local-tools {:cwd cwd}) (k/agent))
+    :tools (k/local-tools {:cwd cwd})
     :output string?}))
 
 (k/run! (adaptive-reviewer "/workspace/project")
@@ -122,5 +122,5 @@ instead of hard-coding the review team:
                   :model-calls 40}})
 ```
 
-Agents created through the Tool remain inside this Run, so these limits and
-events cover the whole generated Agent tree.
+Generated Agents remain inside this Run, so these limits and events cover the
+whole Agent tree.
