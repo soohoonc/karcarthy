@@ -251,7 +251,7 @@
 
 (declare draw-tree!)
 
-(deftype RunMonitor [state display out rendered-lines lock]
+(deftype Monitor [state display out rendered-lines lock]
   clojure.lang.IDeref
   (deref [_] @state)
 
@@ -264,7 +264,7 @@
         (draw-tree! this)))
     nil))
 
-(defn- draw-tree! [^RunMonitor monitor]
+(defn- draw-tree! [^Monitor monitor]
   (let [^Writer out (.-out monitor)
         rendered-lines (.-rendered-lines monitor)
         previous @rendered-lines
@@ -278,13 +278,13 @@
     (.flush out)
     (reset! rendered-lines lines)))
 
-(defn run-monitor
+(defn monitor
   "Create an event observer that tracks live Runs and Agents.
 
   Pass the result as `run!`'s `:observe` function. Dereference it for ordinary
   Clojure data. Use `{:display :tree}` to redraw a live tree on `:out`, which
   defaults to the current `*out*`."
-  ([] (run-monitor {}))
+  ([] (monitor {}))
   ([{:keys [display out]
      :or {out *out*}}]
    (when-not (contains? #{nil :tree} display)
@@ -293,7 +293,7 @@
    (when-not (instance? Writer out)
      (throw (ex-info "Run monitor :out must be a java.io.Writer"
                      {:out out})))
-   (RunMonitor. (atom {:karcarthy/type :run-monitor-snapshot
-                       :runs {}
-                       :run-order []})
-                display out (atom 0) (Object.))))
+   (Monitor. (atom {:karcarthy/type :monitor-snapshot
+                    :runs {}
+                    :run-order []})
+             display out (atom 0) (Object.))))

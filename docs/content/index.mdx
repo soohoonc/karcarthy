@@ -118,7 +118,7 @@ the same event history.
 Use a Run monitor to see that history as it happens:
 
 ```clojure
-(def live (k/run-monitor {:display :tree}))
+(def live (k/monitor {:display :tree}))
 (def run (k/run! reviewer "Review this migration." {:observe live}))
 ```
 

@@ -48,7 +48,7 @@
   (when (and (live?) (credentials?))
     (let [run (architect/run-architect!
                "Review a migration from synchronous writes to a queue."
-               (k/run-monitor))
+               (k/monitor))
           program-events (->> (:events run)
                               (map :type)
                               (filter #(= "program" (namespace %)))

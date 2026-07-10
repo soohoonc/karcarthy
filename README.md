@@ -77,10 +77,10 @@ executable program and data that a developer, macro, or model can produce.
 
 ## Watch live Runs at the REPL
 
-`run-monitor` turns the event stream into a live Agent tree:
+`monitor` turns the event stream into a live Agent tree:
 
 ```clojure
-(def live (k/run-monitor {:display :tree}))
+(def live (k/monitor {:display :tree}))
 (def run (k/run! assistant "Complete the task." {:observe live}))
 ```
 

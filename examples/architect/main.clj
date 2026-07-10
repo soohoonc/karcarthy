@@ -35,7 +35,7 @@
 
 (defn run-architect!
   ([task]
-   (run-architect! task (k/run-monitor {:display :tree})))
+   (run-architect! task (k/monitor {:display :tree})))
   ([task monitor]
    (k/run! (architect) task
            {:observe monitor

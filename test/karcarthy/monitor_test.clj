@@ -71,13 +71,13 @@
                           :usage {:model-calls 3}})])
 
 (deftest monitor-projects-live-agent-tree
-  (let [monitor (k/run-monitor)]
+  (let [monitor (k/monitor)]
     (is (ifn? monitor))
     (doseq [event start-events] (monitor event))
     (let [snapshot @monitor
           run (get-in snapshot [:runs "run_123"])
           view (k/monitor-view monitor)]
-      (is (= :run-monitor-snapshot (:karcarthy/type snapshot)))
+      (is (= :monitor-snapshot (:karcarthy/type snapshot)))
       (is (= :running (:status run)))
       (is (= 1 (:agent-forms run)))
       (is (= ["child"] (:created-agents run)))
@@ -97,7 +97,7 @@
 
 (deftest tree-display-redraws-in-place
   (let [out (StringWriter.)
-        monitor (k/run-monitor {:display :tree :out out})]
+        monitor (k/monitor {:display :tree :out out})]
     (monitor (first start-events))
     (monitor (second start-events))
     (let [rendered (str out)]
@@ -106,7 +106,7 @@
       (is (str/includes? rendered "└─ parent · running")))))
 
 (deftest monitor-can-track-more-than-one-run
-  (let [monitor (k/run-monitor)]
+  (let [monitor (k/monitor)]
     (monitor (event :run/started {:agent "one"}))
     (monitor (assoc (event :run/started {:agent "two"}) :run-id "run_456"))
     (is (= ["run_123" "run_456"] (:run-order @monitor)))
@@ -114,6 +114,6 @@
 
 (deftest monitor-validates-display-options
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #":display"
-                        (k/run-monitor {:display :unknown})))
+                        (k/monitor {:display :unknown})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #":out"
-                        (k/run-monitor {:out :not-a-writer}))))
+                        (k/monitor {:out :not-a-writer}))))

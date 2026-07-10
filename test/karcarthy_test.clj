@@ -8,7 +8,7 @@
                 memory-session session? session-id get-items add-items!
                 pop-item! clear-session!
                 model! emit! events fake-model
-                run-monitor monitor-view print-monitor
+                monitor monitor-view print-monitor
                 hosted-tool hosted-tool?
                 local-tools prompt prompt-file system-prompt
                 responses-web-search connect-mcp! mcp-tools close-mcp!

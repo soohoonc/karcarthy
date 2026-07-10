@@ -25,7 +25,7 @@ A Run monitor turns those events into current state. Pass it directly as the
 observer:
 
 ```clojure
-(def live (k/run-monitor {:display :tree}))
+(def live (k/monitor {:display :tree}))
 
 (def run
   (k/run! architect task {:observe live}))
@@ -48,7 +48,7 @@ The monitor is also ordinary REPL state. Create it without `:display` when you
 want to inspect it manually:
 
 ```clojure
-(def live (k/run-monitor))
+(def live (k/monitor))
 
 (def work
   (future
@@ -68,7 +68,7 @@ console that does not support ANSI control sequences. Pass `:out` to render to
 another `java.io.Writer`:
 
 ```clojure
-(k/run-monitor {:display :tree :out *err*})
+(k/monitor {:display :tree :out *err*})
 ```
 
 If another observer is already installed, compose the functions:

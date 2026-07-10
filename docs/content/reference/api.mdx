@@ -116,8 +116,8 @@ Clojure Agent program:
 ## Run monitors
 
 ```clojure
-(def live (k/run-monitor))
-(def displayed (k/run-monitor {:display :tree :out *out*}))
+(def live (k/monitor))
+(def displayed (k/monitor {:display :tree :out *out*}))
 
 @live
 (k/monitor-view live)
