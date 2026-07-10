@@ -109,7 +109,11 @@ there is no directory-specific prompt builder or special coding Agent.
 MCP tools enter through the same `:tools` vector. The inner loop does not know
 or care whether a function tool was authored locally or discovered from an MCP
 server. The ACP server exposes an Agent or per-session Agent factory to editors
-and evaluation clients such as Harbor.
+and evaluation clients such as Harbor. It advertises selectable models through
+ACP session configuration and reports aggregate prompt token usage when the
+model transport supplies it. Harbor's generic ACP adapter records the wire
+events and converts them to ATIF; karcarthy does not define a competing
+evaluation record.
 
 Agent `:instructions` is either a string or a function of the Runtime view.
 Local handles, credentials, and user metadata are passed separately as
@@ -147,8 +151,9 @@ ID can target a compatible gateway without adding a provider implementation:
 The native kernel, instructions/context split, explicit Sessions, streaming
 model/tool loop, local tools, structured child execution,
 generated-form evaluation, Responses-compatible HTTP/SSE transport, hosted
-web search, stdio MCP client, and ACP v1 server are implemented. The former
-Runner/EDN workflow implementation and JSON workflow bridge have been removed.
+web search, stdio MCP client, and ACP v1 server with model selection and prompt
+usage are implemented. The former Runner/EDN workflow implementation and JSON
+workflow bridge have been removed.
 
 The documentation site describes the implemented programming model:
 

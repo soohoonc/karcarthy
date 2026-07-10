@@ -285,12 +285,28 @@ directly rather than through a shell. Always close the connection.
 ## ACP
 
 ```clojure
-(k/serve-acp! {:agent agent-or-factory})
+(k/serve-acp!
+ {:models ["gpt-5.6" "gpt-5.5"]
+  :agent (fn [{:keys [cwd mcp-tools model-id]}]
+           (k/agent
+            {:model {:transport :responses :id model-id}
+             :instructions (k/system-prompt)
+             :tools (into (k/local-tools {:cwd cwd}) mcp-tools)
+             :output string?}))})
 ```
 
 Serves ACP v1 over stdio or supplied `:in` and `:out` streams. A factory
-receives `{:cwd ... :mcp-tools ... :session-id ...}` and returns an Agent.
-`:run-options` supplies base Run options.
+receives `{:cwd ... :mcp-tools ... :session-id ... :model-id ...}` and returns
+an Agent. For a static Agent, its configured model ID is advertised
+automatically. `:models` adds selectable model IDs; `:run-options` supplies base
+Run options.
+
+Model selection uses ACP session configuration options. The prompt response
+includes `inputTokens`, `outputTokens`, and `totalTokens` aggregated across the
+Run's model calls when each call reported usage. The field is currently marked
+unstable by ACP. Tool updates carry standard ACP content as well as raw inputs
+and outputs, so Harbor's generic ACP adapter can preserve calls and observations
+when it produces ATIF. ATIF itself remains Harbor's concern.
 
 ```bash
 clojure -M -m karcarthy.acp your.namespace/agent-var

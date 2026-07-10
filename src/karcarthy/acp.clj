@@ -116,12 +116,55 @@
                  {:seen #{} :result []})
          :result)))
 
+(defn- configured-model-id [agent]
+  (let [model (get-in agent [:config :model])]
+    (when (and (map? model) (string? (:id model)) (seq (:id model)))
+      (:id model))))
+
+(defn- session-model-ids [server]
+  (let [source (:agent server)
+        default-id (when (core/agent? source) (configured-model-id source))]
+    (vec (distinct (remove nil? (concat [default-id] (:models server)))))))
+
+(defn- model-config-option [session]
+  (when-let [current @(:model-id session)]
+    {:id "model"
+     :name "Model"
+     :description "Model used by this Agent session."
+     :category "model"
+     :type "select"
+     :currentValue current
+     :options (mapv (fn [model-id] {:value model-id :name model-id})
+                    (:model-ids session))}))
+
+(defn- session-config-options [session]
+  (cond-> []
+    @(:model-id session) (conj (model-config-option session))))
+
+(defn- set-session-model! [session model-id]
+  (when-not (and (string? model-id)
+                 (contains? (set (:model-ids session)) model-id))
+    (core/fail! :acp :configuration
+                "Requested model is not available for this ACP session"
+                {:model-id model-id :available-models (:model-ids session)}))
+  (when @(:running? session)
+    (core/fail! :acp :session
+                "Cannot change the model during an active prompt"
+                {:session-id (:id session)}))
+  (reset! (:model-id session) model-id)
+  (session-config-options session))
+
 (defn- materialize-agent [server session]
   (let [source (:agent server)
         context {:cwd (:cwd session)
                  :mcp-tools (:mcp-tools session)
-                 :session-id (:id session)}
-        agent (if (core/agent? source) source (source context))]
+                 :session-id (:id session)
+                 :model-id @(:model-id session)}
+        agent (if (core/agent? source) source (source context))
+        agent (if (and @(:model-id session)
+                       (map? (get-in agent [:config :model])))
+                (assoc-in agent [:config :model :id] @(:model-id session))
+                agent)]
     (when-not (core/agent? agent)
       (core/fail! :acp :configuration
                   "ACP :agent must be an Agent or a function returning one"
@@ -155,6 +198,21 @@
     (re-find #"(?i)(fetch|http|web)" name) "fetch"
     :else "other"))
 
+(defn- tool-output-content [output]
+  (let [blocks (if (and (map? output) (sequential? (:content output)))
+                 (:content output)
+                 [output])]
+    (->> blocks
+         (remove nil?)
+         (mapv (fn [block]
+                 {:type "content"
+                  :content (if (and (map? block) (string? (:type block)))
+                             block
+                             {:type "text"
+                              :text (if (string? block)
+                                      block
+                                      (json/write-str block))})})))))
+
 (defn- observer [server session message-id streamed?]
   (fn [event]
     (case (:type event)
@@ -172,28 +230,32 @@
        server (:id session)
        {:sessionUpdate "tool_call"
         :toolCallId (:tool-call-id event)
-        :title (str "Using " (:tool event))
+        :title (:tool event)
         :kind (tool-kind (:tool event))
         :status "in_progress"
         :rawInput (or (:input event) {})})
 
       :tool/completed
-      (session-update!
-       server (:id session)
-       {:sessionUpdate "tool_call_update"
-        :toolCallId (:tool-call-id event)
-        :status "completed"
-        :rawOutput (if (map? (:output event))
-                     (:output event)
-                     {:value (:output event)})})
+      (let [output (:output event)]
+        (session-update!
+         server (:id session)
+         (cond-> {:sessionUpdate "tool_call_update"
+                  :toolCallId (:tool-call-id event)
+                  :status "completed"
+                  :rawOutput (if (map? output)
+                               output
+                               {:output output})}
+           (some? output) (assoc :content (tool-output-content output)))))
 
       :tool/failed
-      (session-update!
-       server (:id session)
-       {:sessionUpdate "tool_call_update"
-        :toolCallId (:tool-call-id event)
-        :status "failed"
-        :rawOutput {:error (:error event)}})
+      (let [error (:error event)]
+        (session-update!
+         server (:id session)
+         (cond-> {:sessionUpdate "tool_call_update"
+                  :toolCallId (:tool-call-id event)
+                  :status "failed"
+                  :rawOutput {:error error}}
+           (some? error) (assoc :content (tool-output-content error)))))
       nil)))
 
 (defn- approval-handler [server session]
@@ -225,6 +287,24 @@
           (swap! (:always-allowed session) conj (:name tool)))
         (and (= "selected" (:outcome outcome))
              (contains? #{"allow-once" "allow-always"} option-id))))))
+
+(defn- prompt-usage [run]
+  (let [model-usages (->> (:events run)
+                          (filter #(= :model/completed (:type %)))
+                          (map :usage))
+        token-count (fn [usage kebab snake]
+                      (or (get usage kebab) (get usage snake)))]
+    (when (and (seq model-usages)
+               (every? #(and (integer? (token-count % :input-tokens
+                                                     :input_tokens))
+                             (integer? (token-count % :output-tokens
+                                                     :output_tokens)))
+                       model-usages))
+      (let [input-tokens (long (get-in run [:usage :input-tokens]))
+            output-tokens (long (get-in run [:usage :output-tokens]))]
+        {:inputTokens input-tokens
+         :outputTokens output-tokens
+         :totalTokens (+ input-tokens output-tokens)}))))
 
 (defn- run-prompt! [server request]
   (let [id (:id request)
@@ -260,14 +340,17 @@
                                  (contains? #{:model-loop :runtime}
                                             (get-in run [:error :phase])))
                             "max_turn_requests"
-                            :else "end_turn")]
+                            :else "end_turn")
+              usage (prompt-usage run)]
           (when (or (not @streamed?) (not= :completed (:status run)))
             (session-update!
              server sessionId
              {:sessionUpdate "agent_message_chunk"
               :messageId message-id
               :content {:type "text" :text text}}))
-          (respond! server id {:stopReason stop-reason}))
+          (respond! server id
+                    (cond-> {:stopReason stop-reason}
+                      usage (assoc :usage usage))))
         (catch Throwable error
           (error! server id -32000
                   (or (ex-message error) "ACP prompt failed")
@@ -306,6 +389,7 @@
                 mcp-tools (mapcat #(mcp/tools % {:approval :always})
                                   connections)
                 session-id (str "sess_" (UUID/randomUUID))
+                model-ids (session-model-ids server)
                 session {:id session-id
                          :cwd cwd
                          :mcp-connections connections
@@ -313,9 +397,32 @@
                          :agent-session (session/memory-session {:id session-id})
                          :cancel (atom false)
                          :running? (atom false)
+                         :model-ids model-ids
+                         :model-id (atom (first model-ids))
                          :always-allowed (atom #{})}]
             (swap! (:sessions server) assoc session-id session)
-            (respond! server id {:sessionId session-id})))
+            (respond! server id
+                      (cond-> {:sessionId session-id}
+                        (seq model-ids)
+                        (assoc :configOptions
+                               (session-config-options session))))))
+
+        "session/set_config_option"
+        (let [session (get-session server (:sessionId params))]
+          (if-not (= "model" (:configId params))
+            (error! server id -32602 "Unknown session configuration option"
+                    {:configId (:configId params)})
+            (respond! server id
+                      {:configOptions
+                       (set-session-model! session (:value params))})))
+
+        ;; Harbor's current ACP adapter still calls the pre-config-options
+        ;; model method. Keep this narrow compatibility alias at the boundary;
+        ;; `session/set_config_option` above is the canonical ACP interface.
+        "session/set_model"
+        (let [session (get-session server (:sessionId params))]
+          (set-session-model! session (:modelId params))
+          (respond! server id {}))
 
         "session/prompt"
         (do
@@ -346,9 +453,12 @@
 (defn serve!
   "Serve an Agent or session Agent factory over ACP v1 JSON-RPC on stdio.
 
-  A factory receives `{:cwd string :mcp-tools [...] :session-id string}` and
-  must return an Agent. This is the preferred form for coding Agents because
-  their local tools are rooted per ACP session."
+  A factory receives `{:cwd string :mcp-tools [...] :session-id string
+  :model-id string-or-nil}` and must return an Agent. This is the preferred
+  form for coding Agents because their local tools are rooted per ACP session.
+
+  `:models` may contain selectable model-id strings. For a static model-backed
+  Agent, its configured model is included automatically."
   [{:keys [agent in out client-request-timeout-ms] :as options}]
   (when-not agent
     (core/fail! :contract :configuration "ACP serve! requires :agent"))
@@ -356,7 +466,15 @@
                 (InputStreamReader. (or in System/in) StandardCharsets/UTF_8))
         writer (BufferedWriter.
                 (OutputStreamWriter. (or out System/out) StandardCharsets/UTF_8))
+        models (:models options)
+        _ (when-not (or (nil? models)
+                        (and (sequential? models)
+                             (every? #(and (string? %) (seq %)) models)))
+            (core/fail! :contract :configuration
+                        "ACP :models must be a sequence of non-empty strings"
+                        {:value models}))
         server {:agent agent
+                :models (vec (distinct (or models [])))
                 :run-options (:run-options options)
                 :reader reader
                 :writer writer
@@ -385,14 +503,16 @@
 (defn serve-var!
   "Resolve `namespace/var` and serve its Agent value or Agent factory."
   [qualified-symbol]
-  (let [symbol (symbol qualified-symbol)
-        namespace (some-> symbol namespace symbol)]
-    (when-not namespace
+  (let [qualified (symbol qualified-symbol)
+        namespace-symbol (some-> qualified namespace symbol)]
+    (when-not namespace-symbol
       (core/fail! :contract :configuration
                   "ACP Agent var must be namespace/var"
                   {:value qualified-symbol}))
-    (require namespace)
-    (let [value (some-> (ns-resolve namespace (symbol (name symbol))) deref)]
+    (require namespace-symbol)
+    (let [value (some-> (ns-resolve namespace-symbol
+                                    (symbol (name qualified)))
+                        deref)]
       (when-not value
         (core/fail! :contract :configuration "ACP Agent var was not found"
                     {:value qualified-symbol}))

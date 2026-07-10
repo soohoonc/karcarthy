@@ -197,8 +197,24 @@ There is no separate hook system or synthetic trace ID.
 `serve-acp!` exposes an Agent or per-session Agent factory over ACP v1 stdio.
 The server maps ACP prompts to `run!`, creates one in-memory Session per ACP
 session, forwards cancellation and permission requests, publishes Tool events,
-and merges session-provided MCP Tools. ACP is an external client boundary, not
-the harness underneath karcarthy.
+and merges session-provided MCP Tools. It advertises selectable models with ACP
+session configuration options and returns aggregate Run token counts in the
+prompt response when every model call reported usage. ACP currently marks that
+prompt-usage field unstable. karcarthy does not synthesize `usage_update`
+notifications: those describe current context occupancy and context-window
+size, which a generic model transport may not know. The current
+`session/set_config_option` method is canonical; a narrow `session/set_model`
+alias supports Harbor's current adapter.
+
+Harbor's generic ACP adapter stores `acp-events.jsonl` and `acp-summary.json`,
+then converts those protocol records to a validated `trajectory.json` in
+[ATIF](https://harborframework.com/docs/agents/trajectory-format). That
+conversion belongs to Harbor. karcarthy does not add a second experiment-file
+format or send source/expanded Agent forms as task input. Those forms and their
+program events remain observable inside the karcarthy Run when a research
+caller chooses to retain them.
+
+ACP is an external client boundary, not the harness underneath karcarthy.
 
 ## Next
 

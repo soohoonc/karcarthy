@@ -17,7 +17,10 @@ bridge, and legacy examples have been removed without a compatibility layer.
 - MCP 2025-11-25 stdio initialization, tool discovery, calls, and adaptation to
   ordinary Tools.
 - ACP v1 stdio serving for an Agent or per-session Agent factory, including
-  session-provided stdio MCP, tool updates, permissions, and cancellation.
+  session-provided stdio MCP, model selection, aggregate prompt usage, tool
+  updates, permissions, and cancellation.
+- Harbor's generic ACP adapter converts karcarthy sessions to schema-valid ATIF
+  with model, Tool-call, observation, and prompt-usage data.
 - `run!`, `invoke!`, `spawn!`, `await!`, `await-all!`, and `as-tool`.
 - Dynamic model instructions, separate local Runtime context, optional
   conversation Sessions, Clojure specs, JSON Schema derivation, guardrails,
@@ -40,7 +43,7 @@ bridge, and legacy examples have been removed without a compatibility layer.
 
 - Add ACP session loading/resumption and richer incremental child events.
 - Add MCP Streamable HTTP after the stdio surface is proven in evaluation.
-- Connect Harbor tasks and scorers.
+- Package and register the ACP launcher, then run Harbor tasks and scorers.
 - Store program hashes, source/expanded forms, event metrics, and evaluator
   results together.
 
