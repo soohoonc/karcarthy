@@ -50,20 +50,16 @@
           :input string?
           :output string?})]
 
-    (k/agent
-     {:name "review-team"
-      :input string?
-      :output string?}
-     [request]
-     (let [[security api]
-           (->> [security-reviewer api-reviewer]
-                (mapv #(future (k/run! % request reviewer-options)))
-                (mapv deref)
-                (mapv output!))
-           editor-prompt
-           (str "Request:\n" request
-                "\n\nSecurity review:\n" security
-                "\n\nAPI review:\n" api)]
-       (output! (k/run! editor editor-prompt
-                        {:limits {:model-calls 4
-                                  :deadline-ms 60000}}))))))
+    (fn review-team [request]
+      (let [[security api]
+            (->> [security-reviewer api-reviewer]
+                 (mapv #(future (k/run! % request reviewer-options)))
+                 (mapv deref)
+                 (mapv output!))
+            editor-prompt
+            (str "Request:\n" request
+                 "\n\nSecurity review:\n" security
+                 "\n\nAPI review:\n" api)]
+        (output! (k/run! editor editor-prompt
+                         {:limits {:model-calls 4
+                                   :deadline-ms 60000}}))))))

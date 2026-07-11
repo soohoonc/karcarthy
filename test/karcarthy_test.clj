@@ -7,7 +7,7 @@
                 run! context
                 memory-session session? session-id get-items add-items!
                 pop-item! clear-session!
-                model! emit! events fake-model
+                model! emit! events mock-model
                 monitor monitor-state
                 hosted-tool hosted-tool?
                 local-tools prompt prompt-file system-prompt
@@ -21,13 +21,27 @@
                     claude-runner codex-runner openai-runner acp-runner
                     invoke! spawn! await! await-all!
                     as-tool source-form expanded-form monitor-view print-monitor
+                    fake-model
                     handoff! environment conversation-state? model-transport
                     workspace-tools workspace-prompt]]
     (is (nil? (get (ns-publics 'karcarthy) removed))
         (str "still exports " removed))))
 
 (deftest forwarding-macros-capture-source
-  (let [agent (k/agent {:name "facade" :output string?}
-                       [x] (str x))]
+  (let [agent (k/agent {:name "facade"
+                        :model {:id "fake"
+                                :transport (k/mock-model (constantly "ok"))}
+                        :instructions "answer"
+                        :output string?})]
     (is (k/agent? agent))
     (is (seq (k/definition agent)))))
+
+(deftest agents-do-not-accept-function-bodies
+  (is (thrown? clojure.lang.ArityException
+               (macroexpand
+                '(karcarthy/agent
+                  {:name "function-backed"} [input] input))))
+  (is (thrown? clojure.lang.ArityException
+               (macroexpand
+                '(karcarthy/defagent
+                  function-backed {} [input] input)))))

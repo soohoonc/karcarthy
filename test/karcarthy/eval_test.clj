@@ -5,10 +5,59 @@
 
 (def suffix " from definition namespace")
 
+(defn scripted-model [& responses]
+  (let [remaining (atom responses)]
+    (k/mock-model
+     (fn [_]
+       (let [response (first @remaining)]
+         (swap! remaining next)
+         response)))))
+
 (defn compile-in-run [source & [limits]]
-  (let [compiler (k/agent {:name "compiler" :input string? :output k/agent?}
-                          [input] (k/compile-agent! input))]
-    (k/run! compiler source {:limits limits})))
+  (let [compiled (atom nil)
+        compile-tool
+        (k/tool {:name "compile-agent"
+                 :description "Compile one Agent form."
+                 :input map?
+                 :output string?}
+                [{:keys [source]}]
+                (reset! compiled (k/compile-agent! source))
+                "compiled")
+        model (scripted-model
+               {:type :tool-calls
+                :calls [{:id "compile"
+                         :name "compile-agent"
+                         :input {:source source}}]}
+               {:type :final :output "done"})
+        compiler
+        (k/agent {:name "compiler"
+                  :model {:id "fake" :transport model}
+                  :instructions "Compile the supplied Agent."
+                  :tools [compile-tool]
+                  :output string?})
+        run (k/run! compiler source {:limits limits})]
+    {:run run :agent @compiled}))
+
+(defn generated-run [source input model-transports & [limits]]
+  (let [turn (atom 0)
+        parent-model
+        (k/mock-model
+         (fn [request]
+           (if (= 1 (swap! turn inc))
+             {:type :tool-calls
+              :calls [{:id "generated"
+                       :name "agent"
+                       :input {:source source :input input}}]}
+             {:type :final
+              :output (get-in request [:messages 0 :content])})))
+        parent
+        (k/agent {:name "parent"
+                  :model {:transport :parent :id "parent"}
+                  :instructions "Create the requested Agent."
+                  :output any?})]
+    (k/run! parent "create an Agent"
+            {:limits limits
+             :model-transports (assoc model-transports :parent parent-model)})))
 
 (deftest reads-one-form-with-reader-eval-disabled
   (is (= '(+ 1 2) (k/read-agent-form "(+ 1 2)")))
@@ -18,15 +67,24 @@
                (k/read-agent-form "#=(System/exit 1)"))))
 
 (deftest compiles-and-runs-generated-agent
-  (let [parent (k/agent {:name "parent" :input string? :output string?}
-                        [input]
-                        (let [child (k/compile-agent!
-                                     "(agent {:name \"child\" :input string? :output string?} [x] (str x \"!\"))")]
-                          (:output (k/run! child input))))
-        run (k/run! parent "hello")]
-    (is (= :completed (:status run)))
+  (let [source
+        (str "(agent {:name \"child\" "
+             ":model {:transport :child :id \"child\"} "
+             ":instructions \"Append punctuation.\" "
+             ":input string? :output string?})")
+        child-model
+        (k/mock-model
+         (fn [request]
+           {:type :final
+            :output (str (get-in request [:messages 0 :content]) "!")}))
+        run (generated-run source "hello" {:child child-model})]
+    (is (= :completed (:status run)) (pr-str (:error run)))
     (is (= "hello!" (:output run)))
     (is (= 1 (get-in run [:usage :agent-forms])))
+    (is (= ["parent" "child"]
+           (->> (:events run)
+                (filter #(= :agent/started (:type %)))
+                (mapv :agent))))
     (is (= #{:program/read :program/expanded :program/checked
              :program/evaluated}
            (->> (:events run)
@@ -35,117 +93,113 @@
                 set)))))
 
 (deftest generated-code-resolves-definition-namespace
-  (let [parent (k/agent {:name "parent" :output string?}
-                        [_]
-                        (:output
-                         (k/run!
-                          (k/compile-agent!
-                           "(agent {:name \"child\" :output string?} [_] (str \"ok\" suffix))")
-                          nil)))
-        run (k/run! parent nil)]
-    (is (= :completed (:status run)))
-    (is (= (str "ok" suffix) (:output run)))))
+  (let [{:keys [run agent]}
+        (compile-in-run
+         (str "(agent {:name \"child\" "
+              ":model {:transport :child :id \"child\"} "
+              ":instructions (str \"answer\" suffix)})"))]
+    (is (= :completed (:status run)) (pr-str (:error run)))
+    (is (= (str "answer" suffix)
+           (get-in agent [:config :instructions])))))
 
-(deftest generated-source-must-be-an-agent-form
-  (let [run (compile-in-run "(do :side-effect (agent {:name \"child\"} [_] nil))")]
-    (is (= :failed (:status run)))
-    (is (= :expand (get-in run [:error :kind])))
-    (is (re-find #"top-level \(agent" (get-in run [:error :message])))))
+(deftest generated-source-must-be-one-model-agent-form
+  (let [{do-run :run}
+        (compile-in-run
+         "(do :side-effect (agent {:name \"child\"}))")
+        {body-run :run}
+        (compile-in-run
+         (str "(agent {:name \"child\" "
+              ":model {:transport :child :id \"child\"} "
+              ":instructions \"answer\"} [_] \"ok\")"))]
+    (doseq [run [do-run body-run]]
+      (is (= :failed (:status run)))
+      (is (= :expand (get-in run [:error :kind])))
+      (is (re-find #"top-level \(agent config"
+                   (get-in run [:error :message]))))))
 
 (deftest compiler-errors-are-structured
-  (let [run (compile-in-run
-             "(agent {:name \"bad\" :output string?} [_] (missing-symbol))")]
+  (let [{:keys [run]} (compile-in-run "(agent (missing-symbol))")]
     (is (= :failed (:status run)))
     (is (= :evaluation (get-in run [:error :phase])))
     (is (re-find #"missing-symbol" (get-in run [:error :message])))))
 
 (deftest agent-form-budget
-  (let [parent (k/agent {:name "parent" :output string?}
-                        [_]
-                        (k/compile-agent!
-                         "(agent {:name \"child\" :output string?} [_] \"ok\")")
-                        "unreachable")
-        run (k/run! parent nil {:limits {:agent-forms 0}})]
+  (let [{:keys [run]}
+        (compile-in-run
+         (str "(agent {:name \"child\" "
+              ":model {:transport :child :id \"child\"} "
+              ":instructions \"answer\"})")
+         {:agent-forms 0})]
     (is (= :failed (:status run)))
     (is (= :budget (get-in run [:error :kind])))))
 
 (deftest evaluated-agent-retains-forms
-  (let [run (compile-in-run
-             "(agent {:name \"child\" :output string?} [_] \"ok\")")
-        agent (:output run)]
+  (let [{:keys [run agent]}
+        (compile-in-run
+         (str "(agent {:name \"child\" "
+              ":model {:transport :child :id \"child\"} "
+              ":instructions \"answer\"})"))]
     (is (= :completed (:status run)))
     (is (= 'agent (first (k/definition agent))))
     (is (= 'karcarthy.core/make-agent
            (first (k/expansion agent))))))
 
-(deftest agent-is-its-own-homoiconic-bridge
-  (let [calls (atom 0)
-        model
-        (k/fake-model
+(deftest generated-agent-can-reference-an-advertised-agent
+  (let [helper
+        (k/agent {:name "local-helper"
+                  :description "Add punctuation to text."
+                  :model {:transport :helper :id "helper"}
+                  :instructions "Add punctuation."
+                  :input string?
+                  :output string?})
+        parent-turn (atom 0)
+        workflow-turn (atom 0)
+        parent-model
+        (k/mock-model
          (fn [request]
-           (if (= 1 (swap! calls inc))
+           (if (= 1 (swap! parent-turn inc))
              {:type :tool-calls
               :calls
-              [{:id "call_eval"
+              [{:id "workflow"
                 :name "agent"
                 :input
                 {:source
-                 "(agent {:name \"answer\" :input string? :output int?} [_] 42)"
-                 :input "Return 42."}}]}
+                 (str "(agent {:name \"workflow\" "
+                      ":model {:transport :workflow :id \"workflow\"} "
+                      ":instructions \"Call the helper.\" "
+                      ":agents [local-helper] "
+                      ":input string? :output string?})")
+                 :input "hello"}}]}
              {:type :final
               :output (get-in request [:messages 0 :content])})))
+        workflow-model
+        (k/mock-model
+         (fn [request]
+           (if (= 1 (swap! workflow-turn inc))
+             {:type :tool-calls
+              :calls [{:id "helper"
+                       :name "local-helper"
+                       :input {:input "hello"}}]}
+             {:type :final
+              :output (get-in request [:messages 0 :content])})))
+        helper-model
+        (k/mock-model
+         (fn [request]
+           {:type :final
+            :output (str (get-in request [:messages 0 :content]) "!")}))
         parent
         (k/agent {:name "architect"
-                  :model {:id "fake" :transport model}
-                  :instructions "Write and run an Agent."
-                  :output int?})
-        run (k/run! parent nil)]
-    (is (= :completed (:status run)))
-    (is (= 42 (:output run)))
-    (is (= 1 (get-in run [:usage :agent-forms])))
-    (is (= ["architect" "answer"]
-           (->> (:events run)
-                (filter #(= :agent/started (:type %)))
-                (map :agent)
-                vec)))
-    (is (= #{:program/read :program/expanded :program/checked
-             :program/evaluated}
-           (->> (:events run)
-                (map :type)
-                (filter #(= "program" (namespace %)))
-                set)))))
-
-(deftest generated-program-can-reference-an-advertised-agent
-  (let [helper (k/agent {:name "local-helper"
-                         :description "Add punctuation to text."
-                         :input string?
-                         :output string?}
-                        [input] (str input "!"))
-        calls (atom 0)
-        model (k/fake-model
-               (fn [request]
-                 (if (= 1 (swap! calls inc))
-                   {:type :tool-calls
-                    :calls
-                    [{:id "write_program"
-                      :name "agent"
-                      :input
-                      {:source
-                       (str "(agent {:name \"workflow\" :input string? "
-                            ":output string?} [text] "
-                            "(:output (run! local-helper text)))")
-                       :input "hello"}}]}
-                   {:type :final
-                    :output (get-in request [:messages 0 :content])})))
-        parent (k/agent {:name "architect"
-                         :model {:id "fake" :transport model}
-                         :instructions "Write a workflow."
-                         :agents [helper]
-                         :output string?})
-        run (k/run! parent nil)]
+                  :model {:transport :parent :id "parent"}
+                  :instructions "Create a workflow."
+                  :agents [helper]
+                  :output string?})
+        run (k/run! parent nil
+                    {:model-transports {:parent parent-model
+                                        :workflow workflow-model
+                                        :helper helper-model}})]
     (is (= :completed (:status run)) (pr-str (:error run)))
     (is (= "hello!" (:output run)))
-    (is (= ["architect" "workflow"]
+    (is (= ["architect" "workflow" "local-helper"]
            (->> (:events run)
                 (filter #(= :agent/started (:type %)))
                 (mapv :agent))))))
@@ -154,12 +208,12 @@
   (let [parent-calls (atom 0)
         child-messages (atom nil)
         parent-model
-        (k/fake-model
+        (k/mock-model
          (fn [request]
            (if (= 1 (swap! parent-calls inc))
              {:type :tool-calls
               :calls
-              [{:id "fresh_agent"
+              [{:id "fresh-agent"
                 :name "agent"
                 :input
                 {:source
@@ -171,7 +225,7 @@
              {:type :final
               :output (get-in request [:messages 0 :content])})))
         fresh-model
-        (k/fake-model
+        (k/mock-model
          (fn [request]
            (reset! child-messages (:messages request))
            {:type :final :output "fresh answer"}))
@@ -195,7 +249,7 @@
   (let [parent-turn (atom 0)
         child-turn (atom 0)
         parent-model
-        (k/fake-model
+        (k/mock-model
          (fn [request]
            (if (= 1 (swap! parent-turn inc))
              {:type :tool-calls
@@ -212,26 +266,32 @@
              {:type :final
               :output (get-in request [:messages 0 :content])})))
         child-model
-        (k/fake-model
+        (k/mock-model
          (fn [request]
            (if (= 1 (swap! child-turn inc))
              {:type :tool-calls
               :calls
-              [{:id "grandchild"
+              [{:id "answer"
                 :name "agent"
                 :input
                 {:source
-                 "(agent {:name \"answer\" :input string? :output int?} [_] 42)"
+                 (str "(agent {:name \"answer\" "
+                      ":model {:transport :answer :id \"answer\"} "
+                      ":instructions \"Return 42.\" "
+                      ":input string? :output int?})")
                  :input "Return 42"}}]}
              {:type :final
               :output (get-in request [:messages 0 :content])})))
-        parent (k/agent {:name "parent"
-                         :model {:transport :parent :id "parent"}
-                         :instructions "Create an Agent."
-                         :output int?})
+        answer-model (scripted-model 42)
+        parent
+        (k/agent {:name "parent"
+                  :model {:transport :parent :id "parent"}
+                  :instructions "Create an Agent."
+                  :output int?})
         run (k/run! parent "solve"
                     {:model-transports {:parent parent-model
-                                        :child child-model}})]
+                                        :child child-model
+                                        :answer answer-model}})]
     (is (= :completed (:status run)) (pr-str (:error run)))
     (is (= 42 (:output run)))
     (is (= 2 (get-in run [:usage :agent-forms])))

@@ -3,10 +3,9 @@ title: Agent forms
 description: The exact source shape accepted for runtime-generated Agents.
 ---
 
-This page specifies how a model submits the same Clojure `agent` form used by
-application code.
+This page specifies the Clojure `agent` form a model may submit at runtime.
 
-A developer might write:
+In application code the macro is namespaced:
 
 ```clojure
 (k/agent
@@ -17,7 +16,7 @@ A developer might write:
   :output string?})
 ```
 
-A model submits the equivalent unqualified form as source:
+Runtime source uses the unqualified macro in its evaluation namespace:
 
 ```clojure
 (agent
@@ -28,17 +27,17 @@ A model submits the equivalent unqualified form as source:
   :output string?})
 ```
 
-The evaluation namespace supplies the real `agent` macro. Both forms create the
-same Agent value. No generation flag or manually constructed Tool is required.
+The evaluation namespace supplies the real `agent` macro. No generation flag
+or manually constructed Tool is required.
 
 ## What the model sees
 
 The built-in `agent` Tool is described as a small programming manual. It tells
 the model:
 
-- when a specialist or custom workflow is useful;
+- when a specialist is useful;
 - when direct Tool use or an existing Agent is preferable;
-- the two accepted `(agent ...)` forms;
+- the accepted `(agent config)` form;
 - which model configuration, Tools, and Agents generated code may reference;
 - what information a generated Agent receives; and
 - how its output and failures return.
@@ -58,9 +57,7 @@ The call itself is:
 `source` is exactly one top-level Clojure `agent` form. `input` may be any JSON
 value; the generated Agent's `:input` contract validates it after compilation.
 
-## Accepted forms
-
-A model-driven Agent:
+## Accepted form
 
 ```clojure
 (agent
@@ -73,24 +70,9 @@ A model-driven Agent:
   :output string?})
 ```
 
-A Clojure Agent program:
-
-```clojure
-(agent
- {:name "generated-review-team"
-  :input string?
-  :output vector?}
- [change]
- (->> [security-reviewer api-reviewer]
-      (mapv #(future (run! % change)))
-      (mapv deref)
-      (mapv :output)))
-```
-
 The form must evaluate to an Agent. `defagent`, Markdown fences, prose, and
-multiple top-level forms are rejected. A program body has one input binding and
-may use ordinary Clojure, nested `agent` forms, and the symbols advertised in
-the Tool description.
+multiple top-level forms are rejected. The Agent requires a model and
+instructions.
 
 ## Information boundary
 
@@ -98,9 +80,8 @@ A generated Agent receives exactly the value supplied in `input`. It does not
 receive the parent model's messages, reasoning, previous Tool results, or
 Session history.
 
-Run-local application context is still accessible to Clojure code and Tools
-through `context`. karcarthy does not insert it into the generated Agent's
-model messages.
+Run-local application context remains available to Tools through `context`.
+karcarthy does not insert it into the generated Agent's model messages.
 
 Its own definition supplies its instructions and capabilities. Its final
 output becomes the result of the `agent` Tool call; the parent model then
@@ -148,9 +129,8 @@ A successful compilation therefore emits `read`, `expanded`, `checked`, and
 ## Available symbols
 
 Generated code runs in a fresh evaluation namespace. It receives Clojure core,
-the public Agent-program forms (`agent`, `tool`, `run!`, `context`, `model!`,
-and `emit!`), public vars from the selected application namespace, and the Tool
-and Agent values advertised in the dynamic catalog.
+public vars from the selected application namespace, and the Tool and Agent
+values advertised in the dynamic catalog.
 
 A Run may select the application namespace:
 
@@ -162,7 +142,7 @@ A Run may select the application namespace:
 ## Recursion and limits
 
 A generated model Agent receives the same built-in `agent` Tool and can write
-another Agent. Bound recursive programs with Run limits:
+another Agent. Bound recursive generation with Run limits:
 
 ```clojure
 {:depth 4
@@ -179,7 +159,7 @@ attempts.
 
 ## Direct compilation
 
-A Clojure Agent program can use the same compiler directly:
+Code already executing inside a Run can use the same compiler directly:
 
 ```clojure
 (def generated (k/compile-agent! source))

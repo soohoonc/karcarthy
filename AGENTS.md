@@ -1,9 +1,9 @@
 # karcarthy - guide for Codex
 
 karcarthy is a native, homoiconic Clojure agent harness. It owns the model/tool
-loop. Agents, tools, and orchestration are executable Clojure values and forms;
-model-authored Agents are read, expanded, checked, evaluated, and run by the
-same kernel.
+loop. Agents are model-backed values; Tools and orchestration are ordinary
+Clojure. Model-authored Agents are read, expanded, checked, evaluated, and run
+by the same kernel.
 
 There is no Runner protocol, EDN/JSON workflow DSL, or separate dynamic system.
 Do not reintroduce `pipe`, `branch`, workflow nodes, runner adapters, or a JSON
@@ -34,7 +34,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy/model/responses.clj` | Complete and SSE-streaming Responses-compatible HTTP transport. It translates model I/O only. |
 | `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a local directory. |
 | `resources/karcarthy/system.md` | Readable system prompt packaged in library and standalone jars. |
-| `resources/karcarthy/agent.md` | Model-facing manual for generating Agent programs; runtime model, Tool, and Agent catalogs are interpolated into it. |
+| `resources/karcarthy/agent.md` | Model-facing manual for generating Agents; runtime model, Tool, and Agent catalogs are interpolated into it. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
 | `examples/main.clj` | Small command dispatcher for the live Basic and Coding examples and the REPL. |
@@ -63,11 +63,13 @@ cd docs && npm run lint && npm run types:check && npm run build
 - **Clojure is the orchestration language.** Use `let`, `if`, `case`,
   `loop/recur`, functions, macros, `future`, `deref`, and `run!`. Do not add a
   separate child-call or workflow API.
-- **Bodies receive only input.** Agent and Tool bodies use `[input]`; internal
-  Run machinery is dynamically scoped and must not become a public argument.
+- **Agents are model-backed.** `agent` and `defagent` accept configuration, not
+  Clojure bodies. Use ordinary functions, macros, and data for orchestration.
+- **Tool bodies receive only input.** Tool bodies use `[input]`; internal Run
+  machinery is dynamically scoped and must not become a public argument.
 - **Agents and Tools retain code.** Preserve `:definition` and `:expansion`
   when changing macros or evaluation.
-- **Agent generation is recursive.** `(agent config ...)` constructs an Agent.
+- **Agent generation is recursive.** `(agent config)` constructs an Agent.
   Every model Agent receives a dynamically documented `agent` Tool that reads,
   expands, evaluates, validates, and runs another ordinary Agent form. Its
   source and input are explicit; no parent conversation is inherited. Do not
@@ -96,7 +98,7 @@ cd docs && npm run lint && npm run types:check && npm run build
   and lineage.
 - **Dependencies: Maven Central only.** HTTP uses Java's built-in client.
 - Keep live/paid model tests opt-in. The normal suite must stay offline and
-  deterministic through `fake-model`.
+  deterministic through `mock-model`.
 - Register new offline test namespaces in `test/karcarthy/test_runner.clj`;
   paid tests belong behind the `:live-test` alias and `KARCARTHY_LIVE=1`.
 

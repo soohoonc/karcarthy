@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: A toy Clojure harness where Agent programs can add new Agents while they run.
+description: A toy Clojure harness where Agents can add new Agents while they run.
 ---
 
 > **The agent architecture is the program.**
@@ -68,8 +68,7 @@ and evaluates it. The result is an executable Agent value.
 form → macroexpansion → Agent value → execution
 ```
 
-A model-driven Agent receives the same built-in Tool, so this can continue
-recursively.
+The new Agent receives the same built-in Tool, so this can continue recursively.
 
 ## Known architecture is ordinary Clojure
 
@@ -77,11 +76,7 @@ Runtime generation is not required. When the architecture is known, write it
 directly:
 
 ```clojure
-(k/agent
- {:name "review-team"
-  :input string?
-  :output vector?}
- [change]
+(defn review-team [change]
  (->> [security-reviewer api-reviewer]
       (mapv #(future (k/run! % change)))
       (mapv deref)

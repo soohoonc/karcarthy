@@ -1,5 +1,5 @@
 (ns karcarthy.cli
-  "Small executable entry point. Agent programs are authored in Clojure; the
+  "Small executable entry point. Agents are authored in Clojure; the
   former JSON workflow CLI has been removed."
   (:gen-class)
   (:require [karcarthy.acp :as acp]))

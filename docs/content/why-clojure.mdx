@@ -1,14 +1,13 @@
 ---
 title: Why Clojure?
-description: How forms, macros, and evaluation let an Agent program add new Agents while it runs.
+description: How forms, macros, and evaluation let an Agent add new Agents while it runs.
 ---
 
 karcarthy depends on a few properties that Clojure makes ordinary: programs
 can be read as data, macros receive their source forms, and evaluated forms
 become running code.
 
-The harness uses those properties to let an Agent program add new Agents while
-it runs.
+The harness uses those properties to let an Agent add new Agents while it runs.
 
 ## `agent` is a macro
 
@@ -67,7 +66,7 @@ result.
 
 ## The program can extend itself
 
-A generated Agent may use a model:
+A generated Agent is another Agent:
 
 ```clojure
 (agent
@@ -78,23 +77,8 @@ A generated Agent may use a model:
   :output string?})
 ```
 
-Or it may contain a Clojure body:
-
-```clojure
-(agent
- {:name "parallel-review"
-  :input string?
-  :output vector?}
- [change]
- (->> reviewers
-      (mapv #(future (run! % change)))
-      (mapv deref)
-      (mapv :output)))
-```
-
-The model-driven Agent can call the built-in `agent` Tool again. The Agent with
-a Clojure body can construct Agents and call them with `run!`. In both cases,
-the running program gains more behavior by evaluating more Clojure.
+The new Agent receives the built-in `agent` Tool and can create another one.
+The running program gains more behavior by evaluating more Clojure.
 
 ## Control flow stays in Clojure
 

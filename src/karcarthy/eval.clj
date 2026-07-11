@@ -101,10 +101,11 @@
   (let [ns-obj (evaluation-ns! rt)]
     (try
       (when-not (and (seq? form)
+                     (= 2 (count form))
                      (contains? '#{agent karcarthy/agent karcarthy.core/agent}
                                 (first form)))
         (throw (IllegalArgumentException.
-                "Agent source must be exactly one top-level (agent ...) form")))
+                "Agent source must be exactly one top-level (agent config) form")))
       (let [expanded (binding [*ns* ns-obj]
                        (macroexpand-all form))
             checked {:karcarthy/type :checked-agent-form
@@ -175,16 +176,16 @@
          (eval-agent-form-in-run! rt))))
 
 (defn check-agent-form!
-  "Macroexpand an Agent form inside the current Agent body."
+  "Macroexpand an Agent form inside the current Run."
   [form]
   (check-agent-form-in-run! (core/current-run-context) form))
 
 (defn eval-agent-form!
-  "Evaluate a checked Agent form inside the current Agent body."
+  "Evaluate a checked Agent form inside the current Run."
   [checked]
   (eval-agent-form-in-run! (core/current-run-context) checked))
 
 (defn compile-agent!
-  "Read, expand, check, evaluate, and return an Agent inside an Agent body."
+  "Read, expand, check, evaluate, and return an Agent inside the current Run."
   [source]
   (compile-agent-in-run! (core/current-run-context) source))

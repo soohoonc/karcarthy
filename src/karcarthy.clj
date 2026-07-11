@@ -12,12 +12,11 @@
             [karcarthy.tools :as tools]))
 
 ;; Agent and Tool macros are forwarding macros so callers need one alias.
-(defmacro agent
-  [config & body]
-  `(core/agent ~config ~@body))
+(defmacro agent [config]
+  `(core/agent ~config))
 
-(defmacro defagent [sym config & body]
-  `(core/defagent ~sym ~config ~@body))
+(defmacro defagent [sym config]
+  `(core/defagent ~sym ~config))
 
 (defmacro tool [config bindings & body]
   `(core/tool ~config ~bindings ~@body))
@@ -43,7 +42,7 @@
 (def monitor mon/monitor)
 (def monitor-state mon/monitor-state)
 
-(def fake-model core/fake-model)
+(def mock-model core/mock-model)
 (def memory-session session/memory-session)
 (def session? session/session?)
 (def session-id session/session-id)
