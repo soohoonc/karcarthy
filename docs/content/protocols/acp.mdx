@@ -1,11 +1,11 @@
 ---
-title: ACP
-description: Expose a karcarthy Agent as an ACP v1 stdio server.
+title: ACP server
+description: Serve a karcarthy Agent to an editor or evaluation harness over ACP.
 ---
 
-karcarthy can act as the Agent side of the Agent Client Protocol. An editor,
-evaluation harness, or other ACP client launches the process and communicates
-with it over newline-delimited JSON-RPC on standard input and output.
+Use ACP when another process needs to launch and control a karcarthy Agent. An
+editor or evaluation harness starts the server and communicates over
+newline-delimited JSON-RPC on standard input and output.
 
 ACP is the process boundary. The object being served is still an ordinary
 karcarthy Agent.
@@ -138,5 +138,5 @@ an isolation and authentication layer.
 
 ## Next
 
-- [Harbor](/docs/guides/harbor) evaluates a packaged Agent through this ACP boundary.
-- [Library API](/docs/reference/api#acp) lists the embedding API and exact options.
+- [Evaluate an agent](/docs/guides/harbor) uses this boundary from Harbor.
+- [API](/docs/reference/api#acp) lists the embedding API and exact options.

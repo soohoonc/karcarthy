@@ -1,0 +1,100 @@
+---
+title: Why Clojure?
+description: Why code as data makes Clojure unusually well suited to agent programs.
+---
+
+Agent architecture is control flow. An agent may call a specialist, run two
+reviews at once, retry a failed operation, or create a new specialist after it
+sees the task. These are programming-language problems.
+
+Many agent frameworks describe that control flow in a second language: a
+graph, a collection of nodes, or a JSON workflow. karcarthy uses Clojure.
+
+## One language
+
+A developer can write an Agent:
+
+```clojure
+(k/agent
+ {:name "reviewer"
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Review the proposed change."
+  :input string?
+  :output string?})
+```
+
+A model can submit the same form:
+
+```clojure
+(agent
+ {:name "reviewer"
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Review the proposed change."
+  :input string?
+  :output string?})
+```
+
+Both forms create the same Agent value. The same contracts, limits, events,
+and model loop apply. There is no generated-workflow representation to
+translate into the runtime.
+
+## Code is data
+
+Clojure source can be read as data before it runs. karcarthy keeps the original
+Agent form and its macroexpansion:
+
+```clojure
+(k/definition reviewer)
+(k/expansion reviewer)
+```
+
+For model-written source, karcarthy reads one `agent` form, expands it, checks
+it, evaluates it, and verifies that the result is an Agent. Each phase appears
+in the Run event stream.
+
+```text
+source → read → expand → check → evaluate → Agent
+```
+
+The important point is not that a model can return text that looks like code.
+It is that the returned program uses the application's own language and
+produces the same value a developer would write.
+
+## Clojure already has orchestration
+
+When the architecture is known, write it directly:
+
+```clojure
+(if high-risk?
+  (k/run! security-reviewer change)
+  (k/run! general-reviewer change))
+```
+
+```clojure
+(->> reviewers
+     (mapv #(future (k/run! % change)))
+     (mapv deref))
+```
+
+Branches, functions, recursion, macros, and concurrency remain ordinary
+Clojure. When the architecture depends on the task, a model can write another
+Agent in that same language.
+
+## The REPL matters
+
+Agents and Tools are values. At the REPL you can redefine one, run it, inspect
+its retained source, watch its children, and examine the result without a
+separate registry or compiler service.
+
+That feedback loop is particularly useful for agent programs, where prompts,
+Tools, model behavior, and control flow are often developed together.
+
+## The tradeoff
+
+Generated Clojure is executable JVM code. karcarthy checks the shape and
+contracts of an Agent form, but it is not a security sandbox. Source you do not
+trust must run in a process, container, or VM with only the authority it needs.
+
+Many languages can implement an agent harness. Clojure is unusually well
+suited to this experiment because its normal programs are already data. The
+[runtime-generation example](/docs/guides/architect) shows the idea running.

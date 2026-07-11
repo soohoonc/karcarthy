@@ -1,11 +1,13 @@
 ---
-title: Agents
-description: Define Agents, run them, and let them create more Agents.
+title: Agents and runs
+description: The program you define and the execution record returned by run!.
 ---
 
-An Agent is a Clojure value that keeps the form that created it. Its config has
-a name, instructions, Tools, input rules, and output rules. It may also have a
-Clojure body.
+An Agent is a program. A Run is the record of executing it once.
+
+Agents retain the Clojure form that created them. Their configuration defines
+instructions, capabilities, and boundary contracts; an optional Clojure body
+defines explicit control flow.
 
 An Agent runs in one of two ways:
 
@@ -117,7 +119,7 @@ The calls are recorded differently:
 | Model calls an Agent listed in `:agents` | Nested Agent in the current Run |
 | Model calls the built-in `agent` Tool | Compiled and nested Agent in the current Run |
 
-## Who writes and chooses Agents
+## Choose the architecture
 
 You can write an Agent before a Run. You can let a model choose an Agent you
 already wrote. Or you can let the model write a new Agent during the Run. All
@@ -153,7 +155,7 @@ Use a program Agent when application code should decide ordering, branching,
 or concurrency. The [composition guide](/docs/guides/composition) builds a
 parallel review team and handles failed child Runs explicitly.
 
-### Let the model write another Agent
+### Generate an Agent at runtime
 
 Every model-driven Agent also sees a built-in Tool named `agent`. The model can
 call it with a complete Clojure Agent form and explicit input:
@@ -166,9 +168,9 @@ call it with a complete Clojure Agent form and explicit input:
 The harness compiles that form into the same Agent value described on this
 page, runs it inside the current Run, and returns its output to the parent
 model. Use this when you cannot know what kind of specialist will help until
-the model sees the task. The [Agent creates Agents guide](/docs/guides/architect)
-shows a live run; [Agent forms](/docs/reference/agent-forms) gives the exact
-Tool input and compiler steps.
+the model sees the task. [Generated agents](/docs/generated-agents) explains
+the mechanism; [Create agents at runtime](/docs/guides/architect) shows it
+running.
 
 These choices are not maturity levels. Prefer one Agent when one Agent is
 enough.
@@ -213,7 +215,7 @@ reference](/docs/reference/api#run) for their exact shapes.
 
 ## Next
 
-- [Tools](/docs/tools) covers callable functions, contracts, context, and approvals.
-- [Agent creates Agents](/docs/guides/architect) follows one Agent as it writes and runs two more.
-- [Agent composition](/docs/guides/composition) shows fixed coordination in Clojure.
-- [Events](/docs/events) exposes the execution tree.
+- [Tools and context](/docs/tools) covers callable functions, contracts, context, and approvals.
+- [Generated agents](/docs/generated-agents) explains runtime-created Agents.
+- [Compose agents](/docs/guides/composition) shows fixed coordination in Clojure.
+- [Events and monitoring](/docs/events) exposes the execution tree.

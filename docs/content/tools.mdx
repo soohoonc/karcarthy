@@ -1,10 +1,10 @@
 ---
-title: Tools
-description: Define Clojure functions that a model can call.
+title: Tools and context
+description: Give a model callable functions without mixing local dependencies into its input.
 ---
 
-A Tool is a Clojure function with a model-visible name, description, and input
-schema.
+A Tool is a Clojure function a model can call. Its name, description, and input
+schema are visible to the model; local dependencies remain in Run context.
 
 ```clojure
 (k/deftool lookup-user
@@ -77,7 +77,7 @@ Function Tool schemas should be object-shaped with named properties. That is
 the common interface expected by model providers, even though a local Clojure
 function can accept any value.
 
-## Context and approval
+## Keep dependencies out of model input
 
 Pass local dependencies to `run!`:
 
@@ -130,18 +130,18 @@ File Tools remain under `:cwd`, including after resolving symlinks. `bash` is
 bounded by timeout and output size but is not a sandbox.
 
 Provider-hosted capabilities are declared as Tool values but executed by the
-model endpoint; see [Models](/docs/models#provider-hosted-tools).
+model endpoint; see [Model providers](/docs/protocols/models#provider-hosted-tools).
 
 For MCP, karcarthy starts a stdio MCP server, discovers its remote Tool
 definitions, and turns each one into an ordinary Tool value. Connection
 lifecycle, approval defaults, naming, supported protocol features, and
 ACP-provided MCP servers are documented on the dedicated [MCP page](/docs/protocols/mcp).
 
-Agents are declared separately with `:agents`; see [Make specialists
-available](/docs/agents#make-specialists-available).
+Agents are declared separately with `:agents`; see [Expose a known
+specialist](/docs/agents#expose-a-known-specialist).
 
 ## Next
 
-- [Models](/docs/models) configures endpoints, streaming, hosted Tools, and deterministic test transports.
-- [MCP](/docs/protocols/mcp) adapts Tools from an external process.
-- [Coding Agent](/docs/guides/coding) puts local filesystem and shell Tools into an end-to-end application.
+- [Model providers](/docs/protocols/models) configures endpoints, streaming, and hosted Tools.
+- [MCP tools](/docs/protocols/mcp) adapts Tools from an external process.
+- [Build a coding agent](/docs/guides/coding) uses filesystem and shell Tools end to end.

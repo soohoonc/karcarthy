@@ -44,6 +44,9 @@ All notable changes are documented here, following
 
 ### Changed
 
+- Documentation now presents karcarthy as an executable argument for Clojure:
+  a thesis-led overview, a complete Quickstart, outcome-driven examples,
+  focused concepts and integrations, and mechanical reference pages.
 - Runnable examples now live in task-scoped folders outside library source and Harbor
   builds a separate application artifact; library artifacts contain only the
   harness and production CLI.

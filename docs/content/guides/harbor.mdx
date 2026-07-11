@@ -1,54 +1,73 @@
 ---
-title: Harbor
-description: Evaluate one fixed karcarthy Coding Agent with a Harbor verifier and trajectory.
+title: Evaluate an agent
+description: Run the Coding Agent in isolation, score it, and inspect its trajectory.
 ---
 
-[Harbor](https://www.harborframework.com/) runs Agents in isolated task
-environments, invokes verifiers, and stores rewards and trajectories. The
-karcarthy example exposes one fixed Coding Agent through ACP:
+This example runs the karcarthy Coding Agent against a broken repository,
+checks its work with hidden tests, and records the interaction for inspection.
+It uses Harbor as the evaluation harness and ACP as the process boundary.
 
-This is the last step in the guide sequence. Read [Coding](/docs/guides/coding)
-for the Agent being evaluated and [ACP](/docs/protocols/acp) for the process
-boundary Harbor launches.
+## What is measured
 
-```text
-Harbor task
-  -> packaged karcarthy ACP process
-  -> fixed Coding Agent and repository Tools
-  -> Harbor verifier
-  -> reward, logs, and ATIF trajectory
-```
-
-This is an evaluation example. It has no optimizer, training loop, or program
-search.
-
-## What it demonstrates
-
-1. A normal karcarthy Agent can be packaged and served through ACP.
-2. Harbor can run that Agent inside an isolated repository task.
-3. A task verifier can define a metric over the Agent's work.
-4. Harbor can store the reward and convert the ACP interaction into an ATIF
-   trajectory.
-
-Harbor owns the task environment, verifier, result storage, and trajectory.
-karcarthy owns the Agent and model/Tool loop.
-
-## Bundled task and metric
-
-The bundled `scheduler` task contains a small SQLite-backed delivery scheduler
-with transaction and retry bugs. The Coding Agent receives a production
-symptom, inspects the repository, makes changes, and runs its tests.
-
-After the Agent exits, Harbor runs hidden behavioral tests. The verifier's
-`reward` metric is:
+The bundled task gives the Agent this production symptom:
 
 ```text
-1  all hidden tests pass
-0  one or more hidden tests fail
+A scheduler is delivering some jobs twice and retrying failed jobs in a tight
+loop. Find and fix the persistence bugs without changing the public Store
+method signatures. Preserve priority ordering and exhausted-attempt behavior.
 ```
 
-The task also includes an oracle solution so its environment and verifier can
-be checked without a model call:
+After the Agent exits, hidden behavioral tests run against its repository:
+
+```text
+reward 1  all hidden tests pass
+reward 0  one or more hidden tests fail
+```
+
+The repository does not check in a model result. Running the command below
+creates the score, logs, and trajectory for the selected model.
+
+## Before you begin
+
+You need Docker, JDK 21, the Clojure CLI, `uv`, and an OpenAI credential. The
+model-backed run is paid and requires an explicit opt-in.
+
+## Run the evaluation
+
+```bash
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh
+```
+
+Set `KARCARTHY_OPENAI_MODEL` to choose another Responses-compatible model and
+`KARCARTHY_ATTEMPTS` to repeat the task.
+
+The script packages the fixed Coding Agent, starts it through ACP inside the
+isolated task environment, and writes the resulting job under
+`examples/harbor/jobs`.
+
+## Inspect the result
+
+Open Harbor's local viewer:
+
+```bash
+uvx --python 3.13 --from harbor harbor view examples/harbor/jobs
+```
+
+The job contains:
+
+- the verifier reward and hidden-test logs;
+- the Agent's final answer;
+- model messages and token usage;
+- repository Tool calls and observations; and
+- any runtime-generated Agent calls.
+
+Use these artifacts together. The reward says whether the behavior passed; the
+trajectory shows how the Agent reached that result.
+
+## Validate the task without a model
+
+The bundled oracle checks that the environment and verifier can reach reward
+`1` without spending model tokens:
 
 ```bash
 uvx --python 3.13 --from harbor harbor run \
@@ -59,37 +78,6 @@ uvx --python 3.13 --from harbor harbor run \
   --yes
 ```
 
-## Run the live evaluation
-
-Docker, JDK 21, the Clojure CLI, `uv`, and an OpenAI credential are required.
-The model-backed run is paid and explicitly opt-in:
-
-```bash
-KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh
-```
-
-Set `KARCARTHY_OPENAI_MODEL` to select another Responses-compatible model and
-`KARCARTHY_ATTEMPTS` to repeat the evaluation.
-
-The development adapter builds and uploads a Harbor-only application plus a
-Java 21 runtime. The published karcarthy library artifact remains unchanged.
-
-## Inspect the result
-
-Harbor stores the result, verifier logs, ACP events, and
-[`trajectory.json`](https://www.harborframework.com/docs/agents/trajectory-format)
-under `examples/harbor/jobs`. Open the viewer with:
-
-```bash
-uvx --python 3.13 --from harbor harbor view examples/harbor/jobs
-```
-
-The ATIF trajectory records model messages, Tool calls, observations, usage,
-and any runtime `agent` calls. karcarthy's internal Run events retain finer
-compiler phases and nested lineage when those details are needed.
-
-## Continue exploring
-
-- [Coding](/docs/guides/coding) describes the Agent being run.
-- [ACP](/docs/protocols/acp) documents the process boundary Harbor launches.
-- [`examples/harbor/README.md`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/README.md) is the operational guide.
+The operational packaging details live in
+[`examples/harbor/README.md`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/README.md).
+[ACP server](/docs/protocols/acp) explains the boundary Harbor launches.

@@ -1,132 +1,68 @@
 ---
-title: Agent composition
-description: Coordinate independent Agent Runs with ordinary Clojure.
+title: Compose agents
+description: Coordinate a fixed Agent architecture with ordinary Clojure.
 ---
 
-This example runs two reviewers in parallel and passes their outputs to an
-editor. Each `run!` call is independent, so the example checks every Run and
-sets limits for each reviewer explicitly. The complete source lives at
-`examples/composition/main.clj`.
+Runtime generation is useful when the task determines the architecture. When
+you already know the architecture, write it directly.
 
-## Build the system
+This example runs security and API reviewers concurrently, then gives both
+reviews to an editor.
+
+## The coordinator
 
 ```clojure
-(ns example.composition
-  (:require [karcarthy :as k]))
-
 (defn output! [run]
   (if (= :completed (:status run))
     (:output run)
     (throw (ex-info "Agent Run failed" {:run run}))))
 
-(defn review-system [cwd]
-  (let [tools
-        (k/local-tools
-         {:cwd cwd
-          :approval {:read :never
-                     :search :never
-                     :write :always
-                     :edit :always
-                     :bash :always}})
-
-        reviewer-options
-        {:limits {:model-calls 12
-                  :deadline-ms 120000}
-         :approval (constantly false)}
-
-        security-reviewer
-        (k/agent
-         {:name "security-reviewer"
-          :model {:transport :responses :id "gpt-5.6"}
-          :instructions
-          "Inspect the repository for concrete security problems. Cite files."
-          :tools tools
-          :input string?
-          :output string?})
-
-        api-reviewer
-        (k/agent
-         {:name "api-reviewer"
-          :model {:transport :responses :id "gpt-5.6"}
-          :instructions
-          "Inspect the repository for API compatibility problems. Cite files."
-          :tools tools
-          :input string?
-          :output string?})
-
-        editor
-        (k/agent
-         {:name "review-editor"
-          :model {:transport :responses :id "gpt-5.6"}
-          :instructions
-          "Combine the supplied reviews. Remove duplicates and unsupported claims."
-          :input string?
-          :output string?})]
-
-    (k/agent
-     {:name "review-team"
-      :input string?
-      :output string?}
-     [request]
-     (let [[security api]
-           (->> [security-reviewer api-reviewer]
-                (mapv #(future (k/run! % request reviewer-options)))
-                (mapv deref)
-                (mapv output!))
-           editor-prompt
-           (str "Request:\n" request
-                "\n\nSecurity review:\n" security
-                "\n\nAPI review:\n" api)]
-       (output! (k/run! editor editor-prompt
-                        {:limits {:model-calls 4
-                                  :deadline-ms 60000}}))))))
+(k/agent
+ {:name "review-team"
+  :input string?
+  :output string?}
+ [request]
+ (let [[security api]
+       (->> [security-reviewer api-reviewer]
+            (mapv #(future (k/run! % request reviewer-options)))
+            (mapv deref)
+            (mapv output!))
+       editor-input
+       (str "Request:\n" request
+            "\n\nSecurity review:\n" security
+            "\n\nAPI review:\n" api)]
+   (output! (k/run! editor editor-input))))
 ```
 
-The reviewers use the model and Tool loop. `review-team` uses a Clojure body
-for deterministic coordination. `future` supplies concurrency; `output!`
-propagates failed child Runs instead of quietly passing `nil` to the editor.
+The reviewers and editor are model-driven Agents. The coordinator has a
+Clojure body, so Clojure determines ordering and concurrency. `future` runs the
+reviews together; `output!` refuses to pass a failed Run to the editor.
 
-## Run it
+## Run the complete example
 
-With `OPENAI_API_KEY` set, load the example from the repository root:
+With `OPENAI_API_KEY` set, start a REPL from the repository root:
 
 ```clojure
+(require '[karcarthy :as k])
 (load-file "examples/composition/main.clj")
 
-(def team (example.composition/review-system "/workspace/project"))
+(def team
+  (example.composition/review-system "/workspace/project"))
 
 (def run
-  (k/run! team "Review the current working tree against origin/main."))
+  (k/run! team
+          "Review the current working tree against origin/main."))
 
-(select-keys run [:status :output :usage])
+(println (:output run))
 ```
 
-The outer Run records the coordinator. Reviewer and editor calls are separate
-Runs with their own limits and events.
+The complete definitions and approval policy are in
+[`examples/composition/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/composition/main.clj).
 
-## Let the model choose the specialists
+Each explicit `run!` starts an independent Run with its own limits and events.
+By contrast, an Agent called through `:agents` or created through the built-in
+`agent` Tool remains nested in the current Run.
 
-When the useful decomposition is not known in advance, let the model write a
-new Agent instead of hard-coding the review team:
-
-```clojure
-(defn adaptive-reviewer [cwd]
-  (k/agent
-   {:name "adaptive-reviewer"
-    :model {:transport :responses :id "gpt-5.6"}
-    :instructions
-    "Review the repository. Create a focused Agent when specialization helps."
-    :tools (k/local-tools {:cwd cwd})
-    :output string?}))
-
-(k/run! (adaptive-reviewer "/workspace/project")
-        "Review the current change."
-        {:limits {:depth 4
-                  :agent-forms 8
-                  :parallelism 3
-                  :model-calls 40}})
-```
-
-Agent forms authored at runtime remain inside this Run, so these limits and events cover the
-whole Agent tree. Continue with [Coding](/docs/guides/coding)
-for open-ended live repository work and optional model-authored Agents.
+Use this pattern when the team is part of the application. Use
+[runtime generation](/docs/guides/architect) when the task should determine
+which specialists exist.

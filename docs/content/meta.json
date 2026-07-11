@@ -3,13 +3,15 @@
   "pages": [
     "index",
     "quickstart",
-    "---Library---",
+    "why-clojure",
+    "guides",
+    "---Concepts---",
     "agents",
     "tools",
-    "models",
+    "generated-agents",
     "sessions",
     "events",
-    "guides",
+    "limits-safety",
     "protocols",
     "reference"
   ]
