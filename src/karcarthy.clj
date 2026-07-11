@@ -5,6 +5,7 @@
             [karcarthy.core :as core]
             [karcarthy.eval :as keval]
             [karcarthy.mcp :as mcp]
+            [karcarthy.monitor :as mon]
             [karcarthy.model.responses :as responses]
             [karcarthy.prompt :as prompt]
             [karcarthy.session :as session]
@@ -39,6 +40,9 @@
 (defn model! [request] (core/model! request))
 (defn emit! [event] (core/emit! event))
 (def events core/events)
+(def monitor mon/monitor)
+(def monitor-view mon/monitor-view)
+(def print-monitor mon/print-monitor)
 
 (def fake-model core/fake-model)
 (def memory-session session/memory-session)

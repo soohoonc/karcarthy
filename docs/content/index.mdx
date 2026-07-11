@@ -1,173 +1,177 @@
 ---
-title: Home
-description: Build Agents that can write and run new Clojure Agents.
+title: The agent architecture is the program
+description: Developers and models write the same Clojure Agents.
 ---
 
-karcarthy is a native, homoiconic Clojure agent harness. Agents are executable
-Clojure values and forms. A model can write a new `(agent ...)` form while its
-Agent is running, and the same kernel reads, expands, checks, evaluates, and
-runs it immediately.
+karcarthy is an agent harness for Clojure. An Agent is a Clojure program.
 
-There is no workflow graph or second orchestration language. Humans, macros,
-and models all author the same Agent program.
-
-## Run an Agent
+You can write one yourself:
 
 ```clojure
 (require '[karcarthy :as k])
 
-(k/defagent assistant
+(k/defagent reviewer
   {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Answer clearly and concisely."
+   :instructions "Review the supplied change. Return concrete findings."
+   :input string?
    :output string?})
+```
 
-(def run
-  (k/run! assistant "Explain continuation-passing style."))
+`defagent` creates an Agent value and keeps the Clojure form that created it.
+Run the Agent with `run!`:
 
+```clojure
+(def run (k/run! reviewer "Replace synchronous writes with a queue."))
+
+(:status run) ;=> :completed
 (:output run) ;=> "..."
 ```
 
-`run!` owns one bounded model/Tool loop and returns a Run containing the output,
-usage, events, and any failure.
+## An Agent can run other Agents
 
-## The Clojure aha: an Agent can write an Agent
-
-Every model Agent automatically receives a Tool named `agent`. No generation
-flag or manually registered Tool is required:
+Give an Agent a Clojure body when you want to control how it works:
 
 ```clojure
-(k/defagent architect
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions
-   "Solve the task. Create and run a skeptical reviewer before answering."
-   :output string?})
-
-(def run
-  (k/run! architect
-          "Review this API migration for hidden risks."
-          {:limits {:agent-forms 4
-                    :depth 3}}))
+(k/defagent review-team
+  {:input string? :output vector?}
+  [change]
+  (->> [security-reviewer api-reviewer]
+       (mapv #(future (k/run! % change)))
+       (mapv deref)
+       (mapv :output)))
 ```
 
-During that Run, the architect's model can call `agent` with two fields. The
-`source` field is a complete Clojure program:
+This Agent runs two reviewers at once. The code is the whole architecture.
+There is no workflow graph behind it. Use normal Clojure for branches, loops,
+recursion, macros, and concurrency.
+
+## A model can write Agents too
+
+Every Agent that uses a model gets a Tool called `agent`. The model calls it
+with Clojure source and an input:
 
 ```clojure
-(agent
- {:name "risk-reviewer"
-  :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Find hidden assumptions and concrete failure modes."
-  :input string?
-  :output string?})
+{:source
+ "(agent
+    {:name \"failure-analyst\"
+     :model {:transport :responses :id \"gpt-5.6\"}
+     :instructions \"Find one hidden failure mode.\"
+     :input string?
+     :output string?})"
+ :input
+ "Replace synchronous writes with a queue."}
 ```
 
-The `input` field is the complete value given to that new Agent:
+karcarthy reads the form, evaluates it into an Agent value, and runs it. Its
+answer goes back to the parent Agent.
 
 ```text
-Review this API migration for hidden risks.
+model writes `(agent ...)`
+  → karcarthy creates an Agent value
+  → karcarthy runs the Agent
+  → the answer goes back to the model
 ```
 
-karcarthy executes one path:
+A developer-written Agent and a model-written Agent produce the same value.
+Both can use Tools. Both can call Agents. Both can contain Clojure code. A new
+Agent can create more Agents.
+
+That is what **the agent architecture is the program** means. The code you
+write, the code the model writes, and the code karcarthy runs are the same kind
+of program.
+
+## Watch an Agent create a team
+
+The Architect example asks one Agent to create two more: a failure analyst and
+a rollout planner. It runs them together, then combines their answers.
+
+```bash
+clojure -M:examples architect \
+  "Review a migration from synchronous writes to a queue."
+```
+
+The terminal redraws the Agent tree as the Run changes:
 
 ```text
-parent Agent
-  -> model calls the built-in agent Tool
-  -> read one `(agent ...)` form
-  -> macroexpand, evaluate, and verify it
-  -> run the new Agent on `input`
-  -> return its output to the parent model
-  -> parent continues to its final answer
+Run run_7c2e9b… · running · 2 Agent forms
+└─ architect · waiting for 2 Agents
+   ├─ failure-analyst · calling model
+   └─ rollout-planner · Tool: search
 ```
 
-The child is an ordinary Agent, not a workflow node or serialized substitute.
-It can use Tools, call known Agents, contain Clojure control flow, or generate
-another Agent. Its source is both program and data: a developer can write it, a
-macro can transform it, and a model can produce it at runtime. That is why
-karcarthy is built in Clojure. Homoiconicity is doing runtime work here, not
-just providing Lisp syntax.
+[Read the walkthrough](/docs/guides/architect) or inspect the
+[`architect` example](https://github.com/soohoonc/karcarthy/blob/main/examples/architect/main.clj).
 
-The generated Agent receives only the explicit `input`, not the parent's hidden
-conversation. Parent and child still share the current Run's limits, usage,
-cancellation, approvals, and event lineage.
+## What `run!` returns
 
-## Three composition choices
-
-| Need | Mechanism | Who chooses |
-| --- | --- | --- |
-| Call a specialist known ahead of time | Put it in `:agents` | Parent model |
-| Run a fixed topology | Write an Agent body with ordinary Clojure and `run!` | Application program |
-| Create a role or workflow after seeing the task | Use the automatic `agent` Tool | Parent model at runtime |
-
-For example, `:agents` makes an existing Agent callable:
+Each call to `run!` returns a Run. The Agent is the program; the Run records one
+execution of it.
 
 ```clojure
-(k/defagent researcher
-  {:description "Research one question."
-   :model {:transport :responses :id "gpt-5.6"}
-   :instructions "Research the assigned question."
-   :output string?})
-
-(k/defagent editor
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Write the answer. Ask researcher when useful."
-   :agents [researcher]
-   :output string?})
+(select-keys run [:status :output :usage :events :error])
 ```
 
-This is different from the built-in `agent` Tool: `researcher` already exists,
-while `agent` accepts new Clojure source and constructs a new Agent during the
-Run.
+A Run sets limits on model calls, tokens, depth, concurrency, generated Agent
+forms, and time. Agents created by a model use the same limits and appear in
+the same event history.
 
-## The mental model
+Use a Run monitor to see that history as it happens:
 
-| Concept | Role |
-| --- | --- |
-| Agent | Instructions, capabilities, contracts, and optionally a Clojure body. |
-| Tool | A model-callable Clojure function with an input schema. |
-| Run | One bounded execution with output, usage, events, and failure data. |
-| Session | Conversation history shared across otherwise independent Runs. |
-| Context | Local dependencies available to code and Tools, never exposed automatically. |
-| Model transport | Translation between the kernel's normalized request and a model API. |
+```clojure
+(def live (k/monitor {:display :tree}))
+(def run (k/run! reviewer "Review this migration." {:observe live}))
+```
 
-The harness owns the model/Tool loop. Clojure owns control flow. Sessions own
-conversation history. Transports only translate model I/O.
+The monitor redraws the Agent tree in the terminal. Dereference it for the
+current state as Clojure data:
 
-## Choose a path
+```clojure
+@live
+```
+
+[Events](/docs/events#watch-runs-live) documents live and manual display.
+
+## Why Clojure
+
+Clojure code is data. karcarthy can keep an Agent's source, let macros change
+it, let a model write it, and execute it with Clojure itself. No second language
+is needed.
+
+Generated source runs as full-trust JVM Clojure. Contracts catch bad inputs and
+outputs, but they are not a sandbox. Isolate the process if you do not trust the
+source.
+
+## Continue
 
 <Cards>
   <Card
-    title="Run your first Agent"
-    description="Install karcarthy, call a model, and add a Tool."
+    title="Quickstart"
+    description="Install karcarthy, run one Agent, and add a Tool."
     href="/docs/quickstart"
   />
   <Card
-    title="Author Agents at runtime"
-    description="See the exact source, input boundary, compilation path, recursion, and limits."
-    href="/docs/reference/agent-forms"
-  />
-  <Card
-    title="Understand Agents"
-    description="Choose between callable specialists, Clojure coordination, and Agent forms authored at runtime."
+    title="Agents"
+    description="Learn how Agents run and call one another."
     href="/docs/agents"
   />
   <Card
-    title="Build an application"
-    description="Follow live examples from chat through open-ended coding."
+    title="Agent creates Agents"
+    description="Follow one Agent as it writes and runs two more."
+    href="/docs/guides/architect"
+  />
+  <Card
+    title="Examples"
+    description="Build chat, composition, coding, and evaluation applications."
     href="/docs/guides"
   />
   <Card
-    title="Connect other systems"
-    description="Import Tools with MCP or serve an Agent over ACP."
+    title="Protocols"
+    description="Import Tools with MCP or serve an Agent through ACP."
     href="/docs/protocols/mcp"
   />
   <Card
-    title="Evaluate with Harbor"
-    description="Run a fixed Agent with a verifier reward and trajectory."
-    href="/docs/guides/harbor"
-  />
-  <Card
-    title="Look up exact shapes"
-    description="Use the API, data, and Agent-form references."
+    title="Reference"
+    description="Look up exact API and data shapes."
     href="/docs/reference"
   />
 </Cards>

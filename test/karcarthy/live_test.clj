@@ -1,4 +1,5 @@
 (load-file "examples/basic/main.clj")
+(load-file "examples/architect/main.clj")
 (load-file "examples/coding/main.clj")
 
 (ns karcarthy.live-test
@@ -7,6 +8,7 @@
             [clojure.string :as str]
             [clojure.test :as t :refer [deftest is]]
             [karcarthy :as k]
+            [example.architect :as architect]
             [example.basic :as basic]
             [example.coding :as coding])
   (:import [java.nio.charset StandardCharsets]
@@ -39,6 +41,23 @@
     (let [run (k/run! (basic/basic-agent) "Reply with only the word ready.")]
       (is (= :completed (:status run)) (pr-str (:error run)))
       (is (= "ready" (some-> (:output run) str/trim str/lower-case))))))
+
+(deftest architect-example-writes-and-runs-two-agents
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [run (architect/run-architect!
+               "Review a migration from synchronous writes to a queue."
+               (k/monitor))
+          program-events (->> (:events run)
+                              (map :type)
+                              (filter #(= "program" (namespace %)))
+                              set)]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (= 2 (get-in run [:usage :agent-forms])))
+      (is (= #{:program/read :program/expanded :program/checked
+               :program/evaluated}
+             program-events)))))
 
 (deftest coding-example-inspects-edits-and-verifies
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")

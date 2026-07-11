@@ -1,26 +1,47 @@
 # karcarthy
 
-karcarthy is a small Clojure agent harness inspired by Lisp's homoiconicity.
-Clojure itself is the workflow engine: Agents are values and forms, and normal
-functions, macros, control flow, and concurrency compose them.
+> **The agent architecture is the program.**
+
+karcarthy is a native, homoiconic Clojure agent harness. Agents are executable
+Clojure values and forms: developers, macros, and models all author the same
+program, and the same kernel runs it.
+
+There is no workflow graph or second orchestration language. Clojure functions,
+conditionals, recursion, and concurrency express fixed architectures. When the
+right architecture depends on the task, a running Agent can write and run a new
+`(agent ...)` form.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [Documentation](https://karcarthy.vercel.app/docs)
 
-## Run the live example
+## Watch an Agent write more Agents
 
 JDK 21, the Clojure CLI, and `RESPONSES_API_KEY` or `OPENAI_API_KEY` are
-required.
+required:
 
 ```bash
-clojure -M:examples basic "Explain what an Agent value is."
+clojure -M:examples architect \
+  "Review a migration from synchronous writes to a queue."
 ```
 
-Fake models are used only by the offline unit tests.
+The terminal redraws the live Agent tree as the Run changes:
 
-## Define and run an Agent
+```text
+Run run_7c2e9b… · running · 2 Agent forms
+└─ architect · waiting for 2 Agents
+   ├─ failure-analyst · calling model
+   └─ rollout-planner · Tool: search
+```
+
+When both children finish, the tree marks them done and the parent writes the
+answer. The `2 Agent forms` count comes from the Clojure forms submitted by the
+parent model.
+
+## One representation
+
+A developer can define a model-driven Agent:
 
 ```clojure
 (require '[karcarthy :as k])
@@ -30,71 +51,69 @@ Fake models are used only by the offline unit tests.
    :instructions "Answer clearly and concisely."
    :output string?})
 
-(def run
-  (k/run! assistant "Explain continuation-passing style."))
-
-(:status run) ;=> :completed
+(def run (k/run! assistant "Explain continuation-passing style."))
 (:output run) ;=> "..."
 ```
 
-The built-in Responses transport reads `RESPONSES_API_KEY` or
-`OPENAI_API_KEY`.
-
-## Add a Tool
+Or use ordinary Clojure to define a fixed architecture:
 
 ```clojure
-(k/deftool word-count
-  {:description "Count the words in text."
-   :input {:type "object"
-           :properties {"text" {:type "string"}}
-           :required ["text"]
-           :additionalProperties false}
-   :output integer?}
-  [{:keys [text]}]
-  (count (re-seq #"\S+" text)))
+(k/defagent review-team
+  {:input string? :output vector?}
+  [change]
+  (->> [security-reviewer api-reviewer]
+       (mapv #(future (k/run! % change)))
+       (mapv deref)
+       (mapv :output)))
 ```
 
-Put the Tool in an Agent with `:tools [word-count]`. The model receives its
-name, description, and schema; karcarthy validates and executes its calls.
+Every model-driven Agent also receives a built-in `agent` Tool. It accepts the
+source for exactly one `(agent ...)` form and an explicit input. Authored and
+runtime-generated architectures therefore share the same language, contracts,
+Run limits, events, and nested lineage.
 
-## Make another Agent available
+This is why karcarthy uses Clojure: an Agent's source is simultaneously an
+executable program and data that a developer, macro, or model can produce.
+
+## Watch live Runs at the REPL
+
+`monitor` turns the event stream into a live Agent tree:
 
 ```clojure
-(k/defagent editor
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Write the answer. Ask researcher when useful."
-   :agents [researcher]
-   :output string?})
+(def live (k/monitor {:display :tree}))
+(def run (k/run! assistant "Complete the task." {:observe live}))
 ```
 
-The editor's model can call `researcher`. Its output returns to the
-editor, which continues to the final answer.
+Use `@live` for the current state as Clojure data or `(k/print-monitor live)`
+to print one snapshot. A monitor can observe several concurrent Runs.
 
-## Let a model write Clojure
+## Examples
 
-```clojure
-(k/defagent architect
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Write and run a focused Agent when useful."
-   :output string?})
-```
+The examples progress from the kernel to a complete evaluation:
 
-Every model Agent may submit a new `(agent ...)` form. karcarthy reads, expands,
-evaluates, verifies, and runs the resulting Agent. A generated form can use
-ordinary Clojure and call other Agents. Authored and generated orchestration
-therefore share one language and representation.
+| Example | What it shows |
+| --- | --- |
+| [Basic](examples/basic/main.clj) | One model-driven Agent Run |
+| [Architect](examples/architect/main.clj) | A running Agent authors and calls a task-specific team |
+| [Composition](examples/composition/main.clj) | A fixed concurrent architecture written with Clojure |
+| [Coding](examples/coding/main.clj) | Open-ended repository work with task-dependent architecture |
+| [Harbor](examples/harbor/README.md) | The Coding Agent evaluated by a verifier with a recorded trajectory |
 
-The built-in `agent` Tool explains the exact grammar, when generation is
-useful, when it is unnecessary, and the model, Tool, and Agent symbols actually
-available. Its call contains the Clojure `source` and an explicit `input`.
-Agent forms submitted at runtime do not inherit the parent's model conversation.
+See [examples/README.md](examples/README.md) for commands and details.
 
-This executes model-authored JVM Clojure and is not a sandbox.
+## Boundaries
+
+The harness owns the bounded model/Tool loop. Clojure owns control flow.
+Sessions own conversation history. Model transports only translate I/O.
+
+Runtime Agent source is evaluated as full-trust JVM Clojure. karcarthy validates
+that it is one Agent form, but it is not a sandbox for untrusted code.
 
 ## Documentation
 
 - [Quickstart](https://karcarthy.vercel.app/docs/quickstart)
-- [Library](https://karcarthy.vercel.app/docs/agents)
+- [Agents](https://karcarthy.vercel.app/docs/agents)
+- [Runtime Agent forms](https://karcarthy.vercel.app/docs/reference/agent-forms)
 - [Guides](https://karcarthy.vercel.app/docs/guides)
 - [Protocols](https://karcarthy.vercel.app/docs/protocols/mcp)
 - [Reference](https://karcarthy.vercel.app/docs/reference)
