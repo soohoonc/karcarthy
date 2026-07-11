@@ -33,9 +33,10 @@ All notable changes are documented here, following
 - An explicit paid live test that asks GPT-5.6 to author and run a new Agent.
 - A paid Agent test that inspects and edits a temporary directory.
 - A minimal REPL chat example built from an Agent, `run!`, and a Session.
-- Event-driven Run monitors that expose current Agent state as Clojure data and
-  can redraw live Run, Agent, model, Tool, and Agent-form activity as a terminal
-  tree.
+- Event-driven Run monitors that print current Agent state directly at the REPL
+  and can redraw live Run, Agent, model, Tool, and Agent-form activity as a
+  terminal tree with elapsed time and cumulative model usage. `monitor-state`
+  exposes the underlying Clojure data explicitly.
 - A live Coding Agent that inspects repositories with local Tools, chooses its
   own strategy, edits code, and verifies the result.
 - A packaged Harbor evaluation that runs the fixed Coding Agent on an isolated

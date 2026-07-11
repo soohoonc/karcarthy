@@ -65,8 +65,13 @@ poorly.
 
 ## Run monitor snapshot
 
-Dereferencing a Run monitor returns process-local data derived from observed
-events:
+`monitor-state` returns process-local data derived from observed events:
+
+```clojure
+(k/monitor-state live)
+```
+
+Its shape is:
 
 ```clojure
 {:karcarthy/type :monitor-snapshot
@@ -76,6 +81,12 @@ events:
   {:id "run_..."
    :status :running
    :agent "architect"
+   :started-at-ms 1760000000000
+   :updated-at-ms 1760000018000
+   :elapsed-ms 18000
+   :usage {:model-calls 3
+           :input-tokens 7000
+           :output-tokens 1421}
    :agent-forms 2
    :created-agents ["failure-analyst" "rollout-planner"]
    :agent-order ["agent_..." "agent_..." "agent_..."]

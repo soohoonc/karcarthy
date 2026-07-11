@@ -48,15 +48,16 @@ The source is in
 The names will vary. While both children run, the terminal looks like this:
 
 ```text
-Run run_7c2e9b… · running · 2 Agent forms
+Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
 └─ architect · waiting for 2 Agents
    ├─ failure-analyst · calling model
    └─ rollout-planner · Tool: search
 ```
 
-The display redraws when an Agent starts, calls a model or Tool, creates an
-Agent form, finishes, or fails. The two child lines may change in either order
-because they run at the same time.
+Elapsed time advances once per second. Model calls and tokens accumulate as
+model responses finish. The display also redraws when an Agent starts, calls a
+model or Tool, creates an Agent form, finishes, or fails. The two child lines
+may change in either order because they run at the same time.
 
 Here is what happened:
 

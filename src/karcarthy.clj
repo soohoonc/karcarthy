@@ -41,8 +41,7 @@
 (defn emit! [event] (core/emit! event))
 (def events core/events)
 (def monitor mon/monitor)
-(def monitor-view mon/monitor-view)
-(def print-monitor mon/print-monitor)
+(def monitor-state mon/monitor-state)
 
 (def fake-model core/fake-model)
 (def memory-session session/memory-session)

@@ -34,15 +34,20 @@ observer:
 `:display :tree` redraws the same terminal lines as events arrive:
 
 ```text
-Run run_7c2e9b… · running · 2 Agent forms
+Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
 └─ architect · waiting for 2 Agents
    ├─ failure-analyst · calling model
    └─ rollout-planner · Tool: search
 ```
 
+The header shows current Run status, elapsed time, model-call count, cumulative
+input and output tokens, and submitted Agent forms. Elapsed time refreshes once
+per second even when no event arrives. Token totals update when a model call
+finishes because providers report usage with the completed response.
+
 The tree shows running, completed, and failed Agents; parent and child
-relationships; model calls; active Tools; and submitted Agent forms. It does
-not print model text or Tool inputs and outputs.
+relationships; model calls; and active Tools. It does not print model text or
+Tool inputs and outputs.
 
 The monitor is also ordinary REPL state. Create it without `:display` when you
 want to inspect it manually:
@@ -54,10 +59,13 @@ want to inspect it manually:
   (future
     (k/run! architect task {:observe live})))
 
-@live                  ; current state as Clojure data
-(k/monitor-view live)  ; current tree as a string
-(k/print-monitor live) ; print one tree snapshot
+(k/monitor live)       ; show the current tree
+(k/monitor-state live) ; underlying Clojure data
 ```
+
+The bundled `clojure -M:examples repl` also hides the unhelpful values returned
+by `require` and `def`, so pasted demo forms do not produce `nil` and
+`#'user/live` between the useful output.
 
 Running the Agent in a `future` leaves the REPL prompt free for manual
 inspection. A single monitor can observe several concurrent root Runs; it keeps
