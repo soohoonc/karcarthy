@@ -11,18 +11,13 @@ description: Public symbols available through the karcarthy namespace.
 
 ```clojure
 (k/agent config)
-(k/agent config [input] body ...)
 
 (k/defagent name config)
-(k/defagent name config [input] body ...)
 ```
 
 Both forms create an Agent. `defagent` defines a var and supplies `:name` from
-its symbol. `agent` creates a value and requires `:name` in the config.
-
-Without a body, an Agent requires `:model` and `:instructions` and uses the
-model/Tool loop. With `[input] body ...`, the Clojure program computes its
-output directly.
+its symbol. `agent` creates a value and requires `:name` in the config. Both
+require `:model` and `:instructions`.
 
 ```clojure
 {:name "researcher"
@@ -106,8 +101,7 @@ Starts a Run, waits for it to finish, and returns its complete result.
  :evaluation-namespace 'example.generated}
 ```
 
-`context` returns the current Run's local dependency value from a Tool or
-Clojure Agent program:
+`context` returns the current Run's local dependency value from a Tool:
 
 ```clojure
 (k/context)
@@ -172,8 +166,8 @@ function only to inspect it or for explicit prompt composition.
 (def generated (k/compile-agent! source))
 ```
 
-These functions must run from an Agent program because compilation is charged
-to the current Run. See [Agent forms](/docs/reference/agent-forms).
+These functions must run inside a Run because compilation is charged to that
+Run. See [Agent forms](/docs/reference/agent-forms).
 
 ## Models
 
@@ -191,10 +185,10 @@ The Responses transport supports `:base-url`, `:path`, `:url`, `:api-key`,
 Use a deterministic model in tests:
 
 ```clojure
-(k/fake-model (fn [request] {:type :final :output "done"}))
+(k/mock-model (fn [request] {:type :final :output "done"}))
 ```
 
-`model!` calls the active transport from a Clojure Agent program:
+`model!` calls the active transport from code executing inside a Run:
 
 ```clojure
 (k/model! normalized-request)

@@ -49,11 +49,11 @@ declaration through the transport; it does not execute that Tool locally.
 
 ## Deterministic tests
 
-`fake-model` replaces the network transport with a function:
+`mock-model` replaces the network transport with a function:
 
 ```clojure
 (def model
-  (k/fake-model
+  (k/mock-model
    (fn [_]
      {:type :final
       :output "deterministic response"

@@ -15,8 +15,7 @@ an external format.
  :config {...}
  :definition-ns 'example.research
  :definition '(agent {...})
- :expansion '(...)
- :body nil}
+ :expansion '(...)}
 ```
 
 The public config keys are `:name`, `:description`, `:model`, `:instructions`,
@@ -24,8 +23,7 @@ The public config keys are `:name`, `:description`, `:model`, `:instructions`,
 `:output-schema`, `:max-turns`, `:stop-when`, `:guardrails`, `:limits`, and
 `:metadata`.
 
-`definition` and `expansion` are retained for program analysis. `body` is nil
-for the normal model loop and a compiled function for a Clojure Agent program.
+`definition` and `expansion` are retained for inspection and program analysis.
 
 ## Tool
 

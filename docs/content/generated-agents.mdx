@@ -3,8 +3,8 @@ title: Generated agents
 description: How a model writes and runs another Agent inside the current Run.
 ---
 
-Every model-driven Agent receives a built-in Tool named `agent`. The Tool lets
-the model submit one Clojure Agent form and the input for that Agent:
+Every Agent receives a built-in Tool named `agent`. The Tool lets the model
+submit one Clojure Agent form and the input for that Agent:
 
 ```clojure
 {:source "(agent {:name \"reviewer\" ...})"

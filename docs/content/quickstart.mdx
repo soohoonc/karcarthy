@@ -3,7 +3,7 @@ title: Quickstart
 description: Install karcarthy and run your first Agent.
 ---
 
-This guide creates one model-driven Agent, runs it, and prints its answer.
+This guide creates one Agent, runs it, and prints its answer.
 
 ## Before you begin
 
@@ -42,8 +42,8 @@ Create `src/example.clj`:
    :output string?})
 ```
 
-An Agent is a Clojure value. This one has no body, so karcarthy runs its model
-and Tool loop.
+An Agent is a Clojure value containing its model, instructions, capabilities,
+and boundary contracts.
 
 ## Run it
 

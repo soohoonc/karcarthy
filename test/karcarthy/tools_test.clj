@@ -23,7 +23,7 @@
     (is (some? resource))
     (when resource
       (let [template (slurp resource)]
-        (is (re-find #"## Agent programs" template))
+        (is (re-find #"## Creating Agents" template))
         (is (re-find #"## Working principles" template))
         (is (= template (k/system-prompt)))
         (is (not (re-find #"\{\{" template)))))))
@@ -76,7 +76,7 @@
       (spit (.toFile (.resolve root "AGENTS.md"))
             "Run the smallest relevant test.")
       (let [seen (atom nil)
-            model (k/fake-model
+            model (k/mock-model
                    (fn [request]
                      (reset! seen request)
                      {:type :final :output "ok"}))

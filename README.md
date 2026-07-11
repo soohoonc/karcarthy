@@ -2,9 +2,9 @@
 
 > **The agent architecture is the program.**
 
-karcarthy is an experiment in writing agents as Clojure programs. Developers,
-macros, and models create the same Agent forms, and the same runtime executes
-them.
+karcarthy is a toy agent harness built around Clojure forms and macros. During
+a Run, an Agent can submit another `(agent ...)` form; karcarthy expands it,
+evaluates it, and runs the new Agent.
 
 There is no workflow graph or second orchestration language. Clojure functions,
 conditionals, recursion, and concurrency express fixed architectures. When the
@@ -39,9 +39,9 @@ Elapsed time updates once per second. Model-call and token totals update as
 usage arrives. When both children finish, the tree marks them done and the
 parent writes the answer.
 
-## One representation
+## Agents and Clojure
 
-A developer can define a model-driven Agent:
+Define an Agent with a model and instructions:
 
 ```clojure
 (require '[karcarthy :as k])
@@ -58,22 +58,16 @@ A developer can define a model-driven Agent:
 Or use ordinary Clojure to define a fixed architecture:
 
 ```clojure
-(k/defagent review-team
-  {:input string? :output vector?}
-  [change]
+(defn review-team [change]
   (->> [security-reviewer api-reviewer]
        (mapv #(future (k/run! % change)))
        (mapv deref)
        (mapv :output)))
 ```
 
-Every model-driven Agent also receives a built-in `agent` Tool. It accepts the
-source for exactly one `(agent ...)` form and an explicit input. Authored and
-runtime-generated architectures therefore share the same language, contracts,
-Run limits, events, and nested lineage.
-
-This is why karcarthy uses Clojure: an Agent's source is simultaneously an
-executable program and data that a developer, macro, or model can produce.
+Every Agent receives a built-in `agent` Tool. It accepts the source for exactly
+one `(agent ...)` form and an explicit input. The form is ordinary Clojure,
+evaluated while the Run is in progress.
 
 ## Watch live Runs at the REPL
 
@@ -94,7 +88,7 @@ The examples progress from the kernel to a complete evaluation:
 
 | Example | What it shows |
 | --- | --- |
-| [Basic](examples/basic/main.clj) | One model-driven Agent Run |
+| [Basic](examples/basic/main.clj) | One Agent Run |
 | [Architect](examples/architect/main.clj) | A running Agent authors and calls a task-specific team |
 | [Compose agents](examples/composition/main.clj) | A fixed concurrent architecture written with Clojure |
 | [Build a coding agent](examples/coding/main.clj) | Open-ended repository work with task-dependent architecture |

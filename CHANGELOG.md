@@ -21,7 +21,7 @@ All notable changes are documented here, following
   evaluation, Agent verification, recursive execution, and program events.
 - A Responses-compatible HTTP/SSE transport with configurable endpoint,
   authentication environment, headers, model IDs, normalized streaming
-  deltas, and a deterministic in-process fake model transport.
+  deltas, and a deterministic in-process mock model transport.
 - Minimal local `read`, `write`, `edit`, `bash`, and ripgrep-backed `search`
   Tools plus generic `prompt`, `prompt-file`, and `system-prompt` composition.
 - Responses-hosted web search as an explicit endpoint capability.
@@ -44,6 +44,9 @@ All notable changes are documented here, following
 
 ### Changed
 
+- Agents are always model-backed. Fixed coordination is ordinary Clojure, and
+  runtime-generated Agent source accepts only `(agent config)`.
+- Renamed the deterministic test transport from `fake-model` to `mock-model`.
 - Documentation now presents karcarthy as an executable argument for Clojure:
   a thesis-led overview, a complete Quickstart, outcome-driven examples,
   focused concepts and integrations, and mechanical reference pages.

@@ -1,8 +1,8 @@
-Write and run a Clojure Agent program.
+Write and run a Clojure Agent.
 
 ## When to use
 
-Use this Tool when the task would materially benefit from a new specialist or custom workflow: independent research, parallel work, adversarial review, iteration until a condition is met, or coordination among multiple Agents.
+Use this Tool when the task would materially benefit from a new specialist: independent research, parallel work, adversarial review, or focused analysis.
 
 ## When not to use
 
@@ -19,7 +19,7 @@ The new Agent receives no other task information. Include everything it needs in
 
 Do not include Markdown fences, prose, `defagent`, or multiple top-level forms in `source`.
 
-A model-driven Agent has this shape:
+An Agent has this shape:
 
 ```clojure
 (agent
@@ -33,26 +33,13 @@ A model-driven Agent has this shape:
    :output OUTPUT_CONTRACT})
 ```
 
-An Agent implemented as a Clojure program has this shape:
-
-```clojure
-(agent
-  {:name "descriptive-name"
-   :input INPUT_CONTRACT
-   :output OUTPUT_CONTRACT}
-  [input]
-  BODY ...)
-```
-
-The body receives exactly `input`. It may use ordinary Clojure, construct additional `(agent ...)` forms, call Agents with `run!`, branch, loop, or run independent work concurrently. `run!` returns a Run map; check `:status` before using `:output`.
-
 ## What the new Agent receives
 
 The generated source is the new Agent's definition. When it runs, karcarthy passes it only the explicit `input`; it does not copy this conversation, your reasoning, previous Tool results, or Session history.
 
 Run-local application context remains accessible to Clojure code and Tools through `context`, but karcarthy does not add that value to model messages. Include all prompt-level task information in the Agent's instructions and `input`.
 
-Generated code can refer to Clojure core, the karcarthy forms described above, public vars from the current application namespace, and the available symbols listed below. Do not use an application var unless the instructions explicitly identify it.
+Generated code can refer to Clojure core, public vars from the current application namespace, and the available symbols listed below. Do not use an application var unless the instructions explicitly identify it.
 
 ## What happens
 
@@ -62,23 +49,23 @@ The Agent's final output is returned to you as this Tool result. It is not shown
 
 If compilation or execution fails, the Tool returns a structured error. Correct the form only when the error is actionable; do not repeat the same invalid call.
 
-## Example: one Clojure specialist
+## Example: one specialist
 
 `source`:
 
 ```clojure
 (agent
-  {:name "sum-values"
-   :input map?
-   :output number?}
-  [{:keys [values]}]
-  (reduce + values))
+  {:name "failure-analyst"
+   :model {:transport :responses :id "MODEL_ID"}
+   :instructions "Find the most dangerous failure mode."
+   :input string?
+   :output string?})
 ```
 
 `input`:
 
 ```clojure
-{:values [10 20 12]}
+"Review the queue migration."
 ```
 
 ## Available model configuration

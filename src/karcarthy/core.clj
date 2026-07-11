@@ -230,31 +230,26 @@
 
 (defn make-agent
   "Implementation constructor used by `agent` and `defagent`."
-  ([config definition expansion program]
-   (make-agent config definition expansion program nil))
-  ([config definition expansion program definition-ns]
-   (when-not (map? config)
-     (fail! :contract :configuration "Agent configuration must be a map"
-            {:value config}))
-   (reject-unknown! "Agent" agent-config-keys config)
-   (when-not (and (string? (:name config)) (seq (:name config)))
-     (fail! :contract :configuration "Agent :name must be a non-empty string"
-            {:config config}))
-   (when (and (nil? program)
-              (or (nil? (:model config)) (nil? (:instructions config))))
-     (fail! :contract :configuration
-            (str "An Agent without a Clojure program requires "
-                 ":model and :instructions")
-            {:name (:name config)}))
-   {:karcarthy/type :agent
-    :name (:name config)
-    :config config
-    :definition-ns definition-ns
-    :definition definition
-    :expansion expansion
-    :body program}))
+  [config definition expansion definition-ns]
+  (when-not (map? config)
+    (fail! :contract :configuration "Agent configuration must be a map"
+           {:value config}))
+  (reject-unknown! "Agent" agent-config-keys config)
+  (when-not (and (string? (:name config)) (seq (:name config)))
+    (fail! :contract :configuration "Agent :name must be a non-empty string"
+           {:config config}))
+  (when (or (nil? (:model config)) (nil? (:instructions config)))
+    (fail! :contract :configuration
+           "An Agent requires :model and :instructions"
+           {:name (:name config)}))
+  {:karcarthy/type :agent
+   :name (:name config)
+   :config config
+   :definition-ns definition-ns
+   :definition definition
+   :expansion expansion})
 
-(defn- body-function-form [label bindings body]
+(defn- tool-function-form [label bindings body]
   (when-not (and (vector? bindings) (= 1 (count bindings)))
     (throw (IllegalArgumentException.
             (str label " body requires [input]"))))
@@ -266,39 +261,37 @@
        ~@body)))
 
 (defmacro agent
-  "Construct an executable Agent. A configured Agent with no body uses the
-  native model/tool loop; `[input] body ...` supplies a Clojure program."
-  [config & body]
+  "Construct a model-backed Agent."
+  [config]
   (let [source &form
-        program (when (seq body)
-                  (body-function-form "agent" (first body) (next body)))
-        expansion `(karcarthy.core/make-agent ~config '~source nil ~program '~(ns-name *ns*))]
-    `(karcarthy.core/make-agent ~config '~source '~expansion ~program '~(ns-name *ns*))))
+        expansion `(karcarthy.core/make-agent
+                    ~config '~source nil '~(ns-name *ns*))]
+    `(karcarthy.core/make-agent
+      ~config '~source '~expansion '~(ns-name *ns*))))
 
 (defmacro defagent
-  "Define a var containing an Agent. The symbol supplies the default :name."
-  [sym config & body]
+  "Define a var containing a model-backed Agent. The symbol supplies the
+  default :name."
+  [sym config]
   (let [source &form
-        program (when (seq body)
-                  (body-function-form "defagent" (first body) (next body)))
         expansion `(def ~sym
                      (karcarthy.core/make-agent
-                      (assoc ~config :name ~(name sym)) '~source nil ~program '~(ns-name *ns*)))]
+                      (assoc ~config :name ~(name sym))
+                      '~source nil '~(ns-name *ns*)))]
     `(def ~sym
        (let [config# ~config
              config# (if (contains? config# :name)
                        config#
                        (assoc config# :name ~(name sym)))]
          (karcarthy.core/make-agent
-          config# '~source '~expansion ~program '~(ns-name *ns*))))))
+          config# '~source '~expansion '~(ns-name *ns*))))))
 
 (defn agent?
   [x]
   (and (map? x)
        (= :agent (:karcarthy/type x))
        (string? (:name x))
-       (map? (:config x))
-       (or (nil? (:body x)) (fn? (:body x)))))
+       (map? (:config x))))
 
 (defn definition
   "Return the Clojure definition that created an Agent or Tool."
@@ -338,7 +331,7 @@
   "Construct a contracted Tool backed by Clojure code."
   [config bindings & body]
   (let [source &form
-        execute (body-function-form "tool" bindings body)
+        execute (tool-function-form "tool" bindings body)
         expansion `(karcarthy.core/make-tool ~config '~source nil ~execute)]
     `(karcarthy.core/make-tool ~config '~source '~expansion ~execute)))
 
@@ -346,7 +339,7 @@
   "Define a var containing a Tool. The symbol supplies the default :name."
   [sym config bindings & body]
   (let [source &form
-        execute (body-function-form "deftool" bindings body)
+        execute (tool-function-form "deftool" bindings body)
         expansion `(def ~sym
                      (karcarthy.core/make-tool
                       (assoc ~config :name ~(name sym)) '~source nil ~execute))]
@@ -393,7 +386,7 @@
    {"source"
     {:type "string"
      :description
-     (str "Exactly one complete Clojure (agent ...) form following the "
+     (str "Exactly one complete Clojure (agent config) form following the "
           "generation grammar in this Tool description.")}
     "input"
     {:description
@@ -491,8 +484,7 @@
      {:model-configuration
       (if (seq model-config)
         (str "```clojure\n" (pr-str model-config) "\n```")
-        (str "No reusable printable model configuration is available. Use a "
-             "Clojure-program Agent or an explicitly configured model."))
+        "No reusable printable model configuration is available. Configure a model explicitly.")
       :tools (catalog-lines #{:tool :hosted-tool} entries)
       :agents (catalog-lines :agent entries)})))
 
@@ -708,11 +700,11 @@
 ;; Model transport
 ;; ---------------------------------------------------------------------------
 
-(defn fake-model
-  "Deterministic in-process model transport for tests and examples."
+(defn mock-model
+  "Deterministic in-process model transport for tests."
   [respond]
   (when-not (fn? respond)
-    (throw (IllegalArgumentException. "fake-model requires a function")))
+    (throw (IllegalArgumentException. "mock-model requires a function")))
   {:karcarthy/type :model-transport
    :complete respond})
 
@@ -1204,9 +1196,7 @@
       (emit! rt {:type :agent/started :agent (:name agent) :input input})
       (try
         (let [output (binding [*run-context* rt]
-                       (if-let [program (:body agent)]
-                         (program rt input)
-                         (default-loop! rt agent input)))
+                       (default-loop! rt agent input))
               output (maybe-json-output output (:output config))]
           (check-run! rt)
           (check-contract! :agent-output (:output config) output)

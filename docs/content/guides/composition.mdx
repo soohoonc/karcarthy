@@ -17,26 +17,22 @@ reviews to an editor.
     (:output run)
     (throw (ex-info "Agent Run failed" {:run run}))))
 
-(k/agent
- {:name "review-team"
-  :input string?
-  :output string?}
- [request]
- (let [[security api]
-       (->> [security-reviewer api-reviewer]
-            (mapv #(future (k/run! % request reviewer-options)))
-            (mapv deref)
-            (mapv output!))
-       editor-input
-       (str "Request:\n" request
-            "\n\nSecurity review:\n" security
-            "\n\nAPI review:\n" api)]
-   (output! (k/run! editor editor-input))))
+(defn review-team [request]
+  (let [[security api]
+        (->> [security-reviewer api-reviewer]
+             (mapv #(future (k/run! % request reviewer-options)))
+             (mapv deref)
+             (mapv output!))
+        editor-input
+        (str "Request:\n" request
+             "\n\nSecurity review:\n" security
+             "\n\nAPI review:\n" api)]
+    (output! (k/run! editor editor-input))))
 ```
 
-The reviewers and editor are model-driven Agents. The coordinator has a
-Clojure body, so Clojure determines ordering and concurrency. `future` runs the
-reviews together; `output!` refuses to pass a failed Run to the editor.
+The reviewers and editor are Agents. The coordinator is a function. `future`
+runs the reviews together; `output!` refuses to pass a failed Run to the
+editor.
 
 ## Run the complete example
 
@@ -46,14 +42,13 @@ With `OPENAI_API_KEY` set, start a REPL from the repository root:
 (require '[karcarthy :as k])
 (load-file "examples/composition/main.clj")
 
-(def team
+(def review
   (example.composition/review-system "/workspace/project"))
 
-(def run
-  (k/run! team
-          "Review the current working tree against origin/main."))
+(def output
+  (review "Review the current working tree against origin/main."))
 
-(println (:output run))
+(println output)
 ```
 
 The complete definitions and approval policy are in

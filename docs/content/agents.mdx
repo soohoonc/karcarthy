@@ -1,26 +1,10 @@
 ---
 title: Agents and runs
-description: The program you define and the execution record returned by run!.
+description: Define an Agent and execute it with run!.
 ---
 
-An Agent is a program. A Run is the record of executing it once.
-
-Agents retain the Clojure form that created them. Their configuration defines
-instructions, capabilities, and boundary contracts; an optional Clojure body
-defines explicit control flow.
-
-An Agent runs in one of two ways:
-
-| Form contains | What executes it |
-| --- | --- |
-| Configuration with a model, no body | karcarthy's model and Tool loop |
-| Configuration and a Clojure body | The body |
-
-Both forms create the same Agent value. Call either one with `run!`.
-
-## Model-driven Agents
-
-A model-driven Agent has no body:
+An Agent is a Clojure value containing a model, instructions, capabilities,
+and boundary contracts.
 
 ```clojure
 (k/defagent researcher
@@ -32,39 +16,13 @@ A model-driven Agent has no body:
    :output string?})
 ```
 
-When it runs, the harness:
-
-1. validates the input;
-2. calls the model with the instructions and callable schemas;
-3. executes requested Tools or available Agents;
-4. returns those results to the model; and
-5. repeats until the model answers or the Run stops.
-
-The Agent declares the loop. The harness owns its execution.
-
-## Agents with Clojure bodies
-
-An Agent may have a one-argument Clojure body:
-
-```clojure
-(k/defagent review-team
-  {:input string? :output vector?}
-  [change]
-  (->> [security-reviewer api-reviewer]
-       (mapv #(future (k/run! % change)))
-       (mapv deref)
-       (mapv :output)))
-```
-
-The body is the executor. It may use `let`, `if`, `case`, `loop/recur`, macros,
-futures, functions, and calls to other Agents. karcarthy validates the input
-before the body and the output after it.
-
-The body is the workflow. There is no graph or config file behind it.
+When it runs, karcarthy validates the input, calls the model, executes requested
+Tools or available Agents, and repeats until the model answers or the Run
+stops.
 
 ## `agent` and `defagent`
 
-The declaration forms differ only in where the value is bound:
+`defagent` defines a var and derives the Agent name from its symbol:
 
 ```clojure
 (k/defagent reviewer
@@ -73,7 +31,6 @@ The declaration forms differ only in where the value is bound:
    :output string?})
 ```
 
-`defagent` defines a var named `reviewer` and derives the Agent name from it.
 Use `agent` inside an expression and supply `:name` explicitly:
 
 ```clojure
@@ -97,38 +54,25 @@ Both macros retain their original form and macroexpansion:
 `run!` passes one input value to an Agent and returns a Run:
 
 ```clojure
-(def run (k/run! researcher "What changed in the latest Java release?"))
+(def run
+  (k/run! researcher "What changed in the latest Java release?"))
 
 (select-keys run [:status :output :usage :error])
 ```
 
 A Run is `:completed`, `:failed`, or `:cancelled`. Completion means the Agent
 and its contracts completed successfully; it does not mean an external
-evaluator judged the answer correct. Check `:status` before consuming `:output`.
+evaluator judged the answer correct. Check `:status` before consuming
+`:output`.
 
-Each top-level `run!` creates a new bounded execution with its own root Agent,
-limits, events, and optional Session. Calls performed through `:agents` or the
-built-in `agent` Tool are nested inside that Run. A program Agent that calls
-`run!` explicitly starts another independent Run.
+Each top-level `run!` creates a bounded execution with its own limits, events,
+and optional Session. An Agent called through `:agents` or created through the
+built-in `agent` Tool remains nested in that Run.
 
-The calls are recorded differently:
+## Make a specialist available
 
-| Call site | What happens |
-| --- | --- |
-| `k/run!` in application or Agent code | New independent Run |
-| Model calls an Agent listed in `:agents` | Nested Agent in the current Run |
-| Model calls the built-in `agent` Tool | Compiled and nested Agent in the current Run |
-
-## Choose the architecture
-
-You can write an Agent before a Run. You can let a model choose an Agent you
-already wrote. Or you can let the model write a new Agent during the Run. All
-three paths use normal Agent values.
-
-### Expose a known specialist
-
-Put existing Agent values in `:agents` when the parent model should decide
-whether to call them:
+Put existing Agents in `:agents` when the parent model should decide whether
+to call them:
 
 ```clojure
 (k/defagent support
@@ -144,46 +88,48 @@ whether to call them:
    :output string?})
 ```
 
-The model sees `support` as a Tool it can call. The specialist receives only
-the explicit Tool input, not the parent's conversation. Its output returns to
-the parent model. Limits, usage, cancellation, approvals, and events remain in
-the same Run.
+The specialist receives only the explicit call input, not the parent's
+conversation. Its output returns to the parent model. Limits, usage,
+cancellation, approvals, and events remain in the same Run.
 
-### Write the coordination in Clojure
+## Compose Agents in Clojure
 
-Use a program Agent when application code should decide ordering, branching,
-or concurrency. The [composition guide](/docs/guides/composition) builds a
-parallel review team and handles failed child Runs explicitly.
+When application code should decide ordering or concurrency, use an ordinary
+function:
 
-### Generate an Agent at runtime
+```clojure
+(defn review-change [change]
+  (->> [security-reviewer api-reviewer]
+       (mapv #(future (k/run! % change)))
+       (mapv deref)
+       (mapv :output)))
+```
 
-Every model-driven Agent also sees a built-in Tool named `agent`. The model can
-call it with a complete Clojure Agent form and explicit input:
+The [composition example](/docs/guides/composition) handles failed Runs and
+passes both reviews to an editor.
+
+## Generate an Agent at runtime
+
+Every Agent also receives a built-in Tool named `agent`. The model calls it
+with one Clojure Agent form and explicit input:
 
 ```clojure
 {:source "(agent {:name \"specialist\" ...})"
  :input "Complete task input"}
 ```
 
-The harness compiles that form into the same Agent value described on this
-page, runs it inside the current Run, and returns its output to the parent
-model. Use this when you cannot know what kind of specialist will help until
-the model sees the task. [Generated agents](/docs/generated-agents) explains
-the mechanism; [Create agents at runtime](/docs/guides/architect) shows it
-running.
-
-These choices are not maturity levels. Prefer one Agent when one Agent is
-enough.
+karcarthy evaluates the form, runs the resulting Agent inside the current Run,
+and returns its output to the parent model. [Generated
+agents](/docs/generated-agents) explains the mechanism; [Create agents at
+runtime](/docs/guides/architect) shows it running.
 
 ## Configuration
-
-Common configuration keys are:
 
 | Key | Meaning |
 | --- | --- |
 | `:name` | Stable runtime name. `agent` requires it; `defagent` derives it. |
 | `:description` | Tells a parent model when to call this Agent. |
-| `:model` | Selects the model and transport for a model-driven Agent. |
+| `:model` | Selects the model and transport. |
 | `:instructions` | Agent-specific instructions appended to the base prompt. |
 | `:tools` | Tools the model may call. |
 | `:agents` | Existing Agents the model may call. |
@@ -191,12 +137,7 @@ Common configuration keys are:
 | `:input-schema` / `:output-schema` | Optional JSON schemas shown to the model. |
 | `:limits` | Limits that narrow the containing Run for this Agent. |
 
-The [API reference](/docs/reference/api#agent-and-defagent) lists every key.
-
-## Run options
-
-Pass local dependencies through `:context`; karcarthy makes them available to
-Tools and program bodies without inserting them into model messages:
+Pass local dependencies to Tools through Run `:context`:
 
 ```clojure
 (k/run! account-agent "Summarize account 123."
@@ -205,17 +146,7 @@ Tools and program bodies without inserting them into model messages:
                   :depth 4
                   :parallelism 4
                   :agent-forms 8
-                  :deadline-ms 300000}
-         :cancel cancelled?})
+                  :deadline-ms 300000}})
 ```
 
-Other options include `:session`, `:observe`, `:approval`, `:metadata`,
-`:model-transports`, and `:evaluation-namespace`. See [`run!` in the API
-reference](/docs/reference/api#run) for their exact shapes.
-
-## Next
-
-- [Tools and context](/docs/tools) covers callable functions, contracts, context, and approvals.
-- [Generated agents](/docs/generated-agents) explains runtime-created Agents.
-- [Compose agents](/docs/guides/composition) shows fixed coordination in Clojure.
-- [Events and monitoring](/docs/events) exposes the execution tree.
+The [API reference](/docs/reference/api#agent-and-defagent) lists every option.
