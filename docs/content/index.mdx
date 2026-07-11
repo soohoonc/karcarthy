@@ -1,58 +1,31 @@
 ---
 title: Overview
-description: A Clojure agent harness where developers and models write the same programs.
+description: A toy Clojure harness where Agent programs can add new Agents while they run.
 ---
 
 > **The agent architecture is the program.**
 
-karcarthy is an experiment in writing agents as Clojure programs. Developers
-and models create the same Agent forms, and the same runtime executes them.
+karcarthy is a toy agent harness built around Clojure forms and macros.
 
-Most agent frameworks introduce another representation for orchestration: a
-graph, a collection of nodes, or a JSON workflow. In karcarthy, fixed
-architecture is ordinary Clojure. When the right architecture depends on the
-task, a running Agent can write another Clojure Agent.
+An Agent is constructed with `(agent ...)`. During a Run, the model can call a
+built-in Tool with the source of another `(agent ...)` form. karcarthy reads the
+source, expands the macro, checks the result, evaluates it, and runs the new
+Agent inside the current Run.
 
-## The same program
+The program adds another Agent by evaluating more Lisp while it runs. There is
+no workflow graph or separate orchestration language between the generated
+form and Clojure.
 
-A developer can write an Agent:
+## Watch the program add new Agents
 
-```clojure
-(k/agent
- {:name "reviewer"
-  :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Review the proposed change."
-  :input string?
-  :output string?})
+The Architect example starts one Agent and asks it to create two specialists:
+
+```bash
+clojure -M:examples architect \
+  "Review a migration from synchronous writes to a queue."
 ```
 
-A model can write the same form during a Run:
-
-```clojure
-(agent
- {:name "reviewer"
-  :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Review the proposed change."
-  :input string?
-  :output string?})
-```
-
-Both produce the same Agent value:
-
-```text
-developer ─┐
-           ├─ Agent form → read → expand → check → evaluate → run
-model ─────┘
-```
-
-The same contracts, limits, event stream, and model/Tool loop apply. That is
-the reason karcarthy is written in Clojure: the program is already data that a
-developer, macro, or model can produce.
-
-## Watch it happen
-
-The Architect example gives one Agent a task and requires it to create two
-specialists. The terminal redraws their state while they run:
+The terminal follows the running program:
 
 ```text
 Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
@@ -61,16 +34,65 @@ Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent 
    └─ rollout-planner · calling model
 ```
 
-```bash
-clojure -M:examples architect \
-  "Review a migration from synchronous writes to a queue."
+The parent did not choose from two predefined workers. It submitted two new
+Clojure forms. Each form was evaluated into an Agent and run. Their results
+returned to the parent, which used them to produce the final answer.
+
+At the REPL, the generated forms and final answer remain available:
+
+```clojure
+(println (:output run))
+
+(->> (k/events run)
+     (filter #(= :program/expanded (:type %)))
+     (map :definition))
 ```
 
-The exact names and answers vary because the run is live. The tree is not a
-workflow definition: it is an event-derived view of the Clojure Agents that
-are executing.
+## Code is data
 
-## Start here
+Before evaluation, an Agent is a Clojure form:
+
+```clojure
+(agent
+ {:name "failure-analyst"
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Find the most dangerous failure mode."
+  :input string?
+  :output string?})
+```
+
+karcarthy retains the form, expands the `agent` macro, checks the expansion,
+and evaluates it. The result is an executable Agent value.
+
+```text
+form → macroexpansion → Agent value → execution
+```
+
+A model-driven Agent receives the same built-in Tool, so this can continue
+recursively.
+
+## Known architecture is ordinary Clojure
+
+Runtime generation is not required. When the architecture is known, write it
+directly:
+
+```clojure
+(k/agent
+ {:name "review-team"
+  :input string?
+  :output vector?}
+ [change]
+ (->> [security-reviewer api-reviewer]
+      (mapv #(future (k/run! % change)))
+      (mapv deref)
+      (mapv :output)))
+```
+
+Branches, functions, recursion, macros, and concurrency remain Clojure.
+karcarthy does not provide workflow nodes for operations the language already
+has.
+
+## Try it
 
 <Cards>
   <Card
@@ -80,12 +102,12 @@ are executing.
   />
   <Card
     title="Why Clojure?"
-    description="See why code as data matters for agent programs."
+    description="Follow a Clojure form from source to a running Agent."
     href="/docs/why-clojure"
   />
   <Card
     title="Create agents at runtime"
-    description="Watch one Agent write and run two specialists."
+    description="Run the Architect example and inspect the generated forms."
     href="/docs/guides/architect"
   />
   <Card
@@ -94,14 +116,3 @@ are executing.
     href="/docs/guides/composition"
   />
 </Cards>
-
-## Boundaries
-
-karcarthy owns the bounded model/Tool loop. Clojure owns control flow. A Run
-records one execution; a Session optionally carries model conversation between
-Runs.
-
-Runtime Agent source is evaluated as JVM Clojure. karcarthy verifies that the
-source produces an Agent, but it is not a sandbox for untrusted code. This is a
-side project exploring the programming model, not a claim that arbitrary model
-output is safe to evaluate in a privileged process.
