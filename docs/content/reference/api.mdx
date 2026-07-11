@@ -119,16 +119,16 @@ Clojure Agent program:
 (def live (k/monitor))
 (def displayed (k/monitor {:display :tree :out *out*}))
 
-@live
-(k/monitor-view live)
-(k/print-monitor live)
-(k/print-monitor live *err*)
+(k/monitor live)
+(k/monitor-state live)
 ```
 
-A Run monitor is both an event observer and a dereferenceable value. Pass it as
-`run!`'s `:observe` option. Dereferencing returns the latest state for every Run
-seen by that monitor. `:display :tree` redraws a live terminal tree; omit it for
-a silent monitor. `:out` must be a `java.io.Writer` and defaults to `*out*`.
+A Run monitor is both an event observer and a printable value. Pass it as
+`run!`'s `:observe` option. Passing it back to `monitor` shows the latest tree;
+`monitor-state` returns data for every Run it has seen. `:display :tree`
+redraws a live terminal tree; omit it for a silent monitor. The tree refreshes
+elapsed time once per second and adds model usage when each call completes.
+`:out` must be a `java.io.Writer` and defaults to `*out*`.
 
 See [Events: Watch Runs live](/docs/events#watch-runs-live).
 

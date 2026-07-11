@@ -8,7 +8,7 @@
                 memory-session session? session-id get-items add-items!
                 pop-item! clear-session!
                 model! emit! events fake-model
-                monitor monitor-view print-monitor
+                monitor monitor-state
                 hosted-tool hosted-tool?
                 local-tools prompt prompt-file system-prompt
                 responses-web-search connect-mcp! mcp-tools close-mcp!
@@ -20,7 +20,7 @@
                     dynamic evolve mock-runner fn-runner process-runner
                     claude-runner codex-runner openai-runner acp-runner
                     invoke! spawn! await! await-all!
-                    as-tool source-form expanded-form
+                    as-tool source-form expanded-form monitor-view print-monitor
                     handoff! environment conversation-state? model-transport
                     workspace-tools workspace-prompt]]
     (is (nil? (get (ns-publics 'karcarthy) removed))

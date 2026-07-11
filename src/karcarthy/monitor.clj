@@ -1,7 +1,8 @@
 (ns karcarthy.monitor
   "Live, event-derived views of running Agents."
   (:require [clojure.string :as str])
-  (:import [java.io Writer]))
+  (:import [java.io Closeable Writer]
+           [java.util.concurrent Executors ThreadFactory TimeUnit]))
 
 (def ^:private rendered-event-types
   #{:run/started :run/completed :run/failed :run/cancelled
@@ -17,11 +18,14 @@
    :status :running
    :started-at-ms (:time-ms event)
    :updated-at-ms (:time-ms event)
+   :elapsed-ms 0
    :agents {}
    :agent-order []
    :agent-forms 0
    :created-agents []
-   :usage nil
+   :usage {:model-calls 0
+           :input-tokens 0
+           :output-tokens 0}
    :error nil})
 
 (defn- ensure-run [snapshot event]
@@ -96,6 +100,17 @@
          :ended-at-ms (:time-ms event)
          :error (:error event)))
 
+(defn- usage-value [usage kebab snake]
+  (long (or (get usage kebab) (get usage snake) 0)))
+
+(defn- add-model-usage [run event]
+  (let [usage (:usage event)]
+    (-> run
+        (update-in [:usage :input-tokens] +
+                   (usage-value usage :input-tokens :input_tokens))
+        (update-in [:usage :output-tokens] +
+                   (usage-value usage :output-tokens :output_tokens)))))
+
 (defn- reduce-run-event [run event]
   (let [run (assoc run :updated-at-ms (:time-ms event))]
     (case (:type event)
@@ -103,13 +118,18 @@
       (assoc run :agent (:agent event) :status :running)
 
       :run/completed
-      (assoc run :status :completed :usage (:usage event))
+      (assoc run
+             :status :completed
+             :ended-at-ms (:time-ms event)
+             :usage (merge (:usage run) (:usage event)))
 
       :run/failed
-      (assoc run :status :failed :error (:error event))
+      (assoc run :status :failed :ended-at-ms (:time-ms event)
+             :error (:error event))
 
       :run/cancelled
-      (assoc run :status :cancelled :error (:error event))
+      (assoc run :status :cancelled :ended-at-ms (:time-ms event)
+             :error (:error event))
 
       :agent/started
       (start-agent run event)
@@ -121,10 +141,14 @@
       (update-agent run event finish-agent :failed event)
 
       :model/requested
-      (update-agent run event set-activity :model event)
+      (-> run
+          (update-in [:usage :model-calls] inc)
+          (update-agent event set-activity :model event))
 
       :model/completed
-      (update-agent run event set-activity :running event)
+      (-> run
+          (add-model-usage event)
+          (update-agent event set-activity :running event))
 
       :model/failed
       (update-agent run event set-activity :model-failed event)
@@ -159,11 +183,29 @@
 
       run)))
 
+(defn- refresh-elapsed [snapshot now-ms]
+  (-> snapshot
+      (assoc :now-ms now-ms)
+      (update :runs
+              (fn [runs]
+                (reduce-kv
+                 (fn [result run-id run]
+                   (let [end-ms (or (:ended-at-ms run) now-ms
+                                    (:updated-at-ms run))]
+                     (assoc result run-id
+                            (assoc run :elapsed-ms
+                                   (max 0 (- end-ms
+                                             (:started-at-ms run)))))))
+                 {}
+                 runs)))))
+
 (defn- reduce-event [snapshot event]
   (let [snapshot (ensure-run snapshot event)
         run-id (:run-id event)]
     (if (and run-id (get-in snapshot [:runs run-id]))
-      (update-in snapshot [:runs run-id] reduce-run-event event)
+      (-> snapshot
+          (update-in [:runs run-id] reduce-run-event event)
+          (refresh-elapsed (:time-ms event)))
       snapshot)))
 
 (defn- short-id [id]
@@ -175,7 +217,18 @@
   (keep (:tools agent) (:tool-order agent)))
 
 (defn- plural [n singular]
-  (str n " " singular (when (not= n 1) "s")))
+  (str (format "%,d" (long n)) " " singular (when (not= n 1) "s")))
+
+(defn- elapsed-label [run]
+  (let [elapsed-seconds (quot (:elapsed-ms run 0) 1000)]
+    (if (< elapsed-seconds 60)
+      (str elapsed-seconds "s")
+      (format "%dm %02ds" (quot elapsed-seconds 60)
+              (mod elapsed-seconds 60)))))
+
+(defn- token-count [run]
+  (+ (get-in run [:usage :input-tokens] 0)
+     (get-in run [:usage :output-tokens] 0)))
 
 (defn- activity-label [agent]
   (case (:status agent)
@@ -220,6 +273,10 @@
 (defn- run-lines [run]
   (let [forms (:agent-forms run)
         header (str "Run " (short-id (:id run)) " · " (name (:status run))
+                    " · " (elapsed-label run)
+                    " · " (plural (get-in run [:usage :model-calls] 0)
+                                    "model call")
+                    " · " (plural (token-count run) "token")
                     (when (pos? forms)
                       (str " · " (plural forms "Agent form"))))
         roots (vec (children run nil))]
@@ -229,7 +286,9 @@
                   (range (count roots))
                   roots))))
 
-(defn- snapshot-value [monitor-or-snapshot]
+(defn monitor-state
+  "Return the current monitor state as Clojure data."
+  [monitor-or-snapshot]
   (if (instance? clojure.lang.IDeref monitor-or-snapshot)
     @monitor-or-snapshot
     monitor-or-snapshot))
@@ -237,7 +296,7 @@
 (defn monitor-view
   "Return the current Run and Agent tree as text."
   [monitor-or-snapshot]
-  (let [snapshot (snapshot-value monitor-or-snapshot)
+  (let [snapshot (monitor-state monitor-or-snapshot)
         runs (keep (:runs snapshot) (:run-order snapshot))]
     (str/join "\n\n" (map #(str/join "\n" (run-lines %)) runs))))
 
@@ -249,9 +308,9 @@
    (.flush out)
    monitor))
 
-(declare draw-tree!)
+(declare draw-tree! update-ticker! stop-ticker!)
 
-(deftype Monitor [state display out rendered-lines lock]
+(deftype Monitor [state display out rendered-lines ticker lock]
   clojure.lang.IDeref
   (deref [_] @state)
 
@@ -261,8 +320,17 @@
       (swap! state reduce-event event)
       (when (and (= :tree display)
                  (contains? rendered-event-types (:type event)))
-        (draw-tree! this)))
-    nil))
+        (draw-tree! this))
+      (update-ticker! this))
+    nil)
+
+  Closeable
+  (close [this]
+    (locking lock
+      (stop-ticker! this))))
+
+(defmethod print-method Monitor [monitor ^Writer out]
+  (.write out (monitor-view monitor)))
 
 (defn- draw-tree! [^Monitor monitor]
   (let [^Writer out (.-out monitor)
@@ -278,22 +346,74 @@
     (.flush out)
     (reset! rendered-lines lines)))
 
-(defn monitor
-  "Create an event observer that tracks live Runs and Agents.
+(defn- active-runs? [snapshot]
+  (some #(= :running (:status %)) (vals (:runs snapshot))))
 
-  Pass the result as `run!`'s `:observe` function. Dereference it for ordinary
-  Clojure data. Use `{:display :tree}` to redraw a live tree on `:out`, which
-  defaults to the current `*out*`."
+(def ^:private daemon-thread-factory
+  (reify ThreadFactory
+    (newThread [_ runnable]
+      (doto (Thread. runnable "karcarthy-monitor")
+        (.setDaemon true)))))
+
+(defn- start-ticker! [^Monitor monitor]
+  (let [ticker (.-ticker monitor)]
+    (when (nil? @ticker)
+      (let [executor (Executors/newSingleThreadScheduledExecutor
+                      daemon-thread-factory)]
+        (if (compare-and-set! ticker nil executor)
+          (.scheduleAtFixedRate
+           executor
+           ^Runnable
+           (reify Runnable
+             (run [_]
+               (try
+                 (locking (.-lock monitor)
+                   (when (active-runs? @(.-state monitor))
+                     (swap! (.-state monitor)
+                            refresh-elapsed (System/currentTimeMillis))
+                     (when (= :tree (.-display monitor))
+                       (draw-tree! monitor))))
+                 (catch Throwable _ nil))))
+           1 1 TimeUnit/SECONDS)
+          (.shutdownNow executor))))))
+
+(defn- stop-ticker! [^Monitor monitor]
+  (let [ticker (.-ticker monitor)]
+    (when-let [executor @ticker]
+      (when (compare-and-set! ticker executor nil)
+        (.shutdownNow executor)))))
+
+(defn- update-ticker! [^Monitor monitor]
+  (if (active-runs? @(.-state monitor))
+    (start-ticker! monitor)
+    (stop-ticker! monitor)))
+
+(defn monitor
+  "Create or inspect a live Run monitor.
+
+  With no argument or an options map, create an event observer to pass as
+  `run!`'s `:observe` function. With an existing monitor, return it so the REPL
+  prints its current tree. Use `monitor-state` for ordinary Clojure data.
+
+  `{:display :tree}` redraws a live tree on `:out`, which defaults to the
+  current `*out*`."
   ([] (monitor {}))
-  ([{:keys [display out]
-     :or {out *out*}}]
-   (when-not (contains? #{nil :tree} display)
-     (throw (ex-info "Run monitor :display must be nil or :tree"
-                     {:display display})))
-   (when-not (instance? Writer out)
-     (throw (ex-info "Run monitor :out must be a java.io.Writer"
-                     {:out out})))
-   (Monitor. (atom {:karcarthy/type :monitor-snapshot
-                    :runs {}
-                    :run-order []})
-             display out (atom 0) (Object.))))
+  ([value]
+   (if (instance? Monitor value)
+     value
+     (let [{:keys [display out]
+            :or {out *out*}} value]
+       (when-not (map? value)
+         (throw (ex-info "monitor expects an options map or an existing monitor"
+                         {:value value})))
+       (when-not (contains? #{nil :tree} display)
+         (throw (ex-info "Run monitor :display must be nil or :tree"
+                         {:display display})))
+       (when-not (instance? Writer out)
+         (throw (ex-info "Run monitor :out must be a java.io.Writer"
+                         {:out out})))
+       (Monitor. (atom {:karcarthy/type :monitor-snapshot
+                        :runs {}
+                        :run-order []
+                        :now-ms nil})
+                 display out (atom 0) (atom nil) (Object.))))))

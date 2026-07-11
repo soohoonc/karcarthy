@@ -93,7 +93,7 @@ clojure -M:examples architect \
 The terminal redraws the Agent tree as the Run changes:
 
 ```text
-Run run_7c2e9b… · running · 2 Agent forms
+Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
 └─ architect · waiting for 2 Agents
    ├─ failure-analyst · calling model
    └─ rollout-planner · Tool: search
@@ -122,12 +122,15 @@ Use a Run monitor to see that history as it happens:
 (def run (k/run! reviewer "Review this migration." {:observe live}))
 ```
 
-The monitor redraws the Agent tree in the terminal. Dereference it for the
-current state as Clojure data:
+The monitor redraws the Agent tree in the terminal. Time updates once per
+second; model-call and token totals update when each model call returns usage.
+Evaluate it again to see the current tree:
 
 ```clojure
-@live
+(k/monitor live)
 ```
+
+`(k/monitor-state live)` returns the underlying Clojure data when needed.
 
 [Events](/docs/events#watch-runs-live) documents live and manual display.
 

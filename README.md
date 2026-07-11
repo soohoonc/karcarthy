@@ -29,15 +29,15 @@ clojure -M:examples architect \
 The terminal redraws the live Agent tree as the Run changes:
 
 ```text
-Run run_7c2e9b… · running · 2 Agent forms
+Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
 └─ architect · waiting for 2 Agents
    ├─ failure-analyst · calling model
    └─ rollout-planner · Tool: search
 ```
 
-When both children finish, the tree marks them done and the parent writes the
-answer. The `2 Agent forms` count comes from the Clojure forms submitted by the
-parent model.
+Elapsed time updates once per second. Model-call and token totals update as
+usage arrives. When both children finish, the tree marks them done and the
+parent writes the answer.
 
 ## One representation
 
@@ -84,8 +84,9 @@ executable program and data that a developer, macro, or model can produce.
 (def run (k/run! assistant "Complete the task." {:observe live}))
 ```
 
-Use `@live` for the current state as Clojure data or `(k/print-monitor live)`
-to print one snapshot. A monitor can observe several concurrent Runs.
+Evaluate `(k/monitor live)` to see the current tree again. Use
+`(k/monitor-state live)` only when you need the underlying Clojure data. A
+monitor can observe several concurrent Runs.
 
 ## Examples
 
