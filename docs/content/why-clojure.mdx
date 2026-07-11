@@ -1,68 +1,104 @@
 ---
 title: Why Clojure?
-description: Why code as data makes Clojure unusually well suited to agent programs.
+description: How forms, macros, and evaluation let an Agent program add new Agents while it runs.
 ---
 
-Agent architecture is control flow. An agent may call a specialist, run two
-reviews at once, retry a failed operation, or create a new specialist after it
-sees the task. These are programming-language problems.
+karcarthy depends on a few properties that Clojure makes ordinary: programs
+can be read as data, macros receive their source forms, and evaluated forms
+become running code.
 
-Many agent frameworks describe that control flow in a second language: a
-graph, a collection of nodes, or a JSON workflow. karcarthy uses Clojure.
+The harness uses those properties to let an Agent program add new Agents while
+it runs.
 
-## One language
+## `agent` is a macro
 
-A developer can write an Agent:
-
-```clojure
-(k/agent
- {:name "reviewer"
-  :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Review the proposed change."
-  :input string?
-  :output string?})
-```
-
-A model can submit the same form:
+An Agent begins with a macro invocation:
 
 ```clojure
-(agent
- {:name "reviewer"
-  :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Review the proposed change."
-  :input string?
-  :output string?})
+(def reviewer
+  (k/agent
+   {:name "reviewer"
+    :model {:transport :responses :id "gpt-5.6"}
+    :instructions "Review the proposed change."
+    :input string?
+    :output string?}))
 ```
 
-Both forms create the same Agent value. The same contracts, limits, events,
-and model loop apply. There is no generated-workflow representation to
-translate into the runtime.
-
-## Code is data
-
-Clojure source can be read as data before it runs. karcarthy keeps the original
-Agent form and its macroexpansion:
+The macro constructs an Agent value and retains both the original form and its
+expansion:
 
 ```clojure
 (k/definition reviewer)
 (k/expansion reviewer)
 ```
 
-For model-written source, karcarthy reads one `agent` form, expands it, checks
-it, evaluates it, and verifies that the result is an Agent. Each phase appears
-in the Run event stream.
+The retained form shows exactly what was evaluated.
 
-```text
-source → read → expand → check → evaluate → Agent
+## A form can become a running Agent
+
+During a Run, the model can call the built-in `agent` Tool:
+
+```clojure
+{:source
+ "(agent
+    {:name \"reviewer\"
+     :model {:transport :responses :id \"gpt-5.6\"}
+     :instructions \"Review the proposed change.\"
+     :input string?
+     :output string?})"
+ :input
+ "Replace synchronous writes with a queue."}
 ```
 
-The important point is not that a model can return text that looks like code.
-It is that the returned program uses the application's own language and
-produces the same value a developer would write.
+karcarthy processes the source as Clojure:
 
-## Clojure already has orchestration
+```text
+read one form
+  → expand the agent macro
+  → check the expansion
+  → evaluate the form
+  → verify the Agent value
+  → run the Agent
+```
 
-When the architecture is known, write it directly:
+The source must contain exactly one top-level `agent` form. The resulting Agent
+runs inside the current Run, and its output returns to the parent as the Tool
+result.
+
+## The program can extend itself
+
+A generated Agent may use a model:
+
+```clojure
+(agent
+ {:name "researcher"
+  :model {:transport :responses :id "gpt-5.6"}
+  :instructions "Research the assigned question."
+  :input string?
+  :output string?})
+```
+
+Or it may contain a Clojure body:
+
+```clojure
+(agent
+ {:name "parallel-review"
+  :input string?
+  :output vector?}
+ [change]
+ (->> reviewers
+      (mapv #(future (run! % change)))
+      (mapv deref)
+      (mapv :output)))
+```
+
+The model-driven Agent can call the built-in `agent` Tool again. The Agent with
+a Clojure body can construct Agents and call them with `run!`. In both cases,
+the running program gains more behavior by evaluating more Clojure.
+
+## Control flow stays in Clojure
+
+Known coordination does not need another representation:
 
 ```clojure
 (if high-risk?
@@ -71,30 +107,12 @@ When the architecture is known, write it directly:
 ```
 
 ```clojure
-(->> reviewers
-     (mapv #(future (k/run! % change)))
-     (mapv deref))
+(loop [attempt 1]
+  (let [run (k/run! reviewer change)]
+    (if (acceptable? run)
+      run
+      (recur (inc attempt)))))
 ```
 
-Branches, functions, recursion, macros, and concurrency remain ordinary
-Clojure. When the architecture depends on the task, a model can write another
-Agent in that same language.
-
-## The REPL matters
-
-Agents and Tools are values. At the REPL you can redefine one, run it, inspect
-its retained source, watch its children, and examine the result without a
-separate registry or compiler service.
-
-That feedback loop is particularly useful for agent programs, where prompts,
-Tools, model behavior, and control flow are often developed together.
-
-## The tradeoff
-
-Generated Clojure is executable JVM code. karcarthy checks the shape and
-contracts of an Agent form, but it is not a security sandbox. Source you do not
-trust must run in a process, container, or VM with only the authority it needs.
-
-Many languages can implement an agent harness. Clojure is unusually well
-suited to this experiment because its normal programs are already data. The
-[runtime-generation example](/docs/guides/architect) shows the idea running.
+karcarthy owns the model and Tool loop. Clojure owns branching, iteration,
+recursion, functions, macros, and concurrency.
