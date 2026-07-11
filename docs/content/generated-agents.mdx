@@ -1,0 +1,58 @@
+---
+title: Generated agents
+description: How a model writes and runs another Agent inside the current Run.
+---
+
+Every model-driven Agent receives a built-in Tool named `agent`. The Tool lets
+the model submit one Clojure Agent form and the input for that Agent:
+
+```clojure
+{:source "(agent {:name \"reviewer\" ...})"
+ :input "Review the queue migration."}
+```
+
+Use it when the useful specialist cannot be chosen until the model sees the
+task. If the architecture is already known, write it directly in Clojure or
+make an existing specialist available through `:agents`.
+
+## From source to Agent
+
+karcarthy processes submitted source in one sequence:
+
+```text
+read one form
+  → expand the agent macro
+  → check the expansion
+  → evaluate it
+  → require an Agent value
+  → validate the input
+  → run the Agent
+  → return its output to the parent
+```
+
+The `:program/*` events expose the compiler phases. The generated Agent then
+emits normal `:agent/*`, `:model/*`, and `:tool/*` events.
+
+## Information does not flow implicitly
+
+The generated Agent receives only the `input` value in the Tool call. It does
+not inherit the parent's messages, reasoning, Tool results, or Session.
+
+Its definition supplies its own instructions and capabilities. Its output is
+returned to the parent model as the Tool result.
+
+## One Run
+
+Generated Agents stay inside the parent's Run. They share its:
+
+- model and token budgets;
+- deadline and cancellation;
+- depth and parallelism limits;
+- approvals; and
+- event history.
+
+A generated model Agent receives the same built-in `agent` Tool, so generation
+can recurse. Bound it with `:depth`, `:agent-forms`, and the other Run limits.
+
+See [Create agents at runtime](/docs/guides/architect) for a complete run and
+[Agent forms](/docs/reference/agent-forms) for the exact accepted grammar.

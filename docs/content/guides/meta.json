@@ -1,11 +1,10 @@
 {
-  "title": "Guides",
+  "title": "Examples",
   "pages": [
-    "index",
     "architect",
-    "chat",
     "composition",
     "coding",
+    "chat",
     "harbor"
   ]
 }

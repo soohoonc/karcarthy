@@ -1,9 +1,10 @@
 ---
-title: Events
-description: Stream model output and observe Agent, model, Tool, Session, and compiler activity.
+title: Events and monitoring
+description: Observe model output, Tool calls, generated Agents, and the live execution tree.
 ---
 
-Pass `:observe` to `run!` to receive events as they occur:
+A Run records what happened. Pass `:observe` to receive the same events while
+it is happening:
 
 ```clojure
 (def run
@@ -37,7 +38,7 @@ observer:
 Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
 └─ architect · waiting for 2 Agents
    ├─ failure-analyst · calling model
-   └─ rollout-planner · Tool: search
+   └─ rollout-planner · calling model
 ```
 
 The header shows current Run status, elapsed time, model-call count, cumulative
@@ -106,7 +107,8 @@ If another observer is already installed, compose the functions:
 ```
 
 Every event has a Run ID. Agent events also have an Agent ID, parent ID, and
-depth, so recursive and parallel children can be reconstructed as a tree.
+depth, so recursive and parallel children can be reconstructed as a tree. The
+[Event catalog](/docs/reference/events) defines each stable event name.
 
 The `:program/*` family is narrower than its name may suggest: it describes the
 compiler lifecycle for dynamically submitted Clojure Agent source. It is not
@@ -141,6 +143,6 @@ Agent-form compilation uses the `:program/*` family. See
 
 ## Next
 
-- [Quickstart](/docs/quickstart#develop-at-the-repl) inspects retained events at the REPL.
-- [Guides](/docs/guides) applies events to chat, composition, coding, and evaluation.
-- [Agent forms](/docs/reference/agent-forms) defines every compiler phase and limit.
+- [Create agents at runtime](/docs/guides/architect) shows the live tree.
+- [Event catalog](/docs/reference/events) lists stable event names.
+- [Agent forms](/docs/reference/agent-forms) defines the compiler phases.

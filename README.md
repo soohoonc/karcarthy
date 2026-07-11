@@ -2,9 +2,9 @@
 
 > **The agent architecture is the program.**
 
-karcarthy is a native, homoiconic Clojure agent harness. Agents are executable
-Clojure values and forms: developers, macros, and models all author the same
-program, and the same kernel runs it.
+karcarthy is an experiment in writing agents as Clojure programs. Developers,
+macros, and models create the same Agent forms, and the same runtime executes
+them.
 
 There is no workflow graph or second orchestration language. Clojure functions,
 conditionals, recursion, and concurrency express fixed architectures. When the
@@ -32,7 +32,7 @@ The terminal redraws the live Agent tree as the Run changes:
 Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
 └─ architect · waiting for 2 Agents
    ├─ failure-analyst · calling model
-   └─ rollout-planner · Tool: search
+   └─ rollout-planner · calling model
 ```
 
 Elapsed time updates once per second. Model-call and token totals update as
@@ -96,9 +96,9 @@ The examples progress from the kernel to a complete evaluation:
 | --- | --- |
 | [Basic](examples/basic/main.clj) | One model-driven Agent Run |
 | [Architect](examples/architect/main.clj) | A running Agent authors and calls a task-specific team |
-| [Composition](examples/composition/main.clj) | A fixed concurrent architecture written with Clojure |
-| [Coding](examples/coding/main.clj) | Open-ended repository work with task-dependent architecture |
-| [Harbor](examples/harbor/README.md) | The Coding Agent evaluated by a verifier with a recorded trajectory |
+| [Compose agents](examples/composition/main.clj) | A fixed concurrent architecture written with Clojure |
+| [Build a coding agent](examples/coding/main.clj) | Open-ended repository work with task-dependent architecture |
+| [Evaluate an agent](examples/harbor/README.md) | The Coding Agent evaluated by a verifier with a recorded trajectory |
 
 See [examples/README.md](examples/README.md) for commands and details.
 
@@ -113,11 +113,11 @@ that it is one Agent form, but it is not a sandbox for untrusted code.
 ## Documentation
 
 - [Quickstart](https://karcarthy.vercel.app/docs/quickstart)
-- [Agents](https://karcarthy.vercel.app/docs/agents)
-- [Runtime Agent forms](https://karcarthy.vercel.app/docs/reference/agent-forms)
-- [Guides](https://karcarthy.vercel.app/docs/guides)
-- [Protocols](https://karcarthy.vercel.app/docs/protocols/mcp)
-- [Reference](https://karcarthy.vercel.app/docs/reference)
+- [Why Clojure?](https://karcarthy.vercel.app/docs/why-clojure)
+- [Create agents at runtime](https://karcarthy.vercel.app/docs/guides/architect)
+- [Agents and runs](https://karcarthy.vercel.app/docs/agents)
+- [Tools and context](https://karcarthy.vercel.app/docs/tools)
+- [API](https://karcarthy.vercel.app/docs/reference/api)
 
 ## Development
 

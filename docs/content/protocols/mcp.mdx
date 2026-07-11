@@ -1,11 +1,11 @@
 ---
-title: MCP
-description: Connect an Agent to Tools exposed by a stdio MCP server.
+title: MCP tools
+description: Import Tools from a stdio MCP server.
 ---
 
-karcarthy is an MCP client. It starts an MCP server as a child process,
-discovers the server's Tools, and adapts them into ordinary karcarthy Tool
-values. The Agent and model loop do not need a separate MCP execution path.
+Use MCP when the Tools an Agent needs already live in an MCP server. karcarthy
+starts the server, discovers its Tools, and adapts them into ordinary Tool
+values. The model loop does not need a separate MCP execution path.
 
 ## Connect and run
 
@@ -105,5 +105,5 @@ session Agent. They are closed with the ACP session.
 
 ## Next
 
-- [ACP](/docs/protocols/acp) accepts MCP servers from a client while serving an Agent.
-- [Tools](/docs/tools) compares local, hosted, and MCP Tool execution.
+- [ACP server](/docs/protocols/acp) accepts MCP servers from a client.
+- [Tools and context](/docs/tools) compares local, hosted, and MCP execution.

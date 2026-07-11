@@ -1,6 +1,6 @@
 ---
-title: Library API
-description: The public karcarthy API.
+title: API
+description: Public symbols available through the karcarthy namespace.
 ---
 
 ```clojure
@@ -86,7 +86,7 @@ name. Optional keys are `:input-schema`, `:output`, `:output-schema`,
 (k/run! agent input options)
 ```
 
-Starts a Run and returns its complete result.
+Starts a Run, waits for it to finish, and returns its complete result.
 
 ```clojure
 {:context {...}
@@ -215,8 +215,8 @@ Use a deterministic model in tests:
 ```
 
 `local-tools` supplies `read`, `write`, `edit`, `bash`, and `search`. MCP uses
-stdio and must be closed by the caller. See [Tools](/docs/tools),
-[Models](/docs/models), and [MCP](/docs/protocols/mcp) for execution and lifecycle
+stdio and must be closed by the caller. See [Tools and context](/docs/tools),
+[Model providers](/docs/protocols/models), and [MCP tools](/docs/protocols/mcp) for execution and lifecycle
 semantics.
 
 ## ACP
@@ -239,7 +239,7 @@ Or provide an Agent factory:
              :output string?}))})
 ```
 
-Client-provided MCP Tools are appended automatically. See [ACP](/docs/protocols/acp) for
+Client-provided MCP Tools are appended automatically. See [ACP server](/docs/protocols/acp) for
 the complete session factory and supported protocol surface.
 
 ## Events and contracts

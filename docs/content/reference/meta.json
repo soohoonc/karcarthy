@@ -1,9 +1,9 @@
 {
   "title": "Reference",
   "pages": [
-    "index",
     "api",
+    "agent-forms",
     "data",
-    "agent-forms"
+    "events"
   ]
 }

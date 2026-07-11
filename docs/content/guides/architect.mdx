@@ -1,128 +1,92 @@
 ---
-title: Agent creates Agents
-description: Watch one Agent write and run two more Agents.
+title: Create agents at runtime
+description: Watch one Agent write and run two specialists.
 ---
 
-This demo starts one Agent called `architect`. After it reads the task, it
-writes two more Agents:
+This example starts one Agent, `architect`. After it reads the task, it writes
+a failure analyst and a rollout planner, runs them concurrently, and uses both
+answers in its final response.
 
-- a failure analyst;
-- a rollout planner.
+## Before you begin
 
-It runs both, waits for their answers, and writes a final answer.
+Run from a karcarthy checkout with JDK 21, the Clojure CLI, and
+`OPENAI_API_KEY` or `RESPONSES_API_KEY` set.
 
-## The parent
-
-The parent is a normal Agent:
-
-```clojure
-(k/agent
- {:name "architect"
-  :model {:transport :responses
-          :id "gpt-5.6"
-          :reasoning :low}
-  :instructions
-  "Call the agent Tool twice. Create a failure analyst and a rollout
-   planner. Give both the full task. Use both answers in your answer."
-  :input string?
-  :output string?})
-```
-
-The demo tells the model to create exactly two Agents so every recording shows
-the feature. A normal Agent is free to create none, one, or several.
-
-## Run it
-
-Set `RESPONSES_API_KEY` or `OPENAI_API_KEY`, then run:
+## Run the demo
 
 ```bash
 clojure -M:examples architect \
   "Review a migration from synchronous writes to a queue."
 ```
 
-The source is in
-[`examples/architect/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/architect/main.clj).
-
-## Read the monitor
-
-The names will vary. While both children run, the terminal looks like this:
+The terminal redraws the Run while it executes:
 
 ```text
 Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
 └─ architect · waiting for 2 Agents
    ├─ failure-analyst · calling model
-   └─ rollout-planner · Tool: search
+   └─ rollout-planner · calling model
 ```
 
-Elapsed time advances once per second. Model calls and tokens accumulate as
-model responses finish. The display also redraws when an Agent starts, calls a
-model or Tool, creates an Agent form, finishes, or fails. The two child lines
-may change in either order because they run at the same time.
+Names, usage, timing, and answers vary. The example fixes the number and roles
+of the children so the same behavior is visible on every successful run.
 
-Here is what happened:
+When the Run finishes, the command prints `ANSWER` followed by the parent's
+synthesis.
 
-1. `2 Agent forms` means the parent model wrote two `(agent ...)` forms.
-2. The two indented lines are the Agent values created from those forms.
-3. `calling model` and `Tool: search` show what each Agent is doing now.
-4. When both lines say `done`, their answers have returned to the parent.
-5. The parent then calls its model again and writes the final answer.
+## Inspect it at the REPL
 
-The parent did not describe a team for some other system to build. It wrote the
-team as Clojure, and that Clojure ran.
+Start the bundled REPL:
 
-The example creates the monitor with:
+```bash
+clojure -M:examples repl
+```
+
+Then create a monitor and keep the Run:
 
 ```clojure
-(k/monitor {:display :tree})
+(require '[karcarthy :as k])
+
+(def live (k/monitor {:display :tree}))
+
+(def run
+  (example.architect/run-architect!
+   "Review a migration from synchronous writes to a queue."
+   live))
 ```
 
-See [Events: Watch Runs live](/docs/events#watch-runs-live) to use the same
-monitor with another Agent.
-
-## What each new Agent knows
-
-Each `agent` Tool call has two fields:
+Read the final answer and tree:
 
 ```clojure
-{:source "(agent ...)"
- :input "the complete task for this Agent"}
+(println (:output run))
+(k/monitor live)
 ```
 
-The new Agent gets that `input`. It does not get the parent's conversation or
-private reasoning. Its form contains its own instructions and Tools.
-
-This makes each call easy to inspect: the source says what the Agent is, and
-the input says what it should do.
-
-## It is the same Agent you would write
-
-A developer could write the failure analyst directly:
+Inspect the Agent forms the model submitted:
 
 ```clojure
-(def failure-analyst
-  (k/agent
-   {:name "failure-analyst"
-    :model {:transport :responses :id "gpt-5.6"}
-    :instructions "Find one hidden failure mode."
-    :input string?
-    :output string?}))
+(->> (k/events run)
+     (filter #(= :program/expanded (:type %)))
+     (map :definition))
 ```
 
-The model-written form creates the same value. You can run it, pass it in
-`:agents`, call other Agents from its body, or let it create more Agents.
+Those forms are retained from the real Run; the documentation does not invent
+their names or source.
 
-## Limits and safety
+## What happened
 
-The two new Agents use the parent's Run limits. Their model calls, tokens, time,
-and events count toward the same Run. `:agent-forms` limits how many forms the
-model may submit; `:depth` limits nesting.
+1. The parent model received the task and called its built-in `agent` Tool
+   twice.
+2. Each call supplied one Clojure Agent form and explicit input.
+3. karcarthy read, expanded, checked, and evaluated each form.
+4. Both resulting Agents ran inside the parent's Run.
+5. Their outputs returned to the parent as Tool results.
+6. The parent model wrote the final answer.
 
-The forms run as JVM Clojure. Do not evaluate source you do not trust in a
-process that holds sensitive files, credentials, or network access.
+The children share the parent's budgets, deadline, approvals, cancellation,
+and event history. They do not inherit its conversation: each receives only
+the input supplied in its `agent` Tool call.
 
-## Next
-
-- [Agents](/docs/agents) explains Agent values and Runs.
-- [Agent forms](/docs/reference/agent-forms) lists the exact rules for submitted forms.
-- [Agent composition](/docs/guides/composition) shows a team written by the developer.
-- [Coding](/docs/guides/coding) lets the model decide whether more Agents will help.
+The [Generated agents](/docs/generated-agents) page explains the mechanism.
+[Compose agents](/docs/guides/composition) shows the other case: architecture
+known in advance and written directly in Clojure.

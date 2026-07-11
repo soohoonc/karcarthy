@@ -1,9 +1,9 @@
 ---
 title: Sessions
-description: Preserve model conversation history across root Runs.
+description: Carry model conversation history across otherwise independent Runs.
 ---
 
-Runs are independent unless you pass a Session:
+Each `run!` call starts without prior conversation unless you pass a Session:
 
 ```clojure
 (def session (k/memory-session))
@@ -61,6 +61,6 @@ state.
 
 ## Next
 
-- [Events](/docs/events) observes Session updates alongside the rest of a Run.
-- [Chat](/docs/guides/chat) builds a terminal application around a Session.
-- [Data](/docs/reference/data#session) specifies Session item shapes.
+- [Build a chat agent](/docs/guides/chat) uses a Session in a complete application.
+- [Events and monitoring](/docs/events) observes Session updates.
+- [Run data](/docs/reference/data#session) specifies Session item shapes.

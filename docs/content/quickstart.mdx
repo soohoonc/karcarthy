@@ -1,119 +1,111 @@
 ---
 title: Quickstart
-description: Run karcarthy, then define and call an Agent.
+description: Install karcarthy and run your first Agent.
 ---
 
-karcarthy requires JDK 21 and the Clojure CLI.
+This guide creates one model-driven Agent, runs it, and prints its answer.
 
-## Run the live example
+## Before you begin
 
-Set `RESPONSES_API_KEY` or `OPENAI_API_KEY`, then run from a checkout:
+You need JDK 21, the Clojure CLI, and an OpenAI API key.
 
-```bash
-clojure -M:examples basic "Explain what an Agent value is."
-```
+## Add karcarthy
 
-The example constructs an ordinary Agent value, runs it through the live
-Responses transport, and prints the model's answer. Use
-`KARCARTHY_OPENAI_MODEL` to override the default model.
+Create `deps.edn`:
 
-## Add karcarthy to a project
-
-```clojure
+```clojure title="deps.edn"
 {:deps
  {io.github.soohoonc/karcarthy
   {:git/url "https://github.com/soohoonc/karcarthy"
-   :git/sha "<commit-sha>"}}
+   :git/sha "bfd9eb8eb9e7feb67a7cce3d577636ac20115375"}}
  :paths ["src"]}
 ```
 
-Set `OPENAI_API_KEY` to use the built-in Responses transport.
+Set the credential in the shell that will start Clojure:
 
-## Define an Agent
+```bash
+export OPENAI_API_KEY="..."
+```
+
+## Define the Agent
 
 Create `src/example.clj`:
 
-```clojure
+```clojure title="src/example.clj"
 (ns example
   (:require [karcarthy :as k]))
 
 (k/defagent assistant
   {:model {:transport :responses :id "gpt-5.6"}
    :instructions "Answer clearly and concisely."
+   :input string?
    :output string?})
 ```
 
-Start a REPL and run it:
+An Agent is a Clojure value. This one has no body, so karcarthy runs its model
+and Tool loop.
+
+## Run it
+
+Start a REPL:
 
 ```bash
 clojure -M
 ```
 
+Require both the example and karcarthy, then start a Run:
+
+```clojure
+(require '[example :as example]
+         '[karcarthy :as k])
+
+(def run
+  (k/run! example/assistant
+          "Why are Lisp macros unusual?"))
+```
+
+The answer varies by model call. Inspect the stable parts of the result:
+
+```clojure
+(:status run)          ;=> :completed
+(println (:output run))
+(:usage run)           ;=> {:model-calls ..., :input-tokens ..., ...}
+```
+
+`run!` returns a failed Run instead of throwing for model, Tool, and contract
+failures. Check `:status` before consuming `:output`; `:error` explains a
+failure.
+
+## Watch the Run
+
+Create a monitor and pass it as the observer:
+
+```clojure
+(def live (k/monitor {:display :tree}))
+
+(def monitored-run
+  (k/run! example/assistant
+          "Explain continuation-passing style."
+          {:observe live}))
+```
+
+The terminal redraws while the Agent runs. Evaluate the monitor to print its
+final tree again:
+
+```clojure
+(k/monitor live)
+```
+
+## Change it
+
+Edit the instructions in `src/example.clj`, reload the namespace, and run the
+new definition:
+
 ```clojure
 (require '[example :as example] :reload)
-
-(def run (k/run! example/assistant "Why are Lisp macros unusual?"))
-
-(:status run) ;=> :completed
-(:output run) ;=> "..."
+(k/run! example/assistant "Explain it with an example.")
 ```
 
-## Develop at the REPL
-
-Agents and Tools are ordinary Clojure values, so they can be inspected and
-redefined without a registry or build step:
-
-```clojure
-(k/events run)
-(k/definition example/assistant)
-(k/expansion example/assistant)
-```
-
-After editing `src/example.clj`, reload it and run the new definition:
-
-```clojure
-(require '[example :as example] :reload)
-(k/run! example/assistant "Try the new definition.")
-```
-
-From a karcarthy checkout, `clojure -M:examples repl` starts a plain
-`clojure.main` REPL with the Basic, Architect, and Coding examples loaded.
-Starting it does not require credentials; only live model calls do.
-
-## Give it a Tool
-
-Add this Tool above the Agent:
-
-```clojure
-(k/deftool word-count
-  {:description "Count the words in text."
-   :input {:type "object"
-           :properties {"text" {:type "string"}}
-           :required ["text"]
-           :additionalProperties false}
-   :output integer?}
-  [{:keys [text]}]
-  (count (re-seq #"\S+" text)))
-```
-
-Then add it to the Agent:
-
-```clojure
-:tools [word-count]
-```
-
-On each model turn, karcarthy sends the Tool's name, description, and input
-schema. A Tool call is validated, executed, and returned to the model before
-the next turn.
-
-## Next
-
-1. Read [Agents](/docs/agents) to see how one Agent form is authored directly,
-   exposed as a callable specialist, or submitted by a model at runtime.
-2. Read [Tools](/docs/tools) for contracts, context, approvals, local Tools,
-   hosted Tools, and MCP Tools.
-3. Run [Agent creates Agents](/docs/guides/architect) to watch one Agent write
-   and run two more.
-
-When those concepts are familiar, follow the [guides](/docs/guides) from
-chat through open-ended coding and metric-driven evaluation.
+Next, read [Why Clojure?](/docs/why-clojure) for the project’s argument or
+[Create agents at runtime](/docs/guides/architect) to watch an Agent write two
+more Agents.

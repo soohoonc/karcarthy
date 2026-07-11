@@ -1,70 +1,19 @@
 ---
-title: Chat
-description: Build a minimal terminal chat with an Agent, run!, and a Session.
+title: Build a chat agent
+description: Carry model conversation across Runs with a Session.
 ---
 
-A chat interface is application code around three existing values: an Agent,
-`run!`, and a Session. karcarthy does not need a separate chat abstraction.
+A chat application needs an Agent, a Session, and a loop. karcarthy does not
+add a separate chat abstraction.
 
-The runnable example lives at `examples/chat/main.clj`:
+## Run the example
 
-```clojure
-(ns example.chat
-  (:require [karcarthy :as k]))
-
-(def assistant
-  (k/agent
-   {:name "chat-assistant"
-    :model {:transport :responses :id "gpt-5.6"}
-    :instructions "Be helpful and concise."
-    :output string?}))
-
-(def session (k/memory-session))
-(def last-run (atom nil))
-
-(defn ask! [input]
-  (let [run (k/run! assistant input {:session session})]
-    (reset! last-run run)
-    run))
-
-(defn reset-chat! []
-  (k/clear-session! session))
-
-(defn chat! []
-  (println "Type /reset to clear the conversation or /quit to exit.")
-  (loop []
-    (print "you> ")
-    (flush)
-    (when-let [input (read-line)]
-      (case input
-        "/quit" :done
-        "/reset" (do (reset-chat!)
-                      (println "Conversation cleared.")
-                      (recur))
-        (let [run (ask! input)]
-          (if (= :completed (:status run))
-            (println "agent>" (:output run))
-            (println "error>" (get-in run [:error :message])))
-          (recur))))))
-```
-
-## Start chatting
-
-Start a REPL with `RESPONSES_API_KEY` or `OPENAI_API_KEY` available to the
-process:
-
-```bash
-clojure -M
-```
-
-Then load and start the example:
+Set `OPENAI_API_KEY`, start a REPL, and load the example:
 
 ```clojure
 (load-file "examples/chat/main.clj")
 (example.chat/chat!)
 ```
-
-The terminal becomes a small chat interface:
 
 ```text
 Type /reset to clear the conversation or /quit to exit.
@@ -73,30 +22,37 @@ agent> Got it.
 you> What is my project called?
 agent> karcarthy.
 you> /quit
-:done
 ```
 
-Each message starts a Run. The shared Session supplies earlier messages to the
-next Run.
+The exact wording varies, but the second response can use the first turn
+because both Runs receive the same Session.
 
-## Inspect and reset
-
-After leaving the loop, inspect the most recent Run and conversation:
+## The state boundary
 
 ```clojure
-(select-keys @example.chat/last-run [:status :output :usage])
-(k/events @example.chat/last-run)
+(def assistant
+  (k/agent
+   {:name "chat-assistant"
+    :model {:transport :responses :id "gpt-5.6"}
+    :instructions "Be helpful and concise."
+    :output string?}))
+
+(def session (k/memory-session))
+
+(defn ask! [input]
+  (k/run! assistant input {:session session}))
+```
+
+Each call to `run!` is a new Run. The Session contributes earlier normalized
+messages and receives the new turn after it completes.
+
+Inspect or clear the conversation:
+
+```clojure
 (k/get-items example.chat/session)
-```
-
-Clear the conversation without recreating the Agent:
-
-```clojure
 (example.chat/reset-chat!)
 ```
 
-## Next
-
-- [Quickstart](/docs/quickstart#develop-at-the-repl) covers redefining and inspecting Agents at the REPL.
-- [Sessions](/docs/sessions) explains in-memory and durable conversation stores.
-- [Events](/docs/events) shows incremental model output.
+A Session stores conversation, not arbitrary application state or a Run
+checkpoint. [Sessions](/docs/sessions) defines that boundary and explains how
+to provide durable storage.

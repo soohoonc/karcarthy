@@ -1,6 +1,7 @@
 {
-  "title": "Protocols",
+  "title": "Integrations",
   "pages": [
+    "models",
     "mcp",
     "acp"
   ]
