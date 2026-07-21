@@ -343,7 +343,8 @@
         (.setDaemon true)))))
 
 (defn- start-ticker! [^Monitor monitor]
-  (let [ticker (.-ticker monitor)]
+  (let [ticker (.-ticker monitor)
+        lock (.-lock monitor)]
     (when (nil? @ticker)
       (let [executor (Executors/newSingleThreadScheduledExecutor
                       daemon-thread-factory)]
@@ -354,7 +355,7 @@
            (reify Runnable
              (run [_]
                (try
-                 (locking (.-lock monitor)
+                 (locking lock
                    (when (active-runs? @(.-state monitor))
                      (swap! (.-state monitor)
                             refresh-elapsed (System/currentTimeMillis))

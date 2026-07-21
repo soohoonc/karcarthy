@@ -1,7 +1,6 @@
 (ns karcarthy.mcp
   "Minimal MCP 2025-11-25 stdio client. It discovers server Tools and adapts
   them into ordinary karcarthy Tools; the model loop stays unchanged."
-  (:refer-clojure :exclude [tools])
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [karcarthy.contract :as contract]

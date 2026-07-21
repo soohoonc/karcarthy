@@ -1,6 +1,5 @@
 (ns karcarthy.tools
   "Small, orthogonal tools for agents operating in a local directory."
-  (:refer-clojure :exclude [read])
   (:require [clojure.string :as str]
             [karcarthy.contract :as contract]
             [karcarthy.tool :as tool])

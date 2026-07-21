@@ -80,6 +80,8 @@ All notable changes are documented here, following
   deadline, cancellation, approvals, and executor.
 - Run limits use Lisp-native vocabulary: `:depth` bounds participating Agent
   calls and `:evals` bounds evaluation attempts.
+- Agent, Tool, contract, and Run implementations now live in their direct
+  namespaces instead of a monolithic internal core.
 
 ### Removed
 

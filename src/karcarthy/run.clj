@@ -1,6 +1,6 @@
 (ns karcarthy.run
   "Agent execution, the model/Tool loop, limits, and events."
-  (:refer-clojure :exclude [agent await run!])
+  (:refer-clojure :exclude [run!])
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [karcarthy.agent :refer [agent? normalize-model]]
@@ -15,7 +15,7 @@
 
 (declare run-agent! run!)
 
-(def ^:dynamic *run*
+(def ^:dynamic ^:no-doc *run*
   "The active run context. `run!` binds this value, including across futures."
   nil)
 
@@ -23,7 +23,7 @@
   "Return the internal context for the Agent or Tool currently running."
   []
   (or *run*
-      (fail! :program :agent
+      (fail! :run :context
              "This operation is only available while an Agent is running")))
 
 (def ^:private eval-request-schema
@@ -301,7 +301,7 @@
 (defn- limit-value [rt k]
   (get (:limits rt) k Long/MAX_VALUE))
 
-(defn consume!
+(defn ^:no-doc consume!
   "Atomically consume a shared run resource budget."
   [rt k n]
   (check-run! rt)
@@ -774,13 +774,12 @@
                          :content model-output})
                       results)
                 new-items (into [assistant-message] result-messages)]
-            (let [messages (into messages new-items)]
-              (append-session-items! rt (into (vec unpersisted) new-items))
-              (recur (inc turn)
-                     messages
-                     result-messages
-                     (:provider-state response)
-                     [])))
+            (append-session-items! rt (into (vec unpersisted) new-items))
+            (recur (inc turn)
+                   (into messages new-items)
+                   result-messages
+                   (:provider-state response)
+                   []))
 
           (fail! :model :response "Unsupported model response type"
                  {:response response}))))))
@@ -852,8 +851,24 @@
                      :error (throwable->failure t)})
           (if (= :failure (:karcarthy/type (ex-data t)))
             (throw t)
-            (fail! :program :execute (or (ex-message t) (str t))
+            (fail! :execution :agent (or (ex-message t) (str t))
                    {:agent (:name agent)} t)))))))
+
+(defn- run-result
+  [rt agent input started events output error]
+  {:karcarthy/type :run
+   :id (:run-id rt)
+   :status (cond
+             (nil? error) :completed
+             (= :cancellation (:kind error)) :cancelled
+             :else :failed)
+   :agent (:name agent)
+   :input input
+   :output output
+   :usage (assoc @(:usage rt) :duration-ms
+                 (/ (double (- (System/nanoTime) started)) 1000000.0))
+   :events events
+   :error error})
 
 (defn- call-result!
   [rt agent input options]
@@ -862,28 +877,10 @@
         rt (update rt :event-collectors (fnil conj []) call-events)]
     (try
       (let [output (run-agent! rt agent input options)]
-        {:karcarthy/type :run
-         :id (:run-id rt)
-         :status :completed
-         :agent (:name agent)
-         :input input
-         :output output
-         :usage (assoc @(:usage rt) :duration-ms
-                       (/ (double (- (System/nanoTime) started)) 1000000.0))
-         :events @call-events
-         :error nil})
+        (run-result rt agent input started @call-events output nil))
       (catch Throwable t
-        (let [error (throwable->failure t)]
-          {:karcarthy/type :run
-           :id (:run-id rt)
-           :status (if (= :cancellation (:kind error)) :cancelled :failed)
-           :agent (:name agent)
-           :input input
-           :output nil
-           :usage (assoc @(:usage rt) :duration-ms
-                         (/ (double (- (System/nanoTime) started)) 1000000.0))
-           :events @call-events
-           :error error})))))
+        (run-result rt agent input started @call-events nil
+                    (throwable->failure t))))))
 
 (defn run!
   "Run an Agent and return a Run map.
@@ -896,21 +893,14 @@
    (run! agent input {}))
   ([agent input options]
    (if *run*
-     (let [rt *run*]
+     (let [rt *run*
+           started (System/nanoTime)]
        (try
          (await-future! (submit-limited!
                          rt #(call-result! rt agent input (or options {}))))
          (catch Throwable t
-           {:karcarthy/type :run
-            :id (:run-id rt)
-            :status (if (= :cancellation (:kind (throwable->failure t)))
-                      :cancelled :failed)
-            :agent (:name agent)
-            :input input
-            :output nil
-            :usage @(:usage rt)
-            :events []
-            :error (throwable->failure t)})))
+           (run-result rt agent input started [] nil
+                       (throwable->failure t)))))
      (let [options (or options {})
            _ (contract/reject-unknown! "Run options" run-option-keys options)
            _ (when (and (some? (:session options))

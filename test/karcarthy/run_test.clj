@@ -1,8 +1,7 @@
 (ns karcarthy.run-test
-  (:refer-clojure :exclude [run!])
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is]]
             [karcarthy :as k]))
 
 (s/def ::text string?)

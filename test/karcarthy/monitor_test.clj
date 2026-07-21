@@ -1,6 +1,6 @@
 (ns karcarthy.monitor-test
   (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is]]
             [karcarthy :as k])
   (:import [java.io StringWriter]))
 

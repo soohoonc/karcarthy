@@ -2,7 +2,7 @@
   "Contracts and structured failures shared by Agents, Tools, and Runs."
   (:require [clojure.spec.alpha :as s]))
 
-(defn failure
+(defn ^:no-doc failure
   "Create the stable data carried by harness exceptions and failed Runs."
   ([kind phase message]
    (failure kind phase message nil nil))
@@ -17,7 +17,7 @@
             :recoverable? false}
      cause (assoc :cause cause))))
 
-(defn fail!
+(defn ^:no-doc fail!
   "Throw an ExceptionInfo carrying a stable failure map."
   ([kind phase message]
    (fail! kind phase message nil nil))
@@ -29,16 +29,16 @@
               (ex-info message value cause)
               (ex-info message value))))))
 
-(defn throwable->failure
+(defn ^:no-doc throwable->failure
   "Convert any Throwable into the public failure shape."
   [^Throwable error]
   (let [data (ex-data error)]
     (if (= :failure (:karcarthy/type data))
       (dissoc data :cause)
-      (failure :program :execute (or (ex-message error) (str error))
+      (failure :execution :execute (or (ex-message error) (str error))
                {:class (.getName (class error))}))))
 
-(defn json-schema?
+(defn ^:no-doc json-schema?
   "Return true for the JSON Schema shapes understood by karcarthy."
   [value]
   (and (map? value)
@@ -164,7 +164,7 @@
     (= contract vector?) {:type "array"}
     :else (spec-form->json-schema contract)))
 
-(defn check!
+(defn ^:no-doc check!
   "Return value when it satisfies contract; otherwise throw a structured failure."
   [phase contract value]
   (when-not (valid? contract value)
@@ -173,7 +173,7 @@
            {:contract contract :value value :explain (explain contract value)}))
   value)
 
-(defn reject-unknown!
+(defn ^:no-doc reject-unknown!
   "Reject keys outside supported and return the map unchanged."
   [label supported value]
   (when-let [unknown (seq (remove supported (keys value)))]

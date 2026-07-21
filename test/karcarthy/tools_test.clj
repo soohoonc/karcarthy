@@ -1,7 +1,7 @@
 (ns karcarthy.tools-test
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is]]
             [karcarthy :as k]
             [karcarthy.tools :as tools])
   (:import [java.nio.file Files Path]

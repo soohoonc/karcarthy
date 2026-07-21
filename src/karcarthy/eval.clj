@@ -1,6 +1,5 @@
 (ns karcarthy.eval
   "Same-process evaluation of one model-authored Clojure expression."
-  (:refer-clojure :exclude [eval])
   (:require [clojure.walk :as walk]
             [karcarthy.agent :as agent]
             [karcarthy.contract :as contract]

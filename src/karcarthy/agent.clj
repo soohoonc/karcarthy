@@ -8,14 +8,14 @@
     :tools :agents :output :output-schema :max-turns :stop-when :guardrails
     :limits :metadata})
 
-(defn normalize-model
+(defn ^:no-doc normalize-model
   "Lower a model ID to the default OpenAI Responses configuration."
   [model]
   (if (string? model)
     {:transport :responses :provider :openai :id model}
     model))
 
-(defn make-agent
+(defn ^:no-doc make-agent
   "Implementation constructor used by `agent` and `defagent`."
   [config definition expansion definition-ns]
   (when-not (map? config)

@@ -1,6 +1,5 @@
 (ns karcarthy.acp
   "ACP v1 stdio server for exposing karcarthy Agents to editors and Harbor."
-  (:refer-clojure :exclude [await])
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [karcarthy.agent :as agent]

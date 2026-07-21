@@ -1,5 +1,4 @@
 (ns karcarthy.eval-test
-  (:refer-clojure :exclude [run!])
   (:require [clojure.test :refer [deftest is testing]]
             [karcarthy :as k]
             [karcarthy.eval :as keval]))

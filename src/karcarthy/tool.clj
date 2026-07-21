@@ -15,7 +15,7 @@
      (let [~(first bindings) input#]
        ~@body)))
 
-(defn make-tool
+(defn ^:no-doc make-tool
   "Implementation constructor used by `tool` and `deftool`."
   [config definition expansion execute]
   (when-not (map? config)

@@ -1,6 +1,6 @@
 (ns karcarthy
   "The public karcarthy API: a native, homoiconic Clojure agent harness."
-  (:refer-clojure :exclude [agent await run!])
+  (:refer-clojure :exclude [agent run!])
   (:require [karcarthy.acp :as acp]
             [karcarthy.agent :as agent-data]
             [karcarthy.contract :as contract]
