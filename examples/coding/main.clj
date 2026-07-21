@@ -38,7 +38,6 @@
           {:limits {:model-calls 32
                     :evals 4
                     :depth 3
-                    :parallelism 3
                     :deadline-ms 600000}}))
 
 (defn -main [& args]
