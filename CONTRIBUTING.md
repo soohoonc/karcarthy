@@ -21,8 +21,8 @@ pure and offline-testable.
 
 ## Architectural rules
 
-- Keep construction, contracts, and execution in their direct namespaces:
-  `karcarthy.agent`, `karcarthy.tool`, `karcarthy.contract`, and
+- Keep construction, schemas, and execution in their direct namespaces:
+  `karcarthy.agent`, `karcarthy.tool`, `karcarthy.schema`, and
   `karcarthy.run`.
 - A provider integration is a narrow normalized model transport. It must not
   run Tools or Agents.
@@ -30,7 +30,7 @@ pure and offline-testable.
   or an interpreter.
 - Generated behavior goes through `karcarthy.eval`: read with reader evaluation
   disabled, expand, evaluate, normalize the result, and emit eval events.
-- Add contracts and structured failures at every new effect boundary.
+- Validate every new effect boundary and return structured failures.
 - Add event coverage for behavior that matters to replay or evaluation.
 - Preserve source and expanded forms.
 - Add tests and register new test namespaces in

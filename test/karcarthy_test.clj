@@ -13,7 +13,8 @@
                 local-tools prompt prompt-file
                 responses-web-search connect-mcp! mcp-tools close-mcp!
                 serve-acp!
-                definition expansion]]
+                definition expansion
+                schema-valid? explain-schema schema->json-schema]]
     (is (some? (ns-resolve 'karcarthy sym)) (str "missing " sym)))
   (doseq [removed '[run pipe branch delegate reduce revise route continue
                     dynamic evolve mock-runner fn-runner process-runner
@@ -24,7 +25,8 @@
                     handoff! environment conversation-state? model-transport
                     workspace-tools workspace-prompt
                     read-agent-form check-agent-form! eval-agent-form!
-                    compile-agent! system-prompt]]
+                    compile-agent! system-prompt
+                    contract-valid? explain-contract contract->json-schema]]
     (is (nil? (get (ns-publics 'karcarthy) removed))
         (str "still exports " removed))))
 
@@ -54,7 +56,7 @@
           {'karcarthy.agent '[agent defagent agent? definition expansion]
            'karcarthy.tool '[tool deftool tool? hosted-tool hosted-tool?]
            'karcarthy.run '[run! context model! emit! events mock-model]
-           'karcarthy.contract '[valid? explain json-schema]
+           'karcarthy.schema '[valid? explain json-schema]
            'karcarthy.eval '[read-expression]}]
     (require namespace)
     (doseq [sym symbols]

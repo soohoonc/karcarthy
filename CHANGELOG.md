@@ -72,15 +72,16 @@ All notable changes are documented here, following
 - Conversation history follows the established Session abstraction. Runs are
   stateless unless supplied a Session; `memory-session` is the process-local
   implementation and applications may provide durable implementations.
-- Loop controls are top-level Agent options: `:max-turns` and `:stop-when`.
-- Agent input contracts may be paired with a model-facing `:input-schema` when
+- Loop control is the top-level Agent option `:max-turns`.
+- Agent `:input` validation schemas may be paired with a model-facing
+  `:input-schema` when
   the Agent is available to another Agent.
 - The first `run!` establishes a dynamically scoped run. Calls within it,
   including calls in `future`, share its ID, usage, limits, events, context,
   deadline, cancellation, approvals, and executor.
 - Run limits use Lisp-native vocabulary: `:depth` bounds participating Agent
   calls and `:evals` bounds evaluation attempts.
-- Agent, Tool, contract, and Run implementations now live in their direct
+- Agent, Tool, Schema, and Run implementations now live in their direct
   namespaces instead of a monolithic internal core.
 
 ### Removed

@@ -1,5 +1,5 @@
-(ns karcarthy.contract
-  "Contracts and structured failures shared by Agents, Tools, and Runs."
+(ns karcarthy.schema
+  "Schemas and structured failures shared by Agents, Tools, and Runs."
   (:require [clojure.spec.alpha :as s]))
 
 (defn ^:no-doc failure
@@ -73,25 +73,25 @@
 
 (defn valid?
   "Return true when value satisfies a spec, predicate, class, set, or JSON Schema."
-  [contract value]
+  [schema value]
   (cond
-    (nil? contract) true
-    (keyword? contract) (s/valid? contract value)
-    (s/spec? contract) (s/valid? contract value)
-    (fn? contract) (boolean (contract value))
-    (class? contract) (instance? contract value)
-    (set? contract) (contains? contract value)
-    (json-schema? contract) (json-schema-valid? contract value)
-    :else (= contract value)))
+    (nil? schema) true
+    (keyword? schema) (s/valid? schema value)
+    (s/spec? schema) (s/valid? schema value)
+    (fn? schema) (boolean (schema value))
+    (class? schema) (instance? schema value)
+    (set? schema) (contains? schema value)
+    (json-schema? schema) (json-schema-valid? schema value)
+    :else (= schema value)))
 
 (defn explain
-  "Return a human-readable contract failure."
-  [contract value]
+  "Return a human-readable schema failure."
+  [schema value]
   (cond
-    (keyword? contract) (s/explain-str contract value)
-    (s/spec? contract) (s/explain-str contract value)
+    (keyword? schema) (s/explain-str schema value)
+    (s/spec? schema) (s/explain-str schema value)
     :else (str "value " (pr-str value) " does not satisfy "
-               (pr-str contract))))
+               (pr-str schema))))
 
 (def ^:private predicate-json-types
   {`clojure.core/string? "string"
@@ -147,37 +147,37 @@
     :else nil))
 
 (defn json-schema
-  "Best-effort JSON Schema derivation for common clojure.spec contracts."
-  [contract]
+  "Best-effort JSON Schema derivation for common clojure.spec schemas."
+  [schema]
   (cond
-    (nil? contract) nil
-    (json-schema? contract) contract
-    (keyword? contract) (some-> (s/get-spec contract) s/form
+    (nil? schema) nil
+    (json-schema? schema) schema
+    (keyword? schema) (some-> (s/get-spec schema) s/form
                                 spec-form->json-schema)
-    (s/spec? contract) (some-> contract s/form spec-form->json-schema)
-    (= contract string?) {:type "string"}
-    (= contract integer?) {:type "integer"}
-    (= contract int?) {:type "integer"}
-    (= contract number?) {:type "number"}
-    (= contract boolean?) {:type "boolean"}
-    (= contract map?) {:type "object"}
-    (= contract vector?) {:type "array"}
-    :else (spec-form->json-schema contract)))
+    (s/spec? schema) (some-> schema s/form spec-form->json-schema)
+    (= schema string?) {:type "string"}
+    (= schema integer?) {:type "integer"}
+    (= schema int?) {:type "integer"}
+    (= schema number?) {:type "number"}
+    (= schema boolean?) {:type "boolean"}
+    (= schema map?) {:type "object"}
+    (= schema vector?) {:type "array"}
+    :else (spec-form->json-schema schema)))
 
 (defn ^:no-doc check!
-  "Return value when it satisfies contract; otherwise throw a structured failure."
-  [phase contract value]
-  (when-not (valid? contract value)
-    (fail! :contract phase
-           (str "Value does not satisfy contract for " (name phase))
-           {:contract contract :value value :explain (explain contract value)}))
+  "Return value when it satisfies schema; otherwise throw a structured failure."
+  [phase schema value]
+  (when-not (valid? schema value)
+    (fail! :schema phase
+           (str "Value does not satisfy schema for " (name phase))
+           {:schema schema :value value :explain (explain schema value)}))
   value)
 
 (defn ^:no-doc reject-unknown!
   "Reject keys outside supported and return the map unchanged."
   [label supported value]
   (when-let [unknown (seq (remove supported (keys value)))]
-    (fail! :contract :configuration
+    (fail! :schema :configuration
            (str label " contains unknown configuration keys")
            {:unknown (vec unknown) :supported (vec (sort supported))}))
   value)

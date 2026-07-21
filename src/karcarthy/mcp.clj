@@ -3,7 +3,7 @@
   them into ordinary karcarthy Tools; the model loop stays unchanged."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [karcarthy.contract :as contract]
+            [karcarthy.schema :as schema]
             [karcarthy.tool :as tool])
   (:import [java.io BufferedReader BufferedWriter File InputStreamReader OutputStreamWriter]
            [java.nio.charset StandardCharsets]
@@ -34,13 +34,13 @@
       (swap! (:pending connection) dissoc id)
       (cond
         (= ::timeout message)
-        (contract/fail! :mcp :timeout "MCP request timed out"
+        (schema/fail! :mcp :timeout "MCP request timed out"
                     {:server (:name connection)
                      :method method
                      :timeout-ms timeout-ms})
 
         (:error message)
-        (contract/fail! :mcp :response
+        (schema/fail! :mcp :response
                     (or (get-in message [:error :message])
                         "MCP request failed")
                     {:server (:name connection)
@@ -138,12 +138,12 @@
   :cwd string}`. The command is executed directly, never through a shell."
   [{:keys [name command args env timeout-ms cwd] :as config}]
   (when-not (and (string? command) (not (str/blank? command)))
-    (contract/fail! :contract :configuration
+    (schema/fail! :schema :configuration
                 "MCP stdio config requires :command"
                 {:config (dissoc config :env)}))
   (let [directory (when cwd (File. (str cwd)))
         _ (when (and directory (not (.isDirectory directory)))
-            (contract/fail! :contract :configuration
+            (schema/fail! :schema :configuration
                         "MCP :cwd must be an existing directory"
                         {:cwd (str cwd)}))
         name (or name command)
@@ -187,7 +187,7 @@
                                     :title "karcarthy"
                                     :version "0.0.2"}})]
         (when-not (= protocol-version (:protocolVersion initialized))
-          (contract/fail! :mcp :initialize
+          (schema/fail! :mcp :initialize
                       "MCP server selected an unsupported protocol version"
                       {:requested protocol-version
                        :selected (:protocolVersion initialized)}))

@@ -14,7 +14,7 @@ available for libraries that prefer explicit dependencies:
 karcarthy.agent
 karcarthy.tool
 karcarthy.run
-karcarthy.contract
+karcarthy.schema
 karcarthy.eval
 karcarthy.session
 karcarthy.monitor
@@ -251,13 +251,13 @@ Or provide an Agent factory:
 Client-provided MCP Tools are appended automatically. See [ACP server](/docs/protocols/acp) for
 the complete session factory and supported protocol surface.
 
-## Events and contracts
+## Events and schema validation
 
 ```clojure
 (k/emit! {:type :application/decision :value value})
 (k/events run)
 
-(k/contract-valid? contract value)
-(k/explain-contract contract value)
-(k/contract->json-schema contract)
+(k/schema-valid? schema value)
+(k/explain-schema schema value)
+(k/schema->json-schema schema)
 ```

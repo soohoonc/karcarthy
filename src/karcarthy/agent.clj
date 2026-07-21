@@ -1,7 +1,7 @@
 (ns karcarthy.agent
   "Flat, model-backed Agent values."
   (:refer-clojure :exclude [agent])
-  (:require [karcarthy.contract :as contract]))
+  (:require [karcarthy.schema :as schema]))
 
 (def ^:private config-keys
   #{:name :description :model :instructions :context :input :input-schema
@@ -19,14 +19,14 @@
   "Implementation constructor used by `agent` and `defagent`."
   [config definition expansion definition-ns]
   (when-not (map? config)
-    (contract/fail! :contract :configuration
+    (schema/fail! :schema :configuration
                     "Agent configuration must be a map" {:value config}))
-  (contract/reject-unknown! "Agent" config-keys config)
+  (schema/reject-unknown! "Agent" config-keys config)
   (when-not (and (string? (:name config)) (seq (:name config)))
-    (contract/fail! :contract :configuration
+    (schema/fail! :schema :configuration
                     "Agent :name must be a non-empty string" {:config config}))
   (when (or (nil? (:model config)) (nil? (:instructions config)))
-    (contract/fail! :contract :configuration
+    (schema/fail! :schema :configuration
                     "An Agent requires :model and :instructions"
                     {:name (:name config)}))
   (assoc (update config :model normalize-model)

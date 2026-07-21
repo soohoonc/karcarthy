@@ -4,7 +4,7 @@ description: Define Agent data and execute it with run!.
 ---
 
 An Agent is a flat Clojure map containing a model, instructions, Tools, other
-Agents it may call, and boundary contracts.
+Agents it may call, and boundary schemas.
 
 ```clojure
 (k/defagent researcher
@@ -51,8 +51,8 @@ Use a map for advanced configuration:
 ```
 
 A Run is `:completed`, `:failed`, or `:cancelled`. Invalid configuration throws
-before execution. Model, Tool, contract, budget, deadline, and cancellation
-failures during execution produce a failed or cancelled Run map.
+before execution. Model, Tool, schema validation, budget, deadline, and
+cancellation failures during execution produce a failed or cancelled Run map.
 
 The first `run!` establishes a run. Calls within its dynamic extent participate
 in that run and share limits, usage, events, context, approvals, cancellation,
@@ -96,8 +96,8 @@ See [Dynamic eval](/docs/eval).
 | `:model` | Model ID string, model map, or metadata function. |
 | `:instructions` | String or metadata function. |
 | `:tools` / `:agents` | Tools and Agents available to the model. |
-| `:context` | Contract for local run context. |
-| `:input` / `:output` | Boundary contracts. |
+| `:context` | Validation schema for local run context. |
+| `:input` / `:output` | Boundary schemas. |
 | `:input-schema` / `:output-schema` | JSON schemas exposed to models. |
 | `:max-turns` | Maximum model turns before the Agent fails. |
 | `:guardrails` | Input and output checks. |

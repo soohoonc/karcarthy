@@ -1,6 +1,6 @@
 (ns karcarthy.tool
-  "Flat, contracted Tool values."
-  (:require [karcarthy.contract :as contract]))
+  "Flat, schema-validated Tool values."
+  (:require [karcarthy.schema :as schema]))
 
 (def ^:private config-keys
   #{:name :description :input :input-schema :output :output-schema :approval
@@ -19,22 +19,22 @@
   "Implementation constructor used by `tool` and `deftool`."
   [config definition expansion execute]
   (when-not (map? config)
-    (contract/fail! :contract :configuration
+    (schema/fail! :schema :configuration
                     "Tool configuration must be a map" {:value config}))
-  (contract/reject-unknown! "Tool" config-keys config)
+  (schema/reject-unknown! "Tool" config-keys config)
   (doseq [[key predicate message]
           [[:name #(and (string? %) (seq %))
             "Tool :name must be a non-empty string"]
            [:description string? "Tool :description must be a string"]]]
     (when-not (predicate (get config key))
-      (contract/fail! :contract :configuration message {:config config})))
+      (schema/fail! :schema :configuration message {:config config})))
   (when-not (contains? config :input)
-    (contract/fail! :contract :configuration
-                    "Tool :input contract is required" {:config config}))
+    (schema/fail! :schema :configuration
+                    "Tool :input schema is required" {:config config}))
   (when-not (or (:input-schema config)
-                (contract/json-schema? (:input config))
-                (contract/json-schema (:input config)))
-    (contract/fail! :contract :configuration
+                (schema/json-schema? (:input config))
+                (schema/json-schema (:input config)))
+    (schema/fail! :schema :configuration
                     "Tool needs :input-schema when :input cannot be expressed as JSON Schema"
                     {:tool (:name config) :input (:input config)}))
   (assoc config
@@ -44,7 +44,7 @@
          :execute execute))
 
 (defmacro tool
-  "Construct a contracted Tool backed by Clojure code."
+  "Construct a schema-validated Tool backed by Clojure code."
   [config bindings & body]
   (let [source &form
         execute (function-form "tool" bindings body)
@@ -78,11 +78,11 @@
   "Describe a provider-executed Tool."
   [transport spec]
   (when-not (keyword? transport)
-    (contract/fail! :contract :configuration
+    (schema/fail! :schema :configuration
                     "Hosted Tool transport must be a keyword"
                     {:transport transport}))
   (when-not (map? spec)
-    (contract/fail! :contract :configuration
+    (schema/fail! :schema :configuration
                     "Hosted Tool spec must be a map" {:spec spec}))
   {:karcarthy/type :hosted-tool :transport transport :spec spec})
 

@@ -2,7 +2,7 @@
   "Responses-compatible HTTP transport. It only translates model I/O."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [karcarthy.contract :as contract]
+            [karcarthy.schema :as schema]
             [karcarthy.tool :as tool])
   (:import [java.net URI]
            [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers
@@ -47,12 +47,12 @@
     :hosted
     (if (= :responses (:transport tool))
       (:spec tool)
-      (contract/fail! :model :configuration
+      (schema/fail! :model :configuration
                   "Hosted Tool belongs to a different transport"
                   {:tool-transport (:transport tool)
                    :model-transport :responses}))
     :function (function-tool tool)
-    (contract/fail! :model :configuration
+    (schema/fail! :model :configuration
                 "Responses transport received an unsupported normalized Tool"
                 {:tool tool})))
 
@@ -132,7 +132,7 @@
   (try
     (json/read-str (or arguments "{}") :key-fn keyword)
     (catch Throwable t
-      (contract/fail! :model :response
+      (schema/fail! :model :response
                   "Responses endpoint returned invalid function-call arguments"
                   {:arguments arguments} t))))
 
@@ -148,11 +148,11 @@
   "Pure: normalize a Responses API payload for the karcarthy loop."
   [payload]
   (when-let [error (:error payload)]
-    (contract/fail! :model :response
+    (schema/fail! :model :response
                 (or (:message error) "Responses request failed")
                 {:error error}))
   (when (and (:status payload) (not= "completed" (:status payload)))
-    (contract/fail! :model :response
+    (schema/fail! :model :response
                 (str "Responses request ended with status " (:status payload))
                 {:status (:status payload)
                  :incomplete-details (:incomplete_details payload)}))
@@ -207,12 +207,12 @@
                            (not (authorization-header? headers)))
         timeout-ms (long (or (:timeout-ms model) 120000))]
     (when (and default-auth? (str/blank? key))
-      (contract/fail! :model :configuration
+      (schema/fail! :model :configuration
                   "Responses API key is not configured"
                   {:transport :responses
                    :api-key-env (:api-key-env model)}))
     (when (str/blank? (:id model))
-      (contract/fail! :model :configuration
+      (schema/fail! :model :configuration
                   "Responses model configuration requires :id"
                   {:model model}))
     (let [builder (doto (HttpRequest/newBuilder)
@@ -235,13 +235,13 @@
   (try
     (json/read-str response-body :key-fn keyword)
     (catch Throwable t
-      (contract/fail! :model :response
+      (schema/fail! :model :response
                   "Responses endpoint returned non-JSON content"
                   {:status status :body response-body} t))))
 
 (defn- check-http-status! [status request-id payload]
   (when-not (<= 200 status 299)
-    (contract/fail! :model :request
+    (schema/fail! :model :request
                 (or (get-in payload [:error :message])
                     (str "Responses request failed with HTTP " status))
                 {:status status
@@ -324,7 +324,7 @@
                (vreset! completed (:response event))
 
                "error"
-               (contract/fail! :model :response
+               (schema/fail! :model :response
                            (or (get-in event [:error :message])
                                (:message event)
                                "Responses stream failed")
@@ -332,7 +332,7 @@
 
                nil)))
           (when-not @completed
-            (contract/fail! :model :response
+            (schema/fail! :model :response
                         "Responses stream ended without a terminal response"
                         {:request-id request-id}))
           (response @completed))))))

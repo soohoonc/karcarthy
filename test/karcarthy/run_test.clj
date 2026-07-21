@@ -63,7 +63,7 @@
                                   :environment map?})))
   (is (thrown-with-msg? IllegalArgumentException #"requires a function"
                         (k/mock-model :not-a-function)))
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input contract"
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input schema"
                         (k/tool {:name "x" :description "x"}
                                 [input] input)))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input-schema"
@@ -273,7 +273,7 @@
     (is (= :completed (:status run)))
     (is (= {:answer "yes"} (:output run)))))
 
-(deftest contract-errors-become-failed-runs
+(deftest schema-errors-become-failed-runs
   (let [bad-input (k/agent {:name "input"
                             :model {:id "fake"
                                     :transport (scripted-model "unused")}
@@ -286,9 +286,9 @@
                              :instructions "answer"
                              :input any?
                              :output string?})]
-    (is (= :contract (get-in (k/run! bad-input 42) [:error :kind])))
+    (is (= :schema (get-in (k/run! bad-input 42) [:error :kind])))
     (is (= :agent-input (get-in (k/run! bad-input 42) [:error :phase])))
-    (is (= :contract (get-in (k/run! bad-output nil) [:error :kind])))
+    (is (= :schema (get-in (k/run! bad-output nil) [:error :kind])))
     (is (= :agent-output (get-in (k/run! bad-output nil) [:error :phase])))))
 
 (deftest rejected-model-output-is-not-added-to-session
@@ -302,7 +302,7 @@
     (is (= :failed (:status run)))
     (is (empty? (k/get-items session)))))
 
-(deftest context-is-local-and-contracted
+(deftest context-is-local-and-schema-validated
   (let [seen (atom nil)
         agent (k/agent {:name "context"
                         :model {:id "fake"
@@ -318,7 +318,7 @@
     (is (= 7 (:output (k/run! agent nil {:context {:value 7}
                                          :observe #(reset! seen %)}))))
     (is (= :run/completed (:type @seen)))
-    (is (= :contract (get-in (k/run! agent nil {:context {}})
+    (is (= :schema (get-in (k/run! agent nil {:context {}})
                              [:error :kind])))))
 
 (deftest instructions-are-model-visible-and-context-is-local

@@ -29,7 +29,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy/agent.clj` | Direct Agent construction namespace. |
 | `src/karcarthy/tool.clj` | Direct Tool construction namespace. |
 | `src/karcarthy/run.clj` | Run participation, model/Tool loop, limits, context, and events. |
-| `src/karcarthy/contract.clj` | Contracts and structured failures. |
+| `src/karcarthy/schema.clj` | Schemas and structured failures. |
 | `src/karcarthy/prompt.clj` | Generic instruction composition and prompt-file loading. |
 | `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `memory-session`. |
 | `src/karcarthy/eval.clj` | The eval Tool, its dynamic description and bindings, and same-process expression evaluation. |
@@ -85,7 +85,7 @@ cd docs && npm run lint && npm run types:check && npm run build
   caller supplies `:session`. `memory-session` is process-local; durable stores
   implement `karcarthy.session/Session` outside the harness. Do not call a
   conversation store a checkpoint or general workflow state.
-- **Contracts fail closed.** Validate context, Agent input/output, and Tool
+- **Schema validation fails closed.** Validate context, Agent input/output, and Tool
   input/output. Model/tool/protocol failures become structured failed Runs.
 - **Model-authored code is intentionally evaluated.** Reader evaluation is disabled
   during the read phase, but the expression is later evaluated as JVM Clojure.

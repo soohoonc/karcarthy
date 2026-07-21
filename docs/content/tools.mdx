@@ -64,12 +64,12 @@ inside an expression:
 
 The body has one input binding and can use all of Clojure.
 
-## Contracts and schemas
+## Validation and JSON Schema
 
-`:input` is the execution contract. If it is JSON Schema, the same value is
-shown to the model. Clojure predicates and specs also work as contracts;
-karcarthy derives a schema when possible. When the contract cannot describe a
-useful model interface, set `:input-schema` separately as in the example above.
+`:input` is the validation schema used by Clojure execution. It may be a
+predicate, a spec, or JSON Schema. karcarthy derives a model-facing JSON Schema
+when possible. When it cannot derive a useful model interface, set
+`:input-schema` separately as in the example above.
 
 The same distinction exists between `:output` and `:output-schema`.
 

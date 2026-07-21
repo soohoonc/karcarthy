@@ -1,7 +1,7 @@
 (ns karcarthy.tools
   "Small, orthogonal tools for agents operating in a local directory."
   (:require [clojure.string :as str]
-            [karcarthy.contract :as contract]
+            [karcarthy.schema :as schema]
             [karcarthy.tool :as tool])
   (:import [java.io ByteArrayOutputStream]
            [java.nio.charset StandardCharsets]
@@ -24,20 +24,20 @@
 
 (defn- local-path [^Path root value]
   (when-not (and (string? value) (not (str/blank? value)))
-    (contract/fail! :contract :tool-input "path must be a non-empty string"
+    (schema/fail! :schema :tool-input "path must be a non-empty string"
                 {:path value}))
   (let [given (Paths/get value (make-array String 0))
         candidate (-> (if (.isAbsolute given) given (.resolve root given))
                       (.toAbsolutePath)
                       (.normalize))]
     (when-not (.startsWith candidate root)
-      (contract/fail! :tool :path "Path escapes the configured directory"
+      (schema/fail! :tool :path "Path escapes the configured directory"
                   {:path value :root (str root)}))
     (when-let [ancestor (existing-ancestor candidate)]
       (let [real-root (.toRealPath root no-link-options)
             real-ancestor (.toRealPath ancestor no-link-options)]
         (when-not (.startsWith real-ancestor real-root)
-          (contract/fail! :tool :path "Path resolves outside the configured directory"
+          (schema/fail! :tool :path "Path resolves outside the configured directory"
                       {:path value :root (str root)}))))
     candidate))
 
@@ -124,7 +124,7 @@
            offset (long (or offset 1))
            limit (long (or limit 2000))]
        (when-not (Files/isRegularFile file no-link-options)
-         (contract/fail! :tool :read "File does not exist or is not regular"
+         (schema/fail! :tool :read "File does not exist or is not regular"
                      {:path path}))
        (with-open [reader (Files/newBufferedReader file StandardCharsets/UTF_8)]
          (let [selected (->> (line-seq reader)
@@ -185,14 +185,14 @@
    (fn [_ {:keys [path old_text new_text replace_all]}]
      (let [file (local-path root path)]
        (when-not (Files/isRegularFile file no-link-options)
-         (contract/fail! :tool :edit "File does not exist or is not regular"
+         (schema/fail! :tool :edit "File does not exist or is not regular"
                      {:path path}))
        (let [text (Files/readString file StandardCharsets/UTF_8)
              count (occurrences text old_text)]
          (when (zero? count)
-           (contract/fail! :tool :edit "old_text was not found" {:path path}))
+           (schema/fail! :tool :edit "old_text was not found" {:path path}))
          (when (and (not replace_all) (not= 1 count))
-           (contract/fail! :tool :edit
+           (schema/fail! :tool :edit
                        "old_text is not unique; provide more context or set replace_all"
                        {:path path :occurrences count}))
          (let [updated (if replace_all
@@ -258,7 +258,7 @@
                   :output (str/join "\n" (take max-results lines))
                   :matches (min max-results (count lines))
                   :truncated? truncated?))
-         (contract/fail! :tool :search "ripgrep failed" result))))))
+         (schema/fail! :tool :search "ripgrep failed" result))))))
 
 (defn local
   "Build the minimal local toolset rooted at one existing directory."
@@ -266,7 +266,7 @@
   ([options]
    (let [root (absolute-path (or (:cwd options) "."))]
      (when-not (Files/isDirectory root no-link-options)
-       (contract/fail! :contract :configuration
+       (schema/fail! :schema :configuration
                    "Local tool root must be an existing directory"
                    {:cwd (str root)}))
      [(read-tool root options)

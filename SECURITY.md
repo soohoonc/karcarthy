@@ -16,13 +16,13 @@ Treat model-authored source as trusted code. Every model Agent has this
 evaluation capability. Do not run one when the process contains capabilities
 the code must not exercise. Applications needing isolation should place the
 entire harness in a process, container, VM, restricted classloader, or a future
-alternate evaluation policy. Do not mistake macroexpansion or contracts for a
+alternate evaluation policy. Do not mistake macroexpansion or schemas for a
 security sandbox.
 
 ## Tools and context
 
 Tools execute application Clojure with access to the current Run's local context.
-Use narrow context values, input/output contracts, `:enabled?`, guardrails,
+Use narrow context values, input/output schemas, `:enabled?`, guardrails,
 approval, timeouts, and least-privilege credentials. Approval is currently a
 synchronous allow/deny decision; durable suspension is not implemented.
 

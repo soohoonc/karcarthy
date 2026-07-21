@@ -3,7 +3,7 @@
   (:refer-clojure :exclude [agent run!])
   (:require [karcarthy.acp :as acp]
             [karcarthy.agent :as agent-data]
-            [karcarthy.contract :as contract]
+            [karcarthy.schema :as schema]
             [karcarthy.mcp :as mcp]
             [karcarthy.monitor :as mon]
             [karcarthy.model.responses :as responses]
@@ -32,9 +32,9 @@
 (def hosted-tool? tool-data/hosted-tool?)
 (def definition agent-data/definition)
 (def expansion agent-data/expansion)
-(def contract-valid? contract/valid?)
-(def explain-contract contract/explain)
-(def contract->json-schema contract/json-schema)
+(def schema-valid? schema/valid?)
+(def explain-schema schema/explain)
+(def schema->json-schema schema/json-schema)
 
 (def run! run/run!)
 (defn context [] (run/context))

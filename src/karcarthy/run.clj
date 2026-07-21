@@ -4,7 +4,7 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [karcarthy.agent :refer [agent? normalize-model]]
-            [karcarthy.contract :as contract
+            [karcarthy.schema :as schema
              :refer [fail! throwable->failure]]
             [karcarthy.session :as session]
             [karcarthy.tool :refer [hosted-tool? make-tool tool?]])
@@ -42,11 +42,11 @@
 (defn- agent-tool
   [agent]
   (when-not (agent? agent)
-    (fail! :contract :configuration
+    (fail! :schema :configuration
            "Agent :agents must contain Agent values"
            {:value agent}))
   (let [schema (or (:input-schema agent)
-                   (contract/json-schema (:input agent)))
+                   (schema/json-schema (:input agent)))
         structured-input? (object-schema? schema)
         tool-schema (if structured-input? schema agent-call-schema)
         tool-input (if structured-input?
@@ -95,24 +95,24 @@
 (defn- validate-limits!
   [limits]
   (when-not (map? limits)
-    (fail! :contract :configuration "Run limits must be a map"
+    (fail! :schema :configuration "Run limits must be a map"
            {:value limits}))
-  (contract/reject-unknown! "Limits" (set (keys default-limits)) limits)
+  (schema/reject-unknown! "Limits" (set (keys default-limits)) limits)
   (doseq [resource [:model-calls :input-tokens :output-tokens
                     :depth :evals]]
     (let [value (get limits resource)]
       (when-not (and (integer? value) (not (neg? value)))
-        (fail! :contract :configuration
+        (fail! :schema :configuration
                (str (name resource) " must be a non-negative integer")
                {:resource resource :value value}))))
   (when-not (and (integer? (:parallelism limits))
                  (pos? (:parallelism limits)))
-    (fail! :contract :configuration
+    (fail! :schema :configuration
            ":parallelism must be a positive integer"
            {:value (:parallelism limits)}))
   (when-let [deadline-ms (:deadline-ms limits)]
     (when-not (and (integer? deadline-ms) (not (neg? deadline-ms)))
-      (fail! :contract :configuration
+      (fail! :schema :configuration
              ":deadline-ms must be nil or a non-negative integer"
              {:value deadline-ms})))
   limits)
@@ -326,8 +326,8 @@
   (cond
     (tool? tool)
     (let [schema (or (:input-schema tool)
-                     (when (contract/json-schema? (:input tool)) (:input tool))
-                     (contract/json-schema (:input tool)))]
+                     (when (schema/json-schema? (:input tool)) (:input tool))
+                     (schema/json-schema (:input tool)))]
       (when-not schema
         (fail! :tool :configuration
                "Tool needs :input-schema when :input cannot be expressed as JSON Schema"
@@ -428,7 +428,7 @@
     (when (and enabled? (not (enabled? (call-metadata rt))))
       (fail! :tool :disabled "Tool is disabled in the current Run"
              {:tool (:name tool)}))
-    (contract/check! :tool-input (:input tool) input)
+    (schema/check! :tool-input (:input tool) input)
     (run-guardrails! rt :tool-input (get-in tool [:guardrails :input]) input)
     (when-not (approved? rt tool input)
       (fail! :approval :tool "Tool approval was denied"
@@ -440,7 +440,7 @@
         (let [output (execute-with-timeout!
                       rt (:timeout-ms tool)
                       #(execute-tool-body! rt tool input))
-              _ (contract/check! :tool-output (:output tool) output)
+              _ (schema/check! :tool-output (:output tool) output)
               _ (run-guardrails! rt :tool-output
                                  (get-in tool [:guardrails :output]) output)
               model-output (if-let [project (:to-model-output tool)]
@@ -491,8 +491,8 @@
   [children]
   (mapv await-future! children))
 
-(defn- maybe-json-output [output contract]
-  (if (and contract (string? output)
+(defn- maybe-json-output [output schema]
+  (if (and schema (string? output)
            (re-find #"^\s*[\[{]" output))
     (try (json/read-str output :key-fn keyword)
          (catch Throwable _ output))
@@ -565,7 +565,7 @@
                         sort
                         vec)]
     (when (seq duplicates)
-      (fail! :contract :configuration
+      (fail! :schema :configuration
              "Agent contains duplicate Tool or Agent names"
              {:names duplicates}))
     tools))
@@ -608,7 +608,7 @@
                      :provider-state provider-state
                      :tools (mapv tool-descriptor tools)
             :output-schema (or (:output-schema agent)
-                                        (contract/json-schema
+                                        (schema/json-schema
                                          (:output agent)))
                      :turn turn}
             response (model! rt request)]
@@ -657,9 +657,9 @@
 (defn- run-agent!
   [parent-rt agent input options]
   (when-not (agent? agent)
-    (fail! :contract :agent "run! requires an Agent" {:value agent}))
+    (fail! :schema :agent "run! requires an Agent" {:value agent}))
   (let [options (or options {})]
-    (contract/reject-unknown! "Participating run options"
+    (schema/reject-unknown! "Participating run options"
                               agent-call-option-keys options))
   (let [depth (inc (:depth parent-rt))
         limits (validate-limits!
@@ -692,8 +692,8 @@
                     :limits limits
                     :deadline-ns deadline-ns)
           started (System/nanoTime)]
-      (contract/check! :context (:context agent) (:context rt))
-      (contract/check! :agent-input (:input agent) input)
+      (schema/check! :context (:context agent) (:context rt))
+      (schema/check! :agent-input (:input agent) input)
       (run-guardrails! rt :agent-input
                        (get-in agent [:guardrails :input]) input)
       (emit! rt {:type :agent/started :agent (:name agent) :input input})
@@ -702,7 +702,7 @@
                        (default-loop! rt agent input))
               output (maybe-json-output output (:output agent))]
           (check-run! rt)
-          (contract/check! :agent-output (:output agent) output)
+          (schema/check! :agent-output (:output agent) output)
           (run-guardrails! rt :agent-output
                            (get-in agent [:guardrails :output]) output)
           (when-let [items @(:pending-session-items rt)]
@@ -768,14 +768,14 @@
            (run-result rt agent input started [] nil
                        (throwable->failure t)))))
      (let [options (or options {})
-           _ (contract/reject-unknown! "Run options" run-option-keys options)
+           _ (schema/reject-unknown! "Run options" run-option-keys options)
            _ (when (and (some? (:session options))
                         (not (session/session? (:session options))))
-               (fail! :contract :session
+               (fail! :schema :session
                       "Run :session must implement karcarthy.session/Session"
                       {:value (:session options)}))
            _ (when-not (agent? agent)
-               (fail! :contract :agent "run! requires an Agent" {:value agent}))
+               (fail! :schema :agent "run! requires an Agent" {:value agent}))
            limits (validate-limits! (merge default-limits (:limits options)))
            executor (Executors/newVirtualThreadPerTaskExecutor)
            events* (atom [])

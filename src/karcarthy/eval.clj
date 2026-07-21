@@ -3,7 +3,7 @@
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
             [karcarthy.agent :as agent]
-            [karcarthy.contract :as contract]
+            [karcarthy.schema :as schema]
             [karcarthy.run :as run]
             [karcarthy.tool :as tool])
   (:import [clojure.lang LineNumberingPushbackReader]
@@ -38,7 +38,7 @@ is needed.
 
 `agent` is a macro that accepts one configuration map. The map requires
 `:name`, `:model`, and `:instructions`; `:input` and `:output` are optional
-contracts. `(run! agent-value agent-input)` runs the resulting Agent and returns
+schemas. `(run! agent-value agent-input)` runs the resulting Agent and returns
 a Run map.
 
 Use `let`, `if`, `mapv`, `future`, `deref`, `agent`, and `run!` normally. A
@@ -113,9 +113,9 @@ Use the model configuration listed below in place of the example's model value.
                       :hosted-tool "Provider-hosted Tool.")
         schema (case kind
                  :agent (or (:input-schema value)
-                            (contract/json-schema (:input value)))
+                            (schema/json-schema (:input value)))
                  :tool (or (:input-schema value)
-                           (contract/json-schema (:input value)))
+                           (schema/json-schema (:input value)))
                  :hosted-tool (:spec value))]
     {:kind kind
      :name (str value-name)
@@ -137,8 +137,8 @@ Use the model configuration listed below in place of the example's model value.
                         sort
                         vec)]
     (when (seq duplicates)
-      (contract/fail!
-       :contract :configuration
+      (schema/fail!
+       :schema :configuration
        "Available Tools and Agents produce duplicate Clojure symbols"
        {:symbols duplicates}))
     (vec entries)))
@@ -188,22 +188,22 @@ Use the model configuration listed below in place of the example's model value.
   "Read exactly one Clojure expression with reader evaluation disabled."
   [source]
   (when-not (string? source)
-    (contract/fail! :read :eval "Eval code must be a string" {:value source}))
+    (schema/fail! :read :eval "Eval code must be a string" {:value source}))
   (try
     (let [reader (LineNumberingPushbackReader. (StringReader. source))
           eof (Object.)
           expression (binding [*read-eval* false] (read {:eof eof} reader))
           extra (binding [*read-eval* false] (read {:eof eof} reader))]
       (when (identical? eof expression)
-        (contract/fail! :read :eval "Eval code is empty"))
+        (schema/fail! :read :eval "Eval code is empty"))
       (when-not (identical? eof extra)
-        (contract/fail! :read :eval
+        (schema/fail! :read :eval
                         "Eval code must contain exactly one top-level expression"
                         {:extra extra}))
       expression)
     (catch clojure.lang.ExceptionInfo e (throw e))
     (catch Throwable t
-      (contract/fail! :read :eval (or (ex-message t) (str t)) nil t))))
+      (schema/fail! :read :eval (or (ex-message t) (str t)) nil t))))
 
 (defn- eval-ns!
   [rt]
@@ -250,7 +250,7 @@ Use the model configuration listed below in place of the example's model value.
                [(cond
                   (or (string? k) (keyword? k)) k
                   (symbol? k) (str k)
-                  :else (contract/fail!
+                  :else (schema/fail!
                          :evaluation :output
                          "Eval returned a map with an unsupported key" {:key k}))
                 (model-value v)]))
@@ -269,7 +269,7 @@ Use the model configuration listed below in place of the example's model value.
     (map? value) (model-map value)
     (sequential? value) (mapv model-value value)
     (set? value) (mapv model-value value)
-    :else (contract/fail!
+    :else (schema/fail!
            :evaluation :output
            "Eval returned a value that cannot be sent to the model"
            {:class (.getName (class value))})))
@@ -305,8 +305,8 @@ Use the model configuration listed below in place of the example's model value.
       (catch Throwable t
         (let [structured? (= :failure (:karcarthy/type (ex-data t)))
               failure (if structured?
-                        (contract/throwable->failure t)
-                        (contract/failure :evaluation :evaluation
+                        (schema/throwable->failure t)
+                        (schema/failure :evaluation :evaluation
                                           (deepest-message t) {:code code}))]
           (run/emit! rt {:type :eval/failed
                          :phase (:phase failure)
@@ -315,7 +315,7 @@ Use the model configuration listed below in place of the example's model value.
                          :error failure})
           (if structured?
             (throw t)
-            (contract/fail! :evaluation :evaluation (deepest-message t)
+            (schema/fail! :evaluation :evaluation (deepest-message t)
                             {:code code} t)))))))
 
 (defn ^:no-doc eval-tool
