@@ -81,6 +81,28 @@
                                  :description "Old Tool options."
                                  :input-schema map?
                                  :retry 2}
+                                [input] input)))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":max-turns"
+                        (k/agent {:name "bad-turns"
+                                  :model "fake"
+                                  :instructions "x"
+                                  :max-turns 0})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input-guardrails"
+                        (k/agent {:name "bad-guardrail"
+                                  :model "fake"
+                                  :instructions "x"
+                                  :input-guardrails [:not-a-function]})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":needs-approval"
+                        (k/tool {:name "bad-approval"
+                                 :description "Invalid approval policy."
+                                 :input-schema map?
+                                 :needs-approval :alway}
+                                [input] input)))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":to-model-output"
+                        (k/tool {:name "bad-projector"
+                                 :description "Invalid output projector."
+                                 :input-schema map?
+                                 :to-model-output :not-a-function}
                                 [input] input))))
 
 (deftest agent-final-output
@@ -271,7 +293,7 @@
                              :name "uppercase"
                              :input {:text "hello"}}]}
                    {:type :final
-                    :output (get-in request [:messages 0 :content])})))
+                    :output (-> request :messages last :content)})))
         agent (k/agent {:name "tool-user"
                         :model {:id "fake" :transport model}
                         :instructions "use the tool"
@@ -286,7 +308,8 @@
            (get-in @seen [0 :tools 0 :parameters :properties "text" :type])))
     (is (= ["text"]
            (get-in @seen [0 :tools 0 :parameters :required])))
-    (is (= :tool (get-in @seen [1 :messages 0 :role])))
+    (is (= [:user :assistant :tool]
+           (mapv :role (get-in @seen [1 :messages]))))
     (is (= [:model/requested :model/completed
             :tool/started :tool/completed
             :model/requested :model/completed]
@@ -308,6 +331,17 @@
         run (k/run! agent nil)]
     (is (= :completed (:status run)))
     (is (= {:answer "yes"} (:output run)))))
+
+(deftest json-looking-string-output-remains-a-string
+  (let [value "{\"answer\":\"yes\"}"
+        agent (k/agent {:name "literal-json"
+                        :model {:id "fake"
+                                :transport (scripted-model value)}
+                        :instructions "Return the literal string."
+                        :output-schema string?})
+        run (k/run! agent nil)]
+    (is (= :completed (:status run)) (pr-str (:error run)))
+    (is (= value (:output run)))))
 
 (deftest schema-errors-become-failed-runs
   (let [bad-input (k/agent {:name "input"
@@ -394,7 +428,7 @@
           (k/mock-model
            (fn [request]
              {:type :final
-              :output (str (get-in request [:messages 0 :content]) suffix)})))
+              :output (str (-> request :messages last :content) suffix)})))
         writer (k/agent {:name "writer"
                          :model {:id "fake"
                                  :transport (append-model " draft")}
@@ -424,7 +458,7 @@
                            (fn [request]
                              (Thread/sleep delay-ms)
                              {:type :final
-                              :output (get-in request [:messages 0 :content])}))}
+                              :output (-> request :messages last :content)}))}
                   :instructions "return the input"
                   :input-schema int?
                   :output-schema int?}))
@@ -498,7 +532,7 @@
                       {:type :tool-calls
                        :calls [{:id "c" :name "dangerous" :input {}}]}
                       {:type :final
-                       :output (get-in request [:messages 0 :content])}))))
+                       :output (-> request :messages last :content)}))))
         make-agent #(k/agent {:name "approval"
                               :model {:id "fake" :transport (model)}
                               :instructions "call"
@@ -507,6 +541,48 @@
     (is (= :failed (:status (k/run! (make-agent) nil))))
     (is (= "done" (:output (k/run! (make-agent) nil
                                     {:approval (constantly true)}))))))
+
+(deftest dynamic-approval-policy-fails-closed
+  (let [executed? (atom false)
+        dangerous (k/tool {:name "dangerous"
+                           :description "Use a dynamic approval policy."
+                           :input-schema map?
+                           :needs-approval (fn [_ _] :alway)}
+                          [_]
+                          (reset! executed? true))
+        model (scripted-model
+               {:type :tool-calls
+                :calls [{:id "call_1" :name "dangerous" :input {}}]})
+        agent (k/agent {:name "invalid-dynamic-approval"
+                        :model {:id "fake" :transport model}
+                        :instructions "Call the Tool."
+                        :tools [dangerous]})
+        run (k/run! agent nil)]
+    (is (= :failed (:status run)))
+    (is (= :configuration (get-in run [:error :phase])))
+    (is (false? @executed?))))
+
+(deftest application-events-cannot-replace-lineage
+  (let [model (k/mock-model
+               (fn [_]
+                 (k/emit! {:type :application/checkpoint
+                           :karcarthy/type :spoofed
+                           :run-id "spoofed"
+                           :agent-id "spoofed"
+                           :depth 99})
+                 {:type :final :output "done"}))
+        agent (k/agent {:name "event-lineage"
+                        :model {:id "fake" :transport model}
+                        :instructions "Answer."
+                        :output-schema string?})
+        run (k/run! agent nil)
+        event (first (filter #(= :application/checkpoint (:type %))
+                             (:events run)))]
+    (is (= :completed (:status run)))
+    (is (= :event (:karcarthy/type event)))
+    (is (= (:id run) (:run-id event)))
+    (is (not= "spoofed" (:agent-id event)))
+    (is (= 0 (:depth event)))))
 
 (deftest once-approval-is-reused-across-turns
   (let [effect (k/tool {:name "effect"
@@ -550,8 +626,8 @@
                                  (fn [request]
                                    {:type :final
                                     :output
-                                    (str (get-in request
-                                                 [:messages 0 :content :text])
+                                    (str (get-in (last (:messages request))
+                                                 [:content :text])
                                          "!")}))}
                         :instructions "Add punctuation."
                         :input-schema child-input
@@ -570,7 +646,7 @@
                                                 :name "child"
                                                 :input {:text "hi"}}]}
                                       {:type :final
-                                       :output (get-in request [:messages 0 :content])})))}
+                                       :output (-> request :messages last :content)})))}
                          :instructions "delegate"
                          :agents [child]
                          :output-schema string?})]
@@ -684,7 +760,7 @@
                    {:type :tool-calls
                     :calls [{:id "call_1" :name "attempt" :input {}}]}
                    (do
-                     (reset! seen (first (:messages request)))
+                     (reset! seen (last (:messages request)))
                      {:type :final :output "recovered"}))))
         agent (k/agent {:name "recovering"
                         :model {:id "fake" :transport model}

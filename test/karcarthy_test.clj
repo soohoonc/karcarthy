@@ -43,6 +43,12 @@
     (is (= "answer" (:instructions agent)))
     (is (nil? (:config agent)))))
 
+(deftest facade-retains-repl-metadata
+  (doseq [sym '[agent tool run! output session prompt local-tools events]]
+    (let [metadata (meta (ns-resolve 'karcarthy sym))]
+      (is (string? (:doc metadata)) (str "missing docs for " sym))
+      (is (seq (:arglists metadata)) (str "missing arglists for " sym)))))
+
 (deftest model-id-shorthand-is-lowered-once
   (let [agent (k/agent {:name "short"
                         :model "gpt-5.6"

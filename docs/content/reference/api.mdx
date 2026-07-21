@@ -98,6 +98,8 @@ supplies the name. Optional keys are `:output-schema`, `:needs-approval`,
 
 Guardrails receive `[run-context value]`. `:needs-approval` accepts `:never`,
 `:once`, `:always`, a boolean, or a function of `[run-context input]`.
+Invalid static policies fail during Tool construction; invalid values returned
+by policy functions fail closed before the Tool body executes.
 
 ```clojure
 (k/tool? value)
@@ -232,6 +234,11 @@ Use a deterministic model in tests:
 ```clojure
 (k/model! normalized-request)
 ```
+
+Structured JSON output is decoded only for object- or array-shaped output
+schemas. JSON-looking values remain strings when `:output-schema` is `string?`.
+The normalized custom transport contract is documented under
+[Model providers](/docs/protocols/models#normalized-transport-contract).
 
 ## Supplied Tools
 

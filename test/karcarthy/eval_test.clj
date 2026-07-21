@@ -16,7 +16,7 @@
    {:type :tool-calls
     :calls [{:id "eval" :name "eval" :input {:code code}}]}
    (fn [request]
-     {:type :final :output (get-in request [:messages 0 :content])})))
+     {:type :final :output (-> request :messages last :content)})))
 
 (def suffix " from the definition namespace")
 
@@ -49,7 +49,7 @@
         (k/mock-model
          (fn [request]
            {:type :final
-            :output (str (get-in request [:messages 0 :content]) "!")}))
+            :output (str (-> request :messages last :content) "!")}))
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."

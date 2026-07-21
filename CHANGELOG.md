@@ -48,6 +48,15 @@ All notable changes are documented here, following
 
 ### Changed
 
+- Agent and Tool options now validate their documented shapes, and both static
+  and dynamic Tool approval policies fail closed on unknown values.
+- Structured model output is decoded as JSON only for object- and array-shaped
+  schemas; JSON-looking string output remains a string.
+- Stateless model transports receive accumulated message history, while
+  transports returning provider continuation state continue to receive only
+  new messages.
+- The single-alias facade retains source Var documentation and arglists, and
+  application events cannot replace harness-owned Run lineage.
 - Agent and Tool configuration is flat on their maps; `assoc`, `update`, and
   destructuring work without a hidden `:config` layer.
 - A model ID string is concise OpenAI Responses configuration; advanced model

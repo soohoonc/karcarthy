@@ -7,7 +7,8 @@
             [karcarthy.run.model :as model]
             [karcarthy.schema :as schema
              :refer [fail! throwable->failure]]
-            [karcarthy.tool :refer [hosted-tool? make-tool tool?]]))
+            [karcarthy.tool :refer [hosted-tool? make-tool tool?
+                                    validate-approval!]]))
 
 (defn- eval-tool [model tools agents]
   ((requiring-resolve 'karcarthy.eval/eval-tool) model tools agents))
@@ -106,8 +107,8 @@
 
 (defn- approved?
   [rt tool input]
-  (let [policy (approval-policy (:needs-approval tool :never)
-                                rt input)]
+  (let [policy (validate-approval!
+                (approval-policy (:needs-approval tool :never) rt input))]
     (cond
       (not (contains? #{true :always :once} policy)) true
       (not= :once policy) (request-approval! rt tool input policy)
@@ -180,8 +181,13 @@
                :error error}
               (throw t))))))))
 
+(defn- structured-schema? [schema]
+  (let [schema (schema/json-schema schema)]
+    (contains? #{"array" "object" :array :object}
+               (or (:type schema) (get schema "type")))))
+
 (defn ^:no-doc output [output schema]
-  (if (and schema (string? output)
+  (if (and (structured-schema? schema) (string? output)
            (re-find #"^\s*[\[{]" output))
     (try (json/read-str output :key-fn keyword)
          (catch Throwable _ output))
@@ -255,7 +261,7 @@
       (let [request {:agent agent
                      :model model
                      :instructions instructions
-                     :messages pending
+                     :messages (if provider-state pending messages)
                      :provider-state provider-state
                      :tools (mapv tool-descriptor tools)
                      :output-schema (schema/json-schema

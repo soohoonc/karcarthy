@@ -8,6 +8,34 @@
     :tools :agents :output-schema :max-turns :input-guardrails
     :output-guardrails :limits})
 
+(defn- functions? [value]
+  (and (sequential? value) (every? fn? value)))
+
+(defn- validate-config! [config]
+  (doseq [[key predicate message]
+          [[:description #(or (nil? %) (string? %))
+            "Agent :description must be a string"]
+           [:model #(or (string? %) (map? %) (fn? %))
+            "Agent :model must be a model ID, map, or function"]
+           [:instructions #(or (string? %) (fn? %))
+            "Agent :instructions must be a string or function"]
+           [:tools #(or (nil? %) (sequential? %) (fn? %))
+            "Agent :tools must be sequential or a function"]
+           [:agents #(or (nil? %) (sequential? %) (fn? %))
+            "Agent :agents must be sequential or a function"]
+           [:max-turns #(or (nil? %)
+                            (and (integer? %) (pos? %)))
+            "Agent :max-turns must be a positive integer"]
+           [:input-guardrails #(or (nil? %) (functions? %))
+            "Agent :input-guardrails must contain functions"]
+           [:output-guardrails #(or (nil? %) (functions? %))
+            "Agent :output-guardrails must contain functions"]
+           [:limits #(or (nil? %) (map? %))
+            "Agent :limits must be a map"]]]
+    (when-not (predicate (get config key))
+      (schema/fail! :schema :configuration message {:config config})))
+  config)
+
 (defn ^:no-doc normalize-model
   "Lower a model ID to the default OpenAI Responses configuration."
   [model]
@@ -29,6 +57,7 @@
     (schema/fail! :schema :configuration
                     "An Agent requires :model and :instructions"
                     {:name (:name config)}))
+  (validate-config! config)
   (assoc (update config :model normalize-model)
          :karcarthy/type :agent
          :definition-ns definition-ns
