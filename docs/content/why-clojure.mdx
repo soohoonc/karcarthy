@@ -11,31 +11,32 @@ model can produce code as data and the running program can execute it directly.
 
 ## One language for both cases
 
-Suppose a moon garden's leaves are turning silver. If you already know which
-specialists should investigate, write the workflow yourself:
+Suppose every change must receive correctness and concurrency reviews. Because
+those roles are known, write the coordination yourself:
 
 ```clojure
-(->> [botanist radiation-engineer]
-     (mapv #(future (k/run! % garden-report)))
+(->> [correctness-reviewer concurrency-reviewer]
+     (mapv #(future (k/run! % change)))
      (mapv (comp k/output deref)))
 ```
 
-If the evidence should determine which specialists exist, let an Agent write
-the equivalent expression after it sees the report:
+If the diff should determine which reviews exist, let an Agent write the
+equivalent expression after it sees the change:
 
 ```clojure
-(let [botanist (agent {:name "botanist"
-                       :model "gpt-5.6"
-                       :instructions "Find biological causes in the evidence."
-                       :input-schema string?
-                       :output-schema string?})
-      radiation-engineer
-      (agent {:name "radiation-engineer"
+(let [correctness-reviewer
+      (agent {:name "correctness-reviewer"
               :model "gpt-5.6"
-              :instructions "Find radiation and shielding causes."
+              :instructions "Find concrete behavioral defects."
+              :input-schema string?
+              :output-schema string?})
+      concurrency-reviewer
+      (agent {:name "concurrency-reviewer"
+              :model "gpt-5.6"
+              :instructions "Check atomicity under concurrent workers."
               :input-schema string?
               :output-schema string?})]
-  (->> [botanist radiation-engineer]
+  (->> [correctness-reviewer concurrency-reviewer]
        (mapv #(future (run! % input)))
        (mapv (comp output deref))))
 ```
@@ -71,23 +72,23 @@ Clojure process.
 Agent configuration is a flat map, so normal data operations still work:
 
 ```clojure
-(def reviewer
-  (k/agent {:name "reviewer"
+(def concurrency-reviewer
+  (k/agent {:name "concurrency-reviewer"
             :model "gpt-5.6"
-            :instructions "Review the evidence."
+            :instructions "Review the change for races."
             :input-schema string?
             :output-schema string?}))
 
-(:instructions reviewer)
-(assoc reviewer :instructions "Review only the radiation evidence.")
+(:instructions concurrency-reviewer)
+(assoc concurrency-reviewer :instructions "Review only the claim transaction.")
 ```
 
 `agent` and `tool` are macros, so their values also retain source and expansion
 for inspection:
 
 ```clojure
-(k/definition reviewer)
-(k/expansion reviewer)
+(k/definition concurrency-reviewer)
+(k/expansion concurrency-reviewer)
 ```
 
 There is no hidden `:config` layer and no separate workflow representation.

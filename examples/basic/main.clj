@@ -29,7 +29,9 @@
     (System/exit 2))
   (let [input (if (seq words)
                 (str/join " " words)
-                "A moon garden's leaves are turning silver. What should we check first?")
+                (str "Review this Python change in one sentence. "
+                     "Contract: count may be zero. Change: "
+                     "`def divide(total, count): return total / count`"))
         run (k/run! (basic-agent) input)]
     (if (= :completed (:status run))
       (println (:output run))

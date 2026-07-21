@@ -55,7 +55,7 @@ with only its explicit input and a fresh model conversation.
 The expression runs in this JVM. It does not start a Clojure subprocess. Model
 transports and process-backed Tools may still perform their normal external I/O.
 
-## Example: parallel specialists
+## Example: parallel reviewers
 
 ```clojure
 (let [reviewers (mapv (fn [[name instructions]]
@@ -64,8 +64,8 @@ transports and process-backed Tools may still perform their normal external I/O.
                                 :instructions instructions
                                 :input-schema string?
                                 :output-schema string?}))
-                      [[\"analyst\" \"Analyze one part of the task.\"]
-                       [\"planner\" \"Propose a practical next step.\"]])
+                      [[\"correctness-reviewer\" \"Find concrete behavioral defects.\"]
+                       [\"concurrency-reviewer\" \"Check shared-state assumptions.\"]])
       tasks (mapv #(future (run! % input)) reviewers)]
   (mapv (comp output deref) tasks))
 ```

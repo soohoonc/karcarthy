@@ -73,6 +73,11 @@ const config = {
         permanent: true,
       },
       {
+        source: '/docs/guides/architect',
+        destination: '/docs/guides/review',
+        permanent: true,
+      },
+      {
         source: '/docs/mcp',
         destination: '/docs/protocols/mcp',
         permanent: true,

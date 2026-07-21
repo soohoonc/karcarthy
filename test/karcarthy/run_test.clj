@@ -380,7 +380,7 @@
                                 :transport (scripted-model "unused")}
                         :instructions "Answer."})]
     (doseq [[options message]
-            [[{:on-event :not-a-function} #":on-event"]
+            [[{:on-event 42} #":on-event"]
              [{:approval true} #":approval"]
              [{:model-transports []} #":model-transports"]
              [{:cancel :not-a-token} #":cancel"]]]
@@ -705,13 +705,13 @@
                (fn [value]
                  (reset! request value)
                  {:type :final :output "done"}))
-        specialist (k/agent {:name "specialist"
-                             :description "Independently verify one result."
-                             :model {:id "fake"
-                                     :transport (scripted-model "verified")}
-                             :instructions "Verify the result."
-                             :input-schema string?
-                             :output-schema string?})
+        verifier (k/agent {:name "finding-verifier"
+                           :description "Independently verify one proposed finding."
+                           :model {:id "fake"
+                                   :transport (scripted-model "verified")}
+                           :instructions "Verify the finding."
+                           :input-schema string?
+                           :output-schema string?})
         parent (k/agent
                 {:name "parent"
                  :model {:transport :captured
@@ -719,7 +719,7 @@
                          :id "test-model"}
                  :instructions "Complete the assigned task."
                  :tools [uppercase]
-                 :agents [specialist]
+                 :agents [verifier]
                  :output-schema string?})
         run (k/run! parent "work"
                     {:model-transports {:captured model}})
@@ -732,7 +732,7 @@
                      "## Tool input"
                      "## Creating an Agent"
                      "## Run behavior"
-                     "## Example: parallel specialists"
+                     "## Example: parallel reviewers"
                      "## Available model configuration"
                      "## Available Tools"
                      "## Available Agents"]]
@@ -742,7 +742,7 @@
     (is (str/includes? description "(run! agent-value agent-input)"))
     (is (str/includes? description "(output run)"))
     (is (str/includes? description "`uppercase`"))
-    (is (str/includes? description "`specialist`"))
+    (is (str/includes? description "`finding-verifier`"))
     (is (= ["code"]
            (get-in eval-tool [:parameters :required])))
     (is (= #{"code"}

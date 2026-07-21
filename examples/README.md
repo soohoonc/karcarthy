@@ -7,9 +7,9 @@ folder and `main.clj`; none of them are part of published library artifacts.
 | Example | Command or source | Demonstrates |
 | --- | --- | --- |
 | Basic Agent | [`basic/main.clj`](basic/main.clj) | One live model Run |
-| Architect | [`architect/main.clj`](architect/main.clj) | A task selects and runs its own specialist team |
+| Code review | [`review/main.clj`](review/main.clj) | A diff selects its reviewers; one creates a nested verifier |
 | Chat | [`chat/main.clj`](chat/main.clj) | Sessions and a terminal application |
-| Agent composition | [`composition/main.clj`](composition/main.clj) | A garden team predefined in Clojure |
+| Agent composition | [`composition/main.clj`](composition/main.clj) | A predefined code-review team in ordinary Clojure |
 | Coding Agent | [`coding/main.clj`](coding/main.clj) | Open-ended repository work with optional dynamic eval |
 | Harbor | [`harbor`](harbor) | Evaluate the Coding Agent with a verifier and trajectory |
 
@@ -20,21 +20,22 @@ Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running an example. Use
 
 ```bash
 clojure -M:examples basic \
-  "A moon garden's leaves are turning silver. What should we check first?"
+  "Contract: count may be zero. Review: def divide(total, count): return total / count"
 ```
 
-## Architect
+## Code review
 
 Run the smallest live demonstration of karcarthy's central idea:
 
 ```bash
-clojure -M:examples architect \
-  "A moon garden's leaves are turning silver after a solar storm. Diagnose the likely causes."
+clojure -M:examples review
 ```
 
-After reading the task, the root uses `eval` to create two or three relevant
-specialists and run them concurrently. The Run monitor redraws the live tree as
-they work. See the [example README](architect/README.md) for operational details.
+The bundled input contains a scheduler contract, storage semantics, and a short
+diff. After reading it, the orchestrator uses `eval` to create two or three
+relevant reviewers and run them concurrently. One reviewer creates a nested
+`finding-verifier` to challenge its strongest candidate. The Run monitor
+redraws the tree as they work. See the [example README](review/README.md).
 
 ## Chat
 
@@ -47,9 +48,10 @@ Start a REPL, then load the terminal chat:
 
 ## Agent composition
 
-[`composition/main.clj`](composition/main.clj) defines the botanist and
-radiation engineer ahead of time. Load it from a REPL and call
-`example.composition/diagnose-garden`.
+[`composition/main.clj`](composition/main.clj) defines correctness,
+concurrency, and test reviewers ahead of time. Load it from a REPL and call
+`example.composition/review-change`. This is the fixed-team comparison to the
+dynamic code-review example.
 
 ## Coding Agent
 

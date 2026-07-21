@@ -19,16 +19,17 @@ functions, macros, `future`, `mapv`, and `run!`.
 ```clojure
 (require '[karcarthy :as k])
 
-(k/defagent assistant
+(k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Answer clearly and concisely."
+   :instructions "Review the proposed change. Report only concrete defects."
    :input-schema string?
    :output-schema string?})
 
-(def garden-report
-  "A moon garden's leaves are turning silver. What should we check first?")
+(def change
+  (str "Contract: count may be zero.\n"
+       "```diff\n+def average(total, count):\n+    return total / count\n```"))
 
-(def result (k/run! assistant garden-report))
+(def result (k/run! reviewer change))
 
 (:output result) ;=> "..."
 ```
@@ -36,33 +37,35 @@ functions, macros, `future`, `mapv`, and `run!`.
 Agents are plain maps. Their operational configuration stays flat:
 
 ```clojure
-(assoc assistant :instructions "Answer in one sentence.")
+(assoc reviewer :instructions "Return only the highest-severity finding.")
 ```
 
 A model ID string uses OpenAI Responses. Pass a model map for transport,
 provider, reasoning, streaming, or timeout options.
 
-## Let the task choose the team
+## Let the change choose its reviewers
 
 Every Agent receives a built-in `eval` Tool. The Tool accepts one `code` string;
 the current Agent input is already bound to `input`.
 
-For the moon-garden task, an Agent might write:
+For a scheduler change, an Agent might decide that correctness and concurrency
+need separate reviews, then write:
 
 ```clojure
-(let [botanist (agent {:name "botanist"
-                       :model "gpt-5.6"
-                       :instructions "Look for biological causes in the evidence."
-                       :input-schema string?
-                       :output-schema string?})
-      radiation-engineer
-      (agent {:name "radiation-engineer"
+(let [correctness-reviewer
+      (agent {:name "correctness-reviewer"
               :model "gpt-5.6"
-              :instructions "Look for radiation and shielding causes."
+              :instructions "Find concrete behavioral defects in this change."
+              :input-schema string?
+              :output-schema string?})
+      concurrency-reviewer
+      (agent {:name "concurrency-reviewer"
+              :model "gpt-5.6"
+              :instructions "Check whether concurrent workers can claim one job twice."
               :input-schema string?
               :output-schema string?})
       jobs (mapv #(future (run! % input))
-                 [botanist radiation-engineer])]
+                 [correctness-reviewer concurrency-reviewer])]
   (mapv (comp output deref) jobs))
 ```
 
@@ -75,26 +78,44 @@ calls inside `future`—join that Run and share its ID, limits, usage, deadline,
 cancellation, approvals, events, context, and executor. Each Agent still starts
 a fresh model conversation.
 
-## Write known workflows directly
+An evaluated reviewer can itself use `eval`, creating a nested verifier that
+tries to disprove a candidate finding before it reaches the final review.
+
+Run that complete example with an API key set:
+
+```bash
+clojure -M:examples review
+```
+
+The command shows the live Run tree, then prints prioritized findings for a
+self-contained scheduler diff with three known defects.
+
+## Write a known review process directly
 
 If the team is known ahead of time, define the Agents once and use the same
 language yourself:
 
 ```clojure
-(defn diagnose-garden [report]
-  (->> [botanist radiation-engineer]
-       (mapv #(future (k/run! % report)))
+(defn review-change [change]
+  (->> [correctness-reviewer concurrency-reviewer test-reviewer]
+       (mapv #(future (k/run! % change)))
        (mapv (comp k/output deref))))
 ```
 
 That is where Lisp's homoiconicity matters: the model can produce ordinary
 Clojure data, and the running program can execute it as ordinary Clojure code.
 
+| | Fixed composition | Dynamic review |
+| --- | --- | --- |
+| Reviewers chosen by | Application author | Orchestrator after reading the diff |
+| Coordination stored as | Source code | Retained generated source and macroexpansion |
+| Nested verification | Explicitly programmed | A reviewer can create another Agent recursively |
+
 ## Observe the Run
 
 ```clojure
 (def live (k/monitor {:display :tree}))
-(def result (k/run! assistant garden-report {:on-event live}))
+(def result (k/run! reviewer change {:on-event live}))
 ```
 
 Runs return data with `:status`, `:output`, `:usage`, `:events`, and `:error`.
@@ -112,8 +133,8 @@ start processes.
 | Example | What it shows |
 | --- | --- |
 | [Basic](examples/basic/main.clj) | One Agent Run |
-| [Architect](examples/architect/main.clj) | A task selects and runs its own specialist team |
-| [Compose](examples/composition/main.clj) | A known team written directly in Clojure |
+| [Code review](examples/review/main.clj) | A diff selects its reviewers; one creates a nested verifier |
+| [Compose](examples/composition/main.clj) | A fixed review team written directly in Clojure |
 | [Chat](examples/chat/main.clj) | Conversation history with a Session |
 | [Coding](examples/coding/main.clj) | Repository work with local Tools |
 | [Harbor](examples/harbor/README.md) | Evaluation with a behavioral verifier and trajectory |
