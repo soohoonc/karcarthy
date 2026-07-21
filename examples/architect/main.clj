@@ -1,5 +1,5 @@
 (ns example.architect
-  "Live trace of one Agent writing and running two more Agents."
+  "Live trace of Agents recursively writing and running more Agents."
   (:require [clojure.string :as str]
             [karcarthy :as k]))
 
@@ -8,13 +8,18 @@
 
 (defn instructions []
   (str
-   "You are the parent Agent in a live demonstration. "
-   "Before answering, call the built-in eval Tool once. Write one Clojure "
-   "expression that creates a failure analyst and a rollout planner, runs both "
-   "with future, dereferences the Runs, and returns their :output values. "
-   "Use input as the task for both. Configure each with model \"" (model-id) "\", "
-   ":input string?, :output string?, and instructions that forbid further "
-   "delegation. Then synthesize the two returned results concisely."))
+   "You are the root Agent in a live recursive demonstration. "
+   "Before answering, call eval exactly once. Write one Clojure expression "
+   "that creates an Agent named coordinator and runs it with input. "
+   "Configure coordinator with model \"" (model-id) "\", :input string?, "
+   ":output string?, and instructions to call eval exactly once before answering. "
+   "That second expression must create Agents named failure-analyst and "
+   "rollout-planner, run each exactly once and concurrently with future on its "
+   "input, dereference their Runs, and return their :output values as data. "
+   "Configure both specialists with model \"" (model-id) "\", :input string?, "
+   ":output string?, and focused instructions that forbid eval or delegation. "
+   "After eval returns, coordinator must synthesize the two values itself without "
+   "running either specialist again. Return the coordinator's result."))
 
 (defn architect []
   (k/agent
@@ -39,10 +44,9 @@
   ([task monitor]
    (k/run! (architect) task
            {:observe monitor
-            :limits {:model-calls 4
-                     :evals 1
+            :limits {:model-calls 8
+                     :evals 2
                      :depth 2
-                     :parallelism 3
                      :deadline-ms 240000}})))
 
 (def default-task

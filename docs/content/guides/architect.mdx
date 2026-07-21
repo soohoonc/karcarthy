@@ -3,9 +3,10 @@ title: Let an Agent write the workflow
 description: Run the Architect example and inspect same-process Clojure eval.
 ---
 
-The Architect Agent is told to use `eval` once. Its expression creates a risk
+The Architect Agent is told to use `eval` once to create a coordinator. The
+coordinator is told to use `eval` again; its expression creates a failure
 analyst and rollout planner, starts both with `future`, dereferences their Run
-maps, and returns their outputs.
+maps, and synthesizes their outputs.
 
 ```bash
 clojure -M:examples architect \
@@ -13,14 +14,15 @@ clojure -M:examples architect \
 ```
 
 ```text
-Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 1 eval
+Run run_7c2e9b… · running · 18s · 6 model calls · 8,421 tokens · 2 evals
 └─ architect · waiting for Agent
-   ├─ failure-analyst · calling model
-   └─ rollout-planner · calling model
+   └─ coordinator · waiting for Agents
+      ├─ failure-analyst · calling model
+      └─ rollout-planner · calling model
 ```
 
-The parent model sees the vector returned by its expression and synthesizes the
-answer. No child Agent was predefined by the application.
+The root model sees the coordinator's result. Neither the coordinator nor its
+specialists were predefined by the application.
 
 ## Inspect the expression
 
@@ -30,16 +32,17 @@ answer. No child Agent was predefined by the application.
      (map :expression))
 ```
 
-The trace then shows both Agent branches with the same `:run-id` as the parent.
-Usage and limits are aggregate.
+The two traces show the coordinator expression and its nested specialist
+expression. Every branch has the root `:run-id`; usage and limits are aggregate.
 
 ## What this demonstrates
 
-1. The model authored control flow, not merely an Agent configuration.
-2. The expression was ordinary Clojure data and then ordinary Clojure code.
-3. `future` carried the dynamically bound run into concurrent work.
-4. Each `run!` returned a normal Run map while sharing run-wide resources.
-5. Evaluation and orchestration stayed in the same JVM.
+1. A model-authored Agent can itself author more executable Clojure.
+2. The models authored control flow, not merely Agent configurations.
+3. Each expression was ordinary Clojure data and then ordinary Clojure code.
+4. `future` carried the dynamically bound run into concurrent work.
+5. Each `run!` returned a normal Run map while sharing run-wide resources.
+6. Both evaluation levels and orchestration stayed in the same JVM.
 
 See [Dynamic eval](/docs/eval) for the programming model and [Eval
 reference](/docs/reference/eval) for exact events and limits.

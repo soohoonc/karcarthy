@@ -88,10 +88,11 @@ ordinary executable code after evaluation.
 ```
 
 ```text
-Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 1 eval
+Run run_7c2e9b… · running · 18s · 6 model calls · 8,421 tokens · 2 evals
 └─ architect · waiting for Agent
-   ├─ failure-analyst · calling model
-   └─ rollout-planner · calling model
+   └─ coordinator · waiting for Agents
+      ├─ failure-analyst · calling model
+      └─ rollout-planner · calling model
 ```
 
 Runs return data with `:status`, `:output`, `:usage`, `:events`, and `:error`.
@@ -113,7 +114,7 @@ start a new Clojure process.
 | Example | What it shows |
 | --- | --- |
 | [Basic](examples/basic/main.clj) | One Agent run |
-| [Architect](examples/architect/main.clj) | An Agent writes a concurrent workflow |
+| [Architect](examples/architect/main.clj) | Agents recursively write a concurrent workflow |
 | [Compose](examples/composition/main.clj) | The same workflow written ahead of time |
 | [Coding](examples/coding/main.clj) | Repository work with local Tools |
 | [Harbor](examples/harbor/README.md) | Evaluation with a recorded trajectory |

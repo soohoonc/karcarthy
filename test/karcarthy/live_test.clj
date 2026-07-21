@@ -142,7 +142,7 @@
           (pr-str eval-types))
       (is (= 1 (get-in run [:usage :evals]))))))
 
-(deftest architect-example-writes-and-runs-two-agents
+(deftest architect-example-recursively-writes-and-runs-agents
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
   (when (and (live?) (credentials?))
@@ -152,11 +152,20 @@
           eval-events (->> (:events run)
                            (map :type)
                            (filter #(= "eval" (namespace %)))
-                           set)]
+                           frequencies)
+          agent-names (->> (:events run)
+                           (filter #(= :agent/started (:type %)))
+                           (map :agent)
+                           frequencies)]
       (is (= :completed (:status run)) (pr-str (:error run)))
-      (is (= 1 (get-in run [:usage :evals])))
-      (is (= #{:eval/started :eval/expanded :eval/completed}
-             eval-events)))))
+      (is (= 2 (get-in run [:usage :evals])))
+      (is (= {:eval/started 2 :eval/expanded 2 :eval/completed 2}
+             eval-events))
+      (is (= {"architect" 1
+              "coordinator" 1
+              "failure-analyst" 1
+              "rollout-planner" 1}
+             agent-names)))))
 
 (deftest coding-example-inspects-edits-and-verifies
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")

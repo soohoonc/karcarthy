@@ -31,11 +31,11 @@ clojure -M:examples architect \
   "Review a migration from synchronous writes to a queue."
 ```
 
-The parent uses `eval` to author one Clojure expression after seeing the task.
-A Run monitor redraws the live tree while that expression creates two Agents,
-runs them concurrently, and waits for their
-answers. This terminal output is designed to be recorded directly as the
-project's short GIF or video.
+The root uses `eval` to author a coordinator after seeing the task. A Run
+monitor redraws the live tree while that coordinator uses `eval` again, creates
+two specialist Agents, runs them concurrently, and waits for their answers.
+This terminal output is designed to be recorded directly as the project's short
+GIF or video.
 See the [recording guide](architect/README.md) for the shot sequence and export
 settings.
 

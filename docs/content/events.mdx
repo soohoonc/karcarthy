@@ -19,10 +19,11 @@ Or use the built-in live monitor:
 ```
 
 ```text
-Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 1 eval
+Run run_7c2e9b… · running · 18s · 6 model calls · 8,421 tokens · 2 evals
 └─ architect · waiting for Agent
-   ├─ failure-analyst · calling model
-   └─ rollout-planner · calling model
+   └─ coordinator · waiting for Agents
+      ├─ failure-analyst · calling model
+      └─ rollout-planner · calling model
 ```
 
 `(k/monitor live)` prints the latest view again. `(k/monitor-state live)`
