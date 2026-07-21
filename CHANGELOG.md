@@ -42,6 +42,9 @@ All notable changes are documented here, following
   own strategy, edits code, and verifies the result.
 - A packaged Harbor evaluation that runs the fixed Coding Agent on an isolated
   repository task and records its verifier reward and ATIF trajectory.
+- A concise `session` constructor for process-local conversation history.
+- A concise `output` accessor that returns completed Run output and throws with
+  the complete Run otherwise.
 
 ### Changed
 
@@ -70,7 +73,7 @@ All notable changes are documented here, following
 - Agent calls made by eval receive only explicit input, never the parent model's
   conversation or Session history.
 - Conversation history follows the established Session abstraction. Runs are
-  stateless unless supplied a Session; `memory-session` is the process-local
+  stateless unless supplied a Session; `session` is the process-local
   implementation and applications may provide durable implementations.
 - Loop control is the top-level Agent option `:max-turns`.
 - Agent and Tool boundaries now use one `:input-schema` and optional
@@ -86,6 +89,20 @@ All notable changes are documented here, following
   calls and `:evals` bounds evaluation attempts.
 - Agent, Tool, Schema, and Run implementations now live in their direct
   namespaces instead of a monolithic internal core.
+- Explicit JSON Schema uses a standards-compliant JVM validator rather than a
+  partial local implementation.
+- Ordinary Tool execution failures return to the model as recoverable error
+  results; harness, schema, approval, guardrail, eval, and limit failures remain
+  fatal.
+- Cancellation and deadlines interrupt in-flight futures, fatal concurrent
+  Tool failures cancel their siblings, and built-in process Tools terminate
+  child processes when interrupted.
+- Top-level Runs sharing one Session instance serialize conversation reads and
+  appends.
+- Model streaming deltas remain available to `:on-event` observers without
+  being retained in completed Run maps.
+- Unknown unqualified configuration keys remain errors while namespaced
+  keyword keys are preserved for extensions.
 
 ### Removed
 

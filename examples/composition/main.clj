@@ -2,11 +2,6 @@
   "A known Agent team coordinated with ordinary Clojure."
   (:require [karcarthy :as k]))
 
-(defn output! [run]
-  (if (= :completed (:status run))
-    (:output run)
-    (throw (ex-info "Agent Run failed" {:run run}))))
-
 (def botanist
   (k/agent
    {:name "botanist"
@@ -35,10 +30,9 @@
   (let [[biology radiation]
         (->> [botanist radiation-engineer]
              (mapv #(future (k/run! % report)))
-             (mapv deref)
-             (mapv output!))
+             (mapv (comp k/output deref)))
         editor-input
         (str "Garden report:\n" report
              "\n\nBiology:\n" biology
              "\n\nRadiation and shielding:\n" radiation)]
-    (output! (k/run! editor editor-input))))
+    (k/output (k/run! editor editor-input))))

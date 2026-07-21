@@ -17,8 +17,7 @@ specialists should investigate, write the workflow yourself:
 ```clojure
 (->> [botanist radiation-engineer]
      (mapv #(future (k/run! % garden-report)))
-     (mapv deref)
-     (mapv :output))
+     (mapv (comp k/output deref)))
 ```
 
 If the evidence should determine which specialists exist, let an Agent write
@@ -38,8 +37,7 @@ the equivalent expression after it sees the report:
               :output-schema string?})]
   (->> [botanist radiation-engineer]
        (mapv #(future (run! % input)))
-       (mapv deref)
-       (mapv :output)))
+       (mapv (comp output deref))))
 ```
 
 The model authored the coordination, not a graph node that karcarthy later had

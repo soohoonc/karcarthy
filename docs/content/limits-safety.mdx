@@ -30,7 +30,11 @@ widen them.
 ## Cancellation and approvals
 
 Pass a function, atom, or dereferenceable value through `:cancel`. Cancellation
-is checked throughout the run and produces a cancelled Run with events retained.
+is checked while waiting for model, Tool, and participating Agent work. It
+interrupts in-flight Java futures and produces a cancelled Run with lifecycle
+events retained. Third-party transports and Tools should respond to thread
+interruption and close their own resources; the built-in process Tools terminate
+their child process.
 
 Tools may request approval on every call or once per run. Without an approval
 handler, required approval fails closed. Approval controls Tool calls; it does

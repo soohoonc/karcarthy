@@ -41,11 +41,12 @@
 (defn model! [request] (run/model! request))
 (defn emit! [event] (run/emit! event))
 (def events run/events)
+(def output run/output)
 (def monitor mon/monitor)
 (def monitor-state mon/monitor-state)
 
 (def mock-model run/mock-model)
-(def memory-session session/memory-session)
+(def session session/session)
 (def session? session/session?)
 (def session-id session/session-id)
 (def get-items session/get-items)

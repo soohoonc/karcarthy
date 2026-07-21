@@ -115,6 +115,14 @@ a dynamic call chain establishes a run. Calls made during that dynamic extent
 participate in it and return the same shape with the same `:id`.
 
 ```clojure
+(k/output run)
+```
+
+Returns the output of a completed Run. A failed or cancelled Run throws
+`ExceptionInfo` with the complete Run at `(:run (ex-data error))`, which keeps
+ordinary composition concise without discarding failure data.
+
+```clojure
 {:context {...}
  :session session
  :limits {:model-calls 100
@@ -159,8 +167,8 @@ See [Events and monitoring](/docs/events).
 ## Sessions
 
 ```clojure
-(def session (k/memory-session))
-(def named (k/memory-session {:id "session_123" :items []}))
+(def session (k/session))
+(def named (k/session {:id "session_123" :items []}))
 
 (k/session? session)
 (k/session-id session)
@@ -170,8 +178,9 @@ See [Events and monitoring](/docs/events).
 (k/clear-session! session)
 ```
 
-`memory-session` is thread-safe and process-local. Durable stores implement
-`karcarthy.session/Session`.
+`session` is thread-safe and process-local. Durable stores implement
+`karcarthy.session/Session`. Runs sharing one Session instance serialize their
+read/run/append sequence.
 
 ## Prompts
 

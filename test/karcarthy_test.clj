@@ -4,8 +4,8 @@
 
 (deftest facade-exposes-only-the-native-harness
   (doseq [sym '[agent defagent tool deftool agent? tool?
-                run! context
-                memory-session session? session-id get-items add-items!
+                run! output context
+                session session? session-id get-items add-items!
                 pop-item! clear-session!
                 model! emit! events mock-model
                 monitor monitor-state
@@ -23,6 +23,7 @@
                     as-tool source-form expanded-form monitor-view print-monitor
                     fake-model
                     handoff! environment conversation-state? model-transport
+                    memory-session atom-session output! run-output
                     workspace-tools workspace-prompt
                     read-agent-form check-agent-form! eval-agent-form!
                     compile-agent! system-prompt
@@ -55,13 +56,16 @@
   (doseq [[namespace symbols]
           {'karcarthy.agent '[agent defagent agent? definition expansion]
            'karcarthy.tool '[tool deftool tool? hosted-tool hosted-tool?]
-           'karcarthy.run '[run! context model! emit! events mock-model]
+           'karcarthy.run '[run! output context model! emit! events mock-model]
+           'karcarthy.session '[Session session session? session-id get-items
+                                add-items! pop-item! clear-session!]
            'karcarthy.schema '[valid? explain json-schema]
            'karcarthy.eval '[read-expression]}]
     (require namespace)
     (doseq [sym symbols]
       (is (some? (ns-resolve namespace sym))
-          (str "missing " namespace "/" sym)))))
+          (str "missing " namespace "/" sym))))
+  (is (nil? (ns-resolve 'karcarthy.session 'memory-session))))
 
 (deftest agents-do-not-accept-function-bodies
   (is (thrown? clojure.lang.ArityException

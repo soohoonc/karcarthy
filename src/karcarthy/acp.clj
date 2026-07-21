@@ -405,7 +405,7 @@
                          :cwd cwd
                          :mcp-connections connections
                          :mcp-tools (vec mcp-tools)
-                         :agent-session (session/memory-session {:id session-id})
+                         :agent-session (session/session {:id session-id})
                          :cancel (atom false)
                          :running? (atom false)
                          :model-ids model-ids

@@ -44,7 +44,7 @@
              ":instructions \"Append punctuation.\" "
              ":input-schema string? :output-schema string?}) "
              "jobs (mapv #(future (run! worker %)) input)] "
-             "(mapv (comp :output deref) jobs))")
+             "(mapv (comp output deref) jobs))")
         worker-model
         (k/mock-model
          (fn [request]

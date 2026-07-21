@@ -117,7 +117,9 @@
     (is (= ["hel" "lo"]
            (->> @observed
                 (filter #(= :model/text-delta (:type %)))
-                (mapv :delta))))))
+                (mapv :delta))))
+    (is (empty? (filter #(= :model/text-delta (:type %))
+                        (:events run))))))
 
 (deftest model-streaming-can-be-disabled-per-model
   (let [path (atom nil)
@@ -160,7 +162,7 @@
 
 (deftest session-manages-conversation-history
   (let [seen (atom [])
-        session (k/memory-session)
+        session (k/session)
         model (k/mock-model
                (fn [request]
                  (swap! seen conj (:messages request))
@@ -185,7 +187,7 @@
     (is (= "second" (get-in @seen [1 2 :content])))))
 
 (deftest session-operations
-  (let [session (k/memory-session {:id "session_test"
+  (let [session (k/session {:id "session_test"
                                    :items [{:role :user :content "one"}]})]
     (is (= "session_test" (k/session-id session)))
     (k/add-items! session [{:role :assistant :content "two"}])
@@ -203,6 +205,29 @@
                           (k/run! agent nil {:session {}})))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown configuration"
                           (k/run! agent nil {:state {}})))))
+
+(deftest output-returns-only-completed-run-output
+  (let [completed-agent
+        (k/agent {:name "completed-output"
+                  :model {:id "fake" :transport (scripted-model nil)}
+                  :instructions "Return nil."
+                  :output-schema any?})
+        failed-agent
+        (k/agent {:name "failed-output"
+                  :model {:id "fake"
+                          :transport (k/mock-model
+                                      (fn [_]
+                                        (throw (ex-info "model failed" {}))))}
+                  :instructions "Fail."})
+        completed (k/run! completed-agent nil)
+        failed (k/run! failed-agent nil)]
+    (is (nil? (k/output completed)))
+    (try
+      (k/output failed)
+      (is false "failed Run output should throw")
+      (catch clojure.lang.ExceptionInfo error
+        (is (= "model failed" (ex-message error)))
+        (is (= failed (:run (ex-data error))))))))
 
 (deftest internal-eval-namespaces-are-not-run-options
   (let [agent (k/agent {:name "agent"
@@ -303,7 +328,7 @@
     (is (= :agent-output (get-in (k/run! bad-output nil) [:error :phase])))))
 
 (deftest rejected-model-output-is-not-added-to-session
-  (let [session (k/memory-session)
+  (let [session (k/session)
         agent (k/agent {:name "bad-model-output"
                         :model {:id "fake"
                                 :transport (scripted-model 42)}
@@ -595,6 +620,7 @@
     (is (str/includes? description
                        "{:transport :captured, :provider :test, :id \"test-model\"}"))
     (is (str/includes? description "(run! agent-value agent-input)"))
+    (is (str/includes? description "(output run)"))
     (is (str/includes? description "`uppercase`"))
     (is (str/includes? description "`specialist`"))
     (is (= ["code"]
@@ -623,3 +649,136 @@
            (get-in (k/run! input-guarded "blocked") [:error :kind])))
     (is (= :guardrail
            (get-in (k/run! output-guarded nil) [:error :kind])))))
+
+(deftest explicit-json-schema-uses-standard-keywords
+  (let [schema {:type "object"
+                :properties
+                {"numbers" {:type "array" :items {:type "integer"}}
+                 "mode" {:anyOf [{:const "fast"} {:const "safe"}]}}
+                :required ["numbers" "mode"]
+                :additionalProperties false}]
+    (is (k/schema-valid? schema {:numbers [1 2] :mode "fast"}))
+    (is (not (k/schema-valid? schema {:numbers [1 "two"] :mode "fast"})))
+    (is (not (k/schema-valid? schema {:numbers [1] :mode "other"})))
+    (is (not (k/schema-valid? schema
+                              {:numbers [1] :mode "safe" :extra true}))))
+  (is (k/schema-valid? {:$schema "http://json-schema.org/draft-07/schema#"
+                        :type "string"
+                        :minLength 2}
+                       "ok"))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid JSON Schema"
+                        (k/schema-valid? {:type "not-a-json-type"} nil))))
+
+(deftest tool-execution-errors-return-to-the-model
+  (let [attempt (k/tool {:name "attempt"
+                         :description "Attempt fallible work."
+                         :input-schema map?
+                         :output-schema string?}
+                        [_]
+                        (throw (ex-info "temporary failure" {})))
+        seen (atom nil)
+        calls (atom 0)
+        model (k/mock-model
+               (fn [request]
+                 (if (= 1 (swap! calls inc))
+                   {:type :tool-calls
+                    :calls [{:id "call_1" :name "attempt" :input {}}]}
+                   (do
+                     (reset! seen (first (:messages request)))
+                     {:type :final :output "recovered"}))))
+        agent (k/agent {:name "recovering"
+                        :model {:id "fake" :transport model}
+                        :instructions "Recover from the Tool error."
+                        :tools [attempt]
+                        :output-schema string?})
+        run (k/run! agent nil)
+        failed-event (first (filter #(= :tool/failed (:type %))
+                                    (:events run)))]
+    (is (= :completed (:status run)))
+    (is (= "recovered" (:output run)))
+    (is (true? (:is-error @seen)))
+    (is (= "temporary failure" (get-in @seen [:content :error])))
+    (is (true? (get-in failed-event [:error :recoverable?])))))
+
+(deftest in-flight-cancellation-interrupts-the-model
+  (let [cancel (atom false)
+        started (promise)
+        interrupted (promise)
+        model (k/mock-model
+               (fn [_]
+                 (deliver started true)
+                 (try
+                   (Thread/sleep 10000)
+                   {:type :final :output "late"}
+                   (catch InterruptedException error
+                     (deliver interrupted true)
+                     (throw error)))))
+        agent (k/agent {:name "cancellable"
+                        :model {:id "fake" :transport model}
+                        :instructions "Wait."
+                        :output-schema string?})
+        result (future (k/run! agent nil {:cancel cancel}))]
+    (try
+      (is (true? (deref started 1000 false)))
+      (reset! cancel true)
+      (let [run (deref result 2000 ::timeout)]
+        (is (not= ::timeout run))
+        (is (= :cancelled (:status run))))
+      (is (true? (deref interrupted 1000 false)))
+      (finally
+        (future-cancel result)))))
+
+(deftest fatal-tool-failure-cancels-sibling-tools
+  (let [slow-started (promise)
+        interrupted (promise)
+        invalid (k/tool {:name "invalid"
+                         :description "Return invalid output."
+                         :input-schema map?
+                         :output-schema string?}
+                        [_]
+                        (deref slow-started 1000 nil)
+                        42)
+        slow (k/tool {:name "slow"
+                      :description "Wait for a long time."
+                      :input-schema map?
+                      :output-schema string?}
+                     [_]
+                     (deliver slow-started true)
+                     (try
+                       (Thread/sleep 10000)
+                       "late"
+                       (catch InterruptedException error
+                         (deliver interrupted true)
+                         (throw error))))
+        model (scripted-model
+               {:type :tool-calls
+                :calls [{:id "slow" :name "slow" :input {}}
+                        {:id "bad" :name "invalid" :input {}}]})
+        agent (k/agent {:name "supervisor"
+                        :model {:id "fake" :transport model}
+                        :instructions "Call both Tools."
+                        :tools [invalid slow]
+                        :output-schema string?})
+        run (k/run! agent nil)]
+    (is (= :failed (:status run)))
+    (is (= :schema (get-in run [:error :kind])))
+    (is (true? (deref interrupted 1000 false)))))
+
+(deftest top-level-runs-serialize-shared-session-access
+  (let [conversation (k/session)
+        message-counts (atom [])
+        model (k/mock-model
+               (fn [request]
+                 (swap! message-counts conj (count (:messages request)))
+                 (Thread/sleep 30)
+                 {:type :final :output "ok"}))
+        agent (k/agent {:name "serialized"
+                        :model {:id "fake" :transport model}
+                        :instructions "Answer."
+                        :output-schema string?})
+        runs [(future (k/run! agent "one" {:session conversation}))
+              (future (k/run! agent "two" {:session conversation}))]]
+    (is (= [:completed :completed]
+           (mapv (comp :status deref) runs)))
+    (is (= [1 3] (sort @message-counts)))
+    (is (= 4 (count (k/get-items conversation))))))

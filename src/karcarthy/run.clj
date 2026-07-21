@@ -10,9 +10,9 @@
             [karcarthy.tool :refer [hosted-tool? make-tool tool?]])
   (:import [java.util UUID]
            [java.util.concurrent Callable ExecutionException Executors Future
-            Semaphore]))
+            Semaphore TimeUnit TimeoutException]))
 
-(declare run-agent! run!)
+(declare await-future! run-agent! run!)
 
 (def ^:dynamic ^:no-doc *run*
   "The active run context. `run!` binds this value, including across futures."
@@ -145,9 +145,12 @@
                        :run-id (:run-id ctx)}
                       (select-keys ctx [:agent-id :parent-id :depth])
                       event)]
-     (swap! (:events ctx) conj event)
-     (doseq [collector (:event-collectors ctx)]
-       (swap! collector conj event))
+     (when-not (contains? #{:model/text-delta :model/tool-call-delta
+                            :model/stream-event}
+                          (:type event))
+       (swap! (:events ctx) conj event)
+       (doseq [collector (:event-collectors ctx)]
+         (swap! collector conj event)))
      (when-let [on-event (:on-event ctx)]
        (try (on-event event) (catch Throwable _ nil)))
      event)))
@@ -157,6 +160,15 @@
   [run]
   (let [v (:events run)]
     (if (instance? clojure.lang.IDeref v) @v (vec v))))
+
+(defn output
+  "Return the output of a completed Run, or throw with the Run as data."
+  [run]
+  (if (= :completed (:status run))
+    (:output run)
+    (throw (ex-info (or (get-in run [:error :message])
+                        "Agent Run did not complete")
+                    {:run run}))))
 
 (defn- cancellation-requested? [cancel]
   (cond
@@ -294,9 +306,15 @@
      (emit! rt {:type :model/requested
                 :model (select-keys model [:provider :transport :id])})
      (try
-       (let [response (normalize-model-response
-                       (call-transport transport request
-                                       #(record-model-delta! rt %)))
+       (let [child (.submit (:executor rt)
+                            ^Callable
+                            (reify Callable
+                              (call [_]
+                                (binding [*run* rt]
+                                  (call-transport
+                                   transport request
+                                   #(record-model-delta! rt %))))))
+             response (normalize-model-response (await-future! rt child))
              usage (:usage response)]
          (when-let [n (or (:input-tokens usage) (:input_tokens usage))]
            (consume! rt :input-tokens n))
@@ -417,14 +435,24 @@
                      :output output})
           result)
         (catch Throwable t
-          (emit! rt {:type :tool/failed :tool (:name tool)
-                     :tool-call-id call-id
-                     :duration-ms (/ (double (- (System/nanoTime) started)) 1000000.0)
-                     :error (throwable->failure t)})
-          (if (= :failure (:karcarthy/type (ex-data t)))
-            (throw t)
-            (fail! :tool :execute (or (ex-message t) (str t))
-                   {:tool (:name tool)} t)))))))
+          (let [failure (throwable->failure t)
+                recoverable? (contains? #{:execution :mcp :tool}
+                                        (:kind failure))
+                error (cond-> failure
+                        recoverable? (assoc :recoverable? true))]
+            (emit! rt {:type :tool/failed :tool (:name tool)
+                       :tool-call-id call-id
+                       :duration-ms (/ (double (- (System/nanoTime) started))
+                                      1000000.0)
+                       :error error})
+            (if recoverable?
+              {:id call-id
+               :name (:name tool)
+               :output nil
+               :model-output {:error (:message error)}
+               :is-error true
+               :error error}
+              (throw t))))))))
 
 (defn- submit-limited! [rt f]
   (let [^Semaphore semaphore (:semaphore rt)]
@@ -442,15 +470,55 @@
         (throw t)))))
 
 (defn- await-future!
-  [^Future child]
+  [rt ^Future child]
   (try
-    (.get child)
-    (catch ExecutionException e
-      (throw (or (.getCause e) e)))))
+    (loop []
+      (check-run! rt)
+      (let [result (try
+                     {:value (.get child 25 TimeUnit/MILLISECONDS)}
+                     (catch TimeoutException _
+                       {:timeout? true})
+                     (catch ExecutionException error
+                       (throw (or (.getCause error) error))))]
+        (if (:timeout? result)
+          (recur)
+          (:value result))))
+    (catch InterruptedException error
+      (.cancel child true)
+      (.interrupt (Thread/currentThread))
+      (fail! :cancellation :run "Run thread was interrupted" nil error))
+    (catch Throwable error
+      (when-not (.isDone child)
+        (.cancel child true))
+      (throw error))))
 
 (defn- await-futures!
-  [children]
-  (mapv await-future! children))
+  [rt children]
+  (try
+    (loop [pending (vec (map-indexed vector children))
+           results (vec (repeat (count children) nil))]
+      (check-run! rt)
+      (if (empty? pending)
+        results
+        (if-let [[index child]
+                 (first (filter (fn [[_ ^Future child]] (.isDone child))
+                                pending))]
+          (recur (filterv #(not= index (first %)) pending)
+                 (assoc results index (await-future! rt child)))
+          (do
+            (Thread/sleep 5)
+            (recur pending results)))))
+    (catch InterruptedException error
+      (doseq [^Future child children]
+        (when-not (.isDone child)
+          (.cancel child true)))
+      (.interrupt (Thread/currentThread))
+      (fail! :cancellation :run "Run thread was interrupted" nil error))
+    (catch Throwable error
+      (doseq [^Future child children]
+        (when-not (.isDone child)
+          (.cancel child true)))
+      (throw error))))
 
 (defn- maybe-json-output [output schema]
   (if (and schema (string? output)
@@ -591,14 +659,15 @@
                                         {:known (vec (keys tool-map))}))
                                (submit-limited! rt #(run-tool! rt tool call))))
                            calls)
-                results (await-futures! jobs)
+                results (await-futures! rt jobs)
                 assistant-message {:role :assistant :tool-calls calls}
                 result-messages
-                (mapv (fn [{:keys [id name model-output]}]
-                        {:role :tool
-                         :tool-call-id id
-                         :name name
-                         :content model-output})
+                (mapv (fn [{:keys [id name model-output is-error]}]
+                        (cond-> {:role :tool
+                                 :tool-call-id id
+                                 :name name
+                                 :content model-output}
+                          is-error (assoc :is-error true)))
                       results)
                 new-items (into [assistant-message] result-messages)]
             (append-session-items! rt (into (vec unpersisted) new-items))
@@ -722,8 +791,9 @@
      (let [rt *run*
            started (System/nanoTime)]
        (try
-         (await-future! (submit-limited!
-                         rt #(run-agent-call! rt agent input (or options {}))))
+         (await-future! rt (submit-limited!
+                            rt #(run-agent-call! rt agent input
+                                                 (or options {}))))
          (catch Throwable t
            (run-result rt agent input started [] nil
                        (throwable->failure t)))))
@@ -774,8 +844,11 @@
                :eval-counter (atom 0)}]
        (emit! rt {:type :run/started :agent (:name agent) :input input})
        (try
-         (let [result (binding [*run* rt]
-                        (run-agent-call! rt agent input {}))
+         (let [call #(binding [*run* rt]
+                       (run-agent-call! rt agent input {}))
+               result (if-let [active-session (:initial-session rt)]
+                        (locking active-session (call))
+                        (call))
                event-type (case (:status result)
                             :completed :run/completed
                             :cancelled :run/cancelled
@@ -791,4 +864,4 @@
                                    1000000.0))
                   :events @events*))
          (finally
-           (.close executor)))))))
+           (.shutdownNow executor)))))))

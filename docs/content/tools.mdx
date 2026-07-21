@@ -71,9 +71,19 @@ input schema must be convertible to JSON Schema; use an explicit JSON Schema
 when a predicate or spec does not describe the model interface. The optional
 `:output-schema` validates the value returned by the Tool body.
 
+Explicit schemas are validated and evaluated as JSON Schema Draft 2020-12 by
+default. Set `$schema` to select Draft 4, 6, 7, or 2019-09. Keywords such as
+`items`, `anyOf`, `const`, and `additionalProperties` use standard JSON Schema
+semantics rather than a harness-specific subset.
+
 Function Tool schemas should be object-shaped with named properties. That is
 the common interface expected by model providers, even though a local Clojure
 function can accept any value.
+
+An exception from ordinary Tool work becomes a Tool result marked as an error,
+so the model can inspect it and recover on its next turn. Configuration, input
+or output schema, guardrail, approval, budget, deadline, cancellation, model,
+Session, and eval failures still stop the Run.
 
 ## Keep dependencies out of model input
 

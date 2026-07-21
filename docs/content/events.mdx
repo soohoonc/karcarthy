@@ -66,3 +66,8 @@ Tools and evaluated Clojure may emit domain events:
 
 karcarthy adds run and Agent lineage before storing and publishing the event.
 See the [event catalog](/docs/reference/events) for the stable names.
+
+Streaming deltas are delivered live through `:on-event` but are not retained
+in the completed Run. This keeps token-by-token output from growing the Run
+map without bound. Event handlers are best-effort observers: an exception in
+one does not fail the Agent Run.
