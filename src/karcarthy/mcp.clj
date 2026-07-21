@@ -243,11 +243,12 @@
 (defn tools
   "Adapt every discovered MCP Tool into an ordinary karcarthy Tool.
 
-  Unknown MCP servers require approval by default. Set `:approval :never` only
-  for a server whose command and tool implementations you trust."
+  Unknown MCP servers require approval by default. Set
+  `:needs-approval :never` only for a server whose command and Tool
+  implementations you trust."
   ([connection] (tools connection {}))
-  ([connection {:keys [prefix approval]
-                :or {approval :always}}]
+  ([connection {:keys [prefix needs-approval]
+                :or {needs-approval :always}}]
    (let [definitions (definitions connection)
          prefix (-> (or prefix
                         (str "mcp_" (safe-name (:name connection)) "__"))
@@ -268,13 +269,9 @@
             :description
             (str "MCP " (:name connection) "/" remote-name ": "
                  (or (:description definition) "No description provided."))
-            :input input-schema
             :input-schema input-schema
-            :output any?
-            :approval approval
-            :metadata {:mcp/server (:name connection)
-                       :mcp/tool remote-name
-                       :mcp/annotations (:annotations definition)}}
+            :output-schema any?
+            :needs-approval needs-approval}
            `(karcarthy.mcp/tool ~(:name connection) ~remote-name)
            nil
            (fn [_ arguments]

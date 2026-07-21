@@ -38,8 +38,8 @@ Create `src/example.clj`:
 (k/defagent assistant
   {:model "gpt-5.6"
    :instructions "Answer clearly and concisely."
-   :input string?
-   :output string?})
+   :input-schema string?
+   :output-schema string?})
 ```
 
 An Agent is a Clojure value containing its model, instructions, Tools, other
@@ -86,7 +86,7 @@ Create a monitor and pass it as the observer:
 (def monitored-run
   (k/run! example/assistant
           "Explain continuation-passing style."
-          {:observe live}))
+          {:on-event live}))
 ```
 
 The terminal redraws while the Agent runs. Evaluate the monitor to print its

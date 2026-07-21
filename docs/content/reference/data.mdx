@@ -11,8 +11,8 @@ description: Agent, Tool, Run, failure, and monitor data shapes.
  :model {:transport :responses :provider :openai :id "gpt-5.6"}
  :instructions "Research carefully."
  :tools [...]
- :input string?
- :output string?
+ :input-schema string?
+ :output-schema string?
  :definition-ns 'example.research
  :definition '(agent {...})
  :expansion '(...)}
@@ -27,16 +27,14 @@ inspection data, not a second configuration layer.
 {:karcarthy/type :tool
  :name "lookup"
  :description "Look up a record."
- :input map?
  :input-schema {:type "object" ...}
- :output map?
+ :output-schema map?
  :definition '(tool {...} [input] ...)
  :expansion '(...)
  :execute #object[clojure.lang.IFn ...]}
 ```
 
-If karcarthy cannot derive a meaningful JSON Schema from `:input`, the Tool
-must provide `:input-schema`.
+Tool input uses one `:input-schema` for validation and the model interface.
 
 ## Run
 

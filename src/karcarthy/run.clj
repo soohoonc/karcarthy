@@ -10,7 +10,7 @@
             [karcarthy.tool :refer [hosted-tool? make-tool tool?]])
   (:import [java.util UUID]
            [java.util.concurrent Callable ExecutionException Executors Future
-            Semaphore TimeUnit TimeoutException]))
+            Semaphore]))
 
 (declare run-agent! run!)
 
@@ -39,19 +39,17 @@
   (contains? #{"object" :object}
              (or (:type schema) (get schema "type"))))
 
-(defn- agent-tool
+(defn- agent-as-tool
   [agent]
   (when-not (agent? agent)
     (fail! :schema :configuration
            "Agent :agents must contain Agent values"
            {:value agent}))
-  (let [schema (or (:input-schema agent)
-                   (schema/json-schema (:input agent)))
+  (let [schema (schema/json-schema (:input-schema agent))
         structured-input? (object-schema? schema)
-        tool-schema (if structured-input? schema agent-call-schema)
-        tool-input (if structured-input?
-                     (or (:input agent) any?)
-                     agent-call-schema)]
+        input-schema (if structured-input?
+                       (:input-schema agent)
+                       agent-call-schema)]
     (make-tool
      {:name (:name agent)
       :description
@@ -62,14 +60,13 @@
              "the Tool input object directly."
              "only the value in the `input` field.")
            " Its final output returns as the Tool result.")
-      :input tool-input
-      :input-schema tool-schema
-      :output (:output agent)
-      :approval :never}
+      :input-schema input-schema
+      :output-schema (:output-schema agent)
+      :needs-approval :never}
      nil
      nil
-     (fn [rt input]
-       (run-agent! rt agent
+     (fn [ctx input]
+       (run-agent! ctx agent
                    (if structured-input? input (:input input))
                    {})))))
 
@@ -82,12 +79,12 @@
    :input-tokens Long/MAX_VALUE
    :output-tokens Long/MAX_VALUE
    :depth 8
-   :parallelism 16
+   :concurrency 16
    :evals 20
    :deadline-ms nil})
 
 (def ^:private run-option-keys
-  #{:context :session :limits :observe :approval :cancel :metadata
+  #{:context :session :limits :on-event :approval :cancel
     :model-transports})
 
 (def ^:private agent-call-option-keys #{:context :limits})
@@ -105,11 +102,11 @@
         (fail! :schema :configuration
                (str (name resource) " must be a non-negative integer")
                {:resource resource :value value}))))
-  (when-not (and (integer? (:parallelism limits))
-                 (pos? (:parallelism limits)))
+  (when-not (and (integer? (:concurrency limits))
+                 (pos? (:concurrency limits)))
     (fail! :schema :configuration
-           ":parallelism must be a positive integer"
-           {:value (:parallelism limits)}))
+           ":concurrency must be a positive integer"
+           {:value (:concurrency limits)}))
   (when-let [deadline-ms (:deadline-ms limits)]
     (when-not (and (integer? deadline-ms) (not (neg? deadline-ms)))
       (fail! :schema :configuration
@@ -127,32 +124,32 @@
   ([run-context]
    (:context run-context)))
 
-(defn- call-metadata
-  [rt]
-  {:run-id (:run-id rt)
-   :agent-id (:agent-id rt)
-   :parent-id (:parent-id rt)
-   :depth (:depth rt)
-   :context (:context rt)
-   :limits (:limits rt)
-   :usage @(:usage rt)
-   :agent (:agent rt)})
+(defn- run-context
+  [ctx]
+  {:run-id (:run-id ctx)
+   :agent-id (:agent-id ctx)
+   :parent-id (:parent-id ctx)
+   :depth (:depth ctx)
+   :context (:context ctx)
+   :limits (:limits ctx)
+   :usage @(:usage ctx)
+   :agent (:agent ctx)})
 
 (defn emit!
   "Record one observation event and notify the run observer."
   ([event]
    (emit! (current-run-context) event))
-  ([rt event]
+  ([ctx event]
    (let [event (merge {:karcarthy/type :event
                        :time-ms (System/currentTimeMillis)
-                       :run-id (:run-id rt)}
-                      (select-keys rt [:agent-id :parent-id :depth])
+                       :run-id (:run-id ctx)}
+                      (select-keys ctx [:agent-id :parent-id :depth])
                       event)]
-     (swap! (:events rt) conj event)
-     (doseq [collector (:event-collectors rt)]
+     (swap! (:events ctx) conj event)
+     (doseq [collector (:event-collectors ctx)]
        (swap! collector conj event))
-     (doseq [observer (when-let [f (:observe rt)] [f])]
-       (try (observer event) (catch Throwable _ nil)))
+     (when-let [on-event (:on-event ctx)]
+       (try (on-event event) (catch Throwable _ nil)))
      event)))
 
 (defn events
@@ -205,9 +202,9 @@
               parent (or child {})))
 
 (defn- run-guardrails!
-  [rt phase guards value]
+  [ctx phase guards value]
   (doseq [guard (or guards [])]
-    (let [result (guard (call-metadata rt) value)]
+    (let [result (guard (run-context ctx) value)]
       (when (or (false? result)
                 (and (map? result) (false? (:ok? result))))
         (fail! :guardrail phase
@@ -227,8 +224,8 @@
   {:karcarthy/type :model-transport
    :complete respond})
 
-(defn- resolve-value [value rt]
-  (if (fn? value) (value (call-metadata rt)) value))
+(defn- resolve-value [value ctx]
+  (if (fn? value) (value (run-context ctx)) value))
 
 (defn- resolve-transport [rt model]
   (let [configured (:transport model)
@@ -325,13 +322,12 @@
 (defn- tool-descriptor [tool]
   (cond
     (tool? tool)
-    (let [schema (or (:input-schema tool)
-                     (when (schema/json-schema? (:input tool)) (:input tool))
-                     (schema/json-schema (:input tool)))]
+    (let [schema (schema/json-schema (:input-schema tool))]
       (when-not schema
         (fail! :tool :configuration
-               "Tool needs :input-schema when :input cannot be expressed as JSON Schema"
-               {:tool (:name tool) :input (:input tool)}))
+               "Tool :input-schema must be expressible as JSON Schema"
+               {:tool (:name tool)
+                :input-schema (:input-schema tool)}))
       {:kind :function
        :name (:name tool)
        :description (:description tool)
@@ -347,8 +343,8 @@
            {:value tool})))
 
 (defn- approval-policy
-  [policy rt input]
-  (if (fn? policy) (policy (call-metadata rt) input) policy))
+  [policy ctx input]
+  (if (fn? policy) (policy (run-context ctx) input) policy))
 
 (defn- request-approval!
   [rt tool input policy]
@@ -356,7 +352,7 @@
              :tool (:name tool) :input input :policy policy})
   (let [allowed?
         (if-let [handler (:approval rt)]
-          (boolean (handler (assoc (call-metadata rt)
+          (boolean (handler (assoc (run-context rt)
                                    :tool tool
                                    :input input)))
           false)]
@@ -366,7 +362,7 @@
 
 (defn- approved?
   [rt tool input]
-  (let [policy (approval-policy (:approval tool :never)
+  (let [policy (approval-policy (:needs-approval tool :never)
                                 rt input)]
     (cond
       (not (contains? #{true :always :once} policy)) true
@@ -384,38 +380,9 @@
               (when allowed? (swap! approvals conj approval-key))
               allowed?)))))))
 
-(defn- retry-count [tool]
-  (let [retry (:retry tool 0)]
-    (cond
-      (integer? retry) (max 0 retry)
-      (map? retry) (max 0 (long (or (:max-retries retry) 0)))
-      :else 0)))
-
 (defn- execute-tool-body! [rt tool input]
-  (loop [attempt 0]
-    (let [outcome (try
-                    {:value (binding [*run* rt]
-                              ((:execute tool) rt input))}
-                    (catch Throwable t {:error t}))]
-      (if-let [error (:error outcome)]
-        (if (< attempt (retry-count tool))
-          (recur (inc attempt))
-          (throw error))
-        (:value outcome)))))
-
-(defn- execute-with-timeout!
-  [rt timeout-ms f]
-  (if-not timeout-ms
-    (f)
-    (let [^Future future (.submit (:executor rt) ^Callable (reify Callable
-                                                             (call [_] (f))))]
-      (try
-        (.get future (long timeout-ms) TimeUnit/MILLISECONDS)
-        (catch TimeoutException t
-          (.cancel future true)
-          (fail! :tool :timeout "Tool timed out" {:timeout-ms timeout-ms} t))
-        (catch ExecutionException e
-          (throw (or (.getCause e) e)))))))
+  (binding [*run* rt]
+    ((:execute tool) rt input)))
 
 (defn- run-tool!
   [rt tool call]
@@ -423,13 +390,9 @@
     (fail! :tool :configuration "Agent contains an invalid Tool"
            {:value tool}))
   (let [input (:input call)
-        call-id (or (:id call) (id "tool_"))
-        enabled? (:enabled? tool)]
-    (when (and enabled? (not (enabled? (call-metadata rt))))
-      (fail! :tool :disabled "Tool is disabled in the current Run"
-             {:tool (:name tool)}))
-    (schema/check! :tool-input (:input tool) input)
-    (run-guardrails! rt :tool-input (get-in tool [:guardrails :input]) input)
+        call-id (or (:id call) (id "tool_"))]
+    (schema/check! :tool-input (:input-schema tool) input)
+    (run-guardrails! rt :tool-input (:input-guardrails tool) input)
     (when-not (approved? rt tool input)
       (fail! :approval :tool "Tool approval was denied"
              {:tool (:name tool) :input input}))
@@ -437,12 +400,10 @@
                :tool-call-id call-id :input input})
     (let [started (System/nanoTime)]
       (try
-        (let [output (execute-with-timeout!
-                      rt (:timeout-ms tool)
-                      #(execute-tool-body! rt tool input))
-              _ (schema/check! :tool-output (:output tool) output)
+        (let [output (execute-tool-body! rt tool input)
+              _ (schema/check! :tool-output (:output-schema tool) output)
               _ (run-guardrails! rt :tool-output
-                                 (get-in tool [:guardrails :output]) output)
+                                 (:output-guardrails tool) output)
               model-output (if-let [project (:to-model-output tool)]
                              (project output)
                              output)
@@ -468,8 +429,8 @@
 (defn- submit-limited! [rt f]
   (let [^Semaphore semaphore (:semaphore rt)]
     (when-not (.tryAcquire semaphore)
-      (fail! :budget :parallelism "Run parallelism limit was reached"
-             {:limit (get-in rt [:limits :parallelism])}))
+      (fail! :budget :concurrency "Run concurrency limit was reached"
+             {:limit (get-in rt [:limits :concurrency])}))
     (try
       (.submit (:executor rt)
                ^Callable
@@ -570,7 +531,7 @@
              {:names duplicates}))
     tools))
 
-(defn- default-loop!
+(defn- model-loop!
   [rt agent input]
   (let [max-turns (or (:max-turns agent) 20)
         model (normalize-model (resolve-value (:model agent) rt))
@@ -583,9 +544,9 @@
               (fail! :tool :configuration
                      "Agent :tools must contain Tool values"
                      {:value tool})))
-        known-agent-tools (mapv agent-tool available-agents)
+        agent-tools (mapv agent-as-tool available-agents)
         tools (unique-tools!
-               (conj (into direct-tools known-agent-tools)
+               (conj (into direct-tools agent-tools)
                      (eval-tool model direct-tools available-agents)))
         tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
         instructions (instructions! rt (:instructions agent))
@@ -607,14 +568,14 @@
                      :messages pending
                      :provider-state provider-state
                      :tools (mapv tool-descriptor tools)
-            :output-schema (or (:output-schema agent)
-                                        (schema/json-schema
-                                         (:output agent)))
+                     :output-schema (schema/json-schema
+                                     (:output-schema agent))
                      :turn turn}
             response (model! rt request)]
         (case (:type response)
           :final
-          (let [output (maybe-json-output (:output response) (:output agent))]
+          (let [output (maybe-json-output (:output response)
+                                          (:output-schema agent))]
             (reset! (:pending-session-items rt)
                     (conj (vec unpersisted)
                           {:role :assistant :content output}))
@@ -693,19 +654,17 @@
                     :limits limits
                     :deadline-ns deadline-ns)
           started (System/nanoTime)]
-      (schema/check! :context (:context agent) (:context rt))
-      (schema/check! :agent-input (:input agent) input)
-      (run-guardrails! rt :agent-input
-                       (get-in agent [:guardrails :input]) input)
+      (schema/check! :context (:context-schema agent) (:context rt))
+      (schema/check! :agent-input (:input-schema agent) input)
+      (run-guardrails! rt :agent-input (:input-guardrails agent) input)
       (emit! rt {:type :agent/started :agent (:name agent) :input input})
       (try
         (let [output (binding [*run* rt]
-                       (default-loop! rt agent input))
-              output (maybe-json-output output (:output agent))]
+                       (model-loop! rt agent input))
+              output (maybe-json-output output (:output-schema agent))]
           (check-run! rt)
-          (schema/check! :agent-output (:output agent) output)
-          (run-guardrails! rt :agent-output
-                           (get-in agent [:guardrails :output]) output)
+          (schema/check! :agent-output (:output-schema agent) output)
+          (run-guardrails! rt :agent-output (:output-guardrails agent) output)
           (when-let [items @(:pending-session-items rt)]
             (append-session-items! rt items))
           (emit! rt {:type :agent/completed :agent (:name agent)
@@ -737,7 +696,7 @@
    :events events
    :error error})
 
-(defn- call-result!
+(defn- run-agent-call!
   [rt agent input options]
   (let [started (System/nanoTime)
         call-events (atom [])
@@ -764,7 +723,7 @@
            started (System/nanoTime)]
        (try
          (await-future! (submit-limited!
-                         rt #(call-result! rt agent input (or options {}))))
+                         rt #(run-agent-call! rt agent input (or options {}))))
          (catch Throwable t
            (run-result rt agent input started [] nil
                        (throwable->failure t)))))
@@ -799,14 +758,13 @@
                :usage usage*
                :events events*
                :initial-session (:session options)
-               :observe (:observe options)
+               :on-event (:on-event options)
                :approval (:approval options)
                :approvals (atom #{})
                :cancel (:cancel options)
-               :metadata (:metadata options)
                :model-transports (:model-transports options)
                :executor executor
-               :semaphore (Semaphore. (int (:parallelism limits)) true)
+               :semaphore (Semaphore. (int (:concurrency limits)) true)
                :deadline-ns deadline-ns
                :eval-parent-namespace (:definition-ns agent)
                :eval-namespace
@@ -817,7 +775,7 @@
        (emit! rt {:type :run/started :agent (:name agent) :input input})
        (try
          (let [result (binding [*run* rt]
-                        (call-result! rt agent input {}))
+                        (run-agent-call! rt agent input {}))
                event-type (case (:status result)
                             :completed :run/completed
                             :cancelled :run/cancelled

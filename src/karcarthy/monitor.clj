@@ -371,8 +371,8 @@
 (defn monitor
   "Create or inspect a live Run monitor.
 
-  With no argument or an options map, create an event observer to pass as
-  `run!`'s `:observe` function. With an existing monitor, return it so the REPL
+  With no argument or an options map, create an event handler to pass as
+  `run!`'s `:on-event` function. With an existing monitor, return it so the REPL
   prints its current tree. Use `monitor-state` for ordinary Clojure data.
 
   `{:display :tree}` redraws a live tree on `:out`, which defaults to the

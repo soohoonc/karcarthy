@@ -12,8 +12,8 @@ Agents it may call, and boundary schemas.
    :model "gpt-5.6"
    :instructions "Research carefully. Distinguish evidence from inference."
    :tools [web-search]
-   :input string?
-   :output string?})
+   :input-schema string?
+   :output-schema string?})
 ```
 
 `defagent` derives `:name` from the var. Use `agent` for an expression and pass
@@ -68,11 +68,12 @@ Put Agents in `:agents` when the model should decide whether to call them:
   {:model "gpt-5.6"
    :instructions "Resolve the request. Ask support when useful."
    :agents [support]
-   :output string?})
+   :output-schema string?})
 ```
 
 The called Agent receives only its explicit input, not the parent's model
-conversation. Its output returns as the Tool result.
+conversation. Its output returns as the Tool result. `:agents` does not create
+a hierarchy or transfer control; it is the Agent-as-Tool pattern.
 
 ## Dynamic composition
 
@@ -92,23 +93,21 @@ See [Dynamic eval](/docs/eval).
 | --- | --- |
 | `:name` | Stable name. `agent` requires it; `defagent` derives it. |
 | `:description` | Tells another model when to call this Agent. |
-| `:model` | Model ID string, model map, or metadata function. |
-| `:instructions` | String or metadata function. |
+| `:model` | Model ID string, model map, or run-context function. |
+| `:instructions` | String or run-context function. |
 | `:tools` / `:agents` | Tools and Agents available to the model. |
-| `:context` | Validation schema for local run context. |
-| `:input` / `:output` | Boundary schemas. |
-| `:input-schema` / `:output-schema` | JSON schemas exposed to models. |
+| `:context-schema` | Validation schema for local run context. |
+| `:input-schema` / `:output-schema` | Boundary schemas, also exposed to models when convertible to JSON Schema. |
 | `:max-turns` | Maximum model turns before the Agent fails. |
-| `:guardrails` | Input and output checks. |
+| `:input-guardrails` / `:output-guardrails` | Input and output checks. |
 | `:limits` | Limits that can only narrow the active run. |
-| `:metadata` | Application data. |
 
 ```clojure
 (k/run! account-agent "Summarize account 123."
         {:context {:account-id "123" :db db}
          :limits {:model-calls 40
                   :depth 4
-                  :parallelism 4
+                  :concurrency 4
                   :evals 8
                   :deadline-ms 300000}})
 ```

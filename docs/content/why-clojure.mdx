@@ -16,8 +16,8 @@ it directly.
   (k/agent {:name "reviewer"
             :model "gpt-5.6"
             :instructions "Review the proposed change."
-            :input string?
-            :output string?}))
+            :input-schema string?
+            :output-schema string?}))
 
 (:instructions reviewer)
 (assoc reviewer :instructions "Review only the API boundary.")
@@ -43,8 +43,8 @@ bound to `input`:
  "(let [r (agent {:name \"reviewer\"
                    :model \"gpt-5.6\"
                    :instructions \"Review the change.\"
-                   :input string?
-                   :output string?})]
+                   :input-schema string?
+                   :output-schema string?})]
     (:output (run! r input)))"}
 ```
 

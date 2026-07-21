@@ -19,8 +19,8 @@ to the symbol `input`.
 (let [analyst (agent {:name "analyst"
                       :model "gpt-5.6"
                       :instructions "Find a non-obvious risk."
-                      :input string?
-                      :output string?})]
+                      :input-schema string?
+                      :output-schema string?})]
   (:output (run! analyst input)))
 ```
 
@@ -36,8 +36,8 @@ would outside eval.
                      (agent {:name name
                              :model "gpt-5.6"
                              :instructions instructions
-                             :input string?
-                             :output string?}))
+                             :input-schema string?
+                             :output-schema string?}))
                    roles)]
   (->> agents
        (mapv #(future (run! % input)))

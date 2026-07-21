@@ -34,12 +34,11 @@
 
 (k/deftool static-stamp
   {:description "Return a deterministic marker for this live Tool test."
-   :input map?
    :input-schema {:type "object"
                   :properties {"text" {:type "string"}}
                   :required ["text"]
                   :additionalProperties false}
-   :output string?}
+   :output-schema string?}
   [{:keys [text]}]
   (str "static-tool:" text))
 
@@ -50,25 +49,24 @@
           :description "Return the fixed marker requested by this live test."
           :model (live-model)
           :instructions "Return exactly static-agent-ok. Do not call a Tool."
-          :input string?
-          :output string?
+          :input-schema string?
+          :output-schema string?
           :max-turns 2})
         dynamic-code
         (str
          "(let [stamp (tool {:name \"dynamic-stamp\" "
          ":description \"Return a deterministic dynamic Tool marker.\" "
-         ":input map? "
          ":input-schema {:type \"object\" "
          ":properties {\"text\" {:type \"string\"}} "
          ":required [\"text\"] :additionalProperties false} "
-         ":output string?} "
+         ":output-schema string?} "
          "[value] (str \"dynamic-tool:\" (:text value))) "
          "specialist (agent {:name \"dynamic-specialist\" "
          ":description \"Exercise a Tool created inside eval.\" "
          ":model " (pr-str (live-model)) " "
          ":instructions \"Call dynamic-stamp exactly once with text dynamic-agent. "
          "Return the Tool result exactly. Do not call eval.\" "
-         ":tools [stamp] :input string? :output string? :max-turns 3})] "
+         ":tools [stamp] :input-schema string? :output-schema string? :max-turns 3})] "
          "(:output (run! specialist input)))")]
     (k/agent
      {:name "live-feature-matrix"
@@ -83,8 +81,8 @@
        "Only after all three calls succeed, return exactly LIVE-FEATURES-OK.")
       :tools [static-stamp]
       :agents [static-specialist]
-      :input string?
-      :output string?
+      :input-schema string?
+      :output-schema string?
       :max-turns 8})))
 
 (defn- temp-directory []
@@ -115,7 +113,7 @@
                       {:limits {:model-calls 12
                                 :evals 1
                                 :depth 2
-                                :parallelism 8
+                                :concurrency 8
                                 :deadline-ms 300000}})
           tool-names (->> (:events run)
                           (filter #(= :tool/started (:type %)))

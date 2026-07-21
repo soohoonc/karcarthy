@@ -19,5 +19,5 @@ Every event contains `:karcarthy/type :event`, `:type`, `:time-ms`, and
 Only the first `run!` emits Run lifecycle events. Participating Agent calls emit
 Agent, model, Tool, and eval events under the same `:run-id`.
 
-Use `(k/events result)` for the retained vector or pass `:observe` to consume
+Use `(k/events result)` for the retained vector or pass `:on-event` to consume
 events live. See [Eval reference](/docs/reference/eval) for eval event fields.

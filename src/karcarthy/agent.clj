@@ -4,9 +4,9 @@
   (:require [karcarthy.schema :as schema]))
 
 (def ^:private config-keys
-  #{:name :description :model :instructions :context :input :input-schema
-    :tools :agents :output :output-schema :max-turns :guardrails :limits
-    :metadata})
+  #{:name :description :model :instructions :context-schema :input-schema
+    :tools :agents :output-schema :max-turns :input-guardrails
+    :output-guardrails :limits})
 
 (defn ^:no-doc normalize-model
   "Lower a model ID to the default OpenAI Responses configuration."

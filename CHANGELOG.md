@@ -15,8 +15,8 @@ All notable changes are documented here, following
 - A complete, dynamically generated `eval` Tool manual covering the Clojure
   expression boundary, use cases, information boundary, execution behavior,
   and the model, Tool, and Agent symbols actually available.
-- First-class `:agents`, which makes known specialists available to a parent
-  model without a public Agent-to-Tool adapter.
+- First-class `:agents`, which makes existing Agents callable through the
+  established Agent-as-Tool pattern without introducing a hierarchy.
 - Model-authored Clojure reading, full executable-position macroexpansion,
   same-process evaluation, recursive Agent execution, and eval events.
 - A Responses-compatible HTTP/SSE transport with configurable endpoint,
@@ -73,9 +73,12 @@ All notable changes are documented here, following
   stateless unless supplied a Session; `memory-session` is the process-local
   implementation and applications may provide durable implementations.
 - Loop control is the top-level Agent option `:max-turns`.
-- Agent `:input` validation schemas may be paired with a model-facing
-  `:input-schema` when
-  the Agent is available to another Agent.
+- Agent and Tool boundaries now use one `:input-schema` and optional
+  `:output-schema` for validation and model-facing JSON Schema derivation.
+- Tool approval uses the established `:needs-approval` name; input and output
+  guardrails use separate keys, and Run event callbacks use `:on-event`.
+- Removed unused Tool retry, enabled, timeout, and metadata configuration and
+  unused Agent and Run metadata configuration.
 - The first `run!` establishes a dynamically scoped run. Calls within it,
   including calls in `future`, share its ID, usage, limits, events, context,
   deadline, cancellation, approvals, and executor.

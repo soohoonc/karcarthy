@@ -9,11 +9,11 @@ schema are visible to the model; local dependencies remain in Run context.
 ```clojure
 (k/deftool lookup-user
   {:description "Look up a user by ID."
-   :input {:type "object"
-           :properties {"user-id" {:type "string"}}
-           :required ["user-id"]
-           :additionalProperties false}
-   :output map?}
+   :input-schema {:type "object"
+                  :properties {"user-id" {:type "string"}}
+                  :required ["user-id"]
+                  :additionalProperties false}
+   :output-schema map?}
   [{:keys [user-id]}]
   (lookup! (:db (k/context)) user-id))
 ```
@@ -25,7 +25,7 @@ Expose it by putting the Tool value in an Agent's `:tools` vector:
   {:model "gpt-5.6"
    :instructions "Resolve the user's request."
    :tools [lookup-user]
-   :output string?})
+   :output-schema string?})
 ```
 
 ## What happens on a Tool call
@@ -52,12 +52,11 @@ inside an expression:
   (k/tool
    {:name "lookup-user"
     :description "Look up a user by ID."
-    :input map?
     :input-schema {:type "object"
                    :properties {"user-id" {:type "string"}}
                    :required ["user-id"]
                    :additionalProperties false}
-    :output map?}
+    :output-schema map?}
    [{:keys [user-id]}]
    (lookup! (:db (k/context)) user-id)))
 ```
@@ -66,12 +65,11 @@ The body has one input binding and can use all of Clojure.
 
 ## Validation and JSON Schema
 
-`:input` is the validation schema used by Clojure execution. It may be a
-predicate, a spec, or JSON Schema. karcarthy derives a model-facing JSON Schema
-when possible. When it cannot derive a useful model interface, set
-`:input-schema` separately as in the example above.
-
-The same distinction exists between `:output` and `:output-schema`.
+`:input-schema` is the one source of truth for both Clojure validation and the
+model-facing schema. It may be a predicate, a spec, or JSON Schema. A Tool's
+input schema must be convertible to JSON Schema; use an explicit JSON Schema
+when a predicate or spec does not describe the model interface. The optional
+`:output-schema` validates the value returned by the Tool body.
 
 Function Tool schemas should be object-shaped with named properties. That is
 the common interface expected by model providers, even though a local Clojure
@@ -89,7 +87,8 @@ Pass local dependencies to `run!`:
 Tools read them with `(k/context)`. Context is not sent to the model unless
 your code deliberately includes it in instructions, messages, or Tool output.
 
-For a Tool with `:approval :always` or `:once`, pass an approval function:
+For a Tool with `:needs-approval :always` or `:once`, pass an approval
+function to `run!`:
 
 ```clojure
 (k/run! support prompt
@@ -119,11 +118,11 @@ in different places:
 (def tools
   (k/local-tools
    {:cwd "/workspace/project"
-    :approval {:read :never
-               :search :never
-               :write :always
-               :edit :always
-               :bash :always}}))
+    :needs-approval {:read :never
+                     :search :never
+                     :write :always
+                     :edit :always
+                     :bash :always}}))
 ```
 
 File Tools remain under `:cwd`, including after resolving symlinks. `bash` is
@@ -137,8 +136,8 @@ definitions, and turns each one into an ordinary Tool value. Connection
 lifecycle, approval defaults, naming, supported protocol features, and
 ACP-provided MCP servers are documented on the dedicated [MCP page](/docs/protocols/mcp).
 
-Agents are declared separately with `:agents`; see [Expose a known
-specialist](/docs/agents#expose-a-known-specialist).
+Agents are declared separately with `:agents`; see [Existing Agents as
+Tools](/docs/agents#existing-agents-as-tools).
 
 ## Next
 

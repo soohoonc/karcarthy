@@ -35,7 +35,7 @@
                         :model {:id "fake"
                                 :transport (k/mock-model (constantly "ok"))}
                         :instructions "answer"
-                        :output string?})]
+                        :output-schema string?})]
     (is (k/agent? agent))
     (is (seq (k/definition agent)))
     (is (= "facade" (:name agent)))

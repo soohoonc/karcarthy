@@ -34,6 +34,6 @@
     :model (model context)
     :instructions instructions
     :tools (k/local-tools {:cwd cwd})
-    :input string?
-    :output string?
+    :input-schema string?
+    :output-schema string?
     :max-turns 24}))

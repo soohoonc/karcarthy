@@ -13,7 +13,7 @@ that evaluates one ordinary Clojure expression.
 (k/defagent assistant
   {:model "gpt-5.6"
    :instructions "Answer clearly."
-   :output string?})
+   :output-schema string?})
 
 (k/run! assistant "Why are Lisp macros unusual?")
 ```
@@ -26,8 +26,8 @@ An Agent can write:
 (let [reviewer (agent {:name "reviewer"
                        :model "gpt-5.6"
                        :instructions "Find one dangerous assumption."
-                       :input string?
-                       :output string?})
+                       :input-schema string?
+                       :output-schema string?})
       jobs (mapv #(future (run! reviewer %)) input)]
   (mapv (comp :output deref) jobs))
 ```

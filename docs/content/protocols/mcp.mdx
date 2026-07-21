@@ -24,7 +24,7 @@ values. The model loop does not need a separate MCP execution path.
                 :model "gpt-5.6"
                 :instructions "Inspect the project and answer the request."
                 :tools tools
-                :output string?})]
+                :output-schema string?})]
     (k/run! agent "Summarize the open work."
             {:approval (fn [{:keys [tool input]}]
                          (approve? (:name tool) input))}))
@@ -54,8 +54,8 @@ paginates `tools/list`, and executes calls with `tools/call`. A
 `notifications/tools/list_changed` notification marks the definitions stale;
 the next call to `mcp-tools` or the underlying definitions API refreshes them.
 
-Each remote definition becomes a normal Tool containing its input schema,
-description, annotations, and MCP source metadata. The default name is:
+Each remote definition becomes a normal Tool containing its input schema and
+description. The default name is:
 
 ```text
 mcp_<server>__<remote-tool>
@@ -67,11 +67,11 @@ prefix.
 
 ## Approval and trust
 
-MCP Tools default to `:approval :always`. Pass an approval handler to `run!`,
-as above, or set a different policy when adapting the Tools:
+MCP Tools default to `:needs-approval :always`. Pass an approval handler to
+`run!`, as above, or set a different policy when adapting the Tools:
 
 ```clojure
-(k/mcp-tools connection {:approval :never})
+(k/mcp-tools connection {:needs-approval :never})
 ```
 
 Use `:never` only for a server and Tool implementation you trust. Tool-call

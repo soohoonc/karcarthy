@@ -3,8 +3,8 @@
   (:require [karcarthy.schema :as schema]))
 
 (def ^:private config-keys
-  #{:name :description :input :input-schema :output :output-schema :approval
-    :enabled? :guardrails :timeout-ms :retry :to-model-output :metadata})
+  #{:name :description :input-schema :output-schema :needs-approval
+    :input-guardrails :output-guardrails :to-model-output})
 
 (defn- function-form [label bindings body]
   (when-not (and (vector? bindings) (= 1 (count bindings)))
@@ -28,15 +28,14 @@
            [:description string? "Tool :description must be a string"]]]
     (when-not (predicate (get config key))
       (schema/fail! :schema :configuration message {:config config})))
-  (when-not (contains? config :input)
+  (when-not (contains? config :input-schema)
     (schema/fail! :schema :configuration
-                    "Tool :input schema is required" {:config config}))
-  (when-not (or (:input-schema config)
-                (schema/json-schema? (:input config))
-                (schema/json-schema (:input config)))
+                    "Tool :input-schema is required" {:config config}))
+  (when-not (schema/json-schema (:input-schema config))
     (schema/fail! :schema :configuration
-                    "Tool needs :input-schema when :input cannot be expressed as JSON Schema"
-                    {:tool (:name config) :input (:input config)}))
+                    "Tool :input-schema must be expressible as JSON Schema"
+                    {:tool (:name config)
+                     :input-schema (:input-schema config)}))
   (assoc config
          :karcarthy/type :tool
          :definition definition

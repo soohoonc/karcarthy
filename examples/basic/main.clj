@@ -15,8 +15,8 @@
             :reasoning :low
             :timeout-ms 180000}
     :instructions "Answer clearly and concisely."
-    :input string?
-    :output string?}))
+    :input-schema string?
+    :output-schema string?}))
 
 (defn credentials? []
   (or (not (str/blank? (System/getenv "RESPONSES_API_KEY")))

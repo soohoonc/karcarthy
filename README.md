@@ -24,8 +24,8 @@ functions, macros, `future`, `mapv`, and `run!`.
 (k/defagent assistant
   {:model "gpt-5.6"
    :instructions "Answer clearly and concisely."
-   :input string?
-   :output string?})
+   :input-schema string?
+   :output-schema string?})
 
 (def result (k/run! assistant "Explain continuation-passing style."))
 (:output result) ;=> "..."
@@ -50,8 +50,8 @@ write this expression:
 (let [reviewer (agent {:name "reviewer"
                        :model "gpt-5.6"
                        :instructions "Find the riskiest assumption."
-                       :input string?
-                       :output string?})
+                       :input-schema string?
+                       :output-schema string?})
       jobs (mapv #(future (run! reviewer %)) input)]
   (mapv (comp :output deref) jobs))
 ```
@@ -84,7 +84,7 @@ ordinary executable code after evaluation.
 
 ```clojure
 (def live (k/monitor {:display :tree}))
-(def result (k/run! assistant "Complete the task." {:observe live}))
+(def result (k/run! assistant "Complete the task." {:on-event live}))
 ```
 
 ```text

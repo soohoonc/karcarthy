@@ -29,8 +29,8 @@
             :timeout-ms 300000}
     :instructions instructions
     :tools (k/local-tools {:cwd cwd})
-    :input string?
-    :output string?
+    :input-schema string?
+    :output-schema string?
     :max-turns 24}))
 
 (defn run-coding! [cwd task]

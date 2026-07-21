@@ -3,19 +3,19 @@ title: Events and monitoring
 description: Observe runs, Agent calls, model output, Tools, and eval.
 ---
 
-Pass an observer to `run!`:
+Pass an event handler to `run!`:
 
 ```clojure
 (def seen (atom []))
 (def result
-  (k/run! assistant input {:observe #(swap! seen conj %)}))
+  (k/run! assistant input {:on-event #(swap! seen conj %)}))
 ```
 
 Or use the built-in live monitor:
 
 ```clojure
 (def live (k/monitor {:display :tree}))
-(def result (k/run! assistant input {:observe live}))
+(def result (k/run! assistant input {:on-event live}))
 ```
 
 ```text

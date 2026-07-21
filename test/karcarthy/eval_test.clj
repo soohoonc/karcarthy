@@ -30,7 +30,7 @@
   (let [parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
-                         :output string?})
+                         :output-schema string?})
         run (k/run! parent "value"
                     {:model-transports
                      {:parent (eval-model "(str input suffix)")}})]
@@ -42,7 +42,7 @@
         (str "(let [worker (agent {:name \"worker\" "
              ":model {:transport :worker :id \"worker\"} "
              ":instructions \"Append punctuation.\" "
-             ":input string? :output string?}) "
+             ":input-schema string? :output-schema string?}) "
              "jobs (mapv #(future (run! worker %)) input)] "
              "(mapv (comp :output deref) jobs))")
         worker-model
@@ -53,7 +53,7 @@
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
-                         :output vector?})
+                         :output-schema vector?})
         run (k/run! parent ["one" "two"]
                     {:model-transports
                      {:parent (eval-model code)
@@ -74,7 +74,7 @@
   (let [code
         (str "(let [a (agent {:name \"made-here\" "
              ":model {:transport :child :id \"child\"} "
-             ":instructions \"Answer.\" :output string?}) "
+             ":instructions \"Answer.\" :output-schema string?}) "
              "r (run! a input)] "
              "{:same-run? (= (:id r) (:run-id (first (:events r)))) "
              ":status (:status r) :output (:output r) "
@@ -83,7 +83,7 @@
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
-                         :output map?})
+                         :output-schema map?})
         run (k/run! parent "hello"
                     {:model-transports
                      {:parent (eval-model code)
@@ -100,18 +100,18 @@
   (let [answer-code
         (str "(let [answer (agent {:name \"answer\" "
              ":model {:transport :answer :id \"answer\"} "
-             ":instructions \"Return 42.\" :output int?})] "
+             ":instructions \"Return 42.\" :output-schema int?})] "
              "(:output (run! answer input)))")
         child-model (eval-model answer-code)
         parent-code
         (str "(let [child (agent {:name \"child\" "
              ":model {:transport :child :id \"child\"} "
-             ":instructions \"Use eval.\" :output int?})] "
+             ":instructions \"Use eval.\" :output-schema int?})] "
              "(:output (run! child input)))")
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
-                         :output int?})
+                         :output-schema int?})
         run (k/run! parent "solve"
                     {:model-transports
                      {:parent (eval-model parent-code)
@@ -130,7 +130,7 @@
     (let [parent (k/agent {:name "parent"
                            :model {:transport :parent :id "parent"}
                            :instructions "Use eval."
-                           :output any?})
+                           :output-schema any?})
           run (k/run! parent nil
                       {:limits {:evals 0}
                        :model-transports
@@ -141,7 +141,7 @@
     (let [parent (k/agent {:name "parent"
                            :model {:transport :parent :id "parent"}
                            :instructions "Use eval."
-                           :output any?})
+                           :output-schema any?})
           run (k/run! parent nil
                       {:model-transports
                        {:parent (eval-model "(Object.)")}})]
@@ -153,13 +153,13 @@
   (let [code
         (str "(do (defagent made "
              "{:model {:transport :child :id \"child\"} "
-             ":instructions \"Answer.\" :output map?}) "
+             ":instructions \"Answer.\" :output-schema map?}) "
              "(assoc (:output (run! made input)) "
              ":context (context)))")
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
-                         :output map?})
+                         :output-schema map?})
         run (k/run! parent {:task "work"}
                     {:context {:request-id "r1"}
                      :model-transports
@@ -179,9 +179,9 @@
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
-                         :output string?})
+                         :output-schema string?})
         run (k/run! parent "work"
-                    {:limits {:parallelism 1}
+                    {:limits {:concurrency 1}
                      :model-transports
                      {:parent (eval-model code)
                       :child (scripted-model "unused")}})]

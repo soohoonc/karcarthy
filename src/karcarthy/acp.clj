@@ -215,7 +215,7 @@
                                       block
                                       (json/write-str block))})})))))
 
-(defn- observer [server session message-id streamed?]
+(defn- event-handler [server session message-id streamed?]
   (fn [event]
     (case (:type event)
       :model/text-delta
@@ -260,7 +260,7 @@
            (some? error) (assoc :content (tool-output-content error)))))
       nil)))
 
-(defn- combine-observers [& callbacks]
+(defn- combine-event-handlers [& callbacks]
   (let [callbacks (remove nil? callbacks)]
     (fn [event]
       (doseq [callback callbacks]
@@ -330,9 +330,10 @@
               (merge base-options
                      {:session (:agent-session session)
                       :cancel (:cancel session)
-                      :observe (combine-observers
-                                (:observe base-options)
-                                (observer server session message-id streamed?))
+                      :on-event (combine-event-handlers
+                                 (:on-event base-options)
+                                 (event-handler server session message-id
+                                                streamed?))
                       :approval (approval-handler server session)
                       :context (merge (:context base-options)
                                       {:cwd (:cwd session)
@@ -396,7 +397,7 @@
           (require-initialized! server)
           (let [cwd (normalize-cwd (:cwd params))
                 connections (connect-mcp-servers! (:mcpServers params) cwd)
-                mcp-tools (mapcat #(mcp/tools % {:approval :always})
+                mcp-tools (mapcat #(mcp/tools % {:needs-approval :always})
                                   connections)
                 session-id (str "sess_" (UUID/randomUUID))
                 model-ids (session-model-ids server)

@@ -9,7 +9,7 @@ description: Bound a run and understand the authority of eval and Tools.
                   :input-tokens 500000
                   :output-tokens 50000
                   :depth 4
-                  :parallelism 4
+                  :concurrency 4
                   :evals 8
                   :deadline-ms 300000}})
 ```
@@ -23,7 +23,7 @@ widen them.
 | `:model-calls` | Attempted model turns |
 | `:input-tokens` / `:output-tokens` | Reported model usage |
 | `:depth` | Participating Agent call depth |
-| `:parallelism` | Concurrent Tool and dynamically started Agent work |
+| `:concurrency` | Concurrent Tool and dynamically started Agent work |
 | `:evals` | Eval attempts, including failed attempts |
 | `:deadline-ms` | Wall-clock time from the first `run!` |
 

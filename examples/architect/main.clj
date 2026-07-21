@@ -11,13 +11,13 @@
    "You are the root Agent in a live recursive demonstration. "
    "Before answering, call eval exactly once. Write one Clojure expression "
    "that creates an Agent named coordinator and runs it with input. "
-   "Configure coordinator with model \"" (model-id) "\", :input string?, "
-   ":output string?, and instructions to call eval exactly once before answering. "
+   "Configure coordinator with model \"" (model-id) "\", :input-schema string?, "
+   ":output-schema string?, and instructions to call eval exactly once before answering. "
    "That second expression must create Agents named failure-analyst and "
    "rollout-planner, run each exactly once and concurrently with future on its "
    "input, dereference their Runs, and return their :output values as data. "
-   "Configure both specialists with model \"" (model-id) "\", :input string?, "
-   ":output string?, and focused instructions that forbid eval or delegation. "
+   "Configure both specialists with model \"" (model-id) "\", :input-schema string?, "
+   ":output-schema string?, and focused instructions that forbid eval or delegation. "
    "After eval returns, coordinator must synthesize the two values itself without "
    "running either specialist again. Return the coordinator's result."))
 
@@ -30,8 +30,8 @@
             :reasoning :low
             :timeout-ms 180000}
     :instructions (instructions)
-    :input string?
-    :output string?
+    :input-schema string?
+    :output-schema string?
     :max-turns 4}))
 
 (defn credentials? []
@@ -43,7 +43,7 @@
    (run-architect! task (k/monitor {:display :tree})))
   ([task monitor]
    (k/run! (architect) task
-           {:observe monitor
+           {:on-event monitor
             :limits {:model-calls 8
                      :evals 2
                      :depth 2

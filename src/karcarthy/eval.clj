@@ -36,9 +36,9 @@ is needed.
 ## Creating an Agent
 
 `agent` is a macro that accepts one configuration map. The map requires
-`:name`, `:model`, and `:instructions`; `:input` and `:output` are optional
-schemas. `(run! agent-value agent-input)` runs the resulting Agent and returns
-a Run map.
+`:name`, `:model`, and `:instructions`; `:input-schema` and `:output-schema`
+are optional. `(run! agent-value agent-input)` runs the resulting Agent and
+returns a Run map.
 
 Use `let`, `if`, `mapv`, `future`, `deref`, `agent`, and `run!` normally. A
 `run!` call returns a Run map; its Agent output is at `:output`.
@@ -59,8 +59,8 @@ transports and process-backed Tools may still perform their normal external I/O.
 (let [reviewer (agent {:name \"reviewer\"
                        :model \"MODEL_ID\"
                        :instructions \"Find the riskiest assumption.\"
-                       :input string?
-                       :output string?})
+                       :input-schema string?
+                       :output-schema string?})
       tasks (mapv #(future (run! reviewer %)) input)]
   (mapv (comp :output deref) tasks))
 ```
@@ -111,10 +111,8 @@ Use the model configuration listed below in place of the example's model value.
                       :tool (or (:description value) "No description provided.")
                       :hosted-tool "Provider-hosted Tool.")
         schema (case kind
-                 :agent (or (:input-schema value)
-                            (schema/json-schema (:input value)))
-                 :tool (or (:input-schema value)
-                           (schema/json-schema (:input value)))
+                 :agent (schema/json-schema (:input-schema value))
+                 :tool (schema/json-schema (:input-schema value))
                  :hosted-tool (:spec value))]
     {:kind kind
      :name (str value-name)
@@ -326,10 +324,9 @@ Use the model configuration listed below in place of the example's model value.
     (tool/make-tool
      {:name "eval"
       :description (description model entries)
-      :input request-schema
       :input-schema request-schema
-      :output any?
-      :approval :never}
+      :output-schema any?
+      :needs-approval :never}
      '(eval)
      '(karcarthy.eval/eval-tool)
      (fn [rt {:keys [code]}]

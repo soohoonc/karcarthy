@@ -41,8 +41,8 @@
                       {:path value :root (str root)}))))
     candidate))
 
-(defn- approval [options tool-name]
-  (let [configured (:approval options)]
+(defn- needs-approval [options tool-name]
+  (let [configured (:needs-approval options)]
     (cond
       (map? configured) (get configured tool-name :never)
       (nil? configured) :never
@@ -109,15 +109,15 @@
    {:name "read"
     :description
     "Read a UTF-8 text file inside the configured directory. Use offset and limit for large files. Read a file before editing it."
-    :input {:type "object"
-            :properties
-            {"path" {:type "string"}
-             "offset" {:type "integer" :minimum 1}
-             "limit" {:type "integer" :minimum 1 :maximum 5000}}
-            :required ["path"]
-            :additionalProperties false}
-    :output map?
-    :approval (approval options :read)}
+    :input-schema {:type "object"
+                   :properties
+                   {"path" {:type "string"}
+                    "offset" {:type "integer" :minimum 1}
+                    "limit" {:type "integer" :minimum 1 :maximum 5000}}
+                   :required ["path"]
+                   :additionalProperties false}
+    :output-schema map?
+    :needs-approval (needs-approval options :read)}
    '(coding/read) nil
    (fn [_ {:keys [path offset limit]}]
      (let [file (local-path root path)
@@ -146,13 +146,13 @@
    {:name "write"
     :description
     "Create or replace a UTF-8 text file inside the configured directory. Prefer edit for targeted changes to an existing file. Parent directories are created."
-    :input {:type "object"
-            :properties {"path" {:type "string"}
-                         "content" {:type "string"}}
-            :required ["path" "content"]
-            :additionalProperties false}
-    :output map?
-    :approval (approval options :write)}
+    :input-schema {:type "object"
+                   :properties {"path" {:type "string"}
+                                "content" {:type "string"}}
+                   :required ["path" "content"]
+                   :additionalProperties false}
+    :output-schema map?
+    :needs-approval (needs-approval options :write)}
    '(coding/write) nil
    (fn [_ {:keys [path content]}]
      (let [file (local-path root path)
@@ -171,16 +171,16 @@
    {:name "edit"
     :description
     "Replace exact text in an existing UTF-8 file. By default old_text must occur exactly once; set replace_all only when every occurrence should change."
-    :input {:type "object"
-            :properties
-            {"path" {:type "string"}
-             "old_text" {:type "string" :minLength 1}
-             "new_text" {:type "string"}
-             "replace_all" {:type "boolean"}}
-            :required ["path" "old_text" "new_text"]
-            :additionalProperties false}
-    :output map?
-    :approval (approval options :edit)}
+    :input-schema {:type "object"
+                   :properties
+                   {"path" {:type "string"}
+                    "old_text" {:type "string" :minLength 1}
+                    "new_text" {:type "string"}
+                    "replace_all" {:type "boolean"}}
+                   :required ["path" "old_text" "new_text"]
+                   :additionalProperties false}
+    :output-schema map?
+    :needs-approval (needs-approval options :edit)}
    '(coding/edit) nil
    (fn [_ {:keys [path old_text new_text replace_all]}]
      (let [file (local-path root path)]
@@ -210,14 +210,14 @@
    {:name "bash"
     :description
     "Run a shell command in the configured directory. Use read, search, edit, and write for file operations when they fit. Avoid destructive commands unless explicitly requested."
-    :input {:type "object"
-            :properties
-            {"command" {:type "string" :minLength 1}
-             "timeout_ms" {:type "integer" :minimum 1 :maximum 600000}}
-            :required ["command"]
-            :additionalProperties false}
-    :output map?
-    :approval (approval options :bash)}
+    :input-schema {:type "object"
+                   :properties
+                   {"command" {:type "string" :minLength 1}
+                    "timeout_ms" {:type "integer" :minimum 1 :maximum 600000}}
+                   :required ["command"]
+                   :additionalProperties false}
+    :output-schema map?
+    :needs-approval (needs-approval options :bash)}
    '(coding/bash) nil
    (fn [_ {:keys [command timeout_ms]}]
      (run-process root (command-vector command)
@@ -229,16 +229,16 @@
    {:name "search"
     :description
     "Search local file contents with ripgrep regular expressions. Use this instead of Bash grep for bounded, path-scoped results."
-    :input {:type "object"
-            :properties
-            {"pattern" {:type "string" :minLength 1}
-             "path" {:type "string"}
-             "glob" {:type "string"}
-             "max_results" {:type "integer" :minimum 1 :maximum 1000}}
-            :required ["pattern"]
-            :additionalProperties false}
-    :output map?
-    :approval (approval options :search)}
+    :input-schema {:type "object"
+                   :properties
+                   {"pattern" {:type "string" :minLength 1}
+                    "path" {:type "string"}
+                    "glob" {:type "string"}
+                    "max_results" {:type "integer" :minimum 1 :maximum 1000}}
+                   :required ["pattern"]
+                   :additionalProperties false}
+    :output-schema map?
+    :needs-approval (needs-approval options :search)}
    '(coding/search) nil
    (fn [_ {:keys [pattern path glob max_results]}]
      (let [max-results (long (or max_results 200))

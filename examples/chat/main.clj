@@ -7,7 +7,7 @@
    {:name "chat-assistant"
     :model "gpt-5.6"
     :instructions "Be helpful and concise."
-    :output string?}))
+    :output-schema string?}))
 
 (def session (k/memory-session))
 (def last-run (atom nil))

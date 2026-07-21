@@ -79,8 +79,8 @@
                      (k/prompt-file (str (.resolve root "AGENTS.md")))
                      "Do not commit changes.")
                     :tools all-tools
-                    :input any?
-                    :output string?})
+                    :input-schema any?
+                    :output-schema string?})
             run (k/run! agent "inspect")]
         (is (= :completed (:status run)))
         (is (re-find #"Run the smallest relevant test"

@@ -40,26 +40,38 @@ require `:model` and `:instructions`.
  :description "Research one question."
  :model "gpt-5.6"
  :instructions "Research carefully."
- :context map?
- :input string?
- :input-schema {...}
+ :context-schema map?
+ :input-schema string?
  :tools [search-tool]
  :agents [fact-checker]
- :output ::report
- :output-schema {...}
+ :output-schema ::report
  :max-turns 20
- :guardrails {:input [safe?] :output [grounded?]}
- :limits {:model-calls 30}
- :metadata {...}}
+ :input-guardrails [safe?]
+ :output-guardrails [grounded?]
+ :limits {:model-calls 30}}
 ```
 
 `:model`, `:instructions`, `:tools`, and `:agents` may be functions of the
-current call metadata. Instructions must resolve to a string and are sent to
+current run context. Instructions must resolve to a string and are sent to
 the model exactly as returned; karcarthy does not prepend a framework prompt.
 
-`:agents` makes those Agents callable by the model. An object-shaped
-`:input-schema` or `:input` becomes the callable schema; otherwise the model
-calls the Agent with `{"input": ...}`.
+The run-context value passed to dynamic configuration and guardrails is:
+
+```clojure
+{:run-id "run_..."
+ :agent-id "agent_..."
+ :parent-id nil
+ :depth 0
+ :context {...}
+ :limits {...}
+ :usage {...}
+ :agent agent-value}
+```
+
+`:agents` makes those Agents callable by the model using the Agent-as-Tool
+pattern. It does not create a hierarchy or transfer the conversation.
+An object-shaped `:input-schema` becomes the callable schema; otherwise the
+model calls the Agent with `{"input": ...}`.
 
 Every model Agent receives an `eval` Tool for one Clojure expression. The
 expression may create Agents and Tools and call `run!`.
@@ -80,10 +92,12 @@ experiments. They are not needed to run an Agent.
 (k/deftool name config [input] body ...)
 ```
 
-A Tool requires `:name`, `:description`, and `:input`; `deftool` supplies the
-name. Optional keys are `:input-schema`, `:output`, `:output-schema`,
-`:approval`, `:enabled?`, `:guardrails`, `:timeout-ms`, `:retry`,
-`:to-model-output`, and `:metadata`.
+A Tool requires `:name`, `:description`, and `:input-schema`; `deftool`
+supplies the name. Optional keys are `:output-schema`, `:needs-approval`,
+`:input-guardrails`, `:output-guardrails`, and `:to-model-output`.
+
+Guardrails receive `[run-context value]`. `:needs-approval` accepts `:never`,
+`:once`, `:always`, a boolean, or a function of `[run-context input]`.
 
 ```clojure
 (k/tool? value)
@@ -107,17 +121,17 @@ participate in it and return the same shape with the same `:id`.
           :input-tokens 1000000
           :output-tokens 100000
           :depth 8
-          :parallelism 6
+          :concurrency 6
           :evals 20
           :deadline-ms 300000}
- :observe event-fn
+ :on-event event-fn
  :approval approval-handler
  :cancel cancellation-token
- :metadata {...}
  :model-transports {...}}
 ```
 
-`context` returns the current Run's local dependency value from a Tool:
+`context` returns the current Run's local dependency value from a Tool or
+evaluated expression:
 
 ```clojure
 (k/context)
@@ -133,8 +147,8 @@ participate in it and return the same shape with the same `:id`.
 (k/monitor-state live)
 ```
 
-A Run monitor is both an event observer and a printable value. Pass it as
-`run!`'s `:observe` option. Passing it back to `monitor` shows the latest tree;
+A Run monitor is both an event handler and a printable value. Pass it as
+`run!`'s `:on-event` option. Passing it back to `monitor` shows the latest tree;
 `monitor-state` returns data for every Run it has seen. `:display :tree`
 redraws a live terminal tree; omit it for a silent monitor. The tree refreshes
 elapsed time once per second and adds model usage when each call completes.
@@ -165,7 +179,7 @@ See [Events: Watch Runs live](/docs/events#watch-runs-live).
 (k/prompt "Base instructions" (k/prompt-file "AGENTS.md"))
 ```
 
-`prompt` joins strings and call-metadata functions. `prompt-file` reads UTF-8
+`prompt` joins strings and run-context functions. `prompt-file` reads UTF-8
 text. The resulting string becomes the Agent's complete model-visible
 instructions; karcarthy does not add a base prompt.
 
@@ -246,7 +260,7 @@ Or provide an Agent factory:
              :model {:transport :responses :id model-id}
              :instructions "Complete the coding request."
              :tools (k/local-tools {:cwd cwd})
-             :output string?}))})
+             :output-schema string?}))})
 ```
 
 Client-provided MCP Tools are appended automatically. See [ACP server](/docs/protocols/acp) for
