@@ -684,6 +684,7 @@
                     :parent-id (:agent-id parent-rt)
                     :depth depth
                     :agent agent
+                    :agent-input input
                     :context (if (contains? options :context)
                                (:context options)
                                (:context parent-rt))

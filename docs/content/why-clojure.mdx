@@ -35,7 +35,8 @@ The operational configuration remains flat on the map; there is no hidden
 
 ## The model writes an expression, not a node
 
-The built-in `eval` Tool accepts `code` and `input`:
+The built-in `eval` Tool accepts only `code`; the current Agent input is already
+bound to `input`:
 
 ```clojure
 {:code
@@ -44,8 +45,7 @@ The built-in `eval` Tool accepts `code` and `input`:
                    :instructions \"Review the change.\"
                    :input string?
                    :output string?})]
-    (:output (run! r input)))"
- :input "Replace synchronous writes with a queue."}
+    (:output (run! r input)))"}
 ```
 
 The code may be any one Clojure expression. `let`, `if`, `mapv`, `future`,

@@ -11,10 +11,10 @@
          (swap! remaining next)
          (if (fn? response) (response request) response))))))
 
-(defn eval-model [code input]
+(defn eval-model [code]
   (scripted-model
    {:type :tool-calls
-    :calls [{:id "eval" :name "eval" :input {:code code :input input}}]}
+    :calls [{:id "eval" :name "eval" :input {:code code}}]}
    (fn [request]
      {:type :final :output (get-in request [:messages 0 :content])})))
 
@@ -31,9 +31,9 @@
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
                          :output string?})
-        run (k/run! parent nil
+        run (k/run! parent "value"
                     {:model-transports
-                     {:parent (eval-model "(str input suffix)" "value")}})]
+                     {:parent (eval-model "(str input suffix)")}})]
     (is (= :completed (:status run)) (pr-str (:error run)))
     (is (= (str "value" suffix) (:output run)))))
 
@@ -54,9 +54,9 @@
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
                          :output vector?})
-        run (k/run! parent nil
+        run (k/run! parent ["one" "two"]
                     {:model-transports
-                     {:parent (eval-model code ["one" "two"])
+                     {:parent (eval-model code)
                       :worker worker-model}})
         eval-events (filter #(= "eval" (namespace (:type %))) (:events run))]
     (is (= :completed (:status run)) (pr-str (:error run)))
@@ -84,9 +84,9 @@
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
                          :output map?})
-        run (k/run! parent nil
+        run (k/run! parent "hello"
                     {:model-transports
-                     {:parent (eval-model code "hello")
+                     {:parent (eval-model code)
                       :child (scripted-model "done")}})
         output (:output run)]
     (is (= :completed (:status run)) (pr-str (:error run)))
@@ -102,7 +102,7 @@
              ":model {:transport :answer :id \"answer\"} "
              ":instructions \"Return 42.\" :output int?})] "
              "(:output (run! answer input)))")
-        child-model (eval-model answer-code "solve")
+        child-model (eval-model answer-code)
         parent-code
         (str "(let [child (agent {:name \"child\" "
              ":model {:transport :child :id \"child\"} "
@@ -112,9 +112,9 @@
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
                          :output int?})
-        run (k/run! parent nil
+        run (k/run! parent "solve"
                     {:model-transports
-                     {:parent (eval-model parent-code "solve")
+                     {:parent (eval-model parent-code)
                       :child child-model
                       :answer (scripted-model 42)}})]
     (is (= :completed (:status run)) (pr-str (:error run)))
@@ -134,7 +134,7 @@
           run (k/run! parent nil
                       {:limits {:evals 0}
                        :model-transports
-                       {:parent (eval-model "(+ 1 2)" nil)}})]
+                       {:parent (eval-model "(+ 1 2)")}})]
       (is (= :failed (:status run)))
       (is (= :budget (get-in run [:error :kind])))))
   (testing "JVM objects do not leak to the model"
@@ -144,7 +144,7 @@
                            :output any?})
           run (k/run! parent nil
                       {:model-transports
-                       {:parent (eval-model "(Object.)" nil)}})]
+                       {:parent (eval-model "(Object.)")}})]
       (is (= :failed (:status run)))
       (is (= :evaluation (get-in run [:error :kind])))
       (is (= :output (get-in run [:error :phase]))))))
@@ -160,10 +160,10 @@
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
                          :output map?})
-        run (k/run! parent nil
+        run (k/run! parent {:task "work"}
                     {:context {:request-id "r1"}
                      :model-transports
-                     {:parent (eval-model code {:task "work"})
+                     {:parent (eval-model code)
                       :child (scripted-model
                               {:type :final :output {:seen "work"}})}})]
     (is (= :completed (:status run)) (pr-str (:error run)))
@@ -180,10 +180,10 @@
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
                          :output string?})
-        run (k/run! parent nil
+        run (k/run! parent "work"
                     {:limits {:parallelism 1}
                      :model-transports
-                     {:parent (eval-model code "work")
+                     {:parent (eval-model code)
                       :child (scripted-model "unused")}})]
     ;; eval occupies the one concurrent slot, so its attempted Agent call
     ;; returns a failed Run map instead of escaping the active run.

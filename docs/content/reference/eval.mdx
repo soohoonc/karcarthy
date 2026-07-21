@@ -8,9 +8,8 @@ description: Input, namespace, events, limits, and result rules for model-author
 ```clojure
 {:type "object"
  :properties
- {"code" {:type "string"}
-  "input" {}}
- :required ["code" "input"]
+ {"code" {:type "string"}}
+ :required ["code"]
  :additionalProperties false}
 ```
 
@@ -23,7 +22,7 @@ rejected.
 1. Consume one unit from the run's `:evals` limit.
 2. Read one expression with `*read-eval*` false.
 3. Recursively macroexpand executable positions while preserving quoted data.
-4. Evaluate it with `input` and the available Tools and Agents bound.
+4. Evaluate it with the current Agent `input` and available Tools and Agents bound.
 5. Normalize the final value for the model transport.
 
 ## Events

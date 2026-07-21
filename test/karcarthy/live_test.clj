@@ -78,7 +78,7 @@
        "Exercise every requested harness feature before answering. "
        "First call static-stamp with text static. "
        "Then call static-specialist with input static. "
-       "Then call eval exactly once with input dynamic and this exact code: "
+       "Then call eval exactly once with this exact code: "
        dynamic-code " "
        "Only after all three calls succeed, return exactly LIVE-FEATURES-OK.")
       :tools [static-stamp]

@@ -586,9 +586,10 @@
     (is (str/includes? description "(run! agent-value agent-input)"))
     (is (str/includes? description "`uppercase`"))
     (is (str/includes? description "`specialist`"))
-    (is (= ["code" "input"]
+    (is (= ["code"]
            (get-in eval-tool [:parameters :required])))
-    (is (nil? (get-in eval-tool [:parameters :properties "input" :type])))))
+    (is (= #{"code"}
+           (set (keys (get-in eval-tool [:parameters :properties])))))))
 
 (deftest guardrails-reject
   (let [agent (k/agent {:name "guarded"

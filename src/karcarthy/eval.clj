@@ -13,9 +13,8 @@
   {:type "object"
    :properties
    {"code" {:type "string"
-            :description "Exactly one complete Clojure expression to evaluate."}
-    "input" {:description "A value bound to `input` during evaluation."}}
-   :required ["code" "input"]
+            :description "Exactly one complete Clojure expression to evaluate."}}
+   :required ["code"]
    :additionalProperties false})
 
 (def ^:private description-template
@@ -32,7 +31,7 @@ is needed.
 ## Tool input
 
 - `code` is exactly one complete Clojure expression, without Markdown fences.
-- `input` is bound to the symbol `input` while that expression is evaluated.
+- The current Agent input is already bound to the symbol `input`.
 
 ## Creating an Agent
 
@@ -275,10 +274,11 @@ Use the model configuration listed below in place of the example's model value.
            {:class (.getName (class value))})))
 
 (defn ^:no-doc eval-in-run!
-  "Evaluate one Clojure expression in `rt`, with `input` lexically available."
-  [rt code input]
+  "Evaluate one Clojure expression in `rt`, with Agent input available."
+  [rt code]
   (run/consume! rt :evals 1)
-  (let [ordinal (swap! (:eval-counter rt) inc)
+  (let [input (:agent-input rt)
+        ordinal (swap! (:eval-counter rt) inc)
         rt (assoc rt :eval-namespace
                   (symbol (str (:eval-namespace rt) ".expr_" ordinal)))
         started (System/nanoTime)]
@@ -332,5 +332,5 @@ Use the model configuration listed below in place of the example's model value.
       :approval :never}
      '(eval)
      '(karcarthy.eval/eval-tool)
-     (fn [rt {:keys [code input]}]
-       (eval-in-run! (assoc rt :eval-bindings bindings) code input)))))
+     (fn [rt {:keys [code]}]
+       (eval-in-run! (assoc rt :eval-bindings bindings) code)))))

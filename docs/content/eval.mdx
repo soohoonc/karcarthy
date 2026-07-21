@@ -6,12 +6,12 @@ description: Let an Agent write and evaluate a Clojure workflow in the current r
 Every Agent receives one built-in `eval` Tool:
 
 ```clojure
-{:code "(+ 1 2)"
- :input nil}
+{:code "(+ 1 2)"}
 ```
 
 `code` must contain exactly one Clojure expression. The expression can contain
-as many nested forms as it needs. `input` is bound to the symbol `input`.
+as many nested forms as it needs. The current Agent input is automatically bound
+to the symbol `input`.
 
 ## Create and run Agents
 

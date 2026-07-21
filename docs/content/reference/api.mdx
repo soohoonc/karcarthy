@@ -172,7 +172,8 @@ instructions; karcarthy does not add a base prompt.
 ## Eval
 
 Eval is deliberately model-facing rather than a separate public compiler API.
-Every Agent receives the `eval` Tool with `{:code string :input value}`. Code
+Every Agent receives the `eval` Tool with `{:code string}`. The current Agent
+input is bound to `input` inside the expression. Code
 can use `agent`, `defagent`, `tool`, `deftool`, `run!`, `context`, `definition`,
 and `expansion`. See [Eval reference](/docs/reference/eval).
 
