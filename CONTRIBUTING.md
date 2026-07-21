@@ -21,15 +21,16 @@ pure and offline-testable.
 
 ## Architectural rules
 
-- Add Agent and Tool behavior to the small harness kernel in
-  `src/karcarthy/core.clj`.
+- Keep construction, schemas, and execution in their direct namespaces:
+  `karcarthy.agent`, `karcarthy.tool`, `karcarthy.schema`, and
+  `karcarthy.run`.
 - A provider integration is a narrow normalized model transport. It must not
   run Tools or Agents.
 - Use normal Clojure for orchestration. Do not add workflow node constructors
   or an interpreter.
 - Generated behavior goes through `karcarthy.eval`: read with reader evaluation
-  disabled, expand, evaluate, verify `agent?`, and emit program events.
-- Add contracts and structured failures at every new effect boundary.
+  disabled, expand, evaluate, normalize the result, and emit eval events.
+- Validate every new effect boundary and return structured failures.
 - Add event coverage for behavior that matters to replay or evaluation.
 - Preserve source and expanded forms.
 - Add tests and register new test namespaces in
@@ -37,6 +38,6 @@ pure and offline-testable.
 
 ## Pull requests
 
-Explain the behavior change, why it belongs in the kernel, the events and
+Explain the behavior change, why it belongs in the harness, the events and
 failure modes it introduces, and how it was verified. Keep unrelated edits out
 of the branch.

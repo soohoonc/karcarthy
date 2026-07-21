@@ -4,26 +4,25 @@ Report vulnerabilities privately through GitHub's security advisory mechanism
 for this repository. Do not open a public issue for an undisclosed
 vulnerability. Include reproduction steps and the affected commit.
 
-## Generated Clojure is executable code
+## Model-authored Clojure is executable code
 
-karcarthy intentionally evaluates model-authored Clojure. `read-agent-form`
-binds `*read-eval*` to false so the reader cannot execute `#=` forms, but
-`eval-agent-form!` later evaluates the checked form as JVM Clojure. In the
-default full-trust mode it can access everything available to its evaluation
-namespace and process.
+karcarthy intentionally evaluates model-authored Clojure. The `eval` Tool reads
+exactly one expression with `*read-eval*` false, so the reader cannot execute
+`#=` forms. It then evaluates the expression as JVM Clojure. In the default
+full-trust mode it can access everything available to its evaluation namespace
+and process.
 
-Treat generated source as trusted code. Every model Agent has this evaluation
-capability; calling `compile-agent!` from a Clojure Agent program does the
-same. Do not run one when the process contains capabilities
-the source must not exercise. Applications needing isolation should place the
+Treat model-authored source as trusted code. Every model Agent has this
+evaluation capability. Do not run one when the process contains capabilities
+the code must not exercise. Applications needing isolation should place the
 entire harness in a process, container, VM, restricted classloader, or a future
-alternate evaluation policy. Do not mistake macroexpansion or contracts for a
+alternate evaluation policy. Do not mistake macroexpansion or schemas for a
 security sandbox.
 
 ## Tools and context
 
 Tools execute application Clojure with access to the current Run's local context.
-Use narrow context values, input/output contracts, `:enabled?`, guardrails,
+Use narrow context values, input/output schemas, `:enabled?`, guardrails,
 approval, timeouts, and least-privilege credentials. Approval is currently a
 synchronous allow/deny decision; durable suspension is not implemented.
 
@@ -59,5 +58,5 @@ credentials and must not be recorded in events or logs.
 
 ## Denial of service
 
-Always configure appropriate model-call, token, Agent-form, depth, parallelism,
-cancellation, and deadline limits for recursively generated code.
+Always configure appropriate model-call, token, eval, depth, parallelism,
+cancellation, and deadline limits for recursively authored code.

@@ -1,17 +1,24 @@
-{;; defagent / defsubagent / defworkflow define a var from their first symbol.
- :lint-as {karcarthy.core/defagent           clj-kondo.lint-as/def-catch-all
-           karcarthy.core/defsubagent        clj-kondo.lint-as/def-catch-all
-           karcarthy.orchestrate/defworkflow clj-kondo.lint-as/def-catch-all
-           karcarthy/defagent                clj-kondo.lint-as/def-catch-all
-           karcarthy/defsubagent             clj-kondo.lint-as/def-catch-all
-           karcarthy/defworkflow             clj-kondo.lint-as/def-catch-all}
+{;; Construction macros retain their source forms, so lint equivalent ordinary
+ ;; forms instead of expanding their implementation details.
+ :hooks {:analyze-call
+         {karcarthy/agent          hooks.karcarthy/agent
+          karcarthy.agent/agent    hooks.karcarthy/agent
+          karcarthy/defagent       hooks.karcarthy/defagent
+          karcarthy.agent/defagent hooks.karcarthy/defagent
+          karcarthy/tool           hooks.karcarthy/tool
+          karcarthy.tool/tool      hooks.karcarthy/tool
+          karcarthy/deftool        hooks.karcarthy/deftool
+          karcarthy.tool/deftool   hooks.karcarthy/deftool}}
 
- ;; The facade builds its vars at load time with a private `export` macro,
- ;; which clj-kondo cannot see.
- :linters {:unresolved-var {:exclude [karcarthy]}}
-
- ;; `map`, `iterate`, `bind`, and `config` are excluded on purpose as
- ;; tombstones for removed legacy DSL names (pinned by
- ;; facade-hides-low-level-execution-apis), not because they are shadowed.
- :config-in-ns {karcarthy             {:linters {:unused-excluded-var {:level :off}}}
-                karcarthy.orchestrate {:linters {:unused-excluded-var {:level :off}}}}}
+ ;; Examples are intentionally organized as task folders with `main.clj`
+ ;; entry points and loaded by the repository example dispatcher.
+ :config-in-ns {example.architect
+                {:linters {:namespace-name-mismatch {:level :off}}}
+                example.basic
+                {:linters {:namespace-name-mismatch {:level :off}}}
+                example.chat
+                {:linters {:namespace-name-mismatch {:level :off}}}
+                example.coding
+                {:linters {:namespace-name-mismatch {:level :off}}}
+                example.composition
+                {:linters {:namespace-name-mismatch {:level :off}}}}}

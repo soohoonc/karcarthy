@@ -1,10 +1,10 @@
 (ns karcarthy.mcp
   "Minimal MCP 2025-11-25 stdio client. It discovers server Tools and adapts
   them into ordinary karcarthy Tools; the model loop stays unchanged."
-  (:refer-clojure :exclude [tools])
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [karcarthy.core :as core])
+            [karcarthy.schema :as schema]
+            [karcarthy.tool :as tool])
   (:import [java.io BufferedReader BufferedWriter File InputStreamReader OutputStreamWriter]
            [java.nio.charset StandardCharsets]
            [java.security MessageDigest]
@@ -34,13 +34,13 @@
       (swap! (:pending connection) dissoc id)
       (cond
         (= ::timeout message)
-        (core/fail! :mcp :timeout "MCP request timed out"
+        (schema/fail! :mcp :timeout "MCP request timed out"
                     {:server (:name connection)
                      :method method
                      :timeout-ms timeout-ms})
 
         (:error message)
-        (core/fail! :mcp :response
+        (schema/fail! :mcp :response
                     (or (get-in message [:error :message])
                         "MCP request failed")
                     {:server (:name connection)
@@ -138,12 +138,12 @@
   :cwd string}`. The command is executed directly, never through a shell."
   [{:keys [name command args env timeout-ms cwd] :as config}]
   (when-not (and (string? command) (not (str/blank? command)))
-    (core/fail! :contract :configuration
+    (schema/fail! :schema :configuration
                 "MCP stdio config requires :command"
                 {:config (dissoc config :env)}))
   (let [directory (when cwd (File. (str cwd)))
         _ (when (and directory (not (.isDirectory directory)))
-            (core/fail! :contract :configuration
+            (schema/fail! :schema :configuration
                         "MCP :cwd must be an existing directory"
                         {:cwd (str cwd)}))
         name (or name command)
@@ -187,7 +187,7 @@
                                     :title "karcarthy"
                                     :version "0.0.2"}})]
         (when-not (= protocol-version (:protocolVersion initialized))
-          (core/fail! :mcp :initialize
+          (schema/fail! :mcp :initialize
                       "MCP server selected an unsupported protocol version"
                       {:requested protocol-version
                        :selected (:protocolVersion initialized)}))
@@ -243,11 +243,12 @@
 (defn tools
   "Adapt every discovered MCP Tool into an ordinary karcarthy Tool.
 
-  Unknown MCP servers require approval by default. Set `:approval :never` only
-  for a server whose command and tool implementations you trust."
+  Unknown MCP servers require approval by default. Set
+  `:needs-approval :never` only for a server whose command and Tool
+  implementations you trust."
   ([connection] (tools connection {}))
-  ([connection {:keys [prefix approval]
-                :or {approval :always}}]
+  ([connection {:keys [prefix needs-approval]
+                :or {needs-approval :always}}]
    (let [definitions (definitions connection)
          prefix (-> (or prefix
                         (str "mcp_" (safe-name (:name connection)) "__"))
@@ -263,18 +264,14 @@
                                        (> (get frequencies base 0) 1))
               input-schema (or (:inputSchema definition)
                                {:type "object" :additionalProperties false})]
-          (core/make-tool
+          (tool/make-tool
            {:name local-name
             :description
             (str "MCP " (:name connection) "/" remote-name ": "
                  (or (:description definition) "No description provided."))
-            :input input-schema
             :input-schema input-schema
-            :output any?
-            :approval approval
-            :metadata {:mcp/server (:name connection)
-                       :mcp/tool remote-name
-                       :mcp/annotations (:annotations definition)}}
+            :output-schema any?
+            :needs-approval needs-approval}
            `(karcarthy.mcp/tool ~(:name connection) ~remote-name)
            nil
            (fn [_ arguments]

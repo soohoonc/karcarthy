@@ -67,7 +67,7 @@
                :usage {:input-tokens 3 :output-tokens 1}})))}}
       :instructions "Exercise the session MCP tool."
       :tools mcp-tools
-      :output string?})))
+      :output-schema string?})))
 
 (defn resolved-agent-factory [_]
   nil)
@@ -106,7 +106,7 @@
             (acp/serve! {:agent factory
                          :models ["fake" "fake-2"]
                          :run-options
-                         {:observe (fn [event]
+                         {:on-event (fn [event]
                                      (swap! observed conj (:type event)))}
                          :in (.getInputStream socket)
                          :out (.getOutputStream socket)

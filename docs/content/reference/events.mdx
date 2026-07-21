@@ -1,68 +1,23 @@
 ---
 title: Event catalog
-description: Stable Run, Agent, model, Tool, Session, and program event names.
+description: Stable Run, Agent, model, Tool, Session, and eval event names.
 ---
 
 Every event contains `:karcarthy/type :event`, `:type`, `:time-ms`, and
 `:run-id`. Agent-scoped events also contain `:agent-id`, `:parent-id`, and
 `:depth`. Tool events add `:tool-call-id` where applicable.
 
-## Runs
-
-| Event | Emitted when |
+| Family | Events |
 | --- | --- |
-| `:run/started` | A root Run begins. |
-| `:run/completed` | The root Agent and output contract complete. |
-| `:run/failed` | The Run ends with a structured failure. |
-| `:run/cancelled` | Cancellation ends the Run. |
+| Run | `:run/started`, `:run/completed`, `:run/failed`, `:run/cancelled` |
+| Agent | `:agent/started`, `:agent/completed`, `:agent/failed` |
+| Model | `:model/requested`, `:model/text-delta`, `:model/tool-call-delta`, `:model/stream-event`, `:model/completed`, `:model/failed` |
+| Tool | `:tool/approval-requested`, `:tool/approval-resolved`, `:tool/approval-reused`, `:tool/started`, `:tool/completed`, `:tool/failed` |
+| Session | `:session/updated` |
+| Eval | `:eval/started`, `:eval/expanded`, `:eval/completed`, `:eval/failed` |
 
-## Agents
+Only the first `run!` emits Run lifecycle events. Participating Agent calls emit
+Agent, model, Tool, and eval events under the same `:run-id`.
 
-| Event | Emitted when |
-| --- | --- |
-| `:agent/started` | An Agent begins inside the Run. |
-| `:agent/completed` | Its output passes its contract. |
-| `:agent/failed` | It ends with a failure. |
-
-## Models
-
-| Event | Emitted when |
-| --- | --- |
-| `:model/requested` | The harness sends a normalized model request. |
-| `:model/text-delta` | Streaming model text arrives. |
-| `:model/tool-call-delta` | Streaming Tool-call data arrives. |
-| `:model/stream-event` | A transport exposes another streaming event. |
-| `:model/completed` | A final response or Tool calls arrive; includes reported usage. |
-| `:model/failed` | The model transport fails. |
-
-## Tools
-
-| Event | Emitted when |
-| --- | --- |
-| `:tool/approval-requested` | A Tool call requires a decision. |
-| `:tool/approval-resolved` | The approval handler returns. |
-| `:tool/approval-reused` | A prior once-per-Run approval applies. |
-| `:tool/started` | Tool execution begins. |
-| `:tool/completed` | Tool output passes its contract. |
-| `:tool/failed` | Approval, execution, or output validation fails. |
-
-## Sessions
-
-| Event | Emitted when |
-| --- | --- |
-| `:session/updated` | A root model conversation is appended to its Session. |
-
-## Generated programs
-
-| Event | Emitted when |
-| --- | --- |
-| `:program/read` | Runtime Agent source enters the read phase. |
-| `:program/expanded` | One `agent` form is read and macroexpanded. |
-| `:program/checked` | The expansion passes structural checks. |
-| `:program/evaluated` | Evaluation produces an Agent value. |
-| `:program/failed` | A compiler phase fails; includes `:phase` and `:error`. |
-
-Use `(k/events run)` for the retained vector or pass an observer through
-`:observe` to consume events live. [Events and monitoring](/docs/events)
-explains the execution model; [Run data](/docs/reference/data) documents the
-surrounding values.
+Use `(k/events result)` for the retained vector or pass `:on-event` to consume
+events live. See [Eval reference](/docs/reference/eval) for eval event fields.

@@ -1,6 +1,6 @@
 (ns karcarthy.monitor-test
   (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is]]
             [karcarthy :as k])
   (:import [java.io StringWriter]))
 
@@ -31,22 +31,15 @@
    (event :tool/started {:agent-id "agent_parent"
                          :parent-id nil
                          :depth 0
-                         :tool "agent"
-                         :tool-call-id "call_agent"})
-   (event :program/read {:agent-id "agent_parent"
+                         :tool "eval"
+                         :tool-call-id "call_eval"})
+   (event :eval/started {:agent-id "agent_parent"
                          :parent-id nil
                          :depth 0
-                         :source "(agent {:name \"child\" ...})"})
-   (event :program/expanded {:agent-id "agent_parent"
-                             :parent-id nil
-                             :depth 0})
-   (event :program/checked {:agent-id "agent_parent"
-                            :parent-id nil
-                            :depth 0})
-   (event :program/evaluated {:agent-id "agent_parent"
-                              :parent-id nil
-                              :depth 0
-                              :agent "child"})
+                         :code "(run! child input)"})
+   (event :eval/expanded {:agent-id "agent_parent"
+                          :parent-id nil
+                          :depth 0})
    (event :agent/started {:agent-id "agent_child"
                           :parent-id "agent_parent"
                           :depth 1
@@ -68,8 +61,8 @@
    (event :tool/completed {:agent-id "agent_parent"
                            :parent-id nil
                            :depth 0
-                           :tool "agent"
-                           :tool-call-id "call_agent"})
+                           :tool "eval"
+                           :tool-call-id "call_eval"})
    (event :agent/completed {:agent-id "agent_parent"
                             :parent-id nil
                             :depth 0
@@ -89,14 +82,13 @@
           view (view monitor)]
       (is (= :monitor-snapshot (:karcarthy/type snapshot)))
       (is (= :running (:status run)))
-      (is (= 1 (:agent-forms run)))
-      (is (= ["child"] (:created-agents run)))
+      (is (= 1 (:evals run)))
       (is (= "agent_parent"
              (get-in run [:agents "agent_child" :parent-id])))
       (is (str/includes?
            view
-           "Run run_123 · running · 0s · 2 model calls · 15 tokens · 1 Agent form"))
-      (is (str/includes? view "└─ parent · waiting for 1 Agent"))
+           "Run run_123 · running · 0s · 2 model calls · 15 tokens · 1 eval"))
+      (is (str/includes? view "└─ parent · waiting for Agent"))
       (is (str/includes? view "   └─ child · calling model")))
     (doseq [event finish-events] (monitor event))
     (let [run (get-in @monitor [:runs "run_123"])

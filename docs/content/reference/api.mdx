@@ -7,6 +7,22 @@ description: Public symbols available through the karcarthy namespace.
 (require '[karcarthy :as k])
 ```
 
+The facade is the normal entry point. Smaller direct namespaces are also
+available for libraries that prefer explicit dependencies:
+
+```clojure
+karcarthy.agent
+karcarthy.tool
+karcarthy.run
+karcarthy.schema
+karcarthy.eval
+karcarthy.session
+karcarthy.monitor
+karcarthy.model.responses
+karcarthy.mcp
+karcarthy.acp
+```
+
 ## `agent` and `defagent`
 
 ```clojure
@@ -22,32 +38,43 @@ require `:model` and `:instructions`.
 ```clojure
 {:name "researcher"
  :description "Research one question."
- :model {:transport :responses :id "gpt-5.6"}
+ :model "gpt-5.6"
  :instructions "Research carefully."
- :context map?
- :input string?
- :input-schema {...}
+ :context-schema map?
+ :input-schema string?
  :tools [search-tool]
  :agents [fact-checker]
- :output ::report
- :output-schema {...}
+ :output-schema ::report
  :max-turns 20
- :stop-when final-acceptable?
- :guardrails {:input [safe?] :output [grounded?]}
- :limits {:model-calls 30}
- :metadata {...}}
+ :input-guardrails [safe?]
+ :output-guardrails [grounded?]
+ :limits {:model-calls 30}}
 ```
 
 `:model`, `:instructions`, `:tools`, and `:agents` may be functions of the
-current call metadata. Instructions must resolve to a string and are appended
-to the packaged base system prompt automatically.
+current run context. Instructions must resolve to a string and are sent to
+the model exactly as returned; karcarthy does not prepend a framework prompt.
 
-`:agents` makes those Agents callable by the model. An object-shaped
-`:input-schema` or `:input` becomes the callable schema; otherwise the model
-calls the Agent with `{"input": ...}`.
+The run-context value passed to dynamic configuration and guardrails is:
 
-Every model Agent may submit a new Clojure `agent` form and run the resulting
-Agent inside the current Run.
+```clojure
+{:run-id "run_..."
+ :agent-id "agent_..."
+ :parent-id nil
+ :depth 0
+ :context {...}
+ :limits {...}
+ :usage {...}
+ :agent agent-value}
+```
+
+`:agents` makes those Agents callable by the model using the Agent-as-Tool
+pattern. It does not create a hierarchy or transfer the conversation.
+An object-shaped `:input-schema` becomes the callable schema; otherwise the
+model calls the Agent with `{"input": ...}`.
+
+Every model Agent receives an `eval` Tool for one Clojure expression. The
+expression may create Agents and Tools and call `run!`.
 
 ```clojure
 (k/agent? value)
@@ -65,10 +92,12 @@ experiments. They are not needed to run an Agent.
 (k/deftool name config [input] body ...)
 ```
 
-A Tool requires `:name`, `:description`, and `:input`; `deftool` supplies the
-name. Optional keys are `:input-schema`, `:output`, `:output-schema`,
-`:approval`, `:enabled?`, `:guardrails`, `:timeout-ms`, `:retry`,
-`:to-model-output`, and `:metadata`.
+A Tool requires `:name`, `:description`, and `:input-schema`; `deftool`
+supplies the name. Optional keys are `:output-schema`, `:needs-approval`,
+`:input-guardrails`, `:output-guardrails`, and `:to-model-output`.
+
+Guardrails receive `[run-context value]`. `:needs-approval` accepts `:never`,
+`:once`, `:always`, a boolean, or a function of `[run-context input]`.
 
 ```clojure
 (k/tool? value)
@@ -81,7 +110,9 @@ name. Optional keys are `:input-schema`, `:output`, `:output-schema`,
 (k/run! agent input options)
 ```
 
-Starts a Run, waits for it to finish, and returns its complete result.
+Runs an Agent, waits for it to finish, and returns a Run map. The first call in
+a dynamic call chain establishes a run. Calls made during that dynamic extent
+participate in it and return the same shape with the same `:id`.
 
 ```clojure
 {:context {...}
@@ -90,18 +121,17 @@ Starts a Run, waits for it to finish, and returns its complete result.
           :input-tokens 1000000
           :output-tokens 100000
           :depth 8
-          :parallelism 6
-          :agent-forms 20
+          :concurrency 6
+          :evals 20
           :deadline-ms 300000}
- :observe event-fn
+ :on-event event-fn
  :approval approval-handler
  :cancel cancellation-token
- :metadata {...}
- :model-transports {...}
- :evaluation-namespace 'example.generated}
+ :model-transports {...}}
 ```
 
-`context` returns the current Run's local dependency value from a Tool:
+`context` returns the current Run's local dependency value from a Tool or
+evaluated expression:
 
 ```clojure
 (k/context)
@@ -117,8 +147,8 @@ Starts a Run, waits for it to finish, and returns its complete result.
 (k/monitor-state live)
 ```
 
-A Run monitor is both an event observer and a printable value. Pass it as
-`run!`'s `:observe` option. Passing it back to `monitor` shows the latest tree;
+A Run monitor is both an event handler and a printable value. Pass it as
+`run!`'s `:on-event` option. Passing it back to `monitor` shows the latest tree;
 `monitor-state` returns data for every Run it has seen. `:display :tree`
 redraws a live terminal tree; omit it for a silent monitor. The tree refreshes
 elapsed time once per second and adds model usage when each call completes.
@@ -147,29 +177,29 @@ See [Events: Watch Runs live](/docs/events#watch-runs-live).
 
 ```clojure
 (k/prompt "Base instructions" (k/prompt-file "AGENTS.md"))
-(k/system-prompt)
 ```
 
-`prompt` joins strings and call-metadata functions. `prompt-file` reads UTF-8
-text. `system-prompt` reads `resources/karcarthy/system.md`; karcarthy already
-prepends that file to every model Agent, so applications normally use the
-function only to inspect it or for explicit prompt composition.
+`prompt` joins strings and run-context functions. `prompt-file` reads UTF-8
+text. The resulting string becomes the Agent's complete model-visible
+instructions; karcarthy does not add a base prompt.
 
-## Agent forms
+## Eval
 
-```clojure
-(def form (k/read-agent-form source))
-(def checked (k/check-agent-form! form))
-(def generated (k/eval-agent-form! checked))
-
-;; Read, expand, evaluate, and verify in one call:
-(def generated (k/compile-agent! source))
-```
-
-These functions must run inside a Run because compilation is charged to that
-Run. See [Agent forms](/docs/reference/agent-forms).
+Eval is deliberately model-facing rather than a separate public compiler API.
+Every Agent receives the `eval` Tool with `{:code string}`. The current Agent
+input is bound to `input` inside the expression. Code
+can use `agent`, `defagent`, `tool`, `deftool`, `run!`, `context`, `definition`,
+and `expansion`. See [Eval reference](/docs/reference/eval).
 
 ## Models
+
+The concise form selects OpenAI Responses:
+
+```clojure
+"gpt-5.6"
+```
+
+The advanced form is:
 
 ```clojure
 {:transport :responses
@@ -230,19 +260,19 @@ Or provide an Agent factory:
              :model {:transport :responses :id model-id}
              :instructions "Complete the coding request."
              :tools (k/local-tools {:cwd cwd})
-             :output string?}))})
+             :output-schema string?}))})
 ```
 
 Client-provided MCP Tools are appended automatically. See [ACP server](/docs/protocols/acp) for
 the complete session factory and supported protocol surface.
 
-## Events and contracts
+## Events and schema validation
 
 ```clojure
 (k/emit! {:type :application/decision :value value})
 (k/events run)
 
-(k/contract-valid? contract value)
-(k/explain-contract contract value)
-(k/contract->json-schema contract)
+(k/schema-valid? schema value)
+(k/explain-schema schema value)
+(k/schema->json-schema schema)
 ```

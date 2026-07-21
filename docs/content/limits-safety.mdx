@@ -1,12 +1,7 @@
 ---
 title: Limits and safety
-description: Bound a Run and understand the authority of generated code and Tools.
+description: Bound a run and understand the authority of eval and Tools.
 ---
-
-Runs combine model calls, Tool effects, concurrency, and generated JVM code. A
-Run should state the resources and authority available to that work.
-
-## Bound the Run
 
 ```clojure
 (k/run! agent input
@@ -14,42 +9,41 @@ Run should state the resources and authority available to that work.
                   :input-tokens 500000
                   :output-tokens 50000
                   :depth 4
-                  :parallelism 4
-                  :agent-forms 8
+                  :concurrency 4
+                  :evals 8
                   :deadline-ms 300000}})
 ```
 
-Nested Agents created through `:agents` or the built-in `agent` Tool consume
-the same budgets. A separate `run!` call creates a separate Run and separate
-limits.
+All `run!` calls made during the first call's dynamic extent share these
+budgets. Agent-specific and participating-call limits may narrow them, never
+widen them.
 
 | Limit | Bounds |
 | --- | --- |
-| `:model-calls` | Completed and attempted model turns |
+| `:model-calls` | Attempted model turns |
 | `:input-tokens` / `:output-tokens` | Reported model usage |
-| `:depth` | Nested Agent calls |
-| `:parallelism` | Concurrent nested work |
-| `:agent-forms` | Submitted runtime Agent forms, including failed attempts |
-| `:deadline-ms` | Wall-clock time for the Run |
+| `:depth` | Participating Agent call depth |
+| `:concurrency` | Concurrent Tool and dynamically started Agent work |
+| `:evals` | Eval attempts, including failed attempts |
+| `:deadline-ms` | Wall-clock time from the first `run!` |
 
-## Cancel work
+## Cancellation and approvals
 
-Pass a cancellation token through `:cancel`. Cancellation propagates through
-the current Run and produces a cancelled Run result with its events retained.
+Pass a function, atom, or dereferenceable value through `:cancel`. Cancellation
+is checked throughout the run and produces a cancelled Run with events retained.
 
-## Approve effects
+Tools may request approval on every call or once per run. Without an approval
+handler, required approval fails closed. Approval controls Tool calls; it does
+not reduce the operating-system authority of the implementing process.
 
-Tools may require approval on every call or once per Run. Without an approval
-handler, a required approval fails closed. Approval controls Tool calls; it
-does not reduce the operating-system authority of the process that implements
-the Tool.
+## Eval is trusted code
 
-## Generated source is trusted code
+karcarthy reads exactly one expression with reader evaluation disabled. It then
+evaluates that expression as JVM Clojure. The single-expression rule creates a
+clear protocol boundary; it is not a security boundary. `(do ...)` can contain
+arbitrary operations.
 
-Reader evaluation is disabled while source is read, and karcarthy requires one
-valid Agent form. The checked form is then evaluated as JVM Clojure. These
-checks prevent malformed Agent submissions; they are not a sandbox.
-
-Run untrusted generation in an isolated process with restricted filesystem,
+Use `eval` only for code trusted with the host JVM's permissions. For untrusted
+generation, isolate the entire application process and restrict filesystem,
 network, credentials, and namespaces. MCP servers and shell Tools require the
-same treatment: they execute with the authority of their processes.
+same treatment.

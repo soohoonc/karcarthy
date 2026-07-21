@@ -10,31 +10,32 @@ All notable changes are documented here, following
 
 - A native Clojure Agent/Tool harness with dynamic instructions, local context,
   optional Sessions, approvals, limits, cancellation, and events.
-- Homoiconic `agent` forms: every model Agent can write and run the same Agent
-  form a developer would write.
-- A complete, dynamically generated `agent` Tool manual covering the Clojure
-  grammar, use and non-use cases, information boundary, execution behavior,
+- Homoiconic `eval`: every model Agent can evaluate one ordinary Clojure
+  expression that may create and run Agents.
+- A complete, dynamically generated `eval` Tool manual covering the Clojure
+  expression boundary, use cases, information boundary, execution behavior,
   and the model, Tool, and Agent symbols actually available.
-- First-class `:agents`, which makes known specialists available to a parent
-  model without a public Agent-to-Tool adapter.
+- First-class `:agents`, which makes existing Agents callable through the
+  established Agent-as-Tool pattern without introducing a hierarchy.
 - Model-authored Clojure reading, full executable-position macroexpansion,
-  evaluation, Agent verification, recursive execution, and program events.
+  same-process evaluation, recursive Agent execution, and eval events.
 - A Responses-compatible HTTP/SSE transport with configurable endpoint,
   authentication environment, headers, model IDs, normalized streaming
   deltas, and a deterministic in-process mock model transport.
 - Minimal local `read`, `write`, `edit`, `bash`, and ripgrep-backed `search`
-  Tools plus generic `prompt`, `prompt-file`, and `system-prompt` composition.
+  Tools plus generic `prompt` and `prompt-file` composition.
 - Responses-hosted web search as an explicit endpoint capability.
 - An MCP 2025-11-25 stdio client that discovers and adapts remote tools.
 - An ACP v1 stdio server with sessions, permissions, cancellation, tool-call
   updates, streaming Agent-message chunks, per-session conversation history,
   session-provided stdio MCP servers, selectable model configuration, and
   aggregate prompt usage compatible with Harbor's ACP-to-ATIF conversion.
-- An explicit paid live test that asks GPT-5.6 to author and run a new Agent.
+- An explicit paid live test that asks GPT-5.6 to author and run a concurrent
+  Clojure workflow.
 - A paid Agent test that inspects and edits a temporary directory.
 - A minimal REPL chat example built from an Agent, `run!`, and a Session.
 - Event-driven Run monitors that print current Agent state directly at the REPL
-  and can redraw live Run, Agent, model, Tool, and Agent-form activity as a
+  and can redraw live Run, Agent, model, Tool, and eval activity as a
   terminal tree with elapsed time and cumulative model usage. `monitor-state`
   exposes the underlying Clojure data explicitly.
 - A live Coding Agent that inspects repositories with local Tools, chooses its
@@ -44,8 +45,10 @@ All notable changes are documented here, following
 
 ### Changed
 
-- Agents are always model-backed. Fixed coordination is ordinary Clojure, and
-  runtime-generated Agent source accepts only `(agent config)`.
+- Agent and Tool configuration is flat on their maps; `assoc`, `update`, and
+  destructuring work without a hidden `:config` layer.
+- A model ID string is concise OpenAI Responses configuration; advanced model
+  maps remain available.
 - Renamed the deterministic test transport from `fake-model` to `mock-model`.
 - Documentation now presents karcarthy as an executable argument for Clojure:
   a thesis-led overview, a complete Quickstart, outcome-driven examples,
@@ -62,18 +65,27 @@ All notable changes are documented here, following
   separate workflow or child-call API.
 - Model-visible `:instructions` is distinct from local `:context`; local
   context is never exposed automatically.
-- The packaged `system.md` prompt is prepended automatically; Agent
-  `:instructions` extend it.
-- Generated Agents receive only the explicit `input` in the `agent` Tool call,
-  never the parent model's conversation or Session history.
+- Agent `:instructions` are the complete model-visible instructions; the
+  harness does not prepend a framework-owned system prompt.
+- Agent calls made by eval receive only explicit input, never the parent model's
+  conversation or Session history.
 - Conversation history follows the established Session abstraction. Runs are
   stateless unless supplied a Session; `memory-session` is the process-local
   implementation and applications may provide durable implementations.
-- Loop controls are top-level Agent options: `:max-turns` and `:stop-when`.
-- Agent input contracts may be paired with a model-facing `:input-schema` when
-  the Agent is available to another Agent.
-- Run limits use Lisp-native vocabulary: `:depth` bounds nested Agent calls and
-  `:agent-forms` bounds submitted runtime Agent forms.
+- Loop control is the top-level Agent option `:max-turns`.
+- Agent and Tool boundaries now use one `:input-schema` and optional
+  `:output-schema` for validation and model-facing JSON Schema derivation.
+- Tool approval uses the established `:needs-approval` name; input and output
+  guardrails use separate keys, and Run event callbacks use `:on-event`.
+- Removed unused Tool retry, enabled, timeout, and metadata configuration and
+  unused Agent and Run metadata configuration.
+- The first `run!` establishes a dynamically scoped run. Calls within it,
+  including calls in `future`, share its ID, usage, limits, events, context,
+  deadline, cancellation, approvals, and executor.
+- Run limits use Lisp-native vocabulary: `:depth` bounds participating Agent
+  calls and `:evals` bounds evaluation attempts.
+- Agent, Tool, Schema, and Run implementations now live in their direct
+  namespaces instead of a monolithic internal core.
 
 ### Removed
 
@@ -89,5 +101,8 @@ All notable changes are documented here, following
 - The placeholder `handoff!`, Agent `:hooks`, Run `:trace-id`, public
   `model-transport`, and generic conversation-state snapshots.
 - Public `as-tool` and the overloaded zero-argument `agent` form.
+- Public Agent-form compiler functions and the restricted built-in `agent`
+  Tool.
+- The automatic packaged `system.md` prompt and public `system-prompt` helper.
 
 [Unreleased]: https://github.com/soohoonc/karcarthy

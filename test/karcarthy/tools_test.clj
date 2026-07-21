@@ -1,7 +1,6 @@
 (ns karcarthy.tools-test
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is]]
             [karcarthy :as k]
             [karcarthy.tools :as tools])
   (:import [java.nio.file Files Path]
@@ -17,16 +16,6 @@
 
 (defn- by-name [tools name]
   (first (filter #(= name (:name %)) tools)))
-
-(deftest system-prompt-is-a-packaged-readable-resource
-  (let [resource (io/resource "karcarthy/system.md")]
-    (is (some? resource))
-    (when resource
-      (let [template (slurp resource)]
-        (is (re-find #"## Creating Agents" template))
-        (is (re-find #"## Working principles" template))
-        (is (= template (k/system-prompt)))
-        (is (not (re-find #"\{\{" template)))))))
 
 (deftest minimal-local-tools-work-together
   (let [root (temp-directory)]
@@ -90,16 +79,17 @@
                      (k/prompt-file (str (.resolve root "AGENTS.md")))
                      "Do not commit changes.")
                     :tools all-tools
-                    :input any?
-                    :output string?})
+                    :input-schema any?
+                    :output-schema string?})
             run (k/run! agent "inspect")]
         (is (= :completed (:status run)))
         (is (re-find #"Run the smallest relevant test"
                      (:instructions @seen)))
         (is (re-find #"Do not commit changes"
                      (:instructions @seen)))
-        (is (str/starts-with? (:instructions @seen) (k/system-prompt)))
-        (is (= #{"read" "write" "edit" "bash" "search" "agent"}
+        (is (= "Run the smallest relevant test.\n\nDo not commit changes."
+               (:instructions @seen)))
+        (is (= #{"read" "write" "edit" "bash" "search" "eval"}
                (->> (:tools @seen)
                     (filter #(= :function (:kind %)))
                     (map :name)

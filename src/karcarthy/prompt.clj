@@ -3,31 +3,6 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
-(defn- packaged-prompt [path]
-  (delay
-    (if-let [resource (io/resource path)]
-      (with-open [reader (io/reader resource :encoding "UTF-8")]
-        (slurp reader))
-      (throw (ex-info "Missing packaged prompt" {:resource path})))))
-
-(def ^:private packaged-system-prompt
-  (packaged-prompt "karcarthy/system.md"))
-
-(def ^:private packaged-agent-tool-prompt
-  (packaged-prompt "karcarthy/agent.md"))
-
-(defn system-prompt
-  "Return karcarthy's readable, packaged system.md prompt."
-  []
-  @packaged-system-prompt)
-
-(defn ^:no-doc agent-tool-prompt
-  [{:keys [model-configuration tools agents]}]
-  (-> @packaged-agent-tool-prompt
-      (str/replace "{{MODEL_CONFIGURATION}}" model-configuration)
-      (str/replace "{{AVAILABLE_TOOLS}}" tools)
-      (str/replace "{{AVAILABLE_AGENTS}}" agents)))
-
 (defn prompt-file
   "Read a UTF-8 prompt from a file."
   [path]

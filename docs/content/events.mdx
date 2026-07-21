@@ -1,148 +1,69 @@
 ---
 title: Events and monitoring
-description: Observe model output, Tool calls, generated Agents, and the live execution tree.
+description: Observe runs, Agent calls, model output, Tools, and eval.
 ---
 
-A Run records what happened. Pass `:observe` to receive the same events while
-it is happening:
+Pass an event handler to `run!`:
 
 ```clojure
-(def run
-  (k/run! agent prompt
-          {:observe
-           (fn [{:keys [type delta] :as event}]
-             (if (= type :model/text-delta)
-               (do (print delta) (flush))
-               (record-event! event)))}))
+(def seen (atom []))
+(def result
+  (k/run! assistant input {:on-event #(swap! seen conj %)}))
 ```
 
-The built-in Responses transport streams by default. `:model/text-delta` is
-the event to render for incremental model text. Other events report Agent,
-Tool, model, Session, and generated-program activity.
-
-## Watch Runs live
-
-A Run monitor turns those events into current state. Pass it directly as the
-observer:
+Or use the built-in live monitor:
 
 ```clojure
 (def live (k/monitor {:display :tree}))
-
-(def run
-  (k/run! architect task {:observe live}))
+(def result (k/run! assistant input {:on-event live}))
 ```
-
-`:display :tree` redraws the same terminal lines as events arrive:
 
 ```text
-Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
-└─ architect · waiting for 2 Agents
-   ├─ failure-analyst · calling model
-   └─ rollout-planner · calling model
+Run run_7c2e9b… · running · 18s · 6 model calls · 8,421 tokens · 2 evals
+└─ architect · waiting for Agent
+   └─ coordinator · waiting for Agents
+      ├─ failure-analyst · calling model
+      └─ rollout-planner · calling model
 ```
 
-The header shows current Run status, elapsed time, model-call count, cumulative
-input and output tokens, and submitted Agent forms. Elapsed time refreshes once
-per second even when no event arrives. Token totals update when a model call
-finishes because providers report usage with the completed response.
-
-The tree shows running, completed, and failed Agents; parent and child
-relationships; model calls; and active Tools. It does not print model text or
-Tool inputs and outputs.
-
-The monitor is also ordinary REPL state. Create it without `:display` when you
-want to inspect it manually:
-
-```clojure
-(def live (k/monitor))
-
-(def work
-  (future
-    (k/run! architect task {:observe live})))
-
-(k/monitor live)       ; show the current tree
-(k/monitor-state live) ; underlying Clojure data
-```
-
-The bundled `clojure -M:examples repl` also hides the unhelpful values returned
-by `require` and `def`, so pasted demo forms do not produce `nil` and
-`#'user/live` between the useful output.
-
-Running the Agent in a `future` leaves the REPL prompt free for manual
-inspection. A single monitor can observe several concurrent root Runs; it keeps
-them separate by Run ID.
-
-The live tree uses ANSI cursor movement. Use a monitor without `:display` in a
-console that does not support ANSI control sequences. Pass `:out` to render to
-another `java.io.Writer`:
-
-```clojure
-(k/monitor {:display :tree :out *err*})
-```
-
-If another observer is already installed, compose the functions:
-
-```clojure
-{:observe (juxt live record-event!)}
-```
+`(k/monitor live)` prints the latest view again. `(k/monitor-state live)`
+returns the event-derived data. One monitor may observe several runs.
 
 ## Event families
 
 ```clojure
 :run/started          :run/completed       :run/failed
 :run/cancelled
-
 :agent/started        :agent/completed     :agent/failed
-
-:model/requested      :model/text-delta    :model/tool-call-delta
-:model/stream-event   :model/completed     :model/failed
-
-:tool/approval-requested  :tool/approval-resolved  :tool/approval-reused
+:model/requested      :model/text-delta    :model/completed
+:model/failed
 :tool/started         :tool/completed      :tool/failed
-
 :session/updated
-
-:program/read         :program/expanded    :program/checked
-:program/evaluated    :program/failed
+:eval/started         :eval/expanded       :eval/completed
+:eval/failed
 ```
 
-Every event has a Run ID. Agent events also have an Agent ID, parent ID, and
-depth, so recursive and parallel children can be reconstructed as a tree. The
-[Event catalog](/docs/reference/events) defines each stable event name.
+All events carry `:run-id` and time. Agent-scoped events carry `:agent-id`,
+`:parent-id`, and `:depth`. Calls to `run!` that participate in an existing run
+appear as Agent branches under the same run ID; they do not emit another Run
+lifecycle.
 
-The `:program/*` family is narrower than its name may suggest: it describes the
-compiler lifecycle for dynamically submitted Clojure Agent source. It is not
-the lifecycle of every Agent Run. See [Agent forms: compiler
-events](/docs/reference/agent-forms#compiler-events) for each event's
-meaning and payload.
-
-## Inspect events after a Run
-
-The Run result contains the complete event vector. `events` works with the
-result directly:
+Eval's expanded event retains both the parsed expression and macroexpansion:
 
 ```clojure
-(k/events run)
-
-(->> (k/events run)
-     (filter #(= :tool/completed (:type %))))
+(->> (k/events result)
+     (filter #(= :eval/expanded (:type %)))
+     (map #(select-keys % [:expression :expansion :namespace])))
 ```
 
-Agent bodies and Tools may add application events with `emit!`:
+## Application events
+
+Tools and evaluated Clojure may emit domain events:
 
 ```clojure
 (k/emit! {:type :application/decision
-          :value decision})
+          :decision :retry})
 ```
 
-`emit!` adds the current Run and Agent lineage before recording and publishing
-the event.
-
-Agent-form compilation uses the `:program/*` family. See
-[Agent forms](/docs/reference/agent-forms) for those events.
-
-## Next
-
-- [Create agents at runtime](/docs/guides/architect) shows the live tree.
-- [Event catalog](/docs/reference/events) lists stable event names.
-- [Agent forms](/docs/reference/agent-forms) defines the compiler phases.
+karcarthy adds run and Agent lineage before storing and publishing the event.
+See the [event catalog](/docs/reference/events) for the stable names.

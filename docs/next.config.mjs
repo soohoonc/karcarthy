@@ -39,17 +39,17 @@ const config = {
       },
       {
         source: '/docs/reference/json',
-        destination: '/docs/reference/agent-forms',
+        destination: '/docs/reference/eval',
         permanent: true,
       },
       {
         source: '/docs/reference/generated-agents',
-        destination: '/docs/reference/agent-forms',
+        destination: '/docs/reference/eval',
         permanent: true,
       },
       {
         source: '/docs/reference/model-authored-agents',
-        destination: '/docs/reference/agent-forms',
+        destination: '/docs/reference/eval',
         permanent: true,
       },
       {

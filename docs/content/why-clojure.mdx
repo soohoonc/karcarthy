@@ -1,102 +1,92 @@
 ---
 title: Why Clojure?
-description: How forms, macros, and evaluation let an Agent add new Agents while it runs.
+description: Homoiconicity makes dynamic workflows ordinary code instead of graph data.
 ---
 
-karcarthy depends on a few properties that Clojure makes ordinary: programs
-can be read as data, macros receive their source forms, and evaluated forms
-become running code.
+Most agent libraries expose familiar primitives: an Agent, Tools, a run loop,
+conversation state, guardrails, and traces. karcarthy keeps that vocabulary.
+Clojure changes one boundary: when the right workflow is not known ahead of
+time, the model can produce code as data and the running program can evaluate
+it directly.
 
-The harness uses those properties to let an Agent add new Agents while it runs.
-
-## `agent` is a macro
-
-An Agent begins with a macro invocation:
+## Agents and Tools are plain data
 
 ```clojure
 (def reviewer
-  (k/agent
-   {:name "reviewer"
-    :model {:transport :responses :id "gpt-5.6"}
-    :instructions "Review the proposed change."
-    :input string?
-    :output string?}))
+  (k/agent {:name "reviewer"
+            :model "gpt-5.6"
+            :instructions "Review the proposed change."
+            :input-schema string?
+            :output-schema string?}))
+
+(:instructions reviewer)
+(assoc reviewer :instructions "Review only the API boundary.")
 ```
 
-The macro constructs an Agent value and retains both the original form and its
-expansion:
+`agent` is a macro so the value can retain its definition and expansion:
 
 ```clojure
 (k/definition reviewer)
 (k/expansion reviewer)
 ```
 
-The retained form shows exactly what was evaluated.
+The operational configuration remains flat on the map; there is no hidden
+`:config` layer.
 
-## A form can become a running Agent
+## The model writes an expression, not a node
 
-During a Run, the model can call the built-in `agent` Tool:
+The built-in `eval` Tool accepts only `code`; the current Agent input is already
+bound to `input`:
 
 ```clojure
-{:source
- "(agent
-    {:name \"reviewer\"
-     :model {:transport :responses :id \"gpt-5.6\"}
-     :instructions \"Review the proposed change.\"
-     :input string?
-     :output string?})"
- :input
- "Replace synchronous writes with a queue."}
+{:code
+ "(let [r (agent {:name \"reviewer\"
+                   :model \"gpt-5.6\"
+                   :instructions \"Review the change.\"
+                   :input-schema string?
+                   :output-schema string?})]
+    (:output (run! r input)))"}
 ```
 
-karcarthy processes the source as Clojure:
+The code may be any one Clojure expression. `let`, `if`, `mapv`, `future`,
+macros, recursion, Agent construction, Tool construction, and `run!` retain
+their normal meanings. That is stronger than accepting only an Agent-shaped
+form: the model can author the coordination itself.
+
+## Homoiconicity is doing real work
+
+The boundary is:
 
 ```text
-read one form
-  → expand the agent macro
-  → check the expansion
-  → evaluate the form
-  → verify the Agent value
-  → run the Agent
+source string → Clojure data → macroexpansion → value
 ```
 
-The source must contain exactly one top-level `agent` form. The resulting Agent
-runs inside the current Run, and its output returns to the parent as the Tool
-result.
+The parsed expression and expansion are emitted as `:eval/*` events. Agent and
+Tool macros retain their own source and expansion. Evaluation happens in the
+same JVM; orchestration does not launch a second Clojure process.
 
-## The program can extend itself
+The result is not durable continuation machinery or a workflow graph. It is
+the simpler Lisp claim: code is data, and that data can become code in the
+currently running process.
 
-A generated Agent is another Agent:
+## One run follows the code
+
+Clojure dynamic bindings are conveyed to `future`, so `run!` calls made by
+generated concurrent code participate in the existing run:
 
 ```clojure
-(agent
- {:name "researcher"
-  :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Research the assigned question."
-  :input string?
-  :output string?})
+(->> input
+     (mapv #(future (run! reviewer %)))
+     (mapv deref)
+     (mapv :output))
 ```
 
-The new Agent receives the built-in `agent` Tool and can create another one.
-The running program gains more behavior by evaluating more Clojure.
+Those calls share run limits, usage, events, cancellation, approvals, context,
+and the run ID. They do not inherit the parent Agent's model conversation.
 
-## Control flow stays in Clojure
+## Trust boundary
 
-Known coordination does not need another representation:
-
-```clojure
-(if high-risk?
-  (k/run! security-reviewer change)
-  (k/run! general-reviewer change))
-```
-
-```clojure
-(loop [attempt 1]
-  (let [run (k/run! reviewer change)]
-    (if (acceptable? run)
-      run
-      (recur (inc attempt)))))
-```
-
-karcarthy owns the model and Tool loop. Clojure owns branching, iteration,
-recursion, functions, macros, and concurrency.
+This is full-trust evaluation, not a sandbox. Use it only when the model and
+available bindings are trusted for the process. Reader evaluation is disabled,
+but evaluated Clojure can perform anything its namespace and JVM permissions
+allow.

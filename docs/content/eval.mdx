@@ -1,0 +1,91 @@
+---
+title: Dynamic eval
+description: Let an Agent write and evaluate a Clojure workflow in the current run.
+---
+
+Every Agent receives one built-in `eval` Tool:
+
+```clojure
+{:code "(+ 1 2)"}
+```
+
+`code` must contain exactly one Clojure expression. The expression can contain
+as many nested forms as it needs. The current Agent input is automatically bound
+to the symbol `input`.
+
+## Create and run Agents
+
+```clojure
+(let [analyst (agent {:name "analyst"
+                      :model "gpt-5.6"
+                      :instructions "Find a non-obvious risk."
+                      :input-schema string?
+                      :output-schema string?})]
+  (:output (run! analyst input)))
+```
+
+`run!` always returns a Run map. Use `:output`, `:status`, or `:error` like you
+would outside eval.
+
+## Compose dynamically
+
+```clojure
+(let [roles [{:name "risk" :instructions "Find a risk."}
+             {:name "plan" :instructions "Propose a rollout."}]
+      agents (mapv (fn [{:keys [name instructions]}]
+                     (agent {:name name
+                             :model "gpt-5.6"
+                             :instructions instructions
+                             :input-schema string?
+                             :output-schema string?}))
+                   roles)]
+  (->> agents
+       (mapv #(future (run! % input)))
+       (mapv deref)
+       (mapv :output)))
+```
+
+The same expression can choose roles from the input, stop early, retry, reduce
+results, create Tools, or let a model-authored Agent call `eval` recursively.
+
+## Available names
+
+The evaluation namespace refers Clojure core plus:
+
+- `agent`, `defagent`, `tool`, `deftool`
+- `run!`, `context`
+- `definition`, `expansion`
+- public vars from the Agent's definition namespace
+- Tools and Agents advertised in the `eval` Tool description
+
+Generated bindings receive stable Clojure symbols derived from their names.
+
+## Result boundary
+
+The expression's final value must be safe for a model transport: nil, strings,
+numbers, booleans, maps, or collections of those values. Keywords and symbols
+are converted to strings. Agent and Tool values become small tagged summaries.
+Functions, futures, streams, and arbitrary JVM objects are rejected instead of
+being leaked through implementation-specific printing.
+
+## Events and limits
+
+Each attempt consumes one `:evals` unit and emits:
+
+```clojure
+:eval/started
+:eval/expanded
+:eval/completed ; or :eval/failed
+```
+
+The expanded event retains the parsed expression and macroexpansion. See the
+[eval reference](/docs/reference/eval) for exact fields and failure behavior.
+
+## Same process, full trust
+
+Evaluation uses Clojure's evaluator in the existing JVM. It does not create a
+new Clojure process. A model transport can make HTTP requests and a Tool can
+explicitly start a process, but Agent creation and coordination stay in-process.
+
+This is not a security sandbox. Reader evaluation is disabled, but evaluated
+code has the permissions of the host JVM.

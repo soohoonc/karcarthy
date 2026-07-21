@@ -21,7 +21,7 @@
     (try
       (is (mcp/connection? connection))
       (is (= ["echo"] (mapv :name (mcp/definitions connection))))
-      (let [tool (first (mcp/tools connection {:approval :never}))
+      (let [tool (first (mcp/tools connection {:needs-approval :never}))
             output ((:execute tool) nil {:text "hello"})]
         (is (= "mcp_fixture__echo" (:name tool)))
         (is (= {:echo "hello"} (:structured_content output)))

@@ -10,7 +10,7 @@
   (let [tools
         (k/local-tools
          {:cwd cwd
-          :approval {:read :never
+          :needs-approval {:read :never
                      :search :never
                      :write :always
                      :edit :always
@@ -24,31 +24,31 @@
         security-reviewer
         (k/agent
          {:name "security-reviewer"
-          :model {:transport :responses :id "gpt-5.6"}
+          :model "gpt-5.6"
           :instructions
           "Inspect the repository for concrete security problems. Cite files."
           :tools tools
-          :input string?
-          :output string?})
+          :input-schema string?
+          :output-schema string?})
 
         api-reviewer
         (k/agent
          {:name "api-reviewer"
-          :model {:transport :responses :id "gpt-5.6"}
+          :model "gpt-5.6"
           :instructions
           "Inspect the repository for API compatibility problems. Cite files."
           :tools tools
-          :input string?
-          :output string?})
+          :input-schema string?
+          :output-schema string?})
 
         editor
         (k/agent
          {:name "review-editor"
-          :model {:transport :responses :id "gpt-5.6"}
+          :model "gpt-5.6"
           :instructions
           "Combine the supplied reviews. Remove duplicates and unsupported claims."
-          :input string?
-          :output string?})]
+          :input-schema string?
+          :output-schema string?})]
 
     (fn review-team [request]
       (let [[security api]

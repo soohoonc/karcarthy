@@ -64,4 +64,4 @@ uvx --python 3.13 --from harbor harbor view examples/harbor/jobs
 ```
 
 The trajectory shows the model messages, repository Tool calls, observations,
-usage, and any runtime-generated Agent calls.
+usage, and any Agent-authored eval and participating Agent calls.

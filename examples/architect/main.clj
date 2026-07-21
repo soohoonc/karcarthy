@@ -1,5 +1,5 @@
 (ns example.architect
-  "Live trace of one Agent writing and running two more Agents."
+  "Live trace of Agents recursively writing and running more Agents."
   (:require [clojure.string :as str]
             [karcarthy :as k]))
 
@@ -8,19 +8,18 @@
 
 (defn instructions []
   (str
-   "You are the parent Agent in a live demonstration. "
-   "Before answering, you must call the built-in agent Tool exactly twice. "
-   "Submit both calls together so the Agents can run concurrently. "
-   "Create one failure analyst that finds a non-obvious risk and one rollout "
-   "planner that proposes a concrete safe plan. Give each Agent the complete "
-   "user task string as its explicit input. Keep each definition concise and "
-   "use exactly this outer source shape, including the closing } before ): "
-   "(agent {:name \"descriptive-name\" "
-   ":model {:transport :responses :provider :openai :id \"" (model-id) "\" "
-   ":reasoning :low} :instructions \"Do not create or call other Agents. "
-   "ROLE-SPECIFIC TASK.\" "
-   ":input string? :output string?}). "
-   "After both Agents return, synthesize their results concisely."))
+   "You are the root Agent in a live recursive demonstration. "
+   "Before answering, call eval exactly once. Write one Clojure expression "
+   "that creates an Agent named coordinator and runs it with input. "
+   "Configure coordinator with model \"" (model-id) "\", :input-schema string?, "
+   ":output-schema string?, and instructions to call eval exactly once before answering. "
+   "That second expression must create Agents named failure-analyst and "
+   "rollout-planner, run each exactly once and concurrently with future on its "
+   "input, dereference their Runs, and return their :output values as data. "
+   "Configure both specialists with model \"" (model-id) "\", :input-schema string?, "
+   ":output-schema string?, and focused instructions that forbid eval or delegation. "
+   "After eval returns, coordinator must synthesize the two values itself without "
+   "running either specialist again. Return the coordinator's result."))
 
 (defn architect []
   (k/agent
@@ -31,8 +30,8 @@
             :reasoning :low
             :timeout-ms 180000}
     :instructions (instructions)
-    :input string?
-    :output string?
+    :input-schema string?
+    :output-schema string?
     :max-turns 4}))
 
 (defn credentials? []
@@ -44,11 +43,10 @@
    (run-architect! task (k/monitor {:display :tree})))
   ([task monitor]
    (k/run! (architect) task
-           {:observe monitor
-            :limits {:model-calls 4
-                     :agent-forms 2
+           {:on-event monitor
+            :limits {:model-calls 8
+                     :evals 2
                      :depth 2
-                     :parallelism 3
                      :deadline-ms 240000}})))
 
 (def default-task

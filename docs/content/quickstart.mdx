@@ -17,7 +17,7 @@ Create `deps.edn`:
 {:deps
  {io.github.soohoonc/karcarthy
   {:git/url "https://github.com/soohoonc/karcarthy"
-   :git/sha "bfd9eb8eb9e7feb67a7cce3d577636ac20115375"}}
+   :git/sha "b9567ed36b0d612b2847e344039c6a810de00c46"}}
  :paths ["src"]}
 ```
 
@@ -36,14 +36,14 @@ Create `src/example.clj`:
   (:require [karcarthy :as k]))
 
 (k/defagent assistant
-  {:model {:transport :responses :id "gpt-5.6"}
+  {:model "gpt-5.6"
    :instructions "Answer clearly and concisely."
-   :input string?
-   :output string?})
+   :input-schema string?
+   :output-schema string?})
 ```
 
-An Agent is a Clojure value containing its model, instructions, capabilities,
-and boundary contracts.
+An Agent is a Clojure value containing its model, instructions, Tools, other
+Agents it may call, and boundary schemas.
 
 ## Run it
 
@@ -72,9 +72,9 @@ The answer varies by model call. Inspect the stable parts of the result:
 (:usage run)           ;=> {:model-calls ..., :input-tokens ..., ...}
 ```
 
-`run!` returns a failed Run instead of throwing for model, Tool, and contract
-failures. Check `:status` before consuming `:output`; `:error` explains a
-failure.
+`run!` returns a failed Run for failures during execution. Check `:status`
+before consuming `:output`; `:error` explains a failure. Invalid Agent, Tool,
+or run configuration throws before execution starts.
 
 ## Watch the Run
 
@@ -86,7 +86,7 @@ Create a monitor and pass it as the observer:
 (def monitored-run
   (k/run! example/assistant
           "Explain continuation-passing style."
-          {:observe live}))
+          {:on-event live}))
 ```
 
 The terminal redraws while the Agent runs. Evaluate the monitor to print its
@@ -107,5 +107,5 @@ new definition:
 ```
 
 Next, read [Why Clojure?](/docs/why-clojure) for the project’s argument or
-[Create agents at runtime](/docs/guides/architect) to watch an Agent write two
-more Agents.
+[Dynamic eval](/docs/eval) to watch an Agent write a concurrent
+Clojure workflow.

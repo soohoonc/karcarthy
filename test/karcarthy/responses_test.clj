@@ -81,7 +81,7 @@
                   :transport :another-transport
                   :spec {:type "special"}}]}))))
 
-(deftest primitive-output-contracts-are-validated-locally
+(deftest primitive-output-schemas-are-validated-locally
   (let [body (responses/request
               {:model {:id "gpt-5.6"}
                :instructions "Return text."

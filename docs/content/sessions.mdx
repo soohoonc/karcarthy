@@ -3,7 +3,7 @@ title: Sessions
 description: Carry model conversation history across otherwise independent Runs.
 ---
 
-Each `run!` call starts without prior conversation unless you pass a Session:
+Each top-level `run!` starts without prior conversation unless you pass a Session:
 
 ```clojure
 (def session (k/memory-session))
@@ -15,9 +15,9 @@ Each `run!` call starts without prior conversation unless you pass a Session:
         {:session session})
 ```
 
-A Session stores normalized conversation items from root Agents. An
+A Session stores normalized conversation items from the first Agent. A
 independent `run!` call must receive the Session explicitly. An available or
-generated Agent starts without its parent's conversation; only its explicit
+participating Agent starts without its parent's conversation; only its explicit
 Tool input is sent as its user message. Child conversations are not added to
 the parent's Session.
 

@@ -29,16 +29,15 @@
             :timeout-ms 300000}
     :instructions instructions
     :tools (k/local-tools {:cwd cwd})
-    :input string?
-    :output string?
+    :input-schema string?
+    :output-schema string?
     :max-turns 24}))
 
 (defn run-coding! [cwd task]
   (k/run! (coding-agent {:cwd cwd}) task
           {:limits {:model-calls 32
-                    :agent-forms 4
+                    :evals 4
                     :depth 3
-                    :parallelism 3
                     :deadline-ms 600000}}))
 
 (defn -main [& args]

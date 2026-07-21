@@ -1,92 +1,48 @@
 ---
-title: Create agents at runtime
-description: Watch one Agent write and run two specialists.
+title: Let an Agent write the workflow
+description: Run the Architect example and inspect same-process Clojure eval.
 ---
 
-This example starts one Agent, `architect`. After it reads the task, it writes
-a failure analyst and a rollout planner, runs them concurrently, and uses both
-answers in its final response.
-
-## Before you begin
-
-Run from a karcarthy checkout with JDK 21, the Clojure CLI, and
-`OPENAI_API_KEY` or `RESPONSES_API_KEY` set.
-
-## Run the demo
+The Architect Agent is told to use `eval` once to create a coordinator. The
+coordinator is told to use `eval` again; its expression creates a failure
+analyst and rollout planner, starts both with `future`, dereferences their Run
+maps, and synthesizes their outputs.
 
 ```bash
 clojure -M:examples architect \
   "Review a migration from synchronous writes to a queue."
 ```
 
-The terminal redraws the Run while it executes:
-
 ```text
-Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
-└─ architect · waiting for 2 Agents
-   ├─ failure-analyst · calling model
-   └─ rollout-planner · calling model
+Run run_7c2e9b… · running · 18s · 6 model calls · 8,421 tokens · 2 evals
+└─ architect · waiting for Agent
+   └─ coordinator · waiting for Agents
+      ├─ failure-analyst · calling model
+      └─ rollout-planner · calling model
 ```
 
-Names, usage, timing, and answers vary. The example fixes the number and roles
-of the children so the same behavior is visible on every successful run.
+The root model sees the coordinator's result. Neither the coordinator nor its
+specialists were predefined by the application.
 
-When the Run finishes, the command prints `ANSWER` followed by the parent's
-synthesis.
-
-## Inspect it at the REPL
-
-Start the bundled REPL:
-
-```bash
-clojure -M:examples repl
-```
-
-Then create a monitor and keep the Run:
+## Inspect the expression
 
 ```clojure
-(require '[karcarthy :as k])
-
-(def live (k/monitor {:display :tree}))
-
-(def run
-  (example.architect/run-architect!
-   "Review a migration from synchronous writes to a queue."
-   live))
+(->> (k/events result)
+     (filter #(= :eval/expanded (:type %)))
+     (map :expression))
 ```
 
-Read the final answer and tree:
+The two traces show the coordinator expression and its nested specialist
+expression. Every branch has the root `:run-id`; usage and limits are aggregate.
 
-```clojure
-(println (:output run))
-(k/monitor live)
-```
+## What this demonstrates
 
-Inspect the Agent forms the model submitted:
+1. A model-authored Agent can itself author more executable Clojure.
+2. The models authored control flow, not merely Agent configurations.
+3. Each expression was ordinary Clojure data and then ordinary Clojure code.
+4. `future` carried the dynamically bound run into concurrent work.
+5. Each `run!` returned a normal Run map while sharing run-wide resources.
+6. Both evaluation levels and orchestration stayed in the same JVM.
 
-```clojure
-(->> (k/events run)
-     (filter #(= :program/expanded (:type %)))
-     (map :definition))
-```
-
-Those forms are retained from the real Run; the documentation does not invent
-their names or source.
-
-## What happened
-
-1. The parent model received the task and called its built-in `agent` Tool
-   twice.
-2. Each call supplied one Clojure Agent form and explicit input.
-3. karcarthy read, expanded, checked, and evaluated each form.
-4. Both resulting Agents ran inside the parent's Run.
-5. Their outputs returned to the parent as Tool results.
-6. The parent model wrote the final answer.
-
-The children share the parent's budgets, deadline, approvals, cancellation,
-and event history. They do not inherit its conversation: each receives only
-the input supplied in its `agent` Tool call.
-
-The [Generated agents](/docs/generated-agents) page explains the mechanism.
-[Compose agents](/docs/guides/composition) shows the other case: architecture
-known in advance and written directly in Clojure.
+See [Dynamic eval](/docs/eval) for the programming model and [Eval
+reference](/docs/reference/eval) for exact events and limits.

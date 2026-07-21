@@ -1,48 +1,50 @@
 (ns karcarthy
   "The public karcarthy API: a native, homoiconic Clojure agent harness."
-  (:refer-clojure :exclude [agent await run!])
+  (:refer-clojure :exclude [agent run!])
   (:require [karcarthy.acp :as acp]
-            [karcarthy.core :as core]
-            [karcarthy.eval :as keval]
+            [karcarthy.agent :as agent-data]
+            [karcarthy.schema :as schema]
             [karcarthy.mcp :as mcp]
             [karcarthy.monitor :as mon]
             [karcarthy.model.responses :as responses]
             [karcarthy.prompt :as prompt]
+            [karcarthy.run :as run]
             [karcarthy.session :as session]
+            [karcarthy.tool :as tool-data]
             [karcarthy.tools :as tools]))
 
-;; Agent and Tool macros are forwarding macros so callers need one alias.
+;; Re-export the construction macros so most applications need one alias.
 (defmacro agent [config]
-  `(core/agent ~config))
+  `(agent-data/agent ~config))
 
 (defmacro defagent [sym config]
-  `(core/defagent ~sym ~config))
+  `(agent-data/defagent ~sym ~config))
 
 (defmacro tool [config bindings & body]
-  `(core/tool ~config ~bindings ~@body))
+  `(tool-data/tool ~config ~bindings ~@body))
 
 (defmacro deftool [sym config bindings & body]
-  `(core/deftool ~sym ~config ~bindings ~@body))
+  `(tool-data/deftool ~sym ~config ~bindings ~@body))
 
-(def agent? core/agent?)
-(def tool? core/tool?)
-(def hosted-tool core/hosted-tool)
-(def hosted-tool? core/hosted-tool?)
-(def definition core/definition)
-(def expansion core/expansion)
-(def contract-valid? core/contract-valid?)
-(def explain-contract core/explain-contract)
-(def contract->json-schema core/contract->json-schema)
+(def agent? agent-data/agent?)
+(def tool? tool-data/tool?)
+(def hosted-tool tool-data/hosted-tool)
+(def hosted-tool? tool-data/hosted-tool?)
+(def definition agent-data/definition)
+(def expansion agent-data/expansion)
+(def schema-valid? schema/valid?)
+(def explain-schema schema/explain)
+(def schema->json-schema schema/json-schema)
 
-(def run! core/run!)
-(defn context [] (core/context))
-(defn model! [request] (core/model! request))
-(defn emit! [event] (core/emit! event))
-(def events core/events)
+(def run! run/run!)
+(defn context [] (run/context))
+(defn model! [request] (run/model! request))
+(defn emit! [event] (run/emit! event))
+(def events run/events)
 (def monitor mon/monitor)
 (def monitor-state mon/monitor-state)
 
-(def mock-model core/mock-model)
+(def mock-model run/mock-model)
 (def memory-session session/memory-session)
 (def session? session/session?)
 (def session-id session/session-id)
@@ -53,14 +55,8 @@
 (def local-tools tools/local)
 (def prompt prompt/prompt)
 (def prompt-file prompt/prompt-file)
-(def system-prompt prompt/system-prompt)
 (def responses-web-search responses/web-search)
 (def connect-mcp! mcp/connect!)
 (def mcp-tools mcp/tools)
 (def close-mcp! mcp/close!)
 (def serve-acp! acp/serve!)
-
-(defn read-agent-form [source] (keval/read-agent-form source))
-(defn check-agent-form! [form] (keval/check-agent-form! form))
-(defn eval-agent-form! [checked] (keval/eval-agent-form! checked))
-(defn compile-agent! [source] (keval/compile-agent! source))
