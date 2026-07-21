@@ -1,4 +1,5 @@
 (ns example.composition
+  "A known Agent team coordinated with ordinary Clojure."
   (:require [karcarthy :as k]))
 
 (defn output! [run]
@@ -6,60 +7,38 @@
     (:output run)
     (throw (ex-info "Agent Run failed" {:run run}))))
 
-(defn review-system [cwd]
-  (let [tools
-        (k/local-tools
-         {:cwd cwd
-          :needs-approval {:read :never
-                     :search :never
-                     :write :always
-                     :edit :always
-                     :bash :always}})
+(def botanist
+  (k/agent
+   {:name "botanist"
+    :model "gpt-5.6"
+    :instructions "Find biological causes in the garden report. State the evidence you need."
+    :input-schema string?
+    :output-schema string?}))
 
-        reviewer-options
-        {:limits {:model-calls 12
-                  :deadline-ms 120000}
-         :approval (constantly false)}
+(def radiation-engineer
+  (k/agent
+   {:name "radiation-engineer"
+    :model "gpt-5.6"
+    :instructions "Find radiation and shielding causes. State the evidence you need."
+    :input-schema string?
+    :output-schema string?}))
 
-        security-reviewer
-        (k/agent
-         {:name "security-reviewer"
-          :model "gpt-5.6"
-          :instructions
-          "Inspect the repository for concrete security problems. Cite files."
-          :tools tools
-          :input-schema string?
-          :output-schema string?})
+(def editor
+  (k/agent
+   {:name "garden-editor"
+    :model "gpt-5.6"
+    :instructions "Combine the specialist reports into a concise diagnosis and next three checks."
+    :input-schema string?
+    :output-schema string?}))
 
-        api-reviewer
-        (k/agent
-         {:name "api-reviewer"
-          :model "gpt-5.6"
-          :instructions
-          "Inspect the repository for API compatibility problems. Cite files."
-          :tools tools
-          :input-schema string?
-          :output-schema string?})
-
-        editor
-        (k/agent
-         {:name "review-editor"
-          :model "gpt-5.6"
-          :instructions
-          "Combine the supplied reviews. Remove duplicates and unsupported claims."
-          :input-schema string?
-          :output-schema string?})]
-
-    (fn review-team [request]
-      (let [[security api]
-            (->> [security-reviewer api-reviewer]
-                 (mapv #(future (k/run! % request reviewer-options)))
-                 (mapv deref)
-                 (mapv output!))
-            editor-prompt
-            (str "Request:\n" request
-                 "\n\nSecurity review:\n" security
-                 "\n\nAPI review:\n" api)]
-        (output! (k/run! editor editor-prompt
-                         {:limits {:model-calls 4
-                                   :deadline-ms 60000}}))))))
+(defn diagnose-garden [report]
+  (let [[biology radiation]
+        (->> [botanist radiation-engineer]
+             (mapv #(future (k/run! % report)))
+             (mapv deref)
+             (mapv output!))
+        editor-input
+        (str "Garden report:\n" report
+             "\n\nBiology:\n" biology
+             "\n\nRadiation and shielding:\n" radiation)]
+    (output! (k/run! editor editor-input))))

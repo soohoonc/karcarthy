@@ -1,48 +1,63 @@
 ---
-title: Let an Agent write the workflow
-description: Run the Architect example and inspect same-process Clojure eval.
+title: Let an Agent choose the team
+description: Run the central example and inspect the Clojure it writes.
 ---
 
-The Architect Agent is told to use `eval` once to create a coordinator. The
-coordinator is told to use `eval` again; its expression creates a failure
-analyst and rollout planner, starts both with `future`, dereferences their Run
-maps, and synthesizes their outputs.
+The Architect example starts with one Agent and one task. After reading the
+task, the Agent chooses two or three specialist roles, creates them in Clojure,
+runs them concurrently, and synthesizes their evidence.
+
+The application does not prescribe the specialist names or roles.
+
+## Run the example
 
 ```bash
 clojure -M:examples architect \
-  "Review a migration from synchronous writes to a queue."
+  "A moon garden's leaves are turning silver after a solar storm. Diagnose the likely causes."
 ```
 
-```text
-Run run_7c2e9b… · running · 18s · 6 model calls · 8,421 tokens · 2 evals
-└─ architect · waiting for Agent
-   └─ coordinator · waiting for Agents
-      ├─ failure-analyst · calling model
-      └─ rollout-planner · calling model
-```
+The terminal monitor shows the specialists as they are created. A run might
+include a botanist, a radiation engineer, and a soil chemist; a different task
+can produce a different team.
 
-The root model sees the coordinator's result. Neither the coordinator nor its
-specialists were predefined by the application.
+## Inspect the generated code
 
-## Inspect the expression
+`run-architect!` returns a normal Run map. At a REPL, retain it and inspect the
+expression the model wrote:
 
 ```clojure
+(require '[karcarthy :as k])
+(load-file "examples/architect/main.clj")
+
+(def result
+  (example.architect/run-architect!
+   "A moon garden's leaves are turning silver after a solar storm."))
+
 (->> (k/events result)
      (filter #(= :eval/expanded (:type %)))
      (map :expression))
 ```
 
-The two traces show the coordinator expression and its nested specialist
-expression. Every branch has the root `:run-id`; usage and limits are aggregate.
+Inspect the Agent tree in the same event sequence:
+
+```clojure
+(->> (k/events result)
+     (filter #(= :agent/started (:type %)))
+     (map (juxt :agent :parent-id :depth)))
+```
 
 ## What this demonstrates
 
-1. A model-authored Agent can itself author more executable Clojure.
-2. The models authored control flow, not merely Agent configurations.
-3. Each expression was ordinary Clojure data and then ordinary Clojure code.
-4. `future` carried the dynamically bound run into concurrent work.
-5. Each `run!` returned a normal Run map while sharing run-wide resources.
-6. Both evaluation levels and orchestration stayed in the same JVM.
+1. The task determines which specialists exist.
+2. The model writes control flow, not workflow configuration data.
+3. The expression is ordinary Clojure data before evaluation and ordinary
+   Clojure code during evaluation.
+4. `future` carries the active Run into concurrent Agent calls.
+5. Every Agent starts a fresh model conversation while sharing Run-wide limits,
+   usage, events, cancellation, and context.
+
+The example deliberately uses one level of generation. Evaluated Agents may
+call `eval` recursively when a task genuinely needs another level.
 
 See [Dynamic eval](/docs/eval) for the programming model and [Eval
 reference](/docs/reference/eval) for exact events and limits.

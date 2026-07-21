@@ -27,7 +27,9 @@
     (binding [*out* *err*]
       (println "Set RESPONSES_API_KEY or OPENAI_API_KEY to run this live example."))
     (System/exit 2))
-  (let [input (if (seq words) (str/join " " words) "What can you do?")
+  (let [input (if (seq words)
+                (str/join " " words)
+                "A moon garden's leaves are turning silver. What should we check first?")
         run (k/run! (basic-agent) input)]
     (if (= :completed (:status run))
       (println (:output run))

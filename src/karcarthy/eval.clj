@@ -56,12 +56,15 @@ transports and process-backed Tools may still perform their normal external I/O.
 ## Example: parallel specialists
 
 ```clojure
-(let [reviewer (agent {:name \"reviewer\"
-                       :model \"MODEL_ID\"
-                       :instructions \"Find the riskiest assumption.\"
-                       :input-schema string?
-                       :output-schema string?})
-      tasks (mapv #(future (run! reviewer %)) input)]
+(let [reviewers (mapv (fn [[name instructions]]
+                        (agent {:name name
+                                :model \"MODEL_ID\"
+                                :instructions instructions
+                                :input-schema string?
+                                :output-schema string?}))
+                      [[\"analyst\" \"Analyze one part of the task.\"]
+                       [\"planner\" \"Propose a practical next step.\"]])
+      tasks (mapv #(future (run! % input)) reviewers)]
   (mapv (comp :output deref) tasks))
 ```
 

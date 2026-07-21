@@ -1,15 +1,15 @@
 ---
-title: Compose agents
+title: Compose a known team
 description: Coordinate a fixed Agent architecture with ordinary Clojure.
 ---
 
-Dynamic eval is useful when the task determines the architecture. When
-you already know the architecture, write it directly.
+Use dynamic eval when the task should determine the architecture. When the team
+is already part of your application, write it directly.
 
-This example runs security and API reviewers concurrently, then gives both
-reviews to an editor.
+This version of the moon-garden workflow always runs a botanist and a radiation
+engineer, then gives both reports to an editor.
 
-## The coordinator
+## Write the coordinator
 
 ```clojure
 (defn output! [run]
@@ -17,47 +17,36 @@ reviews to an editor.
     (:output run)
     (throw (ex-info "Agent Run failed" {:run run}))))
 
-(defn review-team [request]
-  (let [[security api]
-        (->> [security-reviewer api-reviewer]
-             (mapv #(future (k/run! % request reviewer-options)))
+(defn diagnose-garden [report]
+  (let [[biology radiation]
+        (->> [botanist radiation-engineer]
+             (mapv #(future (k/run! % report)))
              (mapv deref)
              (mapv output!))
         editor-input
-        (str "Request:\n" request
-             "\n\nSecurity review:\n" security
-             "\n\nAPI review:\n" api)]
+        (str "Garden report:\n" report
+             "\n\nBiology:\n" biology
+             "\n\nRadiation and shielding:\n" radiation)]
     (output! (k/run! editor editor-input))))
 ```
 
-The reviewers and editor are Agents. The coordinator is a function. `future`
-runs the reviews together; `output!` refuses to pass a failed Run to the
-editor.
+The coordinator is a normal function. `future` runs both reviews together, and
+`output!` prevents a failed Run from being passed to the editor.
 
-## Run the complete example
+## Run it
 
 With `OPENAI_API_KEY` set, start a REPL from the repository root:
 
 ```clojure
-(require '[karcarthy :as k])
 (load-file "examples/composition/main.clj")
 
-(def review
-  (example.composition/review-system "/workspace/project"))
-
-(def output
-  (review "Review the current working tree against origin/main."))
-
-(println output)
+(example.composition/diagnose-garden
+ "The leaves turned silver two days after a solar storm; humidity is stable.")
 ```
 
-The complete definitions and approval policy are in
-[`examples/composition/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/composition/main.clj).
+Each `run!` establishes an independent Run when this function is called outside
+an active Run. If evaluated code calls the same function, its Agent calls join
+the active Run.
 
-Each `run!` here establishes an independent run when the function is called
-outside an active one. If evaluated code calls the same function, its `run!`
-calls participate in that active run.
-
-Use this pattern when the team is part of the application. Use
-[dynamic eval](/docs/guides/architect) when the task should determine
-which specialists exist.
+Compare this fixed team with [Let an Agent choose the team](/docs/guides/architect),
+where the task determines which specialists exist.

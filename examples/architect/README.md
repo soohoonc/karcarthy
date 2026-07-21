@@ -1,26 +1,18 @@
 # Architect example
 
-This live example shows the feature that distinguishes karcarthy: an Agent
-writes another Agent, which writes and concurrently runs two more Agents.
+This live example lets one Agent choose and run a small specialist team after it
+reads the task.
 
 ```bash
 clojure -M:examples architect \
-  "Review a migration from synchronous writes to a queue."
+  "A moon garden's leaves are turning silver after a solar storm. Diagnose the likely causes."
 ```
 
-The root calls `eval` to create a coordinator. The coordinator independently
-calls `eval` to create two specialists and run them with `future`. Every Agent
-call participates in the first run and shares its ID, limits, usage, events,
-context, cancellation, approvals, and executor.
+Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running it. Use
+`KARCARTHY_OPENAI_MODEL` to override the default model.
 
-```text
-Run run_7c2e9b… · running · 18s · 6 model calls · 8,421 tokens · 2 evals
-└─ architect · waiting for Agent
-   └─ coordinator · waiting for Agents
-      ├─ failure-analyst · calling model
-      └─ rollout-planner · calling model
-```
+The terminal monitor redraws the Agent tree while the generated specialists run.
+The command prints the synthesized answer when the Run completes.
 
-Inspect `:eval/expanded` to see the expression and macroexpansion. Inspect
-`:agent/started` to see the resulting call tree. Evaluation and coordination
-stay in the same JVM; model transport calls still use their configured I/O.
+For the generated expression, event inspection, and semantics, see the
+[Architect guide](https://karcarthy.vercel.app/docs/guides/architect).

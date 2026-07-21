@@ -140,30 +140,31 @@
           (pr-str eval-types))
       (is (= 1 (get-in run [:usage :evals]))))))
 
-(deftest architect-example-recursively-writes-and-runs-agents
+(deftest architect-example-chooses-and-runs-specialists
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
   (when (and (live?) (credentials?))
     (let [run (architect/run-architect!
-               "Review a migration from synchronous writes to a queue."
+               architect/default-task
                (k/monitor))
           eval-events (->> (:events run)
                            (map :type)
                            (filter #(= "eval" (namespace %)))
                            frequencies)
-          agent-names (->> (:events run)
-                           (filter #(= :agent/started (:type %)))
-                           (map :agent)
-                           frequencies)]
+          agent-events (->> (:events run)
+                            (filter #(= :agent/started (:type %)))
+                            vec)
+          root-events (filter #(= "architect" (:agent %)) agent-events)
+          specialist-events (remove #(= "architect" (:agent %)) agent-events)]
       (is (= :completed (:status run)) (pr-str (:error run)))
-      (is (= 2 (get-in run [:usage :evals])))
-      (is (= {:eval/started 2 :eval/expanded 2 :eval/completed 2}
+      (is (= 1 (get-in run [:usage :evals])))
+      (is (= {:eval/started 1 :eval/expanded 1 :eval/completed 1}
              eval-events))
-      (is (= {"architect" 1
-              "coordinator" 1
-              "failure-analyst" 1
-              "rollout-planner" 1}
-             agent-names)))))
+      (is (= 1 (count root-events)))
+      (is (<= 2 (count specialist-events) 3))
+      (is (= (count specialist-events)
+             (count (set (map :agent specialist-events)))))
+      (is (every? #(= 1 (:depth %)) specialist-events)))))
 
 (deftest coding-example-inspects-edits-and-verifies
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
