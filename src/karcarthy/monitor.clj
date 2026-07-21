@@ -280,20 +280,12 @@
     @monitor-or-snapshot
     monitor-or-snapshot))
 
-(defn monitor-view
+(defn- monitor-view
   "Return the current Run and Agent tree as text."
   [monitor-or-snapshot]
   (let [snapshot (monitor-state monitor-or-snapshot)
         runs (keep (:runs snapshot) (:run-order snapshot))]
     (str/join "\n\n" (map #(str/join "\n" (run-lines %)) runs))))
-
-(defn print-monitor
-  "Print one snapshot of a Run monitor."
-  ([monitor] (print-monitor monitor *out*))
-  ([monitor ^Writer out]
-   (.write out (str (monitor-view monitor) "\n"))
-   (.flush out)
-   monitor))
 
 (declare draw-tree! update-ticker! stop-ticker!)
 

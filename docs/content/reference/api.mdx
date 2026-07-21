@@ -48,7 +48,6 @@ require `:model` and `:instructions`.
  :output ::report
  :output-schema {...}
  :max-turns 20
- :stop-when final-acceptable?
  :guardrails {:input [safe?] :output [grounded?]}
  :limits {:model-calls 30}
  :metadata {...}}
@@ -115,8 +114,7 @@ participate in it and return the same shape with the same `:id`.
  :approval approval-handler
  :cancel cancellation-token
  :metadata {...}
- :model-transports {...}
- :eval-namespace 'example.agent-code}
+ :model-transports {...}}
 ```
 
 `context` returns the current Run's local dependency value from a Tool:
@@ -175,8 +173,8 @@ instructions; karcarthy does not add a base prompt.
 
 Eval is deliberately model-facing rather than a separate public compiler API.
 Every Agent receives the `eval` Tool with `{:code string :input value}`. Code
-can use `agent`, `defagent`, `tool`, `deftool`, `run!`, `context`, `model!`,
-`emit!`, `definition`, and `expansion`. See [Eval reference](/docs/reference/eval).
+can use `agent`, `defagent`, `tool`, `deftool`, `run!`, `context`, `definition`,
+and `expansion`. See [Eval reference](/docs/reference/eval).
 
 ## Models
 

@@ -88,7 +88,7 @@
 
 (def ^:private run-option-keys
   #{:context :session :limits :observe :approval :cancel :metadata
-    :model-transports :eval-namespace})
+    :model-transports})
 
 (def ^:private agent-call-option-keys #{:context :limits})
 
@@ -615,12 +615,6 @@
         (case (:type response)
           :final
           (let [output (maybe-json-output (:output response) (:output agent))]
-            (when-let [stop-when (:stop-when agent)]
-              (when-not (stop-when (call-metadata rt)
-                                   {:response response :messages messages})
-                (fail! :model :stop-condition
-                       "Model returned final output before the stop condition"
-                       {:agent (:name agent)})))
             (reset! (:pending-session-items rt)
                     (conj (vec unpersisted)
                           {:role :assistant :content output}))
@@ -813,11 +807,10 @@
                :executor executor
                :semaphore (Semaphore. (int (:parallelism limits)) true)
                :deadline-ns deadline-ns
-               :eval-parent-namespace
-               (or (:eval-namespace options) (:definition-ns agent))
+               :eval-parent-namespace (:definition-ns agent)
                :eval-namespace
                (symbol
-                (str (or (:eval-namespace options) 'karcarthy.eval)
+                (str 'karcarthy.eval
                      ".run_" (str/replace run-id "-" "_")))
                :eval-counter (atom 0)}]
        (emit! rt {:type :run/started :agent (:name agent) :input input})

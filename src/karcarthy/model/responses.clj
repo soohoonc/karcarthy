@@ -57,7 +57,7 @@
                 {:tool tool})))
 
 (defn web-search
-  "Create a Responses server-executed web-search capability. The configured
+  "Create a Responses server-executed web-search Tool. The configured
   endpoint and selected model must support this hosted Tool."
   ([] (web-search {}))
   ([options]

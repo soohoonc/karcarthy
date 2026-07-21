@@ -82,8 +82,8 @@ Use the model configuration listed below in place of the example's model value.
 ")
 
 (def ^:private reserved-symbols
-  #{"agent" "defagent" "tool" "deftool" "run!" "context" "model!"
-    "emit!" "definition" "expansion" "eval" "input"})
+  #{"agent" "defagent" "tool" "deftool" "run!" "context" "definition"
+    "expansion" "eval" "input"})
 
 (defn- clojure-symbol [kind value-name]
   (let [clean (-> (str value-name)
@@ -155,8 +155,13 @@ Use the model configuration listed below in place of the example's model value.
     (if (seq entries)
       (str/join
        "\n"
-       (map (fn [{:keys [name symbol description schema]}]
-              (str "- `" symbol "` (model name `" name "`) — " description
+       (map (fn [{:keys [kind name symbol description schema]}]
+              (str "- `" symbol "` — "
+                   (case kind
+                     :agent "Agent"
+                     :tool "Tool"
+                     :hosted-tool "hosted Tool")
+                   " `" name "`: " description
                    (when schema (str " Input: `" (pr-str schema) "`"))))
             entries))
       "- None.")))
@@ -215,17 +220,15 @@ Use the model configuration listed below in place of the example's model value.
                                  vec)]
               (when (seq available)
                 (clojure.core/refer parent-sym :only available)))))
-        (doseq [sym '[agent defagent tool deftool run! context model! emit!
-                      definition expansion]]
+        (doseq [sym '[agent defagent tool deftool run! context definition
+                      expansion]]
           (when (ns-resolve ns-obj sym)
             (ns-unmap ns-obj sym)))
         (clojure.core/refer
          'karcarthy.agent
          :only '[agent defagent definition expansion])
         (clojure.core/refer 'karcarthy.tool :only '[tool deftool])
-        (clojure.core/refer
-         'karcarthy.run
-         :only '[run! context model! emit!]))
+        (clojure.core/refer 'karcarthy.run :only '[run! context]))
       (doseq [[sym value] (:eval-bindings rt)]
         (when (ns-resolve ns-obj sym)
           (ns-unmap ns-obj sym))

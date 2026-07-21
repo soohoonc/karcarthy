@@ -52,6 +52,11 @@
                                   :instructions "x"
                                   :prepare-step identity})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown configuration"
+                        (k/agent {:name "bad-stop-condition"
+                                  :model :x
+                                  :instructions "x"
+                                  :stop-when identity})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown configuration"
                         (k/agent {:name "old-context-name"
                                   :model :x
                                   :instructions "x"
@@ -187,6 +192,15 @@
                           (k/run! agent nil {:session {}})))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown configuration"
                           (k/run! agent nil {:state {}})))))
+
+(deftest internal-eval-namespaces-are-not-run-options
+  (let [agent (k/agent {:name "agent"
+                        :model {:id "fake"
+                                :transport (scripted-model "ok")}
+                        :instructions "answer"})]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown configuration"
+                          (k/run! agent nil
+                                  {:eval-namespace 'example.agent-code})))))
 
 (deftest provider-continuation-avoids-replaying-history-within-a-run
   (let [seen (atom [])

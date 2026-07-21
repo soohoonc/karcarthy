@@ -5,8 +5,8 @@
 
 (def ^:private config-keys
   #{:name :description :model :instructions :context :input :input-schema
-    :tools :agents :output :output-schema :max-turns :stop-when :guardrails
-    :limits :metadata})
+    :tools :agents :output :output-schema :max-turns :guardrails :limits
+    :metadata})
 
 (defn ^:no-doc normalize-model
   "Lower a model ID to the default OpenAI Responses configuration."

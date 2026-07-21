@@ -3,8 +3,8 @@ title: Agents and runs
 description: Define Agent data and execute it with run!.
 ---
 
-An Agent is a flat Clojure map containing a model, instructions, capabilities,
-and boundary contracts.
+An Agent is a flat Clojure map containing a model, instructions, Tools, other
+Agents it may call, and boundary contracts.
 
 ```clojure
 (k/defagent researcher
@@ -95,11 +95,11 @@ See [Dynamic eval](/docs/eval).
 | `:description` | Tells another model when to call this Agent. |
 | `:model` | Model ID string, model map, or metadata function. |
 | `:instructions` | String or metadata function. |
-| `:tools` / `:agents` | Capabilities available to the model. |
+| `:tools` / `:agents` | Tools and Agents available to the model. |
 | `:context` | Contract for local run context. |
 | `:input` / `:output` | Boundary contracts. |
 | `:input-schema` / `:output-schema` | JSON schemas exposed to models. |
-| `:max-turns` / `:stop-when` | Loop bounds and completion predicate. |
+| `:max-turns` | Maximum model turns before the Agent fails. |
 | `:guardrails` | Input and output checks. |
 | `:limits` | Limits that can only narrow the active run. |
 | `:metadata` | Application data. |

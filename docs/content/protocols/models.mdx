@@ -36,11 +36,11 @@ Use the same transport with a different endpoint and credential source:
 The endpoint options are `:base-url`, `:path`, `:url`, `:api-key`,
 `:api-key-env`, `:headers`, `:auth?`, `:timeout-ms`, `:stream`, and
 `:provider-options`. The endpoint must implement the Responses request and
-event shapes used by the selected capabilities.
+event shapes used by the selected Tools.
 
 ## Provider-hosted Tools
 
-Some capabilities execute at the model provider rather than inside karcarthy:
+Some Tools execute at the model provider rather than inside karcarthy:
 
 ```clojure
 (k/defagent researcher
