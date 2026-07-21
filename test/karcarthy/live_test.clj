@@ -1,5 +1,5 @@
 (load-file "examples/basic/main.clj")
-(load-file "examples/architect/main.clj")
+(load-file "examples/review/main.clj")
 (load-file "examples/coding/main.clj")
 
 (ns karcarthy.live-test
@@ -8,9 +8,9 @@
             [clojure.string :as str]
             [clojure.test :as t :refer [deftest is]]
             [karcarthy :as k]
-            [example.architect :as architect]
             [example.basic :as basic]
-            [example.coding :as coding])
+            [example.coding :as coding]
+            [example.review :as review])
   (:import [java.nio.charset StandardCharsets]
            [java.nio.file Files Path]
            [java.nio.file.attribute FileAttribute]))
@@ -140,12 +140,12 @@
           (pr-str eval-types))
       (is (= 1 (get-in run [:usage :evals]))))))
 
-(deftest architect-example-chooses-and-runs-specialists
+(deftest review-example-creates-reviewers-and-a-nested-verifier
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
   (when (and (live?) (credentials?))
-    (let [run (architect/run-architect!
-               architect/default-task
+    (let [run (review/run-review!
+               review/default-change
                (k/monitor))
           eval-events (->> (:events run)
                            (map :type)
@@ -154,17 +154,18 @@
           agent-events (->> (:events run)
                             (filter #(= :agent/started (:type %)))
                             vec)
-          root-events (filter #(= "architect" (:agent %)) agent-events)
-          specialist-events (remove #(= "architect" (:agent %)) agent-events)]
+          root-events (filter #(= "code-reviewer" (:agent %)) agent-events)
+          reviewer-events (filter #(= 1 (:depth %)) agent-events)
+          verifier-events (filter #(= 2 (:depth %)) agent-events)]
       (is (= :completed (:status run)) (pr-str (:error run)))
-      (is (= 1 (get-in run [:usage :evals])))
-      (is (= {:eval/started 1 :eval/expanded 1 :eval/completed 1}
+      (is (= 2 (get-in run [:usage :evals])))
+      (is (= {:eval/started 2 :eval/expanded 2 :eval/completed 2}
              eval-events))
       (is (= 1 (count root-events)))
-      (is (<= 2 (count specialist-events) 3))
-      (is (= (count specialist-events)
-             (count (set (map :agent specialist-events)))))
-      (is (every? #(= 1 (:depth %)) specialist-events)))))
+      (is (<= 2 (count reviewer-events) 3))
+      (is (= (count reviewer-events)
+             (count (set (map :agent reviewer-events)))))
+      (is (= ["finding-verifier"] (mapv :agent verifier-events))))))
 
 (deftest coding-example-inspects-edits-and-verifies
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")

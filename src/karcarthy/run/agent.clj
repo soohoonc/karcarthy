@@ -21,8 +21,8 @@
 (defn- validate-root-options! [options]
   (options! "Run options" context/run-option-keys options)
   (doseq [[key predicate message]
-          [[:on-event #(or (nil? %) (fn? %))
-            "Run :on-event must be a function"]
+          [[:on-event #(or (nil? %) (ifn? %))
+            "Run :on-event must be callable"]
            [:approval #(or (nil? %) (fn? %))
             "Run :approval must be a function"]
            [:model-transports #(or (nil? %) (map? %))

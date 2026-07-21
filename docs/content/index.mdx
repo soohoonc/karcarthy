@@ -16,49 +16,52 @@ There is no workflow graph between generated code and Clojure.
 ```clojure
 (require '[karcarthy :as k])
 
-(k/defagent assistant
+(k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Answer clearly."
+   :instructions "Review the proposed change. Report only concrete defects."
    :input-schema string?
    :output-schema string?})
 
-(def garden-report
-  "A moon garden's leaves are turning silver. What should we check first?")
+(def change
+  "Contract: count may be zero.\n+def average(total, count): return total / count")
 
-(k/run! assistant garden-report)
+(k/run! reviewer change)
 ```
 
 An Agent is a flat Clojure map. `run!` returns a Run map containing its status,
 output, usage, events, and structured error when one occurs.
 
-## Let the task choose specialists
+## Let the change choose its reviewers
 
 Every Agent also receives `eval`. The Tool accepts a single `code` string. The
 current Agent input is already available as `input` inside the expression.
 
-For the garden task, the Agent might create a botanist and a radiation engineer:
+For a scheduler change, the Agent might decide that correctness and concurrency
+need separate reviews:
 
 ```clojure
-(let [botanist (agent {:name "botanist"
-                       :model "gpt-5.6"
-                       :instructions "Find biological causes in the evidence."
-                       :input-schema string?
-                       :output-schema string?})
-      radiation-engineer
-      (agent {:name "radiation-engineer"
+(let [correctness-reviewer
+      (agent {:name "correctness-reviewer"
               :model "gpt-5.6"
-              :instructions "Find radiation and shielding causes."
+              :instructions "Find concrete behavioral defects."
+              :input-schema string?
+              :output-schema string?})
+      concurrency-reviewer
+      (agent {:name "concurrency-reviewer"
+              :model "gpt-5.6"
+              :instructions "Check whether two workers can claim one job."
               :input-schema string?
               :output-schema string?})
       jobs (mapv #(future (run! % input))
-                 [botanist radiation-engineer])]
+                 [correctness-reviewer concurrency-reviewer])]
   (mapv (comp output deref) jobs))
 ```
 
 karcarthy reads exactly one expression with reader evaluation disabled,
 macroexpands it, and evaluates it in the same JVM. The expression can branch,
 recurse, create Agents and Tools, run work concurrently, and return a model-safe
-value to the calling Agent.
+value to the calling Agent. In the central example, one reviewer recursively
+creates a verifier that tries to disprove its strongest candidate finding.
 
 ## Keep one Run
 
@@ -73,6 +76,6 @@ write an ordinary Clojure function instead of asking a model to generate it.
 <Cards>
   <Card title="Quickstart" description="Install karcarthy and run one Agent." href="/docs/quickstart" />
   <Card title="Why Clojure?" description="See why generated workflows remain ordinary code." href="/docs/why-clojure" />
-  <Card title="Let an Agent choose the team" description="Run and inspect the central example." href="/docs/guides/architect" />
+  <Card title="Review code dynamically" description="Run and inspect the central example." href="/docs/guides/review" />
   <Card title="Dynamic eval" description="Learn the exact expression and result boundary." href="/docs/eval" />
 </Cards>

@@ -16,12 +16,12 @@ to the symbol `input`.
 ## Create and run Agents
 
 ```clojure
-(let [botanist (agent {:name "botanist"
+(let [reviewer (agent {:name "correctness-reviewer"
                       :model "gpt-5.6"
-                      :instructions "Find biological causes in the evidence."
+                      :instructions "Find concrete behavioral defects in the change."
                       :input-schema string?
                       :output-schema string?})]
-  (:output (run! botanist input)))
+  (:output (run! reviewer input)))
 ```
 
 `run!` always returns a Run map. Use `:output`, `:status`, or `:error` like you
@@ -30,10 +30,10 @@ would outside eval.
 ## Compose dynamically
 
 ```clojure
-(let [roles [{:name "botanist"
-              :instructions "Find biological causes in the evidence."}
-             {:name "radiation-engineer"
-              :instructions "Find radiation and shielding causes."}]
+(let [roles [{:name "correctness-reviewer"
+              :instructions "Find concrete behavioral defects."}
+             {:name "concurrency-reviewer"
+              :instructions "Check atomicity under concurrent workers."}]
       agents (mapv (fn [{:keys [name instructions]}]
                      (agent {:name name
                              :model "gpt-5.6"

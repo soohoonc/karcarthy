@@ -102,6 +102,23 @@
       (is (str/includes? view "parent · done"))
       (is (str/includes? view "child · done")))))
 
+(deftest monitor-is-a-valid-run-event-handler
+  (let [monitor (k/monitor)
+        agent (k/agent {:name "observed"
+                        :model {:id "fake"
+                                :transport (k/mock-model
+                                            (constantly "done"))}
+                        :instructions "Answer."
+                        :output-schema string?})]
+    (try
+      (let [run (k/run! agent "task" {:on-event monitor})]
+        (is (= :completed (:status run)))
+        (is (= :completed
+               (get-in (k/monitor-state monitor)
+                       [:runs (:id run) :status]))))
+      (finally
+        (.close monitor)))))
+
 (deftest monitor-prints-its-current-tree-at-the-repl
   (let [monitor (k/monitor)]
     (doseq [event (take 2 start-events)] (monitor event))

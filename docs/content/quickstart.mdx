@@ -35,9 +35,9 @@ Create `src/example.clj`:
 (ns example
   (:require [karcarthy :as k]))
 
-(k/defagent assistant
+(k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Answer clearly and concisely."
+   :instructions "Review the proposed change. Report only concrete defects."
    :input-schema string?
    :output-schema string?})
 ```
@@ -60,8 +60,9 @@ Require both the example and karcarthy, then start a Run:
          '[karcarthy :as k])
 
 (def run
-  (k/run! example/assistant
-          "A moon garden's leaves are turning silver. What should we check first?"))
+  (k/run! example/reviewer
+          (str "Contract: count may be zero.\n"
+               "Change: def average(total, count): return total / count")))
 ```
 
 The answer varies by model call. Inspect the stable parts of the result:
@@ -84,8 +85,9 @@ Create a monitor and pass it as the observer:
 (def live (k/monitor {:display :tree}))
 
 (def monitored-run
-  (k/run! example/assistant
-          "List the evidence we should collect before changing the garden."
+  (k/run! example/reviewer
+          (str "Contract: reject ports outside 1..65535.\n"
+               "Change: def parse_port(value): return int(value)")
           {:on-event live}))
 ```
 
@@ -103,11 +105,13 @@ new definition:
 
 ```clojure
 (require '[example :as example] :reload)
-(k/run! example/assistant "Explain it with an example.")
+(k/run! example/reviewer
+        (str "Contract: empty input returns nil.\n"
+             "Change: def first(items): return items[0]"))
 ```
 
 You have run the familiar part of karcarthy: one model-backed Agent. The
-distinguishing step is next. In [Let an Agent choose the team](/docs/guides/architect),
-the garden report causes the Agent to create and run its own specialists with
-ordinary Clojure. [Why Clojure?](/docs/why-clojure) explains why that boundary
-does not need a workflow DSL.
+distinguishing step is next. In [Review code dynamically](/docs/guides/review),
+a proposed change causes the orchestrator to create and run its own reviewers
+with ordinary Clojure. [Why Clojure?](/docs/why-clojure) explains why that
+boundary does not need a workflow DSL.
