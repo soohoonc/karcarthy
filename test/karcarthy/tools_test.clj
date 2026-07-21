@@ -18,15 +18,14 @@
 (defn- by-name [tools name]
   (first (filter #(= name (:name %)) tools)))
 
-(deftest system-prompt-is-a-packaged-readable-resource
-  (let [resource (io/resource "karcarthy/system.md")]
+(deftest eval-prompt-is-a-packaged-readable-resource
+  (let [resource (io/resource "karcarthy/eval.md")]
     (is (some? resource))
     (when resource
       (let [template (slurp resource)]
-        (is (re-find #"## Writing Clojure" template))
-        (is (re-find #"## Working principles" template))
-        (is (= template (k/system-prompt)))
-        (is (not (re-find #"\{\{" template)))))))
+        (is (re-find #"## When to use" template))
+        (is (re-find #"## Available Agents" template))
+        (is (re-find #"\{\{AVAILABLE_AGENTS\}\}" template))))))
 
 (deftest minimal-local-tools-work-together
   (let [root (temp-directory)]
@@ -98,7 +97,8 @@
                      (:instructions @seen)))
         (is (re-find #"Do not commit changes"
                      (:instructions @seen)))
-        (is (str/starts-with? (:instructions @seen) (k/system-prompt)))
+        (is (= "Run the smallest relevant test.\n\nDo not commit changes."
+               (:instructions @seen)))
         (is (= #{"read" "write" "edit" "bash" "search" "eval"}
                (->> (:tools @seen)
                     (filter #(= :function (:kind %)))

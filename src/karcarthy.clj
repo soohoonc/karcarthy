@@ -55,7 +55,6 @@
 (def local-tools tools/local)
 (def prompt prompt/prompt)
 (def prompt-file prompt/prompt-file)
-(def system-prompt prompt/system-prompt)
 (def responses-web-search responses/web-search)
 (def connect-mcp! mcp/connect!)
 (def mcp-tools mcp/tools)

@@ -23,7 +23,7 @@ All notable changes are documented here, following
   authentication environment, headers, model IDs, normalized streaming
   deltas, and a deterministic in-process mock model transport.
 - Minimal local `read`, `write`, `edit`, `bash`, and ripgrep-backed `search`
-  Tools plus generic `prompt`, `prompt-file`, and `system-prompt` composition.
+  Tools plus generic `prompt` and `prompt-file` composition.
 - Responses-hosted web search as an explicit endpoint capability.
 - An MCP 2025-11-25 stdio client that discovers and adapts remote tools.
 - An ACP v1 stdio server with sessions, permissions, cancellation, tool-call
@@ -65,8 +65,8 @@ All notable changes are documented here, following
   separate workflow or child-call API.
 - Model-visible `:instructions` is distinct from local `:context`; local
   context is never exposed automatically.
-- The packaged `system.md` prompt is prepended automatically; Agent
-  `:instructions` extend it.
+- Agent `:instructions` are the complete model-visible instructions; the
+  harness does not prepend a framework-owned system prompt.
 - Agent calls made by eval receive only explicit input, never the parent model's
   conversation or Session history.
 - Conversation history follows the established Session abstraction. Runs are
@@ -99,5 +99,6 @@ All notable changes are documented here, following
 - Public `as-tool` and the overloaded zero-argument `agent` form.
 - Public Agent-form compiler functions and the restricted built-in `agent`
   Tool.
+- The automatic packaged `system.md` prompt and public `system-prompt` helper.
 
 [Unreleased]: https://github.com/soohoonc/karcarthy

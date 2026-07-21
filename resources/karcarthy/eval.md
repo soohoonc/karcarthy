@@ -13,6 +13,13 @@ is needed.
 - `code` is exactly one complete Clojure expression, without Markdown fences.
 - `input` is bound to the symbol `input` while that expression is evaluated.
 
+## Creating an Agent
+
+`agent` is a macro that accepts one configuration map. The map requires
+`:name`, `:model`, and `:instructions`; `:input` and `:output` are optional
+contracts. `(run! agent-value agent-input)` runs the resulting Agent and returns
+a Run map.
+
 Use `let`, `if`, `mapv`, `future`, `deref`, `agent`, and `run!` normally. A
 `run!` call returns a Run map; its Agent output is at `:output`.
 

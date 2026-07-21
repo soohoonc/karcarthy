@@ -323,10 +323,7 @@
                 :output string?})
         run (k/run! agent "hello" {:context {:user-id "u1"}})]
     (is (= :completed (:status run)))
-    (is (str/starts-with? (get-in @requests [0 :instructions])
-                          (k/system-prompt)))
-    (is (str/ends-with? (get-in @requests [0 :instructions])
-                        "user=u1"))
+    (is (= "user=u1" (get-in @requests [0 :instructions])))
     (is (= "hello"
            (get-in @requests [0 :messages 0 :content])))
     (is (nil? (get-in @requests [0 :context])))))
@@ -560,9 +557,10 @@
                                  (:tools @request)))
         description (:description eval-tool)]
     (is (= :completed (:status run)))
-    (is (str/starts-with? (:instructions @request) (k/system-prompt)))
+    (is (= "Complete the assigned task." (:instructions @request)))
     (doseq [section ["## When to use"
                      "## Tool input"
+                     "## Creating an Agent"
                      "## Run behavior"
                      "## Example: parallel specialists"
                      "## Available model configuration"
@@ -571,6 +569,7 @@
       (is (str/includes? description section) section))
     (is (str/includes? description
                        "{:transport :captured, :provider :test, :id \"test-model\"}"))
+    (is (str/includes? description "(run! agent-value agent-input)"))
     (is (str/includes? description "`uppercase`"))
     (is (str/includes? description "`specialist`"))
     (is (= ["code" "input"]

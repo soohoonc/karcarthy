@@ -55,8 +55,8 @@ require `:model` and `:instructions`.
 ```
 
 `:model`, `:instructions`, `:tools`, and `:agents` may be functions of the
-current call metadata. Instructions must resolve to a string and are appended
-to the packaged base system prompt automatically.
+current call metadata. Instructions must resolve to a string and are sent to
+the model exactly as returned; karcarthy does not prepend a framework prompt.
 
 `:agents` makes those Agents callable by the model. An object-shaped
 `:input-schema` or `:input` becomes the callable schema; otherwise the model
@@ -165,13 +165,11 @@ See [Events: Watch Runs live](/docs/events#watch-runs-live).
 
 ```clojure
 (k/prompt "Base instructions" (k/prompt-file "AGENTS.md"))
-(k/system-prompt)
 ```
 
 `prompt` joins strings and call-metadata functions. `prompt-file` reads UTF-8
-text. `system-prompt` reads `resources/karcarthy/system.md`; karcarthy already
-prepends that file to every model Agent, so applications normally use the
-function only to inspect it or for explicit prompt composition.
+text. The resulting string becomes the Agent's complete model-visible
+instructions; karcarthy does not add a base prompt.
 
 ## Eval
 

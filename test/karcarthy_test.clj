@@ -10,7 +10,7 @@
                 model! emit! events mock-model
                 monitor monitor-state
                 hosted-tool hosted-tool?
-                local-tools prompt prompt-file system-prompt
+                local-tools prompt prompt-file
                 responses-web-search connect-mcp! mcp-tools close-mcp!
                 serve-acp!
                 definition expansion]]
@@ -24,7 +24,7 @@
                     handoff! environment conversation-state? model-transport
                     workspace-tools workspace-prompt
                     read-agent-form check-agent-form! eval-agent-form!
-                    compile-agent!]]
+                    compile-agent! system-prompt]]
     (is (nil? (get (ns-publics 'karcarthy) removed))
         (str "still exports " removed))))
 

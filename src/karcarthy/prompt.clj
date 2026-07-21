@@ -10,16 +10,8 @@
         (slurp reader))
       (throw (ex-info "Missing packaged prompt" {:resource path})))))
 
-(def ^:private packaged-system-prompt
-  (packaged-prompt "karcarthy/system.md"))
-
 (def ^:private packaged-eval-tool-prompt
   (packaged-prompt "karcarthy/eval.md"))
-
-(defn system-prompt
-  "Return karcarthy's readable, packaged system.md prompt."
-  []
-  @packaged-system-prompt)
 
 (defn ^:no-doc eval-tool-prompt
   [{:keys [model-configuration tools agents]}]

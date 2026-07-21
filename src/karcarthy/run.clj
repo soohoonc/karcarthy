@@ -677,13 +677,6 @@
              {:value resolved}))
     resolved))
 
-(defn- model-instructions! [rt value]
-  (let [base (prompt/system-prompt)
-        configured (instructions! rt value)]
-    (if (str/starts-with? configured base)
-      configured
-      (str base "\n\n## Agent instructions\n\n" configured))))
-
 (defn- unique-tools! [tools]
   (let [duplicates (->> tools
                         (filter tool?)
@@ -716,7 +709,7 @@
                (conj (into direct-tools known-agent-tools)
                      (eval-capability model direct-tools available-agents)))
         tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
-        instructions (model-instructions! rt (:instructions agent))
+        instructions (instructions! rt (:instructions agent))
         prior (session-items! (:session rt))
         user-message {:role :user :content input}
         messages (conj prior user-message)]
