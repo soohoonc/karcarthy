@@ -12,7 +12,7 @@
 
 (defn uber [_]
   (clean nil)
-  (b/copy-dir {:src-dirs ["../../src" "../../resources"]
+  (b/copy-dir {:src-dirs ["../../src"]
                :target-dir class-dir})
   (b/copy-file {:src "main.clj"
                 :target (str class-dir "/main.clj")})

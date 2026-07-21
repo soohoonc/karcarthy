@@ -1,4 +1,4 @@
-{:paths ["src" "resources"]
+{:paths ["src"]
 
  ;; Maven Central only - Clojars is blocked in some sandboxes, and we don't
  ;; need it. HTTP is handled by Java 21's built-in java.net.http (no dep).

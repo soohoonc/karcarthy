@@ -3,23 +3,6 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
-(defn- packaged-prompt [path]
-  (delay
-    (if-let [resource (io/resource path)]
-      (with-open [reader (io/reader resource :encoding "UTF-8")]
-        (slurp reader))
-      (throw (ex-info "Missing packaged prompt" {:resource path})))))
-
-(def ^:private packaged-eval-tool-prompt
-  (packaged-prompt "karcarthy/eval.md"))
-
-(defn ^:no-doc eval-tool-prompt
-  [{:keys [model-configuration tools agents]}]
-  (-> @packaged-eval-tool-prompt
-      (str/replace "{{MODEL_CONFIGURATION}}" model-configuration)
-      (str/replace "{{AVAILABLE_TOOLS}}" tools)
-      (str/replace "{{AVAILABLE_AGENTS}}" agents)))
-
 (defn prompt-file
   "Read a UTF-8 prompt from a file."
   [path]

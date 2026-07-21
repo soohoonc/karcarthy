@@ -30,12 +30,11 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy/tool.clj` | Direct Tool construction namespace. |
 | `src/karcarthy/run.clj` | Run participation, model/Tool loop, limits, context, and events. |
 | `src/karcarthy/contract.clj` | Contracts and structured failures. |
-| `src/karcarthy/prompt.clj` | Generic instruction composition, prompt-file loading, and rendering of the packaged eval Tool manual. |
+| `src/karcarthy/prompt.clj` | Generic instruction composition and prompt-file loading. |
 | `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `memory-session`. |
-| `src/karcarthy/eval.clj` | Same-process expression reading, macroexpansion, evaluation, and result normalization. |
+| `src/karcarthy/eval.clj` | The eval Tool, its dynamic description and bindings, and same-process expression evaluation. |
 | `src/karcarthy/model/responses.clj` | Complete and SSE-streaming Responses-compatible HTTP transport. It translates model I/O only. |
 | `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a local directory. |
-| `resources/karcarthy/eval.md` | Model-facing eval manual with model, Tool, and Agent catalogs. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
 | `examples/main.clj` | Small command dispatcher for the live Basic and Coding examples and the REPL. |

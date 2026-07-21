@@ -6,7 +6,6 @@
             [karcarthy.agent :refer [agent? normalize-model]]
             [karcarthy.contract :as contract
              :refer [fail! throwable->failure]]
-            [karcarthy.prompt :as prompt]
             [karcarthy.session :as session]
             [karcarthy.tool :refer [hosted-tool? make-tool tool?]])
   (:import [java.util UUID]
@@ -26,128 +25,8 @@
       (fail! :run :context
              "This operation is only available while an Agent is running")))
 
-(def ^:private eval-request-schema
-  {:type "object"
-   :properties
-   {"code"
-    {:type "string"
-     :description
-     "Exactly one complete Clojure expression to evaluate."}
-    "input"
-    {:description
-     "A value bound to `input` while evaluating the expression."}}
-   :required ["code" "input"]
-   :additionalProperties false})
-
-(def ^:private capability-symbol-reservations
-  #{"agent" "defagent" "tool" "deftool" "run!" "context" "model!"
-    "emit!" "definition" "expansion" "eval" "input"})
-
-(defn- capability-symbol [kind value-name]
-  (let [clean (-> (str value-name)
-                  (str/replace #"[^A-Za-z0-9*+!_?.-]+" "-")
-                  (str/replace #"^-+|-+$" ""))
-        clean (if (or (str/blank? clean)
-                      (re-find #"^[0-9]" clean)
-                      (contains? capability-symbol-reservations clean))
-                (str (name kind) "-" (if (str/blank? clean) "value" clean))
-                clean)]
-    (symbol clean)))
-
-(defn- hosted-tool-name [hosted]
-  (let [spec (:spec hosted)]
-    (or (:name spec) (get spec "name")
-        (:type spec) (get spec "type")
-        "hosted-tool")))
-
-(defn- capability-entry [kind value]
-  (let [value-name (case kind
-                     :agent (:name value)
-                     :tool (:name value)
-                     :hosted-tool (hosted-tool-name value))
-        description
-        (case kind
-          :agent (or (:description value) "No description provided.")
-          :tool (or (:description value) "No description provided.")
-          :hosted-tool "Provider-hosted capability.")
-        schema
-        (case kind
-          :agent (or (:input-schema value)
-                     (contract/json-schema (:input value)))
-          :tool (or (:input-schema value)
-                    (contract/json-schema (:input value)))
-          :hosted-tool (:spec value))]
-    {:kind kind
-     :name (str value-name)
-     :symbol (capability-symbol kind value-name)
-     :description description
-     :schema schema
-     :value value}))
-
-(defn- capability-entries [tools agents]
-  (let [entries
-        (concat
-         (map #(capability-entry (if (hosted-tool? %) :hosted-tool :tool) %)
-              tools)
-         (map #(capability-entry :agent %) agents))
-        duplicate-symbols
-        (->> entries
-             (map :symbol)
-             frequencies
-             (keep (fn [[sym n]] (when (> n 1) sym)))
-             sort
-             vec)]
-    (when (seq duplicate-symbols)
-      (fail! :contract :configuration
-             "Available Tools and Agents produce duplicate Clojure symbols"
-             {:symbols duplicate-symbols}))
-    (vec entries)))
-
-(defn- model-source-config [model]
-  (when (map? model)
-    (let [config (select-keys model [:transport :provider :id :reasoning])]
-      (cond-> config
-        (not (keyword? (:transport config))) (dissoc :transport)))))
-
-(defn- catalog-lines [kinds entries]
-  (let [kinds (if (set? kinds) kinds #{kinds})
-        entries (filter #(contains? kinds (:kind %)) entries)]
-    (if (seq entries)
-      (str/join
-       "\n"
-       (map (fn [{:keys [name symbol description schema]}]
-              (str "- `" symbol "` (model name `" name "`) — " description
-                   (when schema (str " Input: `" (pr-str schema) "`"))))
-            entries))
-      "- None.")))
-
-(defn- eval-capability-description [model entries]
-  (let [model-config (model-source-config model)]
-    (prompt/eval-tool-prompt
-     {:model-configuration
-      (if (seq model-config)
-        (str "```clojure\n" (pr-str model-config) "\n```")
-        "No reusable printable model configuration is available. Configure a model explicitly.")
-      :tools (catalog-lines #{:tool :hosted-tool} entries)
-      :agents (catalog-lines :agent entries)})))
-
-(defn ^:no-doc eval-capability
-  "Tool that evaluates one Clojure expression in the current run."
-  [model tools agents]
-  (let [entries (capability-entries tools agents)
-        bindings (into {} (map (juxt :symbol :value)) entries)]
-    (make-tool
-     {:name "eval"
-      :description (eval-capability-description model entries)
-      :input eval-request-schema
-      :input-schema eval-request-schema
-      :output any?
-      :approval :never}
-     '(eval)
-     '(karcarthy.run/eval-capability)
-     (fn [rt {:keys [code input]}]
-       (let [eval! (requiring-resolve 'karcarthy.eval/eval-in-run!)]
-         (eval! (assoc rt :eval-bindings bindings) code input))))))
+(defn- eval-tool [model tools agents]
+  ((requiring-resolve 'karcarthy.eval/eval-tool) model tools agents))
 
 (def ^:private agent-call-schema
   {:type "object"
@@ -707,7 +586,7 @@
         known-agent-tools (mapv agent-tool available-agents)
         tools (unique-tools!
                (conj (into direct-tools known-agent-tools)
-                     (eval-capability model direct-tools available-agents)))
+                     (eval-tool model direct-tools available-agents)))
         tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
         instructions (instructions! rt (:instructions agent))
         prior (session-items! (:session rt))

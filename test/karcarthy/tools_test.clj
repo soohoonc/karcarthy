@@ -1,6 +1,5 @@
 (ns karcarthy.tools-test
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [clojure.test :refer [deftest is]]
             [karcarthy :as k]
             [karcarthy.tools :as tools])
@@ -17,15 +16,6 @@
 
 (defn- by-name [tools name]
   (first (filter #(= name (:name %)) tools)))
-
-(deftest eval-prompt-is-a-packaged-readable-resource
-  (let [resource (io/resource "karcarthy/eval.md")]
-    (is (some? resource))
-    (when resource
-      (let [template (slurp resource)]
-        (is (re-find #"## When to use" template))
-        (is (re-find #"## Available Agents" template))
-        (is (re-find #"\{\{AVAILABLE_AGENTS\}\}" template))))))
 
 (deftest minimal-local-tools-work-together
   (let [root (temp-directory)]

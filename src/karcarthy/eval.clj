@@ -1,12 +1,177 @@
 (ns karcarthy.eval
-  "Same-process evaluation of one model-authored Clojure expression."
-  (:require [clojure.walk :as walk]
+  "The eval Tool and same-process evaluation of one Clojure expression."
+  (:require [clojure.string :as str]
+            [clojure.walk :as walk]
             [karcarthy.agent :as agent]
             [karcarthy.contract :as contract]
             [karcarthy.run :as run]
             [karcarthy.tool :as tool])
   (:import [clojure.lang LineNumberingPushbackReader]
            [java.io StringReader]))
+
+(def ^:private request-schema
+  {:type "object"
+   :properties
+   {"code" {:type "string"
+            :description "Exactly one complete Clojure expression to evaluate."}
+    "input" {:description "A value bound to `input` during evaluation."}}
+   :required ["code" "input"]
+   :additionalProperties false})
+
+(def ^:private description-template
+  "Evaluate one Clojure expression. The expression may create and run Agents. Its
+value is returned to you.
+
+## When to use
+
+Use `eval` when ordinary Clojure composition materially helps: create a focused
+Agent, run several Agents concurrently, transform their results, or choose the
+next step from data. Call a directly available Tool or Agent when no composition
+is needed.
+
+## Tool input
+
+- `code` is exactly one complete Clojure expression, without Markdown fences.
+- `input` is bound to the symbol `input` while that expression is evaluated.
+
+## Creating an Agent
+
+`agent` is a macro that accepts one configuration map. The map requires
+`:name`, `:model`, and `:instructions`; `:input` and `:output` are optional
+contracts. `(run! agent-value agent-input)` runs the resulting Agent and returns
+a Run map.
+
+Use `let`, `if`, `mapv`, `future`, `deref`, `agent`, and `run!` normally. A
+`run!` call returns a Run map; its Agent output is at `:output`.
+
+## Run behavior
+
+The first `run!` establishes a run. Every `run!` called from this evaluation,
+including calls in `future`, participates in that same run and shares limits,
+usage, cancellation, approvals, events, context, and run id. Each Agent starts
+with only its explicit input and a fresh model conversation.
+
+The expression runs in this JVM. It does not start a Clojure subprocess. Model
+transports and process-backed Tools may still perform their normal external I/O.
+
+## Example: parallel specialists
+
+```clojure
+(let [reviewer (agent {:name \"reviewer\"
+                       :model \"MODEL_ID\"
+                       :instructions \"Find the riskiest assumption.\"
+                       :input string?
+                       :output string?})
+      tasks (mapv #(future (run! reviewer %)) input)]
+  (mapv (comp :output deref) tasks))
+```
+
+Use the model configuration listed below in place of the example's model value.
+
+## Available model configuration
+
+{{MODEL_CONFIGURATION}}
+
+## Available Tools
+
+{{AVAILABLE_TOOLS}}
+
+## Available Agents
+
+{{AVAILABLE_AGENTS}}
+")
+
+(def ^:private reserved-symbols
+  #{"agent" "defagent" "tool" "deftool" "run!" "context" "model!"
+    "emit!" "definition" "expansion" "eval" "input"})
+
+(defn- clojure-symbol [kind value-name]
+  (let [clean (-> (str value-name)
+                  (str/replace #"[^A-Za-z0-9*+!_?.-]+" "-")
+                  (str/replace #"^-+|-+$" ""))
+        clean (if (or (str/blank? clean)
+                      (re-find #"^[0-9]" clean)
+                      (contains? reserved-symbols clean))
+                (str (name kind) "-" (if (str/blank? clean) "value" clean))
+                clean)]
+    (symbol clean)))
+
+(defn- hosted-name [hosted]
+  (let [spec (:spec hosted)]
+    (or (:name spec) (get spec "name")
+        (:type spec) (get spec "type")
+        "hosted-tool")))
+
+(defn- available-entry [kind value]
+  (let [value-name (case kind
+                     :agent (:name value)
+                     :tool (:name value)
+                     :hosted-tool (hosted-name value))
+        description (case kind
+                      :agent (or (:description value) "No description provided.")
+                      :tool (or (:description value) "No description provided.")
+                      :hosted-tool "Provider-hosted Tool.")
+        schema (case kind
+                 :agent (or (:input-schema value)
+                            (contract/json-schema (:input value)))
+                 :tool (or (:input-schema value)
+                           (contract/json-schema (:input value)))
+                 :hosted-tool (:spec value))]
+    {:kind kind
+     :name (str value-name)
+     :symbol (clojure-symbol kind value-name)
+     :description description
+     :schema schema
+     :value value}))
+
+(defn- available-entries [tools agents]
+  (let [entries (concat
+                 (map #(available-entry
+                        (if (tool/hosted-tool? %) :hosted-tool :tool) %)
+                      tools)
+                 (map #(available-entry :agent %) agents))
+        duplicates (->> entries
+                        (map :symbol)
+                        frequencies
+                        (keep (fn [[sym n]] (when (> n 1) sym)))
+                        sort
+                        vec)]
+    (when (seq duplicates)
+      (contract/fail!
+       :contract :configuration
+       "Available Tools and Agents produce duplicate Clojure symbols"
+       {:symbols duplicates}))
+    (vec entries)))
+
+(defn- printable-model [model]
+  (when (map? model)
+    (let [config (select-keys model [:transport :provider :id :reasoning])]
+      (cond-> config
+        (not (keyword? (:transport config))) (dissoc :transport)))))
+
+(defn- catalog [kinds entries]
+  (let [kinds (if (set? kinds) kinds #{kinds})
+        entries (filter #(contains? kinds (:kind %)) entries)]
+    (if (seq entries)
+      (str/join
+       "\n"
+       (map (fn [{:keys [name symbol description schema]}]
+              (str "- `" symbol "` (model name `" name "`) — " description
+                   (when schema (str " Input: `" (pr-str schema) "`"))))
+            entries))
+      "- None.")))
+
+(defn- description [model entries]
+  (let [model (printable-model model)]
+    (-> description-template
+        (str/replace
+         "{{MODEL_CONFIGURATION}}"
+         (if (seq model)
+           (str "```clojure\n" (pr-str model) "\n```")
+           "No reusable model configuration is available. Configure a model explicitly."))
+        (str/replace "{{AVAILABLE_TOOLS}}"
+                     (catalog #{:tool :hosted-tool} entries))
+        (str/replace "{{AVAILABLE_AGENTS}}" (catalog :agent entries)))))
 
 (defn- deepest-message [^Throwable t]
   (loop [current t]
@@ -149,3 +314,20 @@
             (throw t)
             (contract/fail! :evaluation :evaluation (deepest-message t)
                             {:code code} t)))))))
+
+(defn ^:no-doc eval-tool
+  "Create the eval Tool documented for the supplied model, Tools, and Agents."
+  [model tools agents]
+  (let [entries (available-entries tools agents)
+        bindings (into {} (map (juxt :symbol :value)) entries)]
+    (tool/make-tool
+     {:name "eval"
+      :description (description model entries)
+      :input request-schema
+      :input-schema request-schema
+      :output any?
+      :approval :never}
+     '(eval)
+     '(karcarthy.eval/eval-tool)
+     (fn [rt {:keys [code input]}]
+       (eval-in-run! (assoc rt :eval-bindings bindings) code input)))))
