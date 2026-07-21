@@ -43,15 +43,15 @@ The example roots local Tools at the supplied directory:
 operations remain under `:cwd`, including after symlink resolution. Shell
 execution is bounded but is not sandboxed.
 
-The complete example also sets limits on model calls, generated forms, nesting,
+The complete example also sets limits on model calls, eval, Agent depth,
 parallelism, and total time. See
 [`examples/coding/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/coding/main.clj).
 
 ## Let the task choose the architecture
 
-The built-in `agent` Tool is present automatically. The Coding Agent may solve
-the task directly or create a focused reviewer when that helps. The prompt does
-not require a fixed topology.
+The built-in `eval` Tool is present automatically. The Coding Agent may solve
+the task directly or write Clojure that creates a focused reviewer when that
+helps. The prompt does not require a fixed topology.
 
 That distinction matters: the [composition example](/docs/guides/composition)
 defines the team before the task, while this Agent can choose a strategy after

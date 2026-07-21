@@ -36,7 +36,7 @@
 (defn run-coding! [cwd task]
   (k/run! (coding-agent {:cwd cwd}) task
           {:limits {:model-calls 32
-                    :agent-forms 4
+                    :evals 4
                     :depth 3
                     :parallelism 3
                     :deadline-ms 600000}}))

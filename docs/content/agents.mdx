@@ -1,143 +1,108 @@
 ---
 title: Agents and runs
-description: Define an Agent and execute it with run!.
+description: Define Agent data and execute it with run!.
 ---
 
-An Agent is a Clojure value containing a model, instructions, capabilities,
+An Agent is a flat Clojure map containing a model, instructions, capabilities,
 and boundary contracts.
 
 ```clojure
 (k/defagent researcher
   {:description "Research one question and return sourced findings."
-   :model {:transport :responses :id "gpt-5.6"}
+   :model "gpt-5.6"
    :instructions "Research carefully. Distinguish evidence from inference."
    :tools [web-search]
    :input string?
    :output string?})
 ```
 
-When it runs, karcarthy validates the input, calls the model, executes requested
-Tools or available Agents, and repeats until the model answers or the Run
-stops.
-
-## `agent` and `defagent`
-
-`defagent` defines a var and derives the Agent name from its symbol:
+`defagent` derives `:name` from the var. Use `agent` for an expression and pass
+`:name` explicitly. Both macros retain their definition and expansion:
 
 ```clojure
-(k/defagent reviewer
-  {:model {:transport :responses :id "gpt-5.6"}
-   :instructions "Review the change."
-   :output string?})
+(k/definition researcher)
+(k/expansion researcher)
+(assoc researcher :instructions "Return three findings.")
 ```
 
-Use `agent` inside an expression and supply `:name` explicitly:
+## Models
+
+A string selects the OpenAI Responses transport:
 
 ```clojure
-(def reviewer
-  (k/agent
-   {:name "reviewer"
-    :model {:transport :responses :id "gpt-5.6"}
-    :instructions "Review the change."
-    :output string?}))
+{:model "gpt-5.6"}
 ```
 
-Both macros retain their original form and macroexpansion:
+Use a map for advanced configuration:
 
 ```clojure
-(k/definition reviewer)
-(k/expansion reviewer)
+{:model {:transport :responses
+         :provider :openai
+         :id "gpt-5.6"
+         :reasoning :medium
+         :timeout-ms 180000}}
 ```
 
 ## Runs
 
-`run!` passes one input value to an Agent and returns a Run:
-
 ```clojure
-(def run
-  (k/run! researcher "What changed in the latest Java release?"))
-
-(select-keys run [:status :output :usage :error])
+(def result (k/run! researcher "What changed in Java?"))
+(select-keys result [:status :output :usage :error])
 ```
 
-A Run is `:completed`, `:failed`, or `:cancelled`. Completion means the Agent
-and its contracts completed successfully; it does not mean an external
-evaluator judged the answer correct. Check `:status` before consuming
-`:output`.
+A Run is `:completed`, `:failed`, or `:cancelled`. Invalid configuration throws
+before execution. Model, Tool, contract, budget, deadline, and cancellation
+failures during execution produce a failed or cancelled Run map.
 
-Each top-level `run!` creates a bounded execution with its own limits, events,
-and optional Session. An Agent called through `:agents` or created through the
-built-in `agent` Tool remains nested in that Run.
+The first `run!` establishes a run. Calls within its dynamic extent participate
+in that run and share limits, usage, events, context, approvals, cancellation,
+and its ID. Each Agent starts a fresh model conversation. Only the first Agent
+uses the optional Session.
 
-## Make a specialist available
+## Existing Agents as Tools
 
-Put existing Agents in `:agents` when the parent model should decide whether
-to call them:
+Put Agents in `:agents` when the model should decide whether to call them:
 
 ```clojure
-(k/defagent support
-  {:description "Resolve one billing question."
-   :model {:transport :responses :id "gpt-5.6"}
-   :instructions "Resolve the assigned billing question."
-   :output string?})
-
 (k/defagent manager
-  {:model {:transport :responses :id "gpt-5.6"}
+  {:model "gpt-5.6"
    :instructions "Resolve the request. Ask support when useful."
    :agents [support]
    :output string?})
 ```
 
-The specialist receives only the explicit call input, not the parent's
-conversation. Its output returns to the parent model. Limits, usage,
-cancellation, approvals, and events remain in the same Run.
+The called Agent receives only its explicit input, not the parent's model
+conversation. Its output returns as the Tool result.
 
-## Compose Agents in Clojure
+## Dynamic composition
 
-When application code should decide ordering or concurrency, use an ordinary
-function:
-
-```clojure
-(defn review-change [change]
-  (->> [security-reviewer api-reviewer]
-       (mapv #(future (k/run! % change)))
-       (mapv deref)
-       (mapv :output)))
-```
-
-The [composition example](/docs/guides/composition) handles failed Runs and
-passes both reviews to an editor.
-
-## Generate an Agent at runtime
-
-Every Agent also receives a built-in Tool named `agent`. The model calls it
-with one Clojure Agent form and explicit input:
+Every Agent also receives `eval`. The model may evaluate one Clojure expression
+that creates and runs Agents:
 
 ```clojure
-{:source "(agent {:name \"specialist\" ...})"
+{:code "(let [a (agent {:name \"specialist\" ...})]
+          (:output (run! a input)))"
  :input "Complete task input"}
 ```
 
-karcarthy evaluates the form, runs the resulting Agent inside the current Run,
-and returns its output to the parent model. [Generated
-agents](/docs/generated-agents) explains the mechanism; [Create agents at
-runtime](/docs/guides/architect) shows it running.
+See [Dynamic eval](/docs/eval).
 
 ## Configuration
 
 | Key | Meaning |
 | --- | --- |
-| `:name` | Stable runtime name. `agent` requires it; `defagent` derives it. |
-| `:description` | Tells a parent model when to call this Agent. |
-| `:model` | Selects the model and transport. |
-| `:instructions` | Agent-specific instructions appended to the base prompt. |
-| `:tools` | Tools the model may call. |
-| `:agents` | Existing Agents the model may call. |
-| `:input` / `:output` | Contracts checked at the Agent boundary. |
-| `:input-schema` / `:output-schema` | Optional JSON schemas shown to the model. |
-| `:limits` | Limits that narrow the containing Run for this Agent. |
-
-Pass local dependencies to Tools through Run `:context`:
+| `:name` | Stable name. `agent` requires it; `defagent` derives it. |
+| `:description` | Tells another model when to call this Agent. |
+| `:model` | Model ID string, model map, or metadata function. |
+| `:instructions` | String or metadata function. |
+| `:tools` / `:agents` | Capabilities available to the model. |
+| `:context` | Contract for local run context. |
+| `:input` / `:output` | Boundary contracts. |
+| `:input-schema` / `:output-schema` | JSON schemas exposed to models. |
+| `:max-turns` / `:stop-when` | Loop bounds and completion predicate. |
+| `:guardrails` | Input and output checks. |
+| `:limits` | Limits that can only narrow the active run. |
+| `:metadata` | Application data. |
 
 ```clojure
 (k/run! account-agent "Summarize account 123."
@@ -145,8 +110,6 @@ Pass local dependencies to Tools through Run `:context`:
          :limits {:model-calls 40
                   :depth 4
                   :parallelism 4
-                  :agent-forms 8
+                  :evals 8
                   :deadline-ms 300000}})
 ```
-
-The [API reference](/docs/reference/api#agent-and-defagent) lists every option.

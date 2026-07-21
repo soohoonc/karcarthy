@@ -22,7 +22,7 @@ Expose it by putting the Tool value in an Agent's `:tools` vector:
 
 ```clojure
 (k/defagent support
-  {:model {:transport :responses :id "gpt-5.6"}
+  {:model "gpt-5.6"
    :instructions "Resolve the user's request."
    :tools [lookup-user]
    :output string?})

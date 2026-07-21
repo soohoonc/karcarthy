@@ -1,0 +1,59 @@
+---
+title: Eval reference
+description: Input, namespace, events, limits, and result rules for model-authored Clojure.
+---
+
+## Tool schema
+
+```clojure
+{:type "object"
+ :properties
+ {"code" {:type "string"}
+  "input" {}}
+ :required ["code" "input"]
+ :additionalProperties false}
+```
+
+`code` is exactly one top-level expression. A surrounding `do` is valid because
+it is one expression. Empty input, additional expressions, and reader eval are
+rejected.
+
+## Processing
+
+1. Consume one unit from the run's `:evals` limit.
+2. Read one expression with `*read-eval*` false.
+3. Recursively macroexpand executable positions while preserving quoted data.
+4. Evaluate it with `input` and advertised capabilities bound.
+5. Normalize the final value for the model transport.
+
+## Events
+
+| Event | Meaning | Notable fields |
+| --- | --- | --- |
+| `:eval/started` | An attempt began. | `:code`, `:input` |
+| `:eval/expanded` | Reading and expansion succeeded. | `:expression`, `:expansion`, `:namespace` |
+| `:eval/completed` | Evaluation and result normalization succeeded. | `:value`, `:duration-ms` |
+| `:eval/failed` | A phase failed. | `:phase`, `:error`, `:duration-ms` |
+
+All events have the normal run, Agent, parent, depth, and timestamp fields.
+
+## Run participation
+
+If evaluated code calls `run!`, that call returns a Run map and participates in
+the active run. Its `:id` matches the active run ID. Usage and limits are shared.
+Its `:events` contains the events observed during that Agent call; the first
+Run's event list remains the aggregate trace.
+
+An Agent call may narrow `:context` or `:limits`. It cannot widen the limits
+established by the first `run!` call.
+
+## Failure phases
+
+- `:eval` for source shape and reader failures
+- `:evaluation` for compiler or evaluated-code failures
+- `:output` when the final value is not model-safe
+- the original run, model, Agent, Tool, deadline, cancellation, or budget phase
+  when a participating operation fails
+
+Failures become the eval Tool failure. If generated code deliberately handles a
+failed Run map, it may return a different model-safe value.

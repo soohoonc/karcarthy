@@ -33,7 +33,7 @@ because both Runs receive the same Session.
 (def assistant
   (k/agent
    {:name "chat-assistant"
-    :model {:transport :responses :id "gpt-5.6"}
+    :model "gpt-5.6"
     :instructions "Be helpful and concise."
     :output string?}))
 
@@ -43,7 +43,7 @@ because both Runs receive the same Session.
   (k/run! assistant input {:session session}))
 ```
 
-Each call to `run!` is a new Run. The Session contributes earlier normalized
+Each top-level call to `run!` establishes a new run. The Session contributes earlier normalized
 messages and receives the new turn after it completes.
 
 Inspect or clear the conversation:

@@ -49,15 +49,14 @@
     (let [run (architect/run-architect!
                "Review a migration from synchronous writes to a queue."
                (k/monitor))
-          program-events (->> (:events run)
-                              (map :type)
-                              (filter #(= "program" (namespace %)))
-                              set)]
+          eval-events (->> (:events run)
+                           (map :type)
+                           (filter #(= "eval" (namespace %)))
+                           set)]
       (is (= :completed (:status run)) (pr-str (:error run)))
-      (is (= 2 (get-in run [:usage :agent-forms])))
-      (is (= #{:program/read :program/expanded :program/checked
-               :program/evaluated}
-             program-events)))))
+      (is (= 1 (get-in run [:usage :evals])))
+      (is (= #{:eval/started :eval/expanded :eval/completed}
+             eval-events)))))
 
 (deftest coding-example-inspects-edits-and-verifies
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")

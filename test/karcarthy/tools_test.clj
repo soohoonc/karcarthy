@@ -23,7 +23,7 @@
     (is (some? resource))
     (when resource
       (let [template (slurp resource)]
-        (is (re-find #"## Creating Agents" template))
+        (is (re-find #"## Writing Clojure" template))
         (is (re-find #"## Working principles" template))
         (is (= template (k/system-prompt)))
         (is (not (re-find #"\{\{" template)))))))
@@ -99,7 +99,7 @@
         (is (re-find #"Do not commit changes"
                      (:instructions @seen)))
         (is (str/starts-with? (:instructions @seen) (k/system-prompt)))
-        (is (= #{"read" "write" "edit" "bash" "search" "agent"}
+        (is (= #{"read" "write" "edit" "bash" "search" "eval"}
                (->> (:tools @seen)
                     (filter #(= :function (:kind %)))
                     (map :name)

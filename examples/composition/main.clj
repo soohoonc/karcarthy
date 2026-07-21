@@ -24,7 +24,7 @@
         security-reviewer
         (k/agent
          {:name "security-reviewer"
-          :model {:transport :responses :id "gpt-5.6"}
+          :model "gpt-5.6"
           :instructions
           "Inspect the repository for concrete security problems. Cite files."
           :tools tools
@@ -34,7 +34,7 @@
         api-reviewer
         (k/agent
          {:name "api-reviewer"
-          :model {:transport :responses :id "gpt-5.6"}
+          :model "gpt-5.6"
           :instructions
           "Inspect the repository for API compatibility problems. Cite files."
           :tools tools
@@ -44,7 +44,7 @@
         editor
         (k/agent
          {:name "review-editor"
-          :model {:transport :responses :id "gpt-5.6"}
+          :model "gpt-5.6"
           :instructions
           "Combine the supplied reviews. Remove duplicates and unsupported claims."
           :input string?

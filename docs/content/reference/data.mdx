@@ -1,44 +1,42 @@
 ---
 title: Run data
-description: Run results, usage, failures, Sessions, and monitor snapshots.
+description: Agent, Tool, Run, failure, and monitor data shapes.
 ---
-
-Run results and events are ordinary Clojure data. Agent and Tool values also
-contain executable functions, so applications choose how to project them into
-an external format.
 
 ## Agent
 
 ```clojure
 {:karcarthy/type :agent
  :name "researcher"
- :config {...}
+ :model {:transport :responses :provider :openai :id "gpt-5.6"}
+ :instructions "Research carefully."
+ :tools [...]
+ :input string?
+ :output string?
  :definition-ns 'example.research
  :definition '(agent {...})
  :expansion '(...)}
 ```
 
-The public config keys are `:name`, `:description`, `:model`, `:instructions`,
-`:context`, `:input`, `:input-schema`, `:tools`, `:agents`, `:output`,
-`:output-schema`, `:max-turns`, `:stop-when`, `:guardrails`, `:limits`, and
-`:metadata`.
-
-`definition` and `expansion` are retained for inspection and program analysis.
+Agent configuration is flat. `definition` and `expansion` are additional
+inspection data, not a second configuration layer.
 
 ## Tool
 
 ```clojure
 {:karcarthy/type :tool
- :name "web-search"
- :description "Search the web."
- :config {...}
+ :name "lookup"
+ :description "Look up a record."
+ :input map?
+ :input-schema {:type "object" ...}
+ :output map?
  :definition '(tool {...} [input] ...)
  :expansion '(...)
  :execute #object[clojure.lang.IFn ...]}
 ```
 
-Tool input is validated before execution. Tool output is validated before it
-is returned to the model.
+If karcarthy cannot derive a meaningful JSON Schema from `:input`, the Tool
+must provide `:input-schema`.
 
 ## Run
 
@@ -52,93 +50,14 @@ is returned to the model.
  :usage {:model-calls 3
          :input-tokens 12000
          :output-tokens 900
-         :agent-forms 1
+         :evals 1
          :duration-ms 4200.0}
  :events [...]
  :error nil}
 ```
 
-Status is `:completed`, `:failed`, or `:cancelled`. Completion means the
-harness contracts passed; an external evaluator may still score the behavior
-poorly.
-
-## Run monitor snapshot
-
-`monitor-state` returns process-local data derived from observed events:
-
-```clojure
-(k/monitor-state live)
-```
-
-Its shape is:
-
-```clojure
-{:karcarthy/type :monitor-snapshot
- :run-order ["run_..."]
- :runs
- {"run_..."
-  {:id "run_..."
-   :status :running
-   :agent "architect"
-   :started-at-ms 1760000000000
-   :updated-at-ms 1760000018000
-   :elapsed-ms 18000
-   :usage {:model-calls 3
-           :input-tokens 7000
-           :output-tokens 1421}
-   :agent-forms 2
-   :created-agents ["failure-analyst" "rollout-planner"]
-   :agent-order ["agent_..." "agent_..." "agent_..."]
-   :agents
-   {"agent_..."
-    {:id "agent_..."
-     :parent-id nil
-     :depth 0
-     :name "architect"
-     :status :running
-     :activity :waiting-agents
-     :tools {...}}}}}}
-```
-
-The monitor is a live display. The completed Run and its event vector are the
-permanent record.
-
-## Session
-
-A Session implements `karcarthy.session/Session`:
-
-```clojure
-(session-id session)
-(get-items session)
-(add-items! session items)
-(pop-item! session)
-(clear-session! session)
-```
-
-It stores chronological conversation messages across Runs. It is not a Run
-checkpoint or general application-state store.
-
-## Events
-
-Every event has `:type`, `:time-ms`, and `:run-id`. Agent events add
-`:agent-id`, `:parent-id`, and `:depth`; Tool events may add `:tool-call-id`.
-
-```clojure
-:run/started          :run/completed       :run/failed
-:run/cancelled
-:agent/started        :agent/completed     :agent/failed
-:model/requested      :model/text-delta    :model/completed
-:model/failed
-:tool/started         :tool/completed      :tool/failed
-:session/updated
-:program/read         :program/expanded    :program/checked
-:program/evaluated    :program/failed
-```
-
-The `:program/*` events describe generated-Agent source compilation, not
-ordinary Agent execution. See the [compiler event
-table](/docs/reference/agent-forms#compiler-events) for their sequence and
-fields.
+Participating `run!` calls return the same shape and same `:id`. Their `:events`
+cover the Agent call; the first Run retains the aggregate event sequence.
 
 ## Failure
 
@@ -151,5 +70,9 @@ fields.
  :recoverable? false}
 ```
 
-Failed and cancelled Runs retain their events and failure data but have no
-output.
+## Monitor snapshot
+
+`monitor-state` returns process-local data derived from events. Each run entry
+contains status, elapsed time, usage, eval count, Agent order, parent IDs,
+activities, active Tools, and errors. The completed Run and its events are the
+record; the monitor is a projection for display.

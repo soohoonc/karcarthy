@@ -9,8 +9,7 @@
     :agent/started :agent/completed :agent/failed
     :model/requested :model/completed :model/failed
     :tool/started :tool/completed :tool/failed
-    :program/read :program/expanded :program/checked
-    :program/evaluated :program/failed})
+    :eval/started :eval/expanded :eval/completed :eval/failed})
 
 (defn- empty-run [event]
   {:id (:run-id event)
@@ -21,8 +20,7 @@
    :elapsed-ms 0
    :agents {}
    :agent-order []
-   :agent-forms 0
-   :created-agents []
+   :evals 0
    :usage {:model-calls 0
            :input-tokens 0
            :output-tokens 0}
@@ -38,7 +36,7 @@
 
 (defn- agent-activity-after-tools [tools]
   (cond
-    (some #(= "agent" (:name %)) (vals tools)) :waiting-agents
+    (some #(= "eval" (:name %)) (vals tools)) :evaluating
     (seq tools) :tools
     :else :running))
 
@@ -75,8 +73,8 @@
               :name (:tool event)
               :started-at-ms (:time-ms event)}]
     (cond-> (-> agent
-                (assoc :activity (if (= "agent" (:tool event))
-                                   :creating-agents
+                (assoc :activity (if (= "eval" (:tool event))
+                                   :evaluating
                                    :tools)
                        :updated-at-ms (:time-ms event))
                 (assoc-in [:tools call-id] tool))
@@ -162,24 +160,19 @@
       :tool/failed
       (update-agent run event finish-tool event)
 
-      :program/read
+      :eval/started
       (-> run
-          (update :agent-forms inc)
-          (update-agent event set-activity :program-read event))
+          (update :evals inc)
+          (update-agent event set-activity :evaluating event))
 
-      :program/expanded
-      (update-agent run event set-activity :program-expanded event)
+      :eval/expanded
+      (update-agent run event set-activity :evaluating event)
 
-      :program/checked
-      (update-agent run event set-activity :program-checked event)
+      :eval/completed
+      (update-agent run event set-activity :running event)
 
-      :program/evaluated
-      (-> run
-          (update :created-agents conj (:agent event))
-          (update-agent event set-activity :program-evaluated event))
-
-      :program/failed
-      (update-agent run event set-activity :program-failed event)
+      :eval/failed
+      (update-agent run event set-activity :eval-failed event)
 
       run)))
 
@@ -237,20 +230,14 @@
     (case (:activity agent)
       :model "calling model"
       :model-failed "model failed"
-      :creating-agents "creating Agents"
-      :waiting-agents
-      (let [n (count (filter #(= "agent" (:name %)) (active-tools agent)))]
-        (str "waiting for " (plural (max 1 n) "Agent")))
+      :evaluating "evaluating Clojure"
+      :waiting-agents "waiting for Agent"
       :tools
       (let [tools (vec (active-tools agent))]
         (if (= 1 (count tools))
           (str "Tool: " (:name (first tools)))
           (plural (count tools) "Tool")))
-      :program-read "reading Agent form"
-      :program-expanded "expanding Agent form"
-      :program-checked "checking Agent form"
-      :program-evaluated "created Agent"
-      :program-failed "Agent form failed"
+      :eval-failed "eval failed"
       "running")))
 
 (defn- children [run parent-id]
@@ -271,14 +258,14 @@
                   children))))
 
 (defn- run-lines [run]
-  (let [forms (:agent-forms run)
+  (let [evals (:evals run)
         header (str "Run " (short-id (:id run)) " · " (name (:status run))
                     " · " (elapsed-label run)
                     " · " (plural (get-in run [:usage :model-calls] 0)
                                     "model call")
                     " · " (plural (token-count run) "token")
-                    (when (pos? forms)
-                      (str " · " (plural forms "Agent form"))))
+                    (when (pos? evals)
+                      (str " · " (plural evals "eval"))))
         roots (vec (children run nil))]
     (into [header]
           (mapcat (fn [index agent]

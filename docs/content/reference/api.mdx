@@ -7,6 +7,22 @@ description: Public symbols available through the karcarthy namespace.
 (require '[karcarthy :as k])
 ```
 
+The facade is the normal entry point. Smaller direct namespaces are also
+available for libraries that prefer explicit dependencies:
+
+```clojure
+karcarthy.agent
+karcarthy.tool
+karcarthy.run
+karcarthy.contract
+karcarthy.eval
+karcarthy.session
+karcarthy.monitor
+karcarthy.model.responses
+karcarthy.mcp
+karcarthy.acp
+```
+
 ## `agent` and `defagent`
 
 ```clojure
@@ -22,7 +38,7 @@ require `:model` and `:instructions`.
 ```clojure
 {:name "researcher"
  :description "Research one question."
- :model {:transport :responses :id "gpt-5.6"}
+ :model "gpt-5.6"
  :instructions "Research carefully."
  :context map?
  :input string?
@@ -46,8 +62,8 @@ to the packaged base system prompt automatically.
 `:input-schema` or `:input` becomes the callable schema; otherwise the model
 calls the Agent with `{"input": ...}`.
 
-Every model Agent may submit a new Clojure `agent` form and run the resulting
-Agent inside the current Run.
+Every model Agent receives an `eval` Tool for one Clojure expression. The
+expression may create Agents and Tools and call `run!`.
 
 ```clojure
 (k/agent? value)
@@ -81,7 +97,9 @@ name. Optional keys are `:input-schema`, `:output`, `:output-schema`,
 (k/run! agent input options)
 ```
 
-Starts a Run, waits for it to finish, and returns its complete result.
+Runs an Agent, waits for it to finish, and returns a Run map. The first call in
+a dynamic call chain establishes a run. Calls made during that dynamic extent
+participate in it and return the same shape with the same `:id`.
 
 ```clojure
 {:context {...}
@@ -91,14 +109,14 @@ Starts a Run, waits for it to finish, and returns its complete result.
           :output-tokens 100000
           :depth 8
           :parallelism 6
-          :agent-forms 20
+          :evals 20
           :deadline-ms 300000}
  :observe event-fn
  :approval approval-handler
  :cancel cancellation-token
  :metadata {...}
  :model-transports {...}
- :evaluation-namespace 'example.generated}
+ :eval-namespace 'example.agent-code}
 ```
 
 `context` returns the current Run's local dependency value from a Tool:
@@ -155,21 +173,22 @@ text. `system-prompt` reads `resources/karcarthy/system.md`; karcarthy already
 prepends that file to every model Agent, so applications normally use the
 function only to inspect it or for explicit prompt composition.
 
-## Agent forms
+## Eval
 
-```clojure
-(def form (k/read-agent-form source))
-(def checked (k/check-agent-form! form))
-(def generated (k/eval-agent-form! checked))
-
-;; Read, expand, evaluate, and verify in one call:
-(def generated (k/compile-agent! source))
-```
-
-These functions must run inside a Run because compilation is charged to that
-Run. See [Agent forms](/docs/reference/agent-forms).
+Eval is deliberately model-facing rather than a separate public compiler API.
+Every Agent receives the `eval` Tool with `{:code string :input value}`. Code
+can use `agent`, `defagent`, `tool`, `deftool`, `run!`, `context`, `model!`,
+`emit!`, `definition`, and `expansion`. See [Eval reference](/docs/reference/eval).
 
 ## Models
+
+The concise form selects OpenAI Responses:
+
+```clojure
+"gpt-5.6"
+```
+
+The advanced form is:
 
 ```clojure
 {:transport :responses

@@ -209,14 +209,16 @@
   #{:name :description :input :input-schema :output :output-schema :approval
     :enabled? :guardrails :timeout-ms :retry :to-model-output :metadata})
 
-(declare run-agent!)
+(declare run-agent! run!)
 
-(def ^:dynamic ^:no-doc *run-context* nil)
+(def ^:dynamic *run*
+  "The active run context. `run!` binds this value, including across futures."
+  nil)
 
 (defn ^:no-doc current-run-context
   "Return the internal context for the Agent or Tool currently running."
   []
-  (or *run-context*
+  (or *run*
       (fail! :program :agent
              "This operation is only available while an Agent is running")))
 
@@ -227,6 +229,11 @@
            (str label " contains unknown configuration keys")
            {:unknown (vec unknown) :supported (vec (sort supported))}))
   m)
+
+(defn- normalize-model [model]
+  (if (string? model)
+    {:transport :responses :provider :openai :id model}
+    model))
 
 (defn make-agent
   "Implementation constructor used by `agent` and `defagent`."
@@ -242,12 +249,12 @@
     (fail! :contract :configuration
            "An Agent requires :model and :instructions"
            {:name (:name config)}))
-  {:karcarthy/type :agent
-   :name (:name config)
-   :config config
-   :definition-ns definition-ns
-   :definition definition
-   :expansion expansion})
+  (let [config (update config :model normalize-model)]
+    (assoc config
+           :karcarthy/type :agent
+           :definition-ns definition-ns
+           :definition definition
+           :expansion expansion)))
 
 (defn- tool-function-form [label bindings body]
   (when-not (and (vector? bindings) (= 1 (count bindings)))
@@ -291,7 +298,8 @@
   (and (map? x)
        (= :agent (:karcarthy/type x))
        (string? (:name x))
-       (map? (:config x))))
+       (some? (:model x))
+       (some? (:instructions x))))
 
 (defn definition
   "Return the Clojure definition that created an Agent or Tool."
@@ -319,13 +327,17 @@
   (when-not (contains? config :input)
     (fail! :contract :configuration "Tool :input contract is required"
            {:config config}))
-  {:karcarthy/type :tool
-   :name (:name config)
-   :description (:description config)
-   :config config
-   :definition definition
-   :expansion expansion
-   :execute execute})
+  (when-not (or (:input-schema config)
+                (json-schema? (:input config))
+                (contract->json-schema (:input config)))
+    (fail! :contract :configuration
+           "Tool needs :input-schema when :input cannot be expressed as JSON Schema"
+           {:tool (:name config) :input (:input config)}))
+  (assoc config
+         :karcarthy/type :tool
+         :definition definition
+         :expansion expansion
+         :execute execute))
 
 (defmacro tool
   "Construct a contracted Tool backed by Clojure code."
@@ -380,32 +392,30 @@
        (keyword? (:transport x))
        (map? (:spec x))))
 
-(def ^:private agent-request-schema
+(def ^:private eval-request-schema
   {:type "object"
    :properties
-   {"source"
+   {"code"
     {:type "string"
      :description
-     (str "Exactly one complete Clojure (agent config) form following the "
-          "generation grammar in this Tool description.")}
+     "Exactly one complete Clojure expression to evaluate."}
     "input"
     {:description
-     (str "The complete input value passed to the generated Agent. Include "
-          "all task-specific information it needs.")}}
-   :required ["source" "input"]
+     "A value bound to `input` while evaluating the expression."}}
+   :required ["code" "input"]
    :additionalProperties false})
 
-(def ^:private generated-symbol-reservations
-  #{"agent" "tool" "run!" "context" "model!" "emit!" "definition"
-    "expansion" "compile-agent!"})
+(def ^:private capability-symbol-reservations
+  #{"agent" "defagent" "tool" "deftool" "run!" "context" "model!"
+    "emit!" "definition" "expansion" "eval" "input"})
 
-(defn- generated-symbol [kind value-name]
+(defn- capability-symbol [kind value-name]
   (let [clean (-> (str value-name)
                   (str/replace #"[^A-Za-z0-9*+!_?.-]+" "-")
                   (str/replace #"^-+|-+$" ""))
         clean (if (or (str/blank? clean)
                       (re-find #"^[0-9]" clean)
-                      (contains? generated-symbol-reservations clean))
+                      (contains? capability-symbol-reservations clean))
                 (str (name kind) "-" (if (str/blank? clean) "value" clean))
                 clean)]
     (symbol clean)))
@@ -417,26 +427,25 @@
         "hosted-tool")))
 
 (defn- capability-entry [kind value]
-  (let [config (:config value)
-        value-name (case kind
+  (let [value-name (case kind
                      :agent (:name value)
                      :tool (:name value)
                      :hosted-tool (hosted-tool-name value))
         description
         (case kind
-          :agent (or (:description config) "No description provided.")
+          :agent (or (:description value) "No description provided.")
           :tool (or (:description value) "No description provided.")
           :hosted-tool "Provider-hosted capability.")
         schema
         (case kind
-          :agent (or (:input-schema config)
-                     (contract->json-schema (:input config)))
-          :tool (or (:input-schema config)
-                    (contract->json-schema (:input config)))
+          :agent (or (:input-schema value)
+                     (contract->json-schema (:input value)))
+          :tool (or (:input-schema value)
+                    (contract->json-schema (:input value)))
           :hosted-tool (:spec value))]
     {:kind kind
      :name (str value-name)
-     :symbol (generated-symbol kind value-name)
+     :symbol (capability-symbol kind value-name)
      :description description
      :schema schema
      :value value}))
@@ -478,9 +487,9 @@
             entries))
       "- None.")))
 
-(defn- agent-capability-description [model entries]
+(defn- eval-capability-description [model entries]
   (let [model-config (model-source-config model)]
-    (prompt/agent-tool-prompt
+    (prompt/eval-tool-prompt
      {:model-configuration
       (if (seq model-config)
         (str "```clojure\n" (pr-str model-config) "\n```")
@@ -488,27 +497,23 @@
       :tools (catalog-lines #{:tool :hosted-tool} entries)
       :agents (catalog-lines :agent entries)})))
 
-(defn ^:no-doc agent-capability
-  "Tool that evaluates and runs an Agent definition in the current Run."
+(defn ^:no-doc eval-capability
+  "Tool that evaluates one Clojure expression in the current run."
   [model tools agents]
   (let [entries (capability-entries tools agents)
         bindings (into {} (map (juxt :symbol :value)) entries)]
     (make-tool
-     {:name "agent"
-      :description (agent-capability-description model entries)
-      :input agent-request-schema
-      :input-schema agent-request-schema
+     {:name "eval"
+      :description (eval-capability-description model entries)
+      :input eval-request-schema
+      :input-schema eval-request-schema
       :output any?
       :approval :never}
-     '(agent)
-     '(karcarthy.core/agent-capability)
-     (fn [rt {:keys [source input]}]
-       (let [compile-agent! (requiring-resolve
-                             'karcarthy.eval/compile-agent-in-run!)
-             generated (compile-agent!
-                        (assoc rt :evaluation-bindings bindings)
-                        source)]
-         (run-agent! rt generated input {}))))))
+     '(eval)
+     '(karcarthy.core/eval-capability)
+     (fn [rt {:keys [code input]}]
+       (let [eval! (requiring-resolve 'karcarthy.eval/eval-in-run!)]
+         (eval! (assoc rt :eval-bindings bindings) code input))))))
 
 (def ^:private agent-call-schema
   {:type "object"
@@ -527,18 +532,17 @@
     (fail! :contract :configuration
            "Agent :agents must contain Agent values"
            {:value agent}))
-  (let [config (:config agent)
-        schema (or (:input-schema config)
-                   (contract->json-schema (:input config)))
+  (let [schema (or (:input-schema agent)
+                   (contract->json-schema (:input agent)))
         structured-input? (object-schema? schema)
         tool-schema (if structured-input? schema agent-call-schema)
         tool-input (if structured-input?
-                     (or (:input config) any?)
+                     (or (:input agent) any?)
                      agent-call-schema)]
     (make-tool
      {:name (:name agent)
       :description
-      (str (or (:description config)
+      (str (or (:description agent)
                (str "Ask " (:name agent) " to complete a task."))
            " This Agent starts without the parent conversation and receives "
            (if structured-input?
@@ -547,7 +551,7 @@
            " Its final output returns as the Tool result.")
       :input tool-input
       :input-schema tool-schema
-      :output (:output config)
+      :output (:output agent)
       :approval :never}
      nil
      nil
@@ -566,12 +570,12 @@
    :output-tokens Long/MAX_VALUE
    :depth 8
    :parallelism 16
-   :agent-forms 20
+   :evals 20
    :deadline-ms nil})
 
 (def ^:private run-option-keys
   #{:context :session :limits :observe :approval :cancel :metadata
-    :model-transports :evaluation-namespace})
+    :model-transports :eval-namespace})
 
 (def ^:private agent-call-option-keys #{:context :limits})
 
@@ -582,7 +586,7 @@
            {:value limits}))
   (reject-unknown! "Limits" (set (keys default-limits)) limits)
   (doseq [resource [:model-calls :input-tokens :output-tokens
-                    :depth :agent-forms]]
+                    :depth :evals]]
     (let [value (get limits resource)]
       (when-not (and (integer? value) (not (neg? value)))
         (fail! :contract :configuration
@@ -632,6 +636,8 @@
                       (select-keys rt [:agent-id :parent-id :depth])
                       event)]
      (swap! (:events rt) conj event)
+     (doseq [collector (:event-collectors rt)]
+       (swap! collector conj event))
      (doseq [observer (when-let [f (:observe rt)] [f])]
        (try (observer event) (catch Throwable _ nil)))
      event)))
@@ -662,7 +668,7 @@
   (get (:limits rt) k Long/MAX_VALUE))
 
 (defn consume!
-  "Atomically consume a run-tree resource budget."
+  "Atomically consume a shared run resource budget."
   [rt k n]
   (check-run! rt)
   (loop []
@@ -771,7 +777,7 @@
   ([rt request]
    (check-run! rt)
    (consume! rt :model-calls 1)
-   (let [model (resolve-value (:model request) rt)
+   (let [model (normalize-model (resolve-value (:model request) rt))
          transport (resolve-transport rt model)
          request (assoc request :model model)
          started (System/nanoTime)]
@@ -803,20 +809,20 @@
 ;; Tool execution and the native model loop
 ;; ---------------------------------------------------------------------------
 
-(defn- default-json-schema []
-  {:type "object" :properties {} :additionalProperties true})
-
 (defn- tool-descriptor [tool]
   (cond
     (tool? tool)
-    (let [config (:config tool)]
+    (let [schema (or (:input-schema tool)
+                     (when (json-schema? (:input tool)) (:input tool))
+                     (contract->json-schema (:input tool)))]
+      (when-not schema
+        (fail! :tool :configuration
+               "Tool needs :input-schema when :input cannot be expressed as JSON Schema"
+               {:tool (:name tool) :input (:input tool)}))
       {:kind :function
        :name (:name tool)
        :description (:description tool)
-       :parameters (or (:input-schema config)
-                       (when (json-schema? (:input config)) (:input config))
-                       (contract->json-schema (:input config))
-                       (default-json-schema))})
+       :parameters schema})
 
     (hosted-tool? tool)
     {:kind :hosted
@@ -847,7 +853,7 @@
 
 (defn- approved?
   [rt tool input]
-  (let [policy (approval-policy (get-in tool [:config :approval] :never)
+  (let [policy (approval-policy (:approval tool :never)
                                 rt input)]
     (cond
       (not (contains? #{true :always :once} policy)) true
@@ -866,7 +872,7 @@
               allowed?)))))))
 
 (defn- retry-count [tool]
-  (let [retry (get-in tool [:config :retry] 0)]
+  (let [retry (:retry tool 0)]
     (cond
       (integer? retry) (max 0 retry)
       (map? retry) (max 0 (long (or (:max-retries retry) 0)))
@@ -875,7 +881,7 @@
 (defn- execute-tool-body! [rt tool input]
   (loop [attempt 0]
     (let [outcome (try
-                    {:value (binding [*run-context* rt]
+                    {:value (binding [*run* rt]
                               ((:execute tool) rt input))}
                     (catch Throwable t {:error t}))]
       (if-let [error (:error outcome)]
@@ -903,15 +909,14 @@
   (when-not (tool? tool)
     (fail! :tool :configuration "Agent contains an invalid Tool"
            {:value tool}))
-  (let [config (:config tool)
-        input (:input call)
+  (let [input (:input call)
         call-id (or (:id call) (id "tool_"))
-        enabled? (:enabled? config)]
+        enabled? (:enabled? tool)]
     (when (and enabled? (not (enabled? (call-metadata rt))))
       (fail! :tool :disabled "Tool is disabled in the current Run"
              {:tool (:name tool)}))
-    (check-contract! :tool-input (:input config) input)
-    (run-guardrails! rt :tool-input (get-in config [:guardrails :input]) input)
+    (check-contract! :tool-input (:input tool) input)
+    (run-guardrails! rt :tool-input (get-in tool [:guardrails :input]) input)
     (when-not (approved? rt tool input)
       (fail! :approval :tool "Tool approval was denied"
              {:tool (:name tool) :input input}))
@@ -920,12 +925,12 @@
     (let [started (System/nanoTime)]
       (try
         (let [output (execute-with-timeout!
-                      rt (:timeout-ms config)
+                      rt (:timeout-ms tool)
                       #(execute-tool-body! rt tool input))
-              _ (check-contract! :tool-output (:output config) output)
+              _ (check-contract! :tool-output (:output tool) output)
               _ (run-guardrails! rt :tool-output
-                                 (get-in config [:guardrails :output]) output)
-              model-output (if-let [project (:to-model-output config)]
+                                 (get-in tool [:guardrails :output]) output)
+              model-output (if-let [project (:to-model-output tool)]
                              (project output)
                              output)
               result {:id call-id
@@ -1061,12 +1066,11 @@
 
 (defn- default-loop!
   [rt agent input]
-  (let [config (:config agent)
-        max-turns (or (:max-turns config) 20)
-        model (resolve-value (:model config) rt)
-        tools-value (:tools config)
+  (let [max-turns (or (:max-turns agent) 20)
+        model (normalize-model (resolve-value (:model agent) rt))
+        tools-value (:tools agent)
         direct-tools (vec (or (resolve-value tools-value rt) []))
-        agents-value (:agents config)
+        agents-value (:agents agent)
         available-agents (vec (or (resolve-value agents-value rt) []))
         _ (doseq [tool direct-tools]
             (when-not (or (tool? tool) (hosted-tool? tool))
@@ -1076,9 +1080,9 @@
         known-agent-tools (mapv agent-tool available-agents)
         tools (unique-tools!
                (conj (into direct-tools known-agent-tools)
-                     (agent-capability model direct-tools available-agents)))
+                     (eval-capability model direct-tools available-agents)))
         tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
-        instructions (model-instructions! rt (:instructions config))
+        instructions (model-instructions! rt (:instructions agent))
         prior (session-items! (:session rt))
         user-message {:role :user :content input}
         messages (conj prior user-message)]
@@ -1097,15 +1101,15 @@
                      :messages pending
                      :provider-state provider-state
                      :tools (mapv tool-descriptor tools)
-                     :output-schema (or (:output-schema config)
+            :output-schema (or (:output-schema agent)
                                         (contract->json-schema
-                                         (:output config)))
+                                         (:output agent)))
                      :turn turn}
             response (model! rt request)]
         (case (:type response)
           :final
-          (let [output (maybe-json-output (:output response) (:output config))]
-            (when-let [stop-when (:stop-when config)]
+          (let [output (maybe-json-output (:output response) (:output agent))]
+            (when-let [stop-when (:stop-when agent)]
               (when-not (stop-when (call-metadata rt)
                                    {:response response :messages messages})
                 (fail! :model :stop-condition
@@ -1156,11 +1160,11 @@
   (when-not (agent? agent)
     (fail! :contract :agent "run! requires an Agent" {:value agent}))
   (let [options (or options {})]
-    (reject-unknown! "Nested Agent options" agent-call-option-keys options))
+    (reject-unknown! "Participating run options" agent-call-option-keys options))
   (let [depth (inc (:depth parent-rt))
         limits (validate-limits!
                 (narrower-limits (:limits parent-rt)
-                                 (merge (get-in agent [:config :limits])
+                                 (merge (:limits agent)
                                         (:limits options))))]
     (when (> depth (:depth limits))
       (fail! :budget :depth "Agent depth limit was reached"
@@ -1174,7 +1178,7 @@
               (nil? parent-deadline) local-deadline-ns
               (nil? local-deadline-ns) parent-deadline
               :else (min parent-deadline local-deadline-ns)))
-          active-session (when (zero? depth) (:root-session parent-rt))
+          active-session (when (zero? depth) (:initial-session parent-rt))
           rt (assoc parent-rt
                     :agent-id (id "agent_")
                     :parent-id (:agent-id parent-rt)
@@ -1187,21 +1191,20 @@
                     :pending-session-items (atom nil)
                     :limits limits
                     :deadline-ns deadline-ns)
-          config (:config agent)
           started (System/nanoTime)]
-      (check-contract! :context (:context config) (:context rt))
-      (check-contract! :agent-input (:input config) input)
+      (check-contract! :context (:context agent) (:context rt))
+      (check-contract! :agent-input (:input agent) input)
       (run-guardrails! rt :agent-input
-                       (get-in config [:guardrails :input]) input)
+                       (get-in agent [:guardrails :input]) input)
       (emit! rt {:type :agent/started :agent (:name agent) :input input})
       (try
-        (let [output (binding [*run-context* rt]
+        (let [output (binding [*run* rt]
                        (default-loop! rt agent input))
-              output (maybe-json-output output (:output config))]
+              output (maybe-json-output output (:output agent))]
           (check-run! rt)
-          (check-contract! :agent-output (:output config) output)
+          (check-contract! :agent-output (:output agent) output)
           (run-guardrails! rt :agent-output
-                           (get-in config [:guardrails :output]) output)
+                           (get-in agent [:guardrails :output]) output)
           (when-let [items @(:pending-session-items rt)]
             (append-session-items! rt items))
           (emit! rt {:type :agent/completed :agent (:name agent)
@@ -1217,88 +1220,126 @@
             (fail! :program :execute (or (ex-message t) (str t))
                    {:agent (:name agent)} t)))))))
 
+(defn- call-result!
+  [rt agent input options]
+  (let [started (System/nanoTime)
+        call-events (atom [])
+        rt (update rt :event-collectors (fnil conj []) call-events)]
+    (try
+      (let [output (run-agent! rt agent input options)]
+        {:karcarthy/type :run
+         :id (:run-id rt)
+         :status :completed
+         :agent (:name agent)
+         :input input
+         :output output
+         :usage (assoc @(:usage rt) :duration-ms
+                       (/ (double (- (System/nanoTime) started)) 1000000.0))
+         :events @call-events
+         :error nil})
+      (catch Throwable t
+        (let [error (throwable->failure t)]
+          {:karcarthy/type :run
+           :id (:run-id rt)
+           :status (if (= :cancellation (:kind error)) :cancelled :failed)
+           :agent (:name agent)
+           :input input
+           :output nil
+           :usage (assoc @(:usage rt) :duration-ms
+                         (/ (double (- (System/nanoTime) started)) 1000000.0))
+           :events @call-events
+           :error error})))))
+
 (defn run!
-  "Start a root Run, call an Agent, and return the complete Run value."
+  "Run an Agent and return a Run map.
+
+  The first call establishes a run. Calls made during its dynamic extent join
+  that run and therefore share its id, limits, usage, deadline, cancellation,
+  approvals, events, executor, and context. Each Agent starts a fresh model
+  conversation unless it is the first call with a Session."
   ([agent input]
    (run! agent input {}))
   ([agent input options]
-   (let [options (or options {})
-         _ (reject-unknown! "Run options" run-option-keys options)
-         _ (when (and (some? (:session options))
-                      (not (session/session? (:session options))))
-             (fail! :contract :session
-                    "Run :session must implement karcarthy.session/Session"
-                    {:value (:session options)}))
-         limits (validate-limits! (merge default-limits (:limits options)))
-         executor (Executors/newVirtualThreadPerTaskExecutor)
-         events* (atom [])
-         usage* (atom {:model-calls 0
-                       :input-tokens 0
-                       :output-tokens 0
-                       :agent-forms 0})
-         run-id (id "run_")
-         started (System/nanoTime)
-         deadline-ns (when-let [ms (:deadline-ms limits)]
-                       (+ started (* 1000000 (long ms))))
-         rt {:karcarthy/type :run-context
-             :run-id run-id
-             :agent-id nil
-             :parent-id nil
-             :depth -1
-             :agent nil
-             :context (:context options)
-             :limits limits
-             :usage usage*
-             :events events*
-             :root-session (:session options)
-             :observe (:observe options)
-             :approval (:approval options)
-             :approvals (atom #{})
-             :cancel (:cancel options)
-             :metadata (:metadata options)
-             :model-transports (:model-transports options)
-             :executor executor
-             :semaphore (Semaphore. (int (:parallelism limits)) true)
-             :deadline-ns deadline-ns
-             :evaluation-parent-namespace
-             (or (:evaluation-namespace options)
-                 (:definition-ns agent))
-             :evaluation-namespace
-             (symbol
-              (str (or (:evaluation-namespace options) 'karcarthy.generated)
-                   ".run_" (str/replace run-id "-" "_")))
-             :evaluation-counter (atom 0)}]
-     (emit! rt {:type :run/started :agent (:name agent) :input input})
-     (try
-       (let [output (run-agent! rt agent input {})
-             result {:karcarthy/type :run
-                     :id run-id
-                     :status :completed
-                     :agent (:name agent)
-                     :input input
-                     :output output
-                     :usage (assoc @usage*
-                                   :duration-ms
-                                   (/ (double (- (System/nanoTime) started)) 1000000.0))
-                     :events @events*
-                     :error nil}]
-         (emit! rt {:type :run/completed :agent (:name agent)
-                    :output output :usage @usage*})
-         (assoc result :events @events*))
-       (catch Throwable t
-         (let [cancelled? (= :cancellation (:kind (throwable->failure t)))
-               result {:karcarthy/type :run
-                       :id run-id
-                       :status (if cancelled? :cancelled :failed)
-                       :agent (:name agent)
-                       :input input
-                       :output nil
-                       :usage (assoc @usage*
-                                     :duration-ms
-                                     (/ (double (- (System/nanoTime) started)) 1000000.0))
-                       :error (throwable->failure t)}]
-           (emit! rt {:type (if cancelled? :run/cancelled :run/failed)
-                      :agent (:name agent) :error (:error result)})
-           (assoc result :events @events*)))
-       (finally
-         (.close executor))))))
+   (if *run*
+     (let [rt *run*]
+       (try
+         (await-future! (submit-limited!
+                         rt #(call-result! rt agent input (or options {}))))
+         (catch Throwable t
+           {:karcarthy/type :run
+            :id (:run-id rt)
+            :status (if (= :cancellation (:kind (throwable->failure t)))
+                      :cancelled :failed)
+            :agent (:name agent)
+            :input input
+            :output nil
+            :usage @(:usage rt)
+            :events []
+            :error (throwable->failure t)})))
+     (let [options (or options {})
+           _ (reject-unknown! "Run options" run-option-keys options)
+           _ (when (and (some? (:session options))
+                        (not (session/session? (:session options))))
+               (fail! :contract :session
+                      "Run :session must implement karcarthy.session/Session"
+                      {:value (:session options)}))
+           _ (when-not (agent? agent)
+               (fail! :contract :agent "run! requires an Agent" {:value agent}))
+           limits (validate-limits! (merge default-limits (:limits options)))
+           executor (Executors/newVirtualThreadPerTaskExecutor)
+           events* (atom [])
+           usage* (atom {:model-calls 0
+                         :input-tokens 0
+                         :output-tokens 0
+                         :evals 0})
+           run-id (id "run_")
+           started (System/nanoTime)
+           deadline-ns (when-let [ms (:deadline-ms limits)]
+                         (+ started (* 1000000 (long ms))))
+           rt {:karcarthy/type :run-context
+               :run-id run-id
+               :agent-id nil
+               :parent-id nil
+               :depth -1
+               :agent nil
+               :context (:context options)
+               :limits limits
+               :usage usage*
+               :events events*
+               :initial-session (:session options)
+               :observe (:observe options)
+               :approval (:approval options)
+               :approvals (atom #{})
+               :cancel (:cancel options)
+               :metadata (:metadata options)
+               :model-transports (:model-transports options)
+               :executor executor
+               :semaphore (Semaphore. (int (:parallelism limits)) true)
+               :deadline-ns deadline-ns
+               :eval-parent-namespace
+               (or (:eval-namespace options) (:definition-ns agent))
+               :eval-namespace
+               (symbol
+                (str (or (:eval-namespace options) 'karcarthy.eval)
+                     ".run_" (str/replace run-id "-" "_")))
+               :eval-counter (atom 0)}]
+       (emit! rt {:type :run/started :agent (:name agent) :input input})
+       (try
+         (let [result (binding [*run* rt]
+                        (call-result! rt agent input {}))
+               event-type (case (:status result)
+                            :completed :run/completed
+                            :cancelled :run/cancelled
+                            :run/failed)]
+           (emit! rt (cond-> {:type event-type :agent (:name agent)}
+                       (= :completed (:status result))
+                       (assoc :output (:output result) :usage @usage*)
+                       (not= :completed (:status result))
+                       (assoc :error (:error result))))
+           (assoc result
+                  :usage (assoc @usage* :duration-ms
+                                (/ (double (- (System/nanoTime) started))
+                                   1000000.0))
+                  :events @events*))
+         (finally
+           (.close executor)))))))

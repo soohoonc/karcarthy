@@ -117,7 +117,7 @@
          :result)))
 
 (defn- configured-model-id [agent]
-  (let [model (get-in agent [:config :model])]
+  (let [model (:model agent)]
     (when (and (map? model) (string? (:id model)) (seq (:id model)))
       (:id model))))
 
@@ -162,15 +162,15 @@
                  :model-id @(:model-id session)}
         agent (if (core/agent? source) source (source context))
         agent (if (and @(:model-id session)
-                       (map? (get-in agent [:config :model])))
-                (assoc-in agent [:config :model :id] @(:model-id session))
+                       (map? (:model agent)))
+                (assoc-in agent [:model :id] @(:model-id session))
                 agent)]
     (when-not (core/agent? agent)
       (core/fail! :acp :configuration
                   "ACP :agent must be an Agent or a function returning one"
                   {:value agent}))
-    (update-in agent [:config :tools]
-               #(merge-tools (or % []) (:mcp-tools session)))))
+    (update agent :tools
+            #(merge-tools (or % []) (:mcp-tools session)))))
 
 (defn- prompt-text [blocks]
   (->> blocks

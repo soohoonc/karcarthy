@@ -21,7 +21,7 @@ values. The model loop does not need a separate MCP execution path.
   (let [tools (k/mcp-tools connection)
         agent (k/agent
                {:name "project-agent"
-                :model {:transport :responses :id "gpt-5.6"}
+                :model "gpt-5.6"
                 :instructions "Inspect the project and answer the request."
                 :tools tools
                 :output string?})]

@@ -3,7 +3,13 @@ title: Model providers
 description: Connect an Agent to OpenAI or another Responses-compatible endpoint.
 ---
 
-An Agent's `:model` selects both the model and the transport used to call it:
+For OpenAI Responses, use the model ID directly:
+
+```clojure
+"gpt-5.6"
+```
+
+Use a map when selecting transport or provider options:
 
 ```clojure
 {:transport :responses
@@ -38,7 +44,7 @@ Some capabilities execute at the model provider rather than inside karcarthy:
 
 ```clojure
 (k/defagent researcher
-  {:model {:transport :responses :id "gpt-5.6"}
+  {:model "gpt-5.6"
    :instructions "Research current information and cite sources."
    :tools [(k/responses-web-search)]
    :output string?})

@@ -33,6 +33,8 @@
     (is (k/agent? leaf))
     (is (k/tool? uppercase))
     (is (= "uppercase" (:name uppercase)))
+    (is (= "Uppercase text." (:description uppercase)))
+    (is (nil? (:config uppercase)))
     (is (seq (k/definition leaf)))
     (is (seq (k/expansion leaf)))
     (is (not (contains? leaf :body)))))
@@ -59,6 +61,11 @@
                         (k/mock-model :not-a-function)))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input contract"
                         (k/tool {:name "x" :description "x"}
+                                [input] input)))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input-schema"
+                        (k/tool {:name "opaque"
+                                 :description "Opaque input."
+                                 :input any?}
                                 [input] input))))
 
 (deftest agent-final-output
@@ -526,7 +533,7 @@
     (is (= ["text"]
            (get-in @requests [0 :tools 0 :parameters :required])))))
 
-(deftest agent-tool-has-a-complete-dynamic-manual
+(deftest eval-tool-has-a-complete-dynamic-manual
   (let [request (atom nil)
         model (k/mock-model
                (fn [value]
@@ -550,18 +557,15 @@
                  :output string?})
         run (k/run! parent "work"
                     {:model-transports {:captured model}})
-        agent-tool (first (filter #(= "agent" (:name %))
-                                  (:tools @request)))
-        description (:description agent-tool)]
+        eval-tool (first (filter #(= "eval" (:name %))
+                                 (:tools @request)))
+        description (:description eval-tool)]
     (is (= :completed (:status run)))
     (is (str/starts-with? (:instructions @request) (k/system-prompt)))
     (doseq [section ["## When to use"
-                     "## When not to use"
                      "## Tool input"
-                     "## What to generate"
-                     "## What the new Agent receives"
-                     "## What happens"
-                     "## Example: one specialist"
+                     "## Run behavior"
+                     "## Example: parallel specialists"
                      "## Available model configuration"
                      "## Available Tools"
                      "## Available Agents"]]
@@ -570,9 +574,9 @@
                        "{:transport :captured, :provider :test, :id \"test-model\"}"))
     (is (str/includes? description "`uppercase`"))
     (is (str/includes? description "`specialist`"))
-    (is (= ["source" "input"]
-           (get-in agent-tool [:parameters :required])))
-    (is (nil? (get-in agent-tool [:parameters :properties "input" :type])))))
+    (is (= ["code" "input"]
+           (get-in eval-tool [:parameters :required])))
+    (is (nil? (get-in eval-tool [:parameters :properties "input" :type])))))
 
 (deftest guardrails-reject
   (let [agent (k/agent {:name "guarded"

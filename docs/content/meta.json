@@ -8,7 +8,7 @@
     "---Concepts---",
     "agents",
     "tools",
-    "generated-agents",
+    "eval",
     "sessions",
     "events",
     "limits-safety",

@@ -1,113 +1,70 @@
 ---
 title: Overview
-description: A toy Clojure harness where Agents can add new Agents while they run.
+description: Homoiconic agent orchestration in Clojure.
 ---
 
-> **The agent architecture is the program.**
+> **Agents write Clojure that runs Agents.**
 
-karcarthy is a toy agent harness built around Clojure forms and macros.
-
-An Agent is constructed with `(agent ...)`. During a Run, the model can call a
-built-in Tool with the source of another `(agent ...)` form. karcarthy reads the
-source, expands the macro, checks the result, evaluates it, and runs the new
-Agent inside the current Run.
-
-The program adds another Agent by evaluating more Lisp while it runs. There is
-no workflow graph or separate orchestration language between the generated
-form and Clojure.
-
-## Watch the program add new Agents
-
-The Architect example starts one Agent and asks it to create two specialists:
-
-```bash
-clojure -M:examples architect \
-  "Review a migration from synchronous writes to a queue."
-```
-
-The terminal follows the running program:
-
-```text
-Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
-└─ architect · waiting for 2 Agents
-   ├─ failure-analyst · calling model
-   └─ rollout-planner · calling model
-```
-
-The parent did not choose from two predefined workers. It submitted two new
-Clojure forms. Each form was evaluated into an Agent and run. Their results
-returned to the parent, which used them to produce the final answer.
-
-At the REPL, the generated forms and final answer remain available:
+karcarthy is a small Clojure agent library built from Agents, Tools, Runs,
+Sessions, context, limits, and events. Every Agent also receives an `eval` Tool
+that evaluates one ordinary Clojure expression.
 
 ```clojure
-(println (:output run))
+(k/defagent assistant
+  {:model "gpt-5.6"
+   :instructions "Answer clearly."
+   :output string?})
 
-(->> (k/events run)
-     (filter #(= :program/expanded (:type %)))
-     (map :definition))
+(k/run! assistant "Why are Lisp macros unusual?")
 ```
 
-## Code is data
+## Dynamic workflows use the language
 
-Before evaluation, an Agent is a Clojure form:
+An Agent can write:
 
 ```clojure
-(agent
- {:name "failure-analyst"
-  :model {:transport :responses :id "gpt-5.6"}
-  :instructions "Find the most dangerous failure mode."
-  :input string?
-  :output string?})
+(let [reviewer (agent {:name "reviewer"
+                       :model "gpt-5.6"
+                       :instructions "Find one dangerous assumption."
+                       :input string?
+                       :output string?})
+      jobs (mapv #(future (run! reviewer %)) input)]
+  (mapv (comp :output deref) jobs))
 ```
 
-karcarthy retains the form, expands the `agent` macro, checks the expansion,
-and evaluates it. The result is an executable Agent value.
+karcarthy reads one expression with reader evaluation disabled, expands its
+macros, and evaluates it in the same JVM. The expression can branch, recurse,
+create Agents and Tools, run Agents concurrently, and return JSON-compatible
+data to the model.
 
-```text
-form → macroexpansion → Agent value → execution
+There is no workflow graph between the generated code and Clojure.
+
+## One dynamically scoped run
+
+The first `run!` establishes a run. Calls made during its dynamic extent join
+that run, including calls inside Clojure futures. They share limits, usage,
+events, cancellation, approvals, context, and the run ID. Each Agent gets a
+fresh model conversation.
+
+```clojure
+(->> (k/events result)
+     (filter #(= :eval/expanded (:type %)))
+     (map :expression))
 ```
 
-The new Agent receives the same built-in Tool, so this can continue recursively.
-
-## Known architecture is ordinary Clojure
-
-Runtime generation is not required. When the architecture is known, write it
-directly:
+## Known workflows are the same Clojure
 
 ```clojure
 (defn review-team [change]
- (->> [security-reviewer api-reviewer]
-      (mapv #(future (k/run! % change)))
-      (mapv deref)
-      (mapv :output)))
+  (->> [security-reviewer api-reviewer]
+       (mapv #(future (k/run! % change)))
+       (mapv deref)
+       (mapv :output)))
 ```
 
-Branches, functions, recursion, macros, and concurrency remain Clojure.
-karcarthy does not provide workflow nodes for operations the language already
-has.
-
-## Try it
-
 <Cards>
-  <Card
-    title="Quickstart"
-    description="Install karcarthy and run one Agent."
-    href="/docs/quickstart"
-  />
-  <Card
-    title="Why Clojure?"
-    description="Follow a Clojure form from source to a running Agent."
-    href="/docs/why-clojure"
-  />
-  <Card
-    title="Create agents at runtime"
-    description="Run the Architect example and inspect the generated forms."
-    href="/docs/guides/architect"
-  />
-  <Card
-    title="Compose agents"
-    description="Write a fixed concurrent architecture in ordinary Clojure."
-    href="/docs/guides/composition"
-  />
+  <Card title="Quickstart" description="Install karcarthy and run one Agent." href="/docs/quickstart" />
+  <Card title="Why Clojure?" description="See where homoiconicity changes the workflow UX." href="/docs/why-clojure" />
+  <Card title="Dynamic eval" description="The expression boundary, names, events, and examples." href="/docs/eval" />
+  <Card title="Compose Agents" description="Write concurrent architectures in ordinary Clojure." href="/docs/guides/composition" />
 </Cards>

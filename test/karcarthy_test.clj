@@ -13,8 +13,7 @@
                 local-tools prompt prompt-file system-prompt
                 responses-web-search connect-mcp! mcp-tools close-mcp!
                 serve-acp!
-                read-agent-form check-agent-form! eval-agent-form!
-                compile-agent! definition expansion]]
+                definition expansion]]
     (is (some? (ns-resolve 'karcarthy sym)) (str "missing " sym)))
   (doseq [removed '[run pipe branch delegate reduce revise route continue
                     dynamic evolve mock-runner fn-runner process-runner
@@ -23,7 +22,9 @@
                     as-tool source-form expanded-form monitor-view print-monitor
                     fake-model
                     handoff! environment conversation-state? model-transport
-                    workspace-tools workspace-prompt]]
+                    workspace-tools workspace-prompt
+                    read-agent-form check-agent-form! eval-agent-form!
+                    compile-agent!]]
     (is (nil? (get (ns-publics 'karcarthy) removed))
         (str "still exports " removed))))
 
@@ -34,7 +35,31 @@
                         :instructions "answer"
                         :output string?})]
     (is (k/agent? agent))
-    (is (seq (k/definition agent)))))
+    (is (seq (k/definition agent)))
+    (is (= "facade" (:name agent)))
+    (is (= "answer" (:instructions agent)))
+    (is (nil? (:config agent)))))
+
+(deftest model-id-shorthand-is-lowered-once
+  (let [agent (k/agent {:name "short"
+                        :model "gpt-5.6"
+                        :instructions "answer"})]
+    (is (= {:transport :responses
+            :provider :openai
+            :id "gpt-5.6"}
+           (:model agent)))))
+
+(deftest direct-namespaces-are-small-and-discoverable
+  (doseq [[namespace symbols]
+          {'karcarthy.agent '[agent defagent agent? definition expansion]
+           'karcarthy.tool '[tool deftool tool? hosted-tool hosted-tool?]
+           'karcarthy.run '[run! context model! emit! events mock-model]
+           'karcarthy.contract '[valid? explain json-schema]
+           'karcarthy.eval '[read-expression]}]
+    (require namespace)
+    (doseq [sym symbols]
+      (is (some? (ns-resolve namespace sym))
+          (str "missing " namespace "/" sym)))))
 
 (deftest agents-do-not-accept-function-bodies
   (is (thrown? clojure.lang.ArityException

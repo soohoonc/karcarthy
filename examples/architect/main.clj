@@ -9,18 +9,12 @@
 (defn instructions []
   (str
    "You are the parent Agent in a live demonstration. "
-   "Before answering, you must call the built-in agent Tool exactly twice. "
-   "Submit both calls together so the Agents can run concurrently. "
-   "Create one failure analyst that finds a non-obvious risk and one rollout "
-   "planner that proposes a concrete safe plan. Give each Agent the complete "
-   "user task string as its explicit input. Keep each definition concise and "
-   "use exactly this outer source shape, including the closing } before ): "
-   "(agent {:name \"descriptive-name\" "
-   ":model {:transport :responses :provider :openai :id \"" (model-id) "\" "
-   ":reasoning :low} :instructions \"Do not create or call other Agents. "
-   "ROLE-SPECIFIC TASK.\" "
-   ":input string? :output string?}). "
-   "After both Agents return, synthesize their results concisely."))
+   "Before answering, call the built-in eval Tool once. Write one Clojure "
+   "expression that creates a failure analyst and a rollout planner, runs both "
+   "with future, dereferences the Runs, and returns their :output values. "
+   "Use input as the task for both. Configure each with model \"" (model-id) "\", "
+   ":input string?, :output string?, and instructions that forbid further "
+   "delegation. Then synthesize the two returned results concisely."))
 
 (defn architect []
   (k/agent
@@ -46,7 +40,7 @@
    (k/run! (architect) task
            {:observe monitor
             :limits {:model-calls 4
-                     :agent-forms 2
+                     :evals 1
                      :depth 2
                      :parallelism 3
                      :deadline-ms 240000}})))

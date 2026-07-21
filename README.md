@@ -1,61 +1,72 @@
 # karcarthy
 
-> **The agent architecture is the program.**
+> **Agents write Clojure that runs Agents.**
 
-karcarthy is a toy agent harness built around Clojure forms and macros. During
-a Run, an Agent can submit another `(agent ...)` form; karcarthy expands it,
-evaluates it, and runs the new Agent.
+karcarthy is a small, homoiconic agent library for Clojure. Its public ideas
+are the familiar ones—Agents, Tools, Runs, Sessions, context, limits, and
+events. Its distinguishing capability is a built-in `eval` Tool: while an
+Agent is running, it can write one ordinary Clojure expression that creates
+Agents, runs them, composes their results, and decides what to do next.
 
-There is no workflow graph or second orchestration language. Clojure functions,
-conditionals, recursion, and concurrency express fixed architectures. When the
-right architecture depends on the task, a running Agent can write and run a new
-`(agent ...)` form.
+There is no workflow graph or second orchestration language. Use `let`, `if`,
+functions, macros, `future`, `mapv`, and `run!`.
 
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [Documentation](https://karcarthy.vercel.app/docs)
 
-## Watch an Agent write more Agents
-
-JDK 21, the Clojure CLI, and `RESPONSES_API_KEY` or `OPENAI_API_KEY` are
-required:
-
-```bash
-clojure -M:examples architect \
-  "Review a migration from synchronous writes to a queue."
-```
-
-The terminal redraws the live Agent tree as the Run changes:
-
-```text
-Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 2 Agent forms
-└─ architect · waiting for 2 Agents
-   ├─ failure-analyst · calling model
-   └─ rollout-planner · calling model
-```
-
-Elapsed time updates once per second. Model-call and token totals update as
-usage arrives. When both children finish, the tree marks them done and the
-parent writes the answer.
-
-## Agents and Clojure
-
-Define an Agent with a model and instructions:
+## One Agent
 
 ```clojure
 (require '[karcarthy :as k])
 
 (k/defagent assistant
-  {:model {:transport :responses :id "gpt-5.6"}
+  {:model "gpt-5.6"
    :instructions "Answer clearly and concisely."
+   :input string?
    :output string?})
 
-(def run (k/run! assistant "Explain continuation-passing style."))
-(:output run) ;=> "..."
+(def result (k/run! assistant "Explain continuation-passing style."))
+(:output result) ;=> "..."
 ```
 
-Or use ordinary Clojure to define a fixed architecture:
+`agent` and `defagent` create plain maps. Their configuration is flat, so
+ordinary data operations work as expected:
+
+```clojure
+(assoc assistant :instructions "Answer in one sentence.")
+```
+
+A model ID string uses OpenAI Responses. Pass a model map for transport,
+provider, reasoning, streaming, or timeout options.
+
+## Dynamic workflows are Clojure
+
+Every Agent can call `eval` with `code` and `input`. For example, an Agent can
+write this expression:
+
+```clojure
+(let [reviewer (agent {:name "reviewer"
+                       :model "gpt-5.6"
+                       :instructions "Find the riskiest assumption."
+                       :input string?
+                       :output string?})
+      jobs (mapv #(future (run! reviewer %)) input)]
+  (mapv (comp :output deref) jobs))
+```
+
+This is a real Clojure expression, not an Agent-shaped DSL node. It is read
+with reader evaluation disabled, macroexpanded, and evaluated in the same JVM.
+Its JSON-compatible value is returned to the model.
+
+The first `run!` call establishes a run. Every `run!` within its dynamic
+extent—including calls inside `future`—joins that run and shares its ID,
+limits, usage, deadline, cancellation, approvals, events, context, and
+executor. Each Agent still starts a fresh model conversation unless it is the
+first call with a Session.
+
+## Static composition is the same language
 
 ```clojure
 (defn review-team [change]
@@ -65,62 +76,58 @@ Or use ordinary Clojure to define a fixed architecture:
        (mapv :output)))
 ```
 
-Every Agent receives a built-in `agent` Tool. It accepts the source for exactly
-one `(agent ...)` form and an explicit input. The form is ordinary Clojure,
-evaluated while the Run is in progress.
+The model writes the same kind of Clojure you would write ahead of time. That
+is where Lisp's homoiconicity matters: code is data at the model boundary and
+ordinary executable code after evaluation.
 
-## Watch live Runs at the REPL
-
-`monitor` turns the event stream into a live Agent tree:
+## Observe a run
 
 ```clojure
 (def live (k/monitor {:display :tree}))
-(def run (k/run! assistant "Complete the task." {:observe live}))
+(def result (k/run! assistant "Complete the task." {:observe live}))
 ```
 
-Evaluate `(k/monitor live)` to see the current tree again. Use
-`(k/monitor-state live)` only when you need the underlying Clojure data. A
-monitor can observe several concurrent Runs.
+```text
+Run run_7c2e9b… · running · 18s · 3 model calls · 8,421 tokens · 1 eval
+└─ architect · waiting for Agent
+   ├─ failure-analyst · calling model
+   └─ rollout-planner · calling model
+```
 
-## Examples
-
-The examples progress from the kernel to a complete evaluation:
-
-| Example | What it shows |
-| --- | --- |
-| [Basic](examples/basic/main.clj) | One Agent Run |
-| [Architect](examples/architect/main.clj) | A running Agent authors and calls a task-specific team |
-| [Compose agents](examples/composition/main.clj) | A fixed concurrent architecture written with Clojure |
-| [Build a coding agent](examples/coding/main.clj) | Open-ended repository work with task-dependent architecture |
-| [Evaluate an agent](examples/harbor/README.md) | The Coding Agent evaluated by a verifier with a recorded trajectory |
-
-See [examples/README.md](examples/README.md) for commands and details.
+Runs return data with `:status`, `:output`, `:usage`, `:events`, and `:error`.
+Configuration mistakes throw early; failures during execution become failed
+Run maps with structured errors and events.
 
 ## Boundaries
 
-The harness owns the bounded model/Tool loop. Clojure owns control flow.
-Sessions own conversation history. Model transports only translate I/O.
+karcarthy owns the bounded model/Tool loop. Clojure owns control flow. Sessions
+own conversation history. Model transports translate I/O.
 
-Runtime Agent source is evaluated as full-trust JVM Clojure. karcarthy validates
-that it is one Agent form, but it is not a sandbox for untrusted code.
+`eval` is full-trust, same-process Clojure. It is intentionally not a sandbox
+for untrusted code. Model HTTP calls and process-backed Tools can still perform
+external I/O or start processes; evaluating and coordinating Agents does not
+start a new Clojure process.
 
-## Documentation
+## Examples
 
-- [Quickstart](https://karcarthy.vercel.app/docs/quickstart)
-- [Why Clojure?](https://karcarthy.vercel.app/docs/why-clojure)
-- [Create agents at runtime](https://karcarthy.vercel.app/docs/guides/architect)
-- [Agents and runs](https://karcarthy.vercel.app/docs/agents)
-- [Tools and context](https://karcarthy.vercel.app/docs/tools)
-- [API](https://karcarthy.vercel.app/docs/reference/api)
+| Example | What it shows |
+| --- | --- |
+| [Basic](examples/basic/main.clj) | One Agent run |
+| [Architect](examples/architect/main.clj) | An Agent writes a concurrent workflow |
+| [Compose](examples/composition/main.clj) | The same workflow written ahead of time |
+| [Coding](examples/coding/main.clj) | Repository work with local Tools |
+| [Harbor](examples/harbor/README.md) | Evaluation with a recorded trajectory |
 
 ## Development
 
 ```bash
 clojure -M:test
-OPENAI_API_KEY=... clojure -M:examples basic "Say hello."
-KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
 clojure -T:build all
-cd docs && npm ci && npm run lint && npm run types:check && npm run build
+cd docs
+npm ci
+npm run lint
+npm run types:check
+npm run build
 ```
 
 karcarthy is MIT licensed.
