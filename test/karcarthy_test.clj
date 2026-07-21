@@ -2,6 +2,28 @@
   (:require [clojure.test :refer [deftest is]]
             [karcarthy :as k]))
 
+(k/defagent explicit-name-agent
+  {:name "explicit-agent"
+   :model "fake"
+   :instructions "Answer."})
+
+(k/deftool explicit-name-tool
+  {:name "explicit-tool"
+   :description "Return the input."
+   :input-schema map?}
+  [input]
+  input)
+
+(defn- evaluate-expansion [expansion]
+  (let [namespace (symbol (str (gensym "karcarthy.expansion-test.")))]
+    (create-ns namespace)
+    (try
+      (binding [*ns* (the-ns namespace)]
+        (clojure.core/refer 'clojure.core)
+        @(eval expansion))
+      (finally
+        (remove-ns namespace)))))
+
 (deftest facade-exposes-only-the-native-harness
   (doseq [sym '[agent defagent tool deftool agent? tool?
                 run! output context
@@ -42,6 +64,12 @@
     (is (= "facade" (:name agent)))
     (is (= "answer" (:instructions agent)))
     (is (nil? (:config agent)))))
+
+(deftest retained-expansions-preserve-explicit-names
+  (let [agent-expansion (k/expansion explicit-name-agent)
+        tool-expansion (k/expansion explicit-name-tool)]
+    (is (= "explicit-agent" (:name (evaluate-expansion agent-expansion))))
+    (is (= "explicit-tool" (:name (evaluate-expansion tool-expansion))))))
 
 (deftest facade-retains-repl-metadata
   (doseq [sym '[agent tool run! output session prompt local-tools events]]

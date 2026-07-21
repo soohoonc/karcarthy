@@ -12,14 +12,36 @@
 
 (declare run-agent!)
 
+(defn- options! [label supported options]
+  (when-not (map? options)
+    (fail! :schema :configuration (str label " must be a map")
+           {:value options}))
+  (schema/reject-unknown! label supported options))
+
+(defn- validate-root-options! [options]
+  (options! "Run options" context/run-option-keys options)
+  (doseq [[key predicate message]
+          [[:on-event #(or (nil? %) (fn? %))
+            "Run :on-event must be a function"]
+           [:approval #(or (nil? %) (fn? %))
+            "Run :approval must be a function"]
+           [:model-transports #(or (nil? %) (map? %))
+            "Run :model-transports must be a map"]
+           [:cancel #(or (nil? %) (boolean? %) (fn? %)
+                         (instance? clojure.lang.IDeref %))
+            "Run :cancel must be a boolean, function, or dereferenceable value"]]]
+    (when-not (predicate (get options key))
+      (fail! :schema :configuration message {:value (get options key)})))
+  options)
+
 (defn- run-agent!
   [parent agent input options]
   (when-not (agent? agent)
     (fail! :schema :agent "run! requires an Agent" {:value agent}))
-  (let [options (or options {})]
-    (schema/reject-unknown! "Participating run options"
-                            context/agent-call-option-keys options))
-  (let [depth (inc (:depth parent))
+  (let [options (or options {})
+        _ (options! "Participating run options"
+                    context/agent-call-option-keys options)
+        depth (inc (:depth parent))
         limits (context/validate-limits!
                 (context/narrower-limits
                  (:limits parent)
@@ -119,7 +141,7 @@
                 (throwable->failure error))))))
 
 (defn- root-context [agent options]
-  (schema/reject-unknown! "Run options" context/run-option-keys options)
+  (validate-root-options! options)
   (when (and (some? (:session options))
              (not (session/session? (:session options))))
     (fail! :schema :session

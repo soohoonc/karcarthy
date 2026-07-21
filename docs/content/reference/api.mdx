@@ -140,6 +140,11 @@ ordinary composition concise without discarding failure data.
  :model-transports {...}}
 ```
 
+`:on-event` and `:approval` are functions, `:model-transports` is a map, and
+`:cancel` is a boolean, function, or dereferenceable value such as an atom.
+Invalid option shapes fail before the Run starts. Static Agent `:limits` use
+the same validation as Run limits and fail during Agent construction.
+
 `context` returns the current Run's local dependency value from a Tool or
 evaluated expression:
 
@@ -236,7 +241,8 @@ Use a deterministic model in tests:
 ```
 
 Structured JSON output is decoded only for object- or array-shaped output
-schemas. JSON-looking values remain strings when `:output-schema` is `string?`.
+schemas, including `anyOf`, `oneOf`, and `allOf` branches. JSON-looking values
+remain strings when `:output-schema` is `string?`.
 The normalized custom transport contract is documented under
 [Model providers](/docs/protocols/models#normalized-transport-contract).
 

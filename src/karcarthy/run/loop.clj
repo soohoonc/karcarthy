@@ -181,16 +181,27 @@
                :error error}
               (throw t))))))))
 
-(defn- structured-schema? [schema]
-  (let [schema (schema/json-schema schema)]
-    (contains? #{"array" "object" :array :object}
-               (or (:type schema) (get schema "type")))))
+(def ^:private structured-types #{"array" "object" :array :object})
+
+(defn- structured-json-schema? [schema]
+  (let [type (or (:type schema) (get schema "type"))
+        types (if (sequential? type) type [type])
+        alternatives (mapcat #(or (get schema %) [])
+                             [:anyOf "anyOf" :oneOf "oneOf"
+                              :allOf "allOf"])]
+    (or (some structured-types types)
+        (some structured-json-schema? alternatives))))
+
+(defn- structured-schema? [value]
+  (some-> value schema/json-schema structured-json-schema? boolean))
 
 (defn ^:no-doc output [output schema]
   (if (and (structured-schema? schema) (string? output)
            (re-find #"^\s*[\[{]" output))
     (try (json/read-str output :key-fn keyword)
-         (catch Throwable _ output))
+         (catch Throwable error
+           (fail! :model :response "Model returned invalid structured output"
+                  {:output output} error)))
     output))
 
 (defn- instructions! [rt value]

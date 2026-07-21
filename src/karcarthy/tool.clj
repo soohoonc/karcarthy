@@ -83,9 +83,12 @@
   (let [source &form
         execute (function-form "deftool" bindings body)
         expansion `(def ~sym
-                     (karcarthy.tool/make-tool
-                      (assoc ~config :name ~(name sym))
-                      '~source nil ~execute))]
+                     (let [config# ~config
+                           config# (if (contains? config# :name)
+                                     config#
+                                     (assoc config# :name ~(name sym)))]
+                       (karcarthy.tool/make-tool
+                        config# '~source nil ~execute)))]
     `(def ~sym
        (let [config# ~config
              config# (if (contains? config# :name)

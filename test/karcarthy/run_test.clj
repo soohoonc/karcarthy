@@ -87,6 +87,11 @@
                                   :model "fake"
                                   :instructions "x"
                                   :max-turns 0})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"model-calls"
+                        (k/agent {:name "bad-limits"
+                                  :model "fake"
+                                  :instructions "x"
+                                  :limits {:model-calls -1}})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #":input-guardrails"
                         (k/agent {:name "bad-guardrail"
                                   :model "fake"
@@ -342,6 +347,45 @@
         run (k/run! agent nil)]
     (is (= :completed (:status run)) (pr-str (:error run)))
     (is (= value (:output run)))))
+
+(deftest structured-union-output-is-parsed
+  (s/def ::nullable-answer string?)
+  (s/def ::nullable-report
+    (s/nilable (s/keys :req-un [::nullable-answer])))
+  (let [agent (k/agent {:name "nullable-json"
+                        :model {:id "fake"
+                                :transport
+                                (scripted-model
+                                 "{\"nullable-answer\":\"yes\"}")}
+                        :instructions "Return structured output."
+                        :output-schema ::nullable-report})
+        run (k/run! agent nil)]
+    (is (= :completed (:status run)) (pr-str (:error run)))
+    (is (= {:nullable-answer "yes"} (:output run)))))
+
+(deftest malformed-structured-output-is-a-model-failure
+  (let [agent (k/agent {:name "malformed-json"
+                        :model {:id "fake"
+                                :transport (scripted-model "{not-json")}
+                        :instructions "Return structured output."
+                        :output-schema map?})
+        run (k/run! agent nil)]
+    (is (= :failed (:status run)))
+    (is (= :model (get-in run [:error :kind])))
+    (is (= :response (get-in run [:error :phase])))))
+
+(deftest root-run-options-validate-before-execution
+  (let [agent (k/agent {:name "invalid-options"
+                        :model {:id "fake"
+                                :transport (scripted-model "unused")}
+                        :instructions "Answer."})]
+    (doseq [[options message]
+            [[{:on-event :not-a-function} #":on-event"]
+             [{:approval true} #":approval"]
+             [{:model-transports []} #":model-transports"]
+             [{:cancel :not-a-token} #":cancel"]]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo message
+                            (k/run! agent nil options))))))
 
 (deftest schema-errors-become-failed-runs
   (let [bad-input (k/agent {:name "input"

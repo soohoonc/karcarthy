@@ -1,7 +1,8 @@
 (ns karcarthy.agent
   "Flat, model-backed Agent values."
   (:refer-clojure :exclude [agent])
-  (:require [karcarthy.schema :as schema]))
+  (:require [karcarthy.run.context :as run-context]
+            [karcarthy.schema :as schema]))
 
 (def ^:private config-keys
   #{:name :description :model :instructions :context-schema :input-schema
@@ -58,6 +59,9 @@
                     "An Agent requires :model and :instructions"
                     {:name (:name config)}))
   (validate-config! config)
+  (when-let [limits (:limits config)]
+    (run-context/validate-limits!
+     (merge run-context/default-limits limits)))
   (assoc (update config :model normalize-model)
          :karcarthy/type :agent
          :definition-ns definition-ns
@@ -78,9 +82,12 @@
   [sym config]
   (let [source &form
         expansion `(def ~sym
-                     (karcarthy.agent/make-agent
-                      (assoc ~config :name ~(name sym))
-                      '~source nil '~(ns-name *ns*)))]
+                     (let [config# ~config
+                           config# (if (contains? config# :name)
+                                     config#
+                                     (assoc config# :name ~(name sym)))]
+                       (karcarthy.agent/make-agent
+                        config# '~source nil '~(ns-name *ns*))))]
     `(def ~sym
        (let [config# ~config
              config# (if (contains? config# :name)

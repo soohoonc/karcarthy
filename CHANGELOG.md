@@ -51,7 +51,11 @@ All notable changes are documented here, following
 - Agent and Tool options now validate their documented shapes, and both static
   and dynamic Tool approval policies fail closed on unknown values.
 - Structured model output is decoded as JSON only for object- and array-shaped
-  schemas; JSON-looking string output remains a string.
+  schemas, including structured union branches; JSON-looking string output
+  remains a string and malformed structured output reports a model failure.
+- Static Agent limits and root Run callback/token options validate before Run
+  execution, and retained `defagent` / `deftool` expansions preserve explicit
+  names.
 - Stateless model transports receive accumulated message history, while
   transports returning provider continuation state continue to receive only
   new messages.
