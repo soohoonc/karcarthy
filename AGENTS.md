@@ -28,7 +28,11 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy.clj` | Public facade under one alias: `(require '[karcarthy :as k])`. |
 | `src/karcarthy/agent.clj` | Direct Agent construction namespace. |
 | `src/karcarthy/tool.clj` | Direct Tool construction namespace. |
-| `src/karcarthy/run.clj` | Run participation, model/Tool loop, limits, context, and events. |
+| `src/karcarthy/run.clj` | Public Run operations under the direct `karcarthy.run` namespace. |
+| `src/karcarthy/run/context.clj` | Shared Run state, limits, events, Sessions, and concurrent work. |
+| `src/karcarthy/run/model.clj` | Model transport calls for an active Run. |
+| `src/karcarthy/run/loop.clj` | The native Tool and model loop. |
+| `src/karcarthy/run/agent.clj` | Agent participation and root Run orchestration. |
 | `src/karcarthy/schema.clj` | Schemas and structured failures. |
 | `src/karcarthy/prompt.clj` | Generic instruction composition and prompt-file loading. |
 | `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `session` constructor. |

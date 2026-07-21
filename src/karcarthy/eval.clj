@@ -3,8 +3,9 @@
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
             [karcarthy.agent :as agent]
-            [karcarthy.schema :as schema]
             [karcarthy.run :as run]
+            [karcarthy.run.context :as run-context]
+            [karcarthy.schema :as schema]
             [karcarthy.tool :as tool])
   (:import [clojure.lang LineNumberingPushbackReader]
            [java.io StringReader]))
@@ -296,7 +297,7 @@ Use the model configuration listed below in place of the example's model value.
                        :expansion expansion
                        :namespace (ns-name ns-obj)})
         (intern ns-obj 'input input)
-        (let [value (binding [*ns* ns-obj run/*run* rt]
+        (let [value (binding [*ns* ns-obj run-context/*run* rt]
                       (clojure.core/eval expression))
               value (model-value value)]
           (run/emit! rt {:type :eval/completed
