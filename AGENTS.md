@@ -28,10 +28,14 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy.clj` | Public facade under one alias: `(require '[karcarthy :as k])`. |
 | `src/karcarthy/agent.clj` | Direct Agent construction namespace. |
 | `src/karcarthy/tool.clj` | Direct Tool construction namespace. |
-| `src/karcarthy/run.clj` | Run participation, model/Tool loop, limits, context, and events. |
+| `src/karcarthy/run.clj` | Public Run operations under the direct `karcarthy.run` namespace. |
+| `src/karcarthy/run/context.clj` | Shared Run state, limits, events, Sessions, and concurrent work. |
+| `src/karcarthy/run/model.clj` | Model transport calls for an active Run. |
+| `src/karcarthy/run/loop.clj` | The native Tool and model loop. |
+| `src/karcarthy/run/agent.clj` | Agent participation and root Run orchestration. |
 | `src/karcarthy/schema.clj` | Schemas and structured failures. |
 | `src/karcarthy/prompt.clj` | Generic instruction composition and prompt-file loading. |
-| `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `memory-session`. |
+| `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `session` constructor. |
 | `src/karcarthy/eval.clj` | The eval Tool, its dynamic description and bindings, and same-process expression evaluation. |
 | `src/karcarthy/model/responses.clj` | Complete and SSE-streaming Responses-compatible HTTP transport. It translates model I/O only. |
 | `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a local directory. |
@@ -82,7 +86,7 @@ cd docs && npm run lint && npm run types:check && npm run build
   dependency injection and is never exposed automatically. Do not add
   request-mutation hooks such as `prepare-step`.
 - **Conversation history belongs to a Session.** Runs are stateless unless the
-  caller supplies `:session`. `memory-session` is process-local; durable stores
+  caller supplies `:session`. `session` is process-local; durable stores
   implement `karcarthy.session/Session` outside the harness. Do not call a
   conversation store a checkpoint or general workflow state.
 - **Schema validation fails closed.** Validate context, Agent input/output, and Tool

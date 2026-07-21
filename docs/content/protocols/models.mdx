@@ -69,3 +69,30 @@ declaration through the transport; it does not execute that Tool locally.
 Use it for Tool-loop, Session, and event tests without a paid call. The
 [API reference](/docs/reference/api#models) defines the normalized model
 interface.
+
+## Normalized transport contract
+
+A transport receives one map with `:model`, `:instructions`, `:messages`,
+`:provider-state`, `:tools`, `:output-schema`, `:agent`, and `:turn`.
+It returns either a final value:
+
+```clojure
+{:type :final
+ :output value
+ :usage {:input-tokens 10 :output-tokens 4}
+ :provider-state optional-continuation}
+```
+
+or Tool calls:
+
+```clojure
+{:type :tool-calls
+ :calls [{:id "call_1" :name "search" :input {...}}]
+ :provider-state optional-continuation}
+```
+
+Without `:provider-state`, `:messages` contains the complete accumulated
+conversation on every turn. A stateful transport may return continuation data;
+while that state is present, later requests contain only messages added since
+the preceding response. This lets stateless transports replay history while
+Responses-style transports avoid resending it.

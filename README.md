@@ -63,7 +63,7 @@ For the moon-garden task, an Agent might write:
               :output-schema string?})
       jobs (mapv #(future (run! % input))
                  [botanist radiation-engineer])]
-  (mapv (comp :output deref) jobs))
+  (mapv (comp output deref) jobs))
 ```
 
 This is Clojure, not an Agent-shaped DSL node. karcarthy reads one expression
@@ -84,8 +84,7 @@ language yourself:
 (defn diagnose-garden [report]
   (->> [botanist radiation-engineer]
        (mapv #(future (k/run! % report)))
-       (mapv deref)
-       (mapv :output)))
+       (mapv (comp k/output deref))))
 ```
 
 That is where Lisp's homoiconicity matters: the model can produce ordinary

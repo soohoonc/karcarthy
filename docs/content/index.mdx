@@ -52,7 +52,7 @@ For the garden task, the Agent might create a botanist and a radiation engineer:
               :output-schema string?})
       jobs (mapv #(future (run! % input))
                  [botanist radiation-engineer])]
-  (mapv (comp :output deref) jobs))
+  (mapv (comp output deref) jobs))
 ```
 
 karcarthy reads exactly one expression with reader evaluation disabled,

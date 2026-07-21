@@ -22,9 +22,10 @@ security sandbox.
 ## Tools and context
 
 Tools execute application Clojure with access to the current Run's local context.
-Use narrow context values, input/output schemas, `:enabled?`, guardrails,
-approval, timeouts, and least-privilege credentials. Approval is currently a
-synchronous allow/deny decision; durable suspension is not implemented.
+Use narrow context values, input/output schemas, guardrails, approval, Run
+deadlines, timeouts exposed by individual Tools, and least-privilege
+credentials. Approval is currently a synchronous allow/deny decision; durable
+suspension is not implemented.
 
 Tool output and event payloads may contain sensitive data. Redact them in the
 observer before external export.

@@ -2,10 +2,32 @@
   (:require [clojure.test :refer [deftest is]]
             [karcarthy :as k]))
 
+(k/defagent explicit-name-agent
+  {:name "explicit-agent"
+   :model "fake"
+   :instructions "Answer."})
+
+(k/deftool explicit-name-tool
+  {:name "explicit-tool"
+   :description "Return the input."
+   :input-schema map?}
+  [input]
+  input)
+
+(defn- evaluate-expansion [expansion]
+  (let [namespace (symbol (str (gensym "karcarthy.expansion-test.")))]
+    (create-ns namespace)
+    (try
+      (binding [*ns* (the-ns namespace)]
+        (clojure.core/refer 'clojure.core)
+        @(eval expansion))
+      (finally
+        (remove-ns namespace)))))
+
 (deftest facade-exposes-only-the-native-harness
   (doseq [sym '[agent defagent tool deftool agent? tool?
-                run! context
-                memory-session session? session-id get-items add-items!
+                run! output context
+                session session? session-id get-items add-items!
                 pop-item! clear-session!
                 model! emit! events mock-model
                 monitor monitor-state
@@ -23,6 +45,7 @@
                     as-tool source-form expanded-form monitor-view print-monitor
                     fake-model
                     handoff! environment conversation-state? model-transport
+                    memory-session atom-session output! run-output
                     workspace-tools workspace-prompt
                     read-agent-form check-agent-form! eval-agent-form!
                     compile-agent! system-prompt
@@ -42,6 +65,18 @@
     (is (= "answer" (:instructions agent)))
     (is (nil? (:config agent)))))
 
+(deftest retained-expansions-preserve-explicit-names
+  (let [agent-expansion (k/expansion explicit-name-agent)
+        tool-expansion (k/expansion explicit-name-tool)]
+    (is (= "explicit-agent" (:name (evaluate-expansion agent-expansion))))
+    (is (= "explicit-tool" (:name (evaluate-expansion tool-expansion))))))
+
+(deftest facade-retains-repl-metadata
+  (doseq [sym '[agent tool run! output session prompt local-tools events]]
+    (let [metadata (meta (ns-resolve 'karcarthy sym))]
+      (is (string? (:doc metadata)) (str "missing docs for " sym))
+      (is (seq (:arglists metadata)) (str "missing arglists for " sym)))))
+
 (deftest model-id-shorthand-is-lowered-once
   (let [agent (k/agent {:name "short"
                         :model "gpt-5.6"
@@ -55,13 +90,16 @@
   (doseq [[namespace symbols]
           {'karcarthy.agent '[agent defagent agent? definition expansion]
            'karcarthy.tool '[tool deftool tool? hosted-tool hosted-tool?]
-           'karcarthy.run '[run! context model! emit! events mock-model]
+           'karcarthy.run '[run! output context model! emit! events mock-model]
+           'karcarthy.session '[Session session session? session-id get-items
+                                add-items! pop-item! clear-session!]
            'karcarthy.schema '[valid? explain json-schema]
            'karcarthy.eval '[read-expression]}]
     (require namespace)
     (doseq [sym symbols]
       (is (some? (ns-resolve namespace sym))
-          (str "missing " namespace "/" sym)))))
+          (str "missing " namespace "/" sym))))
+  (is (nil? (ns-resolve 'karcarthy.session 'memory-session))))
 
 (deftest agents-do-not-accept-function-bodies
   (is (thrown? clojure.lang.ArityException

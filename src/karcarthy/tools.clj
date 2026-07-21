@@ -4,6 +4,7 @@
             [karcarthy.schema :as schema]
             [karcarthy.tool :as tool])
   (:import [java.io ByteArrayOutputStream]
+           [java.lang ProcessHandle]
            [java.nio.charset StandardCharsets]
            [java.nio.file Files LinkOption Path Paths StandardOpenOption]
            [java.util.concurrent TimeUnit]))
@@ -73,23 +74,36 @@
     ["cmd.exe" "/d" "/s" "/c" command]
     ["/bin/sh" "-lc" command]))
 
+(defn- destroy-process! [^Process process]
+  (with-open [descendants (.descendants (.toHandle process))]
+    (doseq [^ProcessHandle descendant (reverse (vec (.toList descendants)))]
+      (.destroyForcibly descendant)))
+  (.destroyForcibly process))
+
 (defn- run-process [^Path root command timeout-ms max-output-bytes]
   (let [builder (doto (ProcessBuilder. ^java.util.List (vec command))
                   (.directory (.toFile root))
                   (.redirectErrorStream true))
         process (.start builder)
-        output (future (read-stream (.getInputStream process) max-output-bytes))
-        completed? (.waitFor process (long timeout-ms) TimeUnit/MILLISECONDS)]
-    (when-not completed?
-      (.destroyForcibly process)
-      (.waitFor process 5 TimeUnit/SECONDS))
-    (let [{:keys [text truncated?]}
-          (deref output 5000 {:text "Process output did not close"
-                              :truncated? true})]
-      {:exit_code (if completed? (.exitValue process) 124)
-       :output text
-       :timed_out? (not completed?)
-       :truncated? truncated?})))
+        output (future (read-stream (.getInputStream process) max-output-bytes))]
+    (try
+      (let [completed? (.waitFor process (long timeout-ms)
+                                 TimeUnit/MILLISECONDS)]
+        (when-not completed?
+          (destroy-process! process)
+          (.waitFor process 5 TimeUnit/SECONDS))
+        (let [{:keys [text truncated?]}
+              (deref output 5000 {:text "Process output did not close"
+                                  :truncated? true})]
+          {:exit_code (if completed? (.exitValue process) 124)
+           :output text
+           :timed_out? (not completed?)
+           :truncated? truncated?}))
+      (finally
+        (when (.isAlive process)
+          (destroy-process! process))
+        (when-not (future-done? output)
+          (future-cancel output))))))
 
 (defn- occurrences [text needle]
   (loop [from 0 matches 0]

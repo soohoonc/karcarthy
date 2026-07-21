@@ -21,6 +21,13 @@ description: Agent, Tool, Run, Session, failure, and monitor data shapes.
 Agent configuration is flat. `definition` and `expansion` are additional
 inspection data, not a second configuration layer.
 
+Unknown unqualified configuration keys are rejected. Namespaced keyword keys
+are preserved as extension data, following the normal Clojure map convention:
+
+```clojure
+(assoc researcher :my-app/owner "research")
+```
+
 ## Tool
 
 ```clojure
@@ -35,6 +42,8 @@ inspection data, not a second configuration layer.
 ```
 
 Tool input uses one `:input-schema` for validation and the model interface.
+Tools use the same namespaced extension-key convention as Agents and Run
+options.
 
 ## Run
 
@@ -79,8 +88,12 @@ Tool turns add an assistant Tool call followed by its result:
  :content "..."}
 ```
 
+Recoverable Tool failures use the same item with `:is-error true` and an error
+value in `:content`.
+
 Only the first Agent in a top-level Run reads from and writes to the supplied
-Session. Participating Agents start fresh conversations.
+Session. Participating Agents start fresh conversations. Top-level Runs using
+the same Session instance serialize the complete read/run/append operation.
 
 ## Failure
 

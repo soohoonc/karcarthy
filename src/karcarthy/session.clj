@@ -20,32 +20,30 @@
   [value]
   (satisfies? Session value))
 
-(defrecord MemorySession [id items]
-  Session
-  (session-id [_] id)
-  (get-items [_] @items)
-  (add-items! [this new-items]
-    (swap! items into (vec new-items))
-    this)
-  (pop-item! [_]
-    (loop []
-      (let [before @items]
-        (when (seq before)
-          (let [item (peek before)]
-            (if (compare-and-set! items before (pop before))
-              item
-              (recur)))))))
-  (clear-session! [this]
-    (reset! items [])
-    this))
-
-(defn memory-session
+(defn session
   "Create a process-local Session for tests, CLIs, and ACP sessions.
 
   Options are `:id` and initial `:items`. The contents are lost when the
   process exits. Implement Session with application storage for durability."
-  ([] (memory-session {}))
+  ([] (session {}))
   ([{:keys [id items]
      :or {id (str "session_" (UUID/randomUUID))
           items []}}]
-   (->MemorySession id (atom (vec items)))))
+   (let [stored-items (atom (vec items))]
+     (reify Session
+       (session-id [_] id)
+       (get-items [_] @stored-items)
+       (add-items! [this new-items]
+         (swap! stored-items into (vec new-items))
+         this)
+       (pop-item! [_]
+         (loop []
+           (let [before @stored-items]
+             (when (seq before)
+               (let [item (peek before)]
+                 (if (compare-and-set! stored-items before (pop before))
+                   item
+                   (recur)))))))
+       (clear-session! [this]
+         (reset! stored-items [])
+         this)))))

@@ -37,7 +37,7 @@ because both Runs receive the same Session.
     :instructions "Be helpful and concise."
     :output-schema string?}))
 
-(def session (k/memory-session))
+(def session (k/session))
 
 (defn ask! [input]
   (k/run! assistant input {:session session}))

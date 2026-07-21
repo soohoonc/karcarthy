@@ -64,5 +64,12 @@ Tools and evaluated Clojure may emit domain events:
           :decision :retry})
 ```
 
-karcarthy adds run and Agent lineage before storing and publishing the event.
+karcarthy adds authoritative run and Agent lineage before storing and
+publishing the event. Conflicting `:run-id`, `:agent-id`, `:parent-id`,
+`:depth`, `:time-ms`, and `:karcarthy/type` values are ignored.
 See the [event catalog](/docs/reference/events) for the stable names.
+
+Streaming deltas are delivered live through `:on-event` but are not retained
+in the completed Run. This keeps token-by-token output from growing the Run
+map without bound. Event handlers are best-effort observers: an exception in
+one does not fail the Agent Run.

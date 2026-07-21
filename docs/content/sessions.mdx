@@ -6,7 +6,7 @@ description: Carry model conversation history across otherwise independent Runs.
 Each top-level `run!` starts without prior conversation unless you pass a Session:
 
 ```clojure
-(def session (k/memory-session))
+(def session (k/session))
 
 (k/run! assistant "My preferred format is Markdown."
         {:session session})
@@ -15,20 +15,20 @@ Each top-level `run!` starts without prior conversation unless you pass a Sessio
         {:session session})
 ```
 
-A Session stores normalized conversation items from the first Agent. A
+A Session stores normalized conversation items from the first Agent. An
 independent `run!` call must receive the Session explicitly. An available or
 participating Agent starts without its parent's conversation; only its explicit
 Tool input is sent as its user message. Child conversations are not added to
 the parent's Session.
 
-## In-memory Sessions
+## Process-local Sessions
 
-`memory-session` is thread-safe and process-local:
+`session` is thread-safe and process-local:
 
 ```clojure
 (def session
-  (k/memory-session {:id "session_123"
-                     :items []}))
+  (k/session {:id "session_123"
+              :items []}))
 
 (k/session-id session)
 (k/get-items session)
@@ -38,6 +38,11 @@ the parent's Session.
 
 Use it for a REPL, tests, and processes where conversation history does not
 need to survive a restart.
+
+Top-level Runs using the same Session instance are serialized so that reading
+history and appending the new turn cannot interleave. Durable implementations
+that represent one conversation with multiple Session instances must provide
+the equivalent coordination in their storage layer.
 
 ## Durable Sessions
 
@@ -53,7 +58,8 @@ Applications that need durable history implement
 ```
 
 karcarthy does not prescribe a file, JSONL, or database format. The protocol
-is the boundary; storage and retention policy belong to the application.
+is the boundary; storage, versioning, and retention policy belong to the
+application.
 
 A Session is conversation history, not a snapshot of a Run. It does not store
 Tool side effects, Clojure stacks, Agent definitions, or arbitrary application

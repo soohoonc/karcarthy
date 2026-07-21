@@ -42,9 +42,25 @@ All notable changes are documented here, following
   own strategy, edits code, and verifies the result.
 - A packaged Harbor evaluation that runs the fixed Coding Agent on an isolated
   repository task and records its verifier reward and ATIF trajectory.
+- A concise `session` constructor for process-local conversation history.
+- A concise `output` accessor that returns completed Run output and throws with
+  the complete Run otherwise.
 
 ### Changed
 
+- Agent and Tool options now validate their documented shapes, and both static
+  and dynamic Tool approval policies fail closed on unknown values.
+- Structured model output is decoded as JSON only for object- and array-shaped
+  schemas, including structured union branches; JSON-looking string output
+  remains a string and malformed structured output reports a model failure.
+- Static Agent limits and root Run callback/token options validate before Run
+  execution, and retained `defagent` / `deftool` expansions preserve explicit
+  names.
+- Stateless model transports receive accumulated message history, while
+  transports returning provider continuation state continue to receive only
+  new messages.
+- The single-alias facade retains source Var documentation and arglists, and
+  application events cannot replace harness-owned Run lineage.
 - Agent and Tool configuration is flat on their maps; `assoc`, `update`, and
   destructuring work without a hidden `:config` layer.
 - A model ID string is concise OpenAI Responses configuration; advanced model
@@ -70,7 +86,7 @@ All notable changes are documented here, following
 - Agent calls made by eval receive only explicit input, never the parent model's
   conversation or Session history.
 - Conversation history follows the established Session abstraction. Runs are
-  stateless unless supplied a Session; `memory-session` is the process-local
+  stateless unless supplied a Session; `session` is the process-local
   implementation and applications may provide durable implementations.
 - Loop control is the top-level Agent option `:max-turns`.
 - Agent and Tool boundaries now use one `:input-schema` and optional
@@ -86,6 +102,20 @@ All notable changes are documented here, following
   calls and `:evals` bounds evaluation attempts.
 - Agent, Tool, Schema, and Run implementations now live in their direct
   namespaces instead of a monolithic internal core.
+- Explicit JSON Schema uses a standards-compliant JVM validator rather than a
+  partial local implementation.
+- Ordinary Tool execution failures return to the model as recoverable error
+  results; harness, schema, approval, guardrail, eval, and limit failures remain
+  fatal.
+- Cancellation and deadlines interrupt in-flight futures, fatal concurrent
+  Tool failures cancel their siblings, and built-in process Tools terminate
+  child processes when interrupted.
+- Top-level Runs sharing one Session instance serialize conversation reads and
+  appends.
+- Model streaming deltas remain available to `:on-event` observers without
+  being retained in completed Run maps.
+- Unknown unqualified configuration keys remain errors while namespaced
+  keyword keys are preserved for extensions.
 
 ### Removed
 

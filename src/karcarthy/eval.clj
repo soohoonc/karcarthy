@@ -3,8 +3,9 @@
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
             [karcarthy.agent :as agent]
-            [karcarthy.schema :as schema]
             [karcarthy.run :as run]
+            [karcarthy.run.context :as run-context]
+            [karcarthy.schema :as schema]
             [karcarthy.tool :as tool])
   (:import [clojure.lang LineNumberingPushbackReader]
            [java.io StringReader]))
@@ -41,7 +42,8 @@ are optional. `(run! agent-value agent-input)` runs the resulting Agent and
 returns a Run map.
 
 Use `let`, `if`, `mapv`, `future`, `deref`, `agent`, and `run!` normally. A
-`run!` call returns a Run map; its Agent output is at `:output`.
+`run!` call returns a Run map; `(output run)` returns its output or throws when
+the Run did not complete.
 
 ## Run behavior
 
@@ -65,7 +67,7 @@ transports and process-backed Tools may still perform their normal external I/O.
                       [[\"analyst\" \"Analyze one part of the task.\"]
                        [\"planner\" \"Propose a practical next step.\"]])
       tasks (mapv #(future (run! % input)) reviewers)]
-  (mapv (comp :output deref) tasks))
+  (mapv (comp output deref) tasks))
 ```
 
 Use the model configuration listed below in place of the example's model value.
@@ -84,7 +86,7 @@ Use the model configuration listed below in place of the example's model value.
 ")
 
 (def ^:private reserved-symbols
-  #{"agent" "defagent" "tool" "deftool" "run!" "context" "definition"
+  #{"agent" "defagent" "tool" "deftool" "run!" "output" "context" "definition"
     "expansion" "eval" "input"})
 
 (defn- clojure-symbol [kind value-name]
@@ -220,7 +222,7 @@ Use the model configuration listed below in place of the example's model value.
                                  vec)]
               (when (seq available)
                 (clojure.core/refer parent-sym :only available)))))
-        (doseq [sym '[agent defagent tool deftool run! context definition
+        (doseq [sym '[agent defagent tool deftool run! output context definition
                       expansion]]
           (when (ns-resolve ns-obj sym)
             (ns-unmap ns-obj sym)))
@@ -228,7 +230,7 @@ Use the model configuration listed below in place of the example's model value.
          'karcarthy.agent
          :only '[agent defagent definition expansion])
         (clojure.core/refer 'karcarthy.tool :only '[tool deftool])
-        (clojure.core/refer 'karcarthy.run :only '[run! context]))
+        (clojure.core/refer 'karcarthy.run :only '[run! output context]))
       (doseq [[sym value] (:eval-bindings rt)]
         (when (ns-resolve ns-obj sym)
           (ns-unmap ns-obj sym))
@@ -295,7 +297,7 @@ Use the model configuration listed below in place of the example's model value.
                        :expansion expansion
                        :namespace (ns-name ns-obj)})
         (intern ns-obj 'input input)
-        (let [value (binding [*ns* ns-obj run/*run* rt]
+        (let [value (binding [*ns* ns-obj run-context/*run* rt]
                       (clojure.core/eval expression))
               value (model-value value)]
           (run/emit! rt {:type :eval/completed

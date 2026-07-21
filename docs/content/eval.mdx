@@ -43,8 +43,7 @@ would outside eval.
                    roles)]
   (->> agents
        (mapv #(future (run! % input)))
-       (mapv deref)
-       (mapv :output)))
+       (mapv (comp output deref))))
 ```
 
 The same expression can choose roles from the input, stop early, retry, reduce
@@ -55,7 +54,7 @@ results, create Tools, or let a model-authored Agent call `eval` recursively.
 The evaluation namespace refers Clojure core plus:
 
 - `agent`, `defagent`, `tool`, `deftool`
-- `run!`, `context`
+- `run!`, `output`, `context`
 - `definition`, `expansion`
 - public vars from the Agent's definition namespace
 - Tools and Agents advertised in the `eval` Tool description

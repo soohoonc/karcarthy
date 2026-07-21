@@ -2,6 +2,7 @@
  ;; forms instead of expanding their implementation details.
  :hooks {:analyze-call
          {karcarthy/agent          hooks.karcarthy/agent
+          karcarthy/defexport      hooks.karcarthy/defexport
           karcarthy.agent/agent    hooks.karcarthy/agent
           karcarthy/defagent       hooks.karcarthy/defagent
           karcarthy.agent/defagent hooks.karcarthy/defagent

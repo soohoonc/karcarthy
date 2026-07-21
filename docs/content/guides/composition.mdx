@@ -12,26 +12,20 @@ engineer, then gives both reports to an editor.
 ## Write the coordinator
 
 ```clojure
-(defn output! [run]
-  (if (= :completed (:status run))
-    (:output run)
-    (throw (ex-info "Agent Run failed" {:run run}))))
-
 (defn diagnose-garden [report]
   (let [[biology radiation]
         (->> [botanist radiation-engineer]
              (mapv #(future (k/run! % report)))
-             (mapv deref)
-             (mapv output!))
+             (mapv (comp k/output deref)))
         editor-input
         (str "Garden report:\n" report
              "\n\nBiology:\n" biology
              "\n\nRadiation and shielding:\n" radiation)]
-    (output! (k/run! editor editor-input))))
+    (k/output (k/run! editor editor-input))))
 ```
 
 The coordinator is a normal function. `future` runs both reviews together, and
-`output!` prevents a failed Run from being passed to the editor.
+`output` prevents a failed Run from being passed to the editor.
 
 ## Run it
 

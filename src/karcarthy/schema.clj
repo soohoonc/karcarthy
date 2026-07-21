@@ -1,6 +1,9 @@
 (ns karcarthy.schema
   "Schemas and structured failures shared by Agents, Tools, and Runs."
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.data.json :as json]
+            [clojure.spec.alpha :as s])
+  (:import [com.networknt.schema InputFormat SchemaLocation SchemaRegistry
+            SpecificationVersion]))
 
 (defn ^:no-doc failure
   "Create the stable data carried by harness exceptions and failed Runs."
@@ -39,37 +42,50 @@
                {:class (.getName (class error))}))))
 
 (defn ^:no-doc json-schema?
-  "Return true for the JSON Schema shapes understood by karcarthy."
+  "Return true for an explicit JSON Schema map."
   [value]
-  (and (map? value)
-       (or (contains? value :type) (contains? value "type")
-           (contains? value :properties) (contains? value "properties"))))
+  (map? value))
 
 (declare valid?)
 
-(defn- json-schema-valid? [schema value]
-  (let [get-key #(or (get schema %) (get schema (name %)))
-        type (get-key :type)
-        properties (or (get-key :properties) {})
-        required (set (map keyword (or (get-key :required) [])))]
-    (and
-     (cond
-       (contains? #{"object" :object} type) (map? value)
-       (contains? #{"array" :array} type) (sequential? value)
-       (contains? #{"string" :string} type) (string? value)
-       (contains? #{"number" :number} type) (number? value)
-       (contains? #{"integer" :integer} type) (integer? value)
-       (contains? #{"boolean" :boolean} type) (instance? Boolean value)
-       (contains? #{"null" :null} type) (nil? value)
-       :else true)
-     (or (not (and (map? value) (seq required)))
-         (every? #(contains? value %) required))
-     (or (not (and (map? value) (seq properties)))
-         (every? (fn [[key child-schema]]
-                   (let [key (keyword (name key))]
-                     (or (not (contains? value key))
-                         (json-schema-valid? child-schema (get value key)))))
-                 properties)))))
+(def ^:private schema-registry
+  (delay (SchemaRegistry/withDefaultDialect
+          SpecificationVersion/DRAFT_2020_12)))
+
+(defn- make-json-schema-validator [schema]
+  (try
+    (let [registry ^SchemaRegistry @schema-registry
+          dialect-id (or (get schema :$schema) (get schema "$schema"))
+          version (if dialect-id
+                    (.orElse (SpecificationVersion/fromDialectId dialect-id)
+                             nil)
+                    SpecificationVersion/DRAFT_2020_12)]
+      (when-not version
+        (fail! :schema :configuration "Unsupported JSON Schema dialect"
+               {:schema schema :dialect dialect-id}))
+      (let [source (json/write-str schema)
+            meta-schema (.getSchema
+                         registry
+                         (SchemaLocation/of (.getDialectId version)))
+            schema-errors (vec (.validate meta-schema source
+                                          InputFormat/JSON))]
+        (when (seq schema-errors)
+          (fail! :schema :configuration "Invalid JSON Schema"
+                 {:schema schema :errors (mapv str schema-errors)}))
+        (.getSchema registry source InputFormat/JSON)))
+    (catch Throwable error
+      (if (= :failure (:karcarthy/type (ex-data error)))
+        (throw error)
+        (fail! :schema :configuration "Invalid JSON Schema"
+               {:schema schema} error)))))
+
+(defn- json-schema-errors [schema value]
+  (let [validator (make-json-schema-validator schema)]
+    (try
+      (vec (.validate validator (json/write-str value) InputFormat/JSON))
+      (catch Throwable error
+        [(str "Value is not JSON-compatible: "
+              (or (ex-message error) error))]))))
 
 (defn valid?
   "Return true when value satisfies a spec, predicate, class, set, or JSON Schema."
@@ -81,7 +97,7 @@
     (fn? schema) (boolean (schema value))
     (class? schema) (instance? schema value)
     (set? schema) (contains? schema value)
-    (json-schema? schema) (json-schema-valid? schema value)
+    (json-schema? schema) (empty? (json-schema-errors schema value))
     :else (= schema value)))
 
 (defn explain
@@ -90,6 +106,7 @@
   (cond
     (keyword? schema) (s/explain-str schema value)
     (s/spec? schema) (s/explain-str schema value)
+    (json-schema? schema) (str (mapv str (json-schema-errors schema value)))
     :else (str "value " (pr-str value) " does not satisfy "
                (pr-str schema))))
 
@@ -151,7 +168,7 @@
   [schema]
   (cond
     (nil? schema) nil
-    (json-schema? schema) schema
+    (json-schema? schema) (do (json-schema-errors schema nil) schema)
     (keyword? schema) (some-> (s/get-spec schema) s/form
                                 spec-form->json-schema)
     (s/spec? schema) (some-> schema s/form spec-form->json-schema)
@@ -174,9 +191,15 @@
   value)
 
 (defn ^:no-doc reject-unknown!
-  "Reject keys outside supported and return the map unchanged."
+  "Reject unsupported unqualified keys and return the map unchanged.
+
+  Namespaced keyword keys are extension points, following common Clojure map
+  conventions."
   [label supported value]
-  (when-let [unknown (seq (remove supported (keys value)))]
+  (when-let [unknown (seq (remove #(or (supported %)
+                                       (and (keyword? %)
+                                            (namespace %)))
+                                 (keys value)))]
     (fail! :schema :configuration
            (str label " contains unknown configuration keys")
            {:unknown (vec unknown) :supported (vec (sort supported))}))

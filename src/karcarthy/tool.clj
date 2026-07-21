@@ -6,6 +6,20 @@
   #{:name :description :input-schema :output-schema :needs-approval
     :input-guardrails :output-guardrails :to-model-output})
 
+(def ^:private approval-policies
+  #{false true :never :once :always})
+
+(defn ^:no-doc validate-approval!
+  [policy]
+  (when-not (contains? approval-policies policy)
+    (schema/fail! :schema :configuration
+                  "Tool :needs-approval must be :never, :once, :always, a boolean, or a function"
+                  {:needs-approval policy}))
+  policy)
+
+(defn- functions? [value]
+  (and (sequential? value) (every? fn? value)))
+
 (defn- function-form [label bindings body]
   (when-not (and (vector? bindings) (= 1 (count bindings)))
     (throw (IllegalArgumentException. (str label " body requires [input]"))))
@@ -36,6 +50,19 @@
                     "Tool :input-schema must be expressible as JSON Schema"
                     {:tool (:name config)
                      :input-schema (:input-schema config)}))
+  (when (contains? config :needs-approval)
+    (let [policy (:needs-approval config)]
+      (when-not (fn? policy)
+        (validate-approval! policy))))
+  (doseq [[key predicate message]
+          [[:input-guardrails #(or (nil? %) (functions? %))
+            "Tool :input-guardrails must contain functions"]
+           [:output-guardrails #(or (nil? %) (functions? %))
+            "Tool :output-guardrails must contain functions"]
+           [:to-model-output #(or (nil? %) (fn? %))
+            "Tool :to-model-output must be a function"]]]
+    (when-not (predicate (get config key))
+      (schema/fail! :schema :configuration message {:config config})))
   (assoc config
          :karcarthy/type :tool
          :definition definition
@@ -56,9 +83,12 @@
   (let [source &form
         execute (function-form "deftool" bindings body)
         expansion `(def ~sym
-                     (karcarthy.tool/make-tool
-                      (assoc ~config :name ~(name sym))
-                      '~source nil ~execute))]
+                     (let [config# ~config
+                           config# (if (contains? config# :name)
+                                     config#
+                                     (assoc config# :name ~(name sym)))]
+                       (karcarthy.tool/make-tool
+                        config# '~source nil ~execute)))]
     `(def ~sym
        (let [config# ~config
              config# (if (contains? config# :name)

@@ -8,6 +8,10 @@
   (let [[_ config] (:children node)]
     {:node config}))
 
+(defn defexport [{:keys [node]}]
+  (let [[_ name source] (:children node)]
+    {:node (form 'def name source)}))
+
 (defn defagent [{:keys [node]}]
   (let [[_ name config] (:children node)]
     {:node (form 'def name config)}))

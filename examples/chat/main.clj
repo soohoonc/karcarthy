@@ -9,7 +9,7 @@
     :instructions "Be helpful and concise."
     :output-schema string?}))
 
-(def session (k/memory-session))
+(def session (k/session))
 (def last-run (atom nil))
 
 (defn ask! [input]
