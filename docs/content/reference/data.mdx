@@ -1,6 +1,6 @@
 ---
 title: Run data
-description: Agent, Tool, Run, failure, and monitor data shapes.
+description: Agent, Tool, Run, Session, failure, and monitor data shapes.
 ---
 
 ## Agent
@@ -56,6 +56,31 @@ Tool input uses one `:input-schema` for validation and the model interface.
 
 Participating `run!` calls return the same shape and same `:id`. Their `:events`
 cover the Agent call; the first Run retains the aggregate event sequence.
+
+## Session
+
+A Session stores normalized conversation items in chronological order. Text
+turns use:
+
+```clojure
+{:role :user :content "question"}
+{:role :assistant :content "answer"}
+```
+
+Tool turns add an assistant Tool call followed by its result:
+
+```clojure
+{:role :assistant
+ :tool-calls [{:id "call_..." :name "lookup" :input {...}}]}
+
+{:role :tool
+ :tool-call-id "call_..."
+ :name "lookup"
+ :content "..."}
+```
+
+Only the first Agent in a top-level Run reads from and writes to the supplied
+Session. Participating Agents start fresh conversations.
 
 ## Failure
 

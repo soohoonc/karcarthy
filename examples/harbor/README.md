@@ -1,33 +1,15 @@
 # Harbor evaluation
 
-This example packages one fixed karcarthy Coding Agent and evaluates it with
-[Harbor](https://www.harborframework.com/).
+This directory packages the Coding Agent for a Harbor task. Harbor runs the
+Agent against an isolated repository, executes a separate behavioral verifier,
+and records the trajectory.
 
-It demonstrates one path:
+## Requirements
 
-```text
-Harbor task
-  -> packaged karcarthy ACP process
-  -> fixed Coding Agent and repository Tools
-  -> Harbor verifier
-  -> reward, logs, and ATIF trajectory
-```
+Install Docker, JDK 21, the Clojure CLI, and `uv`. A live run also needs
+`OPENAI_API_KEY` and explicit paid-test opt-in.
 
-There is no optimizer or training loop. Harbor runs the Agent, checks its work,
-and records what happened.
-
-## Task and metric
-
-The bundled `scheduler` task contains a small SQLite-backed delivery scheduler
-with transaction and retry bugs. The Agent receives a production symptom,
-inspects the repository, edits it, and runs its tests.
-
-After the Agent exits, Harbor runs a separate behavioral verifier. Its `reward`
-metric is `1` when every hidden test passes and `0` otherwise. The oracle
-solution is available only for validating the task and verifier; Harbor does
-not expose it to the Coding Agent.
-
-## Validate the task for free
+## Validate the task without a model
 
 ```bash
 uvx --python 3.13 --from harbor harbor run \
@@ -40,28 +22,18 @@ uvx --python 3.13 --from harbor harbor run \
 
 ## Run the Coding Agent
 
-Docker, JDK 21, the Clojure CLI, `uv`, and an OpenAI credential are required.
-The live evaluation is explicitly opt-in because it incurs model cost:
-
 ```bash
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh
 ```
 
-Set `KARCARTHY_OPENAI_MODEL` to choose another Responses-compatible model and
-`KARCARTHY_ATTEMPTS` to repeat the same evaluation.
+Use `KARCARTHY_OPENAI_MODEL` to select another Responses-compatible model and
+`KARCARTHY_ATTEMPTS` to repeat the evaluation.
 
-The script builds a Harbor-only application archive, uploads it and a Java 21
-runtime into the isolated task environment, and asks Harbor to run the fixed
-Agent through ACP.
-
-## Inspect the result
-
-Harbor writes the verifier result, logs, ACP events, and ATIF trajectory under
-`examples/harbor/jobs`. Open its viewer with:
+Results are written under `examples/harbor/jobs`. Open them with:
 
 ```bash
 uvx --python 3.13 --from harbor harbor view examples/harbor/jobs
 ```
 
-The trajectory shows the model messages, repository Tool calls, observations,
-usage, and any Agent-authored eval and participating Agent calls.
+The complete task, metric, process boundary, and trajectory guide are in
+[Evaluate an agent](https://karcarthy.vercel.app/docs/guides/harbor).

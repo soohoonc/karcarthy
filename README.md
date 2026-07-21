@@ -2,11 +2,9 @@
 
 > **Agents write Clojure that runs Agents.**
 
-karcarthy is a small, homoiconic agent library for Clojure. Its public ideas
-are the familiar ones—Agents, Tools, Runs, Sessions, context, limits, and
-events. Its distinguishing capability is a built-in `eval` Tool: while an
-Agent is running, it can write one ordinary Clojure expression that creates
-Agents, runs them, composes their results, and decides what to do next.
+karcarthy is a small, homoiconic agent library for Clojure. An Agent can answer
+directly, call a Tool, or evaluate one ordinary Clojure expression that creates
+and runs the team its task needs.
 
 There is no workflow graph or second orchestration language. Use `let`, `if`,
 functions, macros, `future`, `mapv`, and `run!`.
@@ -16,7 +14,7 @@ functions, macros, `future`, `mapv`, and `run!`.
 
 [Documentation](https://karcarthy.vercel.app/docs)
 
-## One Agent
+## Run one Agent
 
 ```clojure
 (require '[karcarthy :as k])
@@ -27,12 +25,15 @@ functions, macros, `future`, `mapv`, and `run!`.
    :input-schema string?
    :output-schema string?})
 
-(def result (k/run! assistant "Explain continuation-passing style."))
+(def garden-report
+  "A moon garden's leaves are turning silver. What should we check first?")
+
+(def result (k/run! assistant garden-report))
+
 (:output result) ;=> "..."
 ```
 
-`agent` and `defagent` create plain maps. Their configuration is flat, so
-ordinary data operations work as expected:
+Agents are plain maps. Their operational configuration stays flat:
 
 ```clojure
 (assoc assistant :instructions "Answer in one sentence.")
@@ -41,83 +42,82 @@ ordinary data operations work as expected:
 A model ID string uses OpenAI Responses. Pass a model map for transport,
 provider, reasoning, streaming, or timeout options.
 
-## Dynamic workflows are Clojure
+## Let the task choose the team
 
-Every Agent can call `eval` with `code` and `input`. For example, an Agent can
-write this expression:
+Every Agent receives a built-in `eval` Tool. The Tool accepts one `code` string;
+the current Agent input is already bound to `input`.
+
+For the moon-garden task, an Agent might write:
 
 ```clojure
-(let [reviewer (agent {:name "reviewer"
+(let [botanist (agent {:name "botanist"
                        :model "gpt-5.6"
-                       :instructions "Find the riskiest assumption."
+                       :instructions "Look for biological causes in the evidence."
                        :input-schema string?
                        :output-schema string?})
-      jobs (mapv #(future (run! reviewer %)) input)]
+      radiation-engineer
+      (agent {:name "radiation-engineer"
+              :model "gpt-5.6"
+              :instructions "Look for radiation and shielding causes."
+              :input-schema string?
+              :output-schema string?})
+      jobs (mapv #(future (run! % input))
+                 [botanist radiation-engineer])]
   (mapv (comp :output deref) jobs))
 ```
 
-This is a real Clojure expression, not an Agent-shaped DSL node. It is read
-with reader evaluation disabled, macroexpanded, and evaluated in the same JVM.
-Its JSON-compatible value is returned to the model.
+This is Clojure, not an Agent-shaped DSL node. karcarthy reads one expression
+with reader evaluation disabled, macroexpands it, and evaluates it in the same
+JVM. Its model-safe value returns to the calling Agent.
 
-The first `run!` call establishes a run. Every `run!` within its dynamic
-extent—including calls inside `future`—joins that run and shares its ID,
-limits, usage, deadline, cancellation, approvals, events, context, and
-executor. Each Agent still starts a fresh model conversation unless it is the
-first call with a Session.
+The first `run!` establishes a Run. Calls inside its dynamic extent—including
+calls inside `future`—join that Run and share its ID, limits, usage, deadline,
+cancellation, approvals, events, context, and executor. Each Agent still starts
+a fresh model conversation.
 
-## Static composition is the same language
+## Write known workflows directly
+
+If the team is known ahead of time, define the Agents once and use the same
+language yourself:
 
 ```clojure
-(defn review-team [change]
-  (->> [security-reviewer api-reviewer]
-       (mapv #(future (k/run! % change)))
+(defn diagnose-garden [report]
+  (->> [botanist radiation-engineer]
+       (mapv #(future (k/run! % report)))
        (mapv deref)
        (mapv :output)))
 ```
 
-The model writes the same kind of Clojure you would write ahead of time. That
-is where Lisp's homoiconicity matters: code is data at the model boundary and
-ordinary executable code after evaluation.
+That is where Lisp's homoiconicity matters: the model can produce ordinary
+Clojure data, and the running program can execute it as ordinary Clojure code.
 
-## Observe a run
+## Observe the Run
 
 ```clojure
 (def live (k/monitor {:display :tree}))
-(def result (k/run! assistant "Complete the task." {:on-event live}))
-```
-
-```text
-Run run_7c2e9b… · running · 18s · 6 model calls · 8,421 tokens · 2 evals
-└─ architect · waiting for Agent
-   └─ coordinator · waiting for Agents
-      ├─ failure-analyst · calling model
-      └─ rollout-planner · calling model
+(def result (k/run! assistant garden-report {:on-event live}))
 ```
 
 Runs return data with `:status`, `:output`, `:usage`, `:events`, and `:error`.
-Configuration mistakes throw early; failures during execution become failed
-Run maps with structured errors and events.
+Configuration mistakes throw before execution; runtime failures become failed
+Run maps with structured errors and retained events.
 
-## Boundaries
+## Trust boundary
 
-karcarthy owns the bounded model/Tool loop. Clojure owns control flow. Sessions
-own conversation history. Model transports translate I/O.
-
-`eval` is full-trust, same-process Clojure. It is intentionally not a sandbox
-for untrusted code. Model HTTP calls and process-backed Tools can still perform
-external I/O or start processes; evaluating and coordinating Agents does not
-start a new Clojure process.
+`eval` is full-trust, same-process Clojure. It is not a sandbox for untrusted
+code. Model transports and process-backed Tools can also perform external I/O or
+start processes.
 
 ## Examples
 
 | Example | What it shows |
 | --- | --- |
-| [Basic](examples/basic/main.clj) | One Agent run |
-| [Architect](examples/architect/main.clj) | Agents recursively write a concurrent workflow |
-| [Compose](examples/composition/main.clj) | The same workflow written ahead of time |
+| [Basic](examples/basic/main.clj) | One Agent Run |
+| [Architect](examples/architect/main.clj) | A task selects and runs its own specialist team |
+| [Compose](examples/composition/main.clj) | A known team written directly in Clojure |
+| [Chat](examples/chat/main.clj) | Conversation history with a Session |
 | [Coding](examples/coding/main.clj) | Repository work with local Tools |
-| [Harbor](examples/harbor/README.md) | Evaluation with a recorded trajectory |
+| [Harbor](examples/harbor/README.md) | Evaluation with a behavioral verifier and trajectory |
 
 ## Development
 

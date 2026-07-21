@@ -3,7 +3,7 @@ title: Quickstart
 description: Install karcarthy and run your first Agent.
 ---
 
-This guide creates one Agent, runs it, and prints its answer.
+This guide creates one Agent, runs it, and inspects the resulting Run.
 
 ## Before you begin
 
@@ -17,7 +17,7 @@ Create `deps.edn`:
 {:deps
  {io.github.soohoonc/karcarthy
   {:git/url "https://github.com/soohoonc/karcarthy"
-   :git/sha "b9567ed36b0d612b2847e344039c6a810de00c46"}}
+   :git/sha "985db89bf37bd591939b46cf52cce8c14e72306f"}}
  :paths ["src"]}
 ```
 
@@ -61,7 +61,7 @@ Require both the example and karcarthy, then start a Run:
 
 (def run
   (k/run! example/assistant
-          "Why are Lisp macros unusual?"))
+          "A moon garden's leaves are turning silver. What should we check first?"))
 ```
 
 The answer varies by model call. Inspect the stable parts of the result:
@@ -85,7 +85,7 @@ Create a monitor and pass it as the observer:
 
 (def monitored-run
   (k/run! example/assistant
-          "Explain continuation-passing style."
+          "List the evidence we should collect before changing the garden."
           {:on-event live}))
 ```
 
@@ -106,6 +106,8 @@ new definition:
 (k/run! example/assistant "Explain it with an example.")
 ```
 
-Next, read [Why Clojure?](/docs/why-clojure) for the project’s argument or
-[Dynamic eval](/docs/eval) to watch an Agent write a concurrent
-Clojure workflow.
+You have run the familiar part of karcarthy: one model-backed Agent. The
+distinguishing step is next. In [Let an Agent choose the team](/docs/guides/architect),
+the garden report causes the Agent to create and run its own specialists with
+ordinary Clojure. [Why Clojure?](/docs/why-clojure) explains why that boundary
+does not need a workflow DSL.

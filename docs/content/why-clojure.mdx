@@ -1,92 +1,108 @@
 ---
 title: Why Clojure?
-description: Homoiconicity makes dynamic workflows ordinary code instead of graph data.
+description: Generated workflows remain ordinary code.
 ---
 
-Most agent libraries expose familiar primitives: an Agent, Tools, a run loop,
-conversation state, guardrails, and traces. karcarthy keeps that vocabulary.
-Clojure changes one boundary: when the right workflow is not known ahead of
-time, the model can produce code as data and the running program can evaluate
-it directly.
+Most agent libraries already provide Agents, Tools, conversation state, limits,
+and traces. karcarthy keeps those familiar pieces.
 
-## Agents and Tools are plain data
+Clojure changes one boundary: when the right workflow depends on the task, a
+model can produce code as data and the running program can execute it directly.
+
+## One language for both cases
+
+Suppose a moon garden's leaves are turning silver. If you already know which
+specialists should investigate, write the workflow yourself:
+
+```clojure
+(->> [botanist radiation-engineer]
+     (mapv #(future (k/run! % garden-report)))
+     (mapv deref)
+     (mapv :output))
+```
+
+If the evidence should determine which specialists exist, let an Agent write
+the equivalent expression after it sees the report:
+
+```clojure
+(let [botanist (agent {:name "botanist"
+                       :model "gpt-5.6"
+                       :instructions "Find biological causes in the evidence."
+                       :input-schema string?
+                       :output-schema string?})
+      radiation-engineer
+      (agent {:name "radiation-engineer"
+              :model "gpt-5.6"
+              :instructions "Find radiation and shielding causes."
+              :input-schema string?
+              :output-schema string?})]
+  (->> [botanist radiation-engineer]
+       (mapv #(future (run! % input)))
+       (mapv deref)
+       (mapv :output)))
+```
+
+The model authored the coordination, not a graph node that karcarthy later had
+to interpret.
+
+## The eval boundary
+
+Every Agent receives an `eval` Tool with one input field:
+
+```clojure
+{:code "(+ 1 2)"}
+```
+
+The current Agent input is already bound to `input`. `code` must contain exactly
+one Clojure expression, but that expression may use normal `let`, `if`, `mapv`,
+`future`, functions, macros, recursion, Agent construction, Tool construction,
+and `run!`.
+
+The boundary is small:
+
+```text
+source string → Clojure data → macroexpansion → evaluated value
+```
+
+The parsed expression and expansion are retained as `:eval/*` events.
+Evaluation stays in the current JVM; coordination does not launch another
+Clojure process.
+
+## Agents and Tools remain data
+
+Agent configuration is a flat map, so normal data operations still work:
 
 ```clojure
 (def reviewer
   (k/agent {:name "reviewer"
             :model "gpt-5.6"
-            :instructions "Review the proposed change."
+            :instructions "Review the evidence."
             :input-schema string?
             :output-schema string?}))
 
 (:instructions reviewer)
-(assoc reviewer :instructions "Review only the API boundary.")
+(assoc reviewer :instructions "Review only the radiation evidence.")
 ```
 
-`agent` is a macro so the value can retain its definition and expansion:
+`agent` and `tool` are macros, so their values also retain source and expansion
+for inspection:
 
 ```clojure
 (k/definition reviewer)
 (k/expansion reviewer)
 ```
 
-The operational configuration remains flat on the map; there is no hidden
-`:config` layer.
+There is no hidden `:config` layer and no separate workflow representation.
 
-## The model writes an expression, not a node
+## One Run follows the code
 
-The built-in `eval` Tool accepts only `code`; the current Agent input is already
-bound to `input`:
-
-```clojure
-{:code
- "(let [r (agent {:name \"reviewer\"
-                   :model \"gpt-5.6\"
-                   :instructions \"Review the change.\"
-                   :input-schema string?
-                   :output-schema string?})]
-    (:output (run! r input)))"}
-```
-
-The code may be any one Clojure expression. `let`, `if`, `mapv`, `future`,
-macros, recursion, Agent construction, Tool construction, and `run!` retain
-their normal meanings. That is stronger than accepting only an Agent-shaped
-form: the model can author the coordination itself.
-
-## Homoiconicity is doing real work
-
-The boundary is:
-
-```text
-source string → Clojure data → macroexpansion → value
-```
-
-The parsed expression and expansion are emitted as `:eval/*` events. Agent and
-Tool macros retain their own source and expansion. Evaluation happens in the
-same JVM; orchestration does not launch a second Clojure process.
-
-The result is not durable continuation machinery or a workflow graph. It is
-the simpler Lisp claim: code is data, and that data can become code in the
-currently running process.
-
-## One run follows the code
-
-Clojure dynamic bindings are conveyed to `future`, so `run!` calls made by
-generated concurrent code participate in the existing run:
-
-```clojure
-(->> input
-     (mapv #(future (run! reviewer %)))
-     (mapv deref)
-     (mapv :output))
-```
-
-Those calls share run limits, usage, events, cancellation, approvals, context,
-and the run ID. They do not inherit the parent Agent's model conversation.
+Clojure carries dynamic bindings into `future`. Generated `run!` calls therefore
+participate in the active Run and share its limits, usage, events, cancellation,
+approvals, context, and ID. Each called Agent still begins a fresh model
+conversation with only its explicit input.
 
 ## Trust boundary
 
-This is full-trust evaluation, not a sandbox. Use it only when the model and
-available bindings are trusted for the process. Reader evaluation is disabled,
-but evaluated Clojure can perform anything its namespace and JVM permissions
-allow.
+Eval is full-trust JVM Clojure, not a sandbox. Reader evaluation is disabled,
+but evaluated code has the permissions of the host process. Isolate the process
+when generated code or its available dependencies are not trusted.

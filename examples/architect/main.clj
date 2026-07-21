@@ -1,5 +1,5 @@
 (ns example.architect
-  "Live trace of Agents recursively writing and running more Agents."
+  "Live trace of an Agent choosing and running a task-specific team."
   (:require [clojure.string :as str]
             [karcarthy :as k]))
 
@@ -8,18 +8,17 @@
 
 (defn instructions []
   (str
-   "You are the root Agent in a live recursive demonstration. "
-   "Before answering, call eval exactly once. Write one Clojure expression "
-   "that creates an Agent named coordinator and runs it with input. "
-   "Configure coordinator with model \"" (model-id) "\", :input-schema string?, "
-   ":output-schema string?, and instructions to call eval exactly once before answering. "
-   "That second expression must create Agents named failure-analyst and "
-   "rollout-planner, run each exactly once and concurrently with future on its "
-   "input, dereference their Runs, and return their :output values as data. "
-   "Configure both specialists with model \"" (model-id) "\", :input-schema string?, "
-   ":output-schema string?, and focused instructions that forbid eval or delegation. "
-   "After eval returns, coordinator must synthesize the two values itself without "
-   "running either specialist again. Return the coordinator's result."))
+   "Solve the task by choosing a small team after you read it. "
+   "Before answering, call eval exactly once. Write one Clojure expression that "
+   "creates two or three specialist Agents whose unique kebab-case names and "
+   "instructions fit this specific task. Do not use a predefined set of roles. "
+   "Configure each specialist "
+   "with model \"" (model-id) "\", :input-schema string?, and :output-schema string?. "
+   "Tell each specialist to analyze one distinct part of the task and to avoid eval "
+   "or delegation. Run every specialist exactly once and concurrently with future, "
+   "passing input to each one. Dereference their Run maps and return their names and "
+   ":output values as model-safe data. After eval returns, synthesize the evidence "
+   "into one concise answer. Do not call a specialist again."))
 
 (defn architect []
   (k/agent
@@ -45,12 +44,13 @@
    (k/run! (architect) task
            {:on-event monitor
             :limits {:model-calls 8
-                     :evals 2
-                     :depth 2
+                     :evals 1
+                     :depth 1
                      :deadline-ms 240000}})))
 
 (def default-task
-  "Review a migration from synchronous writes to a queue.")
+  (str "A moon garden's leaves are turning silver after a solar storm. "
+       "Diagnose the likely causes and recommend the next three checks."))
 
 (defn -main [& words]
   (when-not (credentials?)
