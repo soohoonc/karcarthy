@@ -28,9 +28,8 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy.clj` | Public facade under one alias: `(require '[karcarthy :as k])`. |
 | `src/karcarthy/agent.clj` | Direct Agent construction namespace. |
 | `src/karcarthy/tool.clj` | Direct Tool construction namespace. |
-| `src/karcarthy/run.clj` | Direct run, context, model, and event namespace. |
-| `src/karcarthy/contract.clj` | Direct contract namespace. |
-| `src/karcarthy/core.clj` | Small shared kernel used by the direct namespaces. |
+| `src/karcarthy/run.clj` | Run participation, model/Tool loop, limits, context, and events. |
+| `src/karcarthy/contract.clj` | Contracts and structured failures. |
 | `src/karcarthy/prompt.clj` | Generic instruction composition, prompt-file loading, and access to the packaged `system.md`. |
 | `src/karcarthy/session.clj` | The conversation-history `Session` protocol and process-local `memory-session`. |
 | `src/karcarthy/eval.clj` | Same-process expression reading, macroexpansion, evaluation, and result normalization. |
@@ -46,7 +45,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `examples/harbor/main.clj` | Fixed Coding Agent packaged for Harbor evaluation through ACP. |
 | `examples/harbor/run.sh` | Opt-in live Harbor evaluation of the bundled scheduler task. |
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
-| `test/karcarthy/core_test.clj` | Kernel, model loop, instructions/context, Sessions, streaming, composition, limits, and events. |
+| `test/karcarthy/run_test.clj` | Model loop, instructions/context, Sessions, streaming, composition, limits, and events. |
 | `test/karcarthy/eval_test.clj` | Dynamic Clojure workflows, concurrency, recursion, and eval boundaries. |
 | `test/karcarthy/responses_test.clj` | Pure translation plus offline complete and SSE endpoint integration tests. |
 | `test/karcarthy/tools_test.clj` | Local tools and generic prompt composition. |
@@ -61,7 +60,7 @@ cd docs && npm run lint && npm run types:check && npm run build
   streaming transport may emit deltas before returning that authoritative
   response. It never executes tools, manages agents, or owns Sessions.
 - **Keep the inner loop small.** Coding capabilities, hosted provider tools,
-  MCP discovery, and ACP serving adapt to ordinary Tools around the kernel.
+  MCP discovery, and ACP serving adapt to ordinary Tools around the loop.
   Prompts must describe the capabilities actually installed.
 - **Clojure is the orchestration language.** Use `let`, `if`, `case`,
   `loop/recur`, functions, macros, `future`, `deref`, and `run!`. Do not add a
@@ -86,7 +85,7 @@ cd docs && npm run lint && npm run types:check && npm run build
   request-mutation hooks such as `prepare-step`.
 - **Conversation history belongs to a Session.** Runs are stateless unless the
   caller supplies `:session`. `memory-session` is process-local; durable stores
-  implement `karcarthy.session/Session` outside the kernel. Do not call a
+  implement `karcarthy.session/Session` outside the harness. Do not call a
   conversation store a checkpoint or general workflow state.
 - **Contracts fail closed.** Validate context, Agent input/output, and Tool
   input/output. Model/tool/protocol failures become structured failed Runs.

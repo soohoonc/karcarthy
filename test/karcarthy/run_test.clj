@@ -1,4 +1,4 @@
-(ns karcarthy.core-test
+(ns karcarthy.run-test
   (:refer-clojure :exclude [run!])
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]

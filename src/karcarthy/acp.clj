@@ -3,9 +3,12 @@
   (:refer-clojure :exclude [await])
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [karcarthy.core :as core]
+            [karcarthy.agent :as agent]
+            [karcarthy.contract :as contract]
             [karcarthy.mcp :as mcp]
-            [karcarthy.session :as session])
+            [karcarthy.run :as run]
+            [karcarthy.session :as session]
+            [karcarthy.tool :as tool])
   (:import [java.io BufferedReader BufferedWriter InputStreamReader OutputStreamWriter]
            [java.nio.charset StandardCharsets]
            [java.nio.file Files Paths LinkOption]
@@ -48,10 +51,10 @@
       (swap! (:pending-client-requests server) dissoc id)
       (cond
         (= ::timeout message)
-        (core/fail! :acp :timeout "ACP client request timed out"
+        (contract/fail! :acp :timeout "ACP client request timed out"
                     {:method method :session-id session-id})
         (:error message)
-        (core/fail! :acp :client-request
+        (contract/fail! :acp :client-request
                     (or (get-in message [:error :message])
                         "ACP client request failed")
                     {:method method :error (:error message)})
@@ -65,12 +68,12 @@
 
 (defn- require-initialized! [server]
   (when-not @(:initialized? server)
-    (core/fail! :acp :initialize
+    (contract/fail! :acp :initialize
                 "ACP initialize must complete before session methods")))
 
 (defn- get-session [server session-id]
   (or (get @(:sessions server) session-id)
-      (core/fail! :acp :session "Unknown ACP session"
+      (contract/fail! :acp :session "Unknown ACP session"
                   {:session-id session-id})))
 
 (defn- normalize-cwd [value]
@@ -78,7 +81,7 @@
                  (.toAbsolutePath)
                  (.normalize))]
     (when-not (Files/isDirectory path no-link-options)
-      (core/fail! :acp :session "ACP session cwd must be a directory"
+      (contract/fail! :acp :session "ACP session cwd must be a directory"
                   {:cwd (str path)}))
     (str path)))
 
@@ -97,14 +100,14 @@
           (recur (subvec remaining 1) (conj connections connection)))
         (do
           (doseq [connection connections] (mcp/close! connection))
-          (core/fail! :acp :mcp
+          (contract/fail! :acp :mcp
                       "This build supports ACP-provided stdio MCP servers only"
                       {:server (dissoc spec :headers :env)})))
       connections)))
 
 (defn- merge-tools [left right]
   (let [key-fn (fn [tool]
-                 (if (core/tool? tool)
+                 (if (tool/tool? tool)
                    [:function (:name tool)]
                    [:hosted (:transport tool) (:spec tool)]))]
     (->> (concat left right)
@@ -123,7 +126,7 @@
 
 (defn- session-model-ids [server]
   (let [source (:agent server)
-        default-id (when (core/agent? source) (configured-model-id source))]
+        default-id (when (agent/agent? source) (configured-model-id source))]
     (vec (distinct (remove nil? (concat [default-id] (:models server)))))))
 
 (defn- model-config-option [session]
@@ -144,11 +147,11 @@
 (defn- set-session-model! [session model-id]
   (when-not (and (string? model-id)
                  (contains? (set (:model-ids session)) model-id))
-    (core/fail! :acp :configuration
+    (contract/fail! :acp :configuration
                 "Requested model is not available for this ACP session"
                 {:model-id model-id :available-models (:model-ids session)}))
   (when @(:running? session)
-    (core/fail! :acp :session
+    (contract/fail! :acp :session
                 "Cannot change the model during an active prompt"
                 {:session-id (:id session)}))
   (reset! (:model-id session) model-id)
@@ -160,13 +163,13 @@
                  :mcp-tools (:mcp-tools session)
                  :session-id (:id session)
                  :model-id @(:model-id session)}
-        agent (if (core/agent? source) source (source context))
+        agent (if (agent/agent? source) source (source context))
         agent (if (and @(:model-id session)
                        (map? (:model agent)))
                 (assoc-in agent [:model :id] @(:model-id session))
                 agent)]
-    (when-not (core/agent? agent)
-      (core/fail! :acp :configuration
+    (when-not (agent/agent? agent)
+      (contract/fail! :acp :configuration
                   "ACP :agent must be an Agent or a function returning one"
                   {:value agent}))
     (update agent :tools
@@ -335,7 +338,7 @@
                       :context (merge (:context base-options)
                                       {:cwd (:cwd session)
                                        :session-id sessionId})})
-              run (core/run! agent (prompt-text prompt) run-options)
+              run (run/run! agent (prompt-text prompt) run-options)
               text (if (= :completed (:status run))
                      (if (string? (:output run))
                        (:output run)
@@ -362,7 +365,7 @@
         (catch Throwable error
           (error! server id -32000
                   (or (ex-message error) "ACP prompt failed")
-                  (core/throwable->failure error)))
+                  (contract/throwable->failure error)))
         (finally
           (reset! (:running? session) false))))))
 
@@ -456,7 +459,7 @@
       (catch Throwable error
         (error! server id -32000
                 (or (ex-message error) "ACP request failed")
-                (core/throwable->failure error))))))
+                (contract/throwable->failure error))))))
 
 (defn serve!
   "Serve an Agent or session Agent factory over ACP v1 JSON-RPC on stdio.
@@ -469,7 +472,7 @@
   Agent, its configured model is included automatically."
   [{:keys [agent in out client-request-timeout-ms] :as options}]
   (when-not agent
-    (core/fail! :contract :configuration "ACP serve! requires :agent"))
+    (contract/fail! :contract :configuration "ACP serve! requires :agent"))
   (let [reader (BufferedReader.
                 (InputStreamReader. (or in System/in) StandardCharsets/UTF_8))
         writer (BufferedWriter.
@@ -478,7 +481,7 @@
         _ (when-not (or (nil? models)
                         (and (sequential? models)
                              (every? #(and (string? %) (seq %)) models)))
-            (core/fail! :contract :configuration
+            (contract/fail! :contract :configuration
                         "ACP :models must be a sequence of non-empty strings"
                         {:value models}))
         server {:agent agent
@@ -514,7 +517,7 @@
   (let [qualified (symbol qualified-symbol)
         namespace-symbol (some-> qualified namespace symbol)]
     (when-not namespace-symbol
-      (core/fail! :contract :configuration
+      (contract/fail! :contract :configuration
                   "ACP Agent var must be namespace/var"
                   {:value qualified-symbol}))
     (require namespace-symbol)
@@ -522,7 +525,7 @@
                                     (symbol (name qualified)))
                         deref)]
       (when-not value
-        (core/fail! :contract :configuration "ACP Agent var was not found"
+        (contract/fail! :contract :configuration "ACP Agent var was not found"
                     {:value qualified-symbol}))
       (serve! {:agent value}))))
 

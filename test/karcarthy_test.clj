@@ -28,7 +28,7 @@
     (is (nil? (get (ns-publics 'karcarthy) removed))
         (str "still exports " removed))))
 
-(deftest forwarding-macros-capture-source
+(deftest facade-macros-capture-source
   (let [agent (k/agent {:name "facade"
                         :model {:id "fake"
                                 :transport (k/mock-model (constantly "ok"))}

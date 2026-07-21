@@ -2,7 +2,10 @@
   "Same-process evaluation of one model-authored Clojure expression."
   (:refer-clojure :exclude [eval])
   (:require [clojure.walk :as walk]
-            [karcarthy.core :as core])
+            [karcarthy.agent :as agent]
+            [karcarthy.contract :as contract]
+            [karcarthy.run :as run]
+            [karcarthy.tool :as tool])
   (:import [clojure.lang LineNumberingPushbackReader]
            [java.io StringReader]))
 
@@ -16,22 +19,22 @@
   "Read exactly one Clojure expression with reader evaluation disabled."
   [source]
   (when-not (string? source)
-    (core/fail! :read :eval "Eval code must be a string" {:value source}))
+    (contract/fail! :read :eval "Eval code must be a string" {:value source}))
   (try
     (let [reader (LineNumberingPushbackReader. (StringReader. source))
           eof (Object.)
           expression (binding [*read-eval* false] (read {:eof eof} reader))
           extra (binding [*read-eval* false] (read {:eof eof} reader))]
       (when (identical? eof expression)
-        (core/fail! :read :eval "Eval code is empty"))
+        (contract/fail! :read :eval "Eval code is empty"))
       (when-not (identical? eof extra)
-        (core/fail! :read :eval
-                    "Eval code must contain exactly one top-level expression"
-                    {:extra extra}))
+        (contract/fail! :read :eval
+                        "Eval code must contain exactly one top-level expression"
+                        {:extra extra}))
       expression)
     (catch clojure.lang.ExceptionInfo e (throw e))
     (catch Throwable t
-      (core/fail! :read :eval (or (ex-message t) (str t)) nil t))))
+      (contract/fail! :read :eval (or (ex-message t) (str t)) nil t))))
 
 (defn- eval-ns!
   [rt]
@@ -53,9 +56,12 @@
           (when (ns-resolve ns-obj sym)
             (ns-unmap ns-obj sym)))
         (clojure.core/refer
-         'karcarthy.core
-         :only '[agent defagent tool deftool run! context model! emit!
-                 definition expansion]))
+         'karcarthy.agent
+         :only '[agent defagent definition expansion])
+        (clojure.core/refer 'karcarthy.tool :only '[tool deftool])
+        (clojure.core/refer
+         'karcarthy.run
+         :only '[run! context model! emit!]))
       (doseq [[sym value] (:eval-bindings rt)]
         (when (ns-resolve ns-obj sym)
           (ns-unmap ns-obj sym))
@@ -77,9 +83,9 @@
                [(cond
                   (or (string? k) (keyword? k)) k
                   (symbol? k) (str k)
-                  :else (core/fail! :evaluation :output
-                                    "Eval returned a map with an unsupported key"
-                                    {:key k}))
+                  :else (contract/fail!
+                         :evaluation :output
+                         "Eval returned a map with an unsupported key" {:key k}))
                 (model-value v)]))
         value))
 
@@ -91,56 +97,56 @@
         (instance? Boolean value)) value
     (keyword? value) (name value)
     (symbol? value) (str value)
-    (core/agent? value) {:karcarthy/type "agent" :name (:name value)}
-    (core/tool? value) {:karcarthy/type "tool" :name (:name value)}
+    (agent/agent? value) {:karcarthy/type "agent" :name (:name value)}
+    (tool/tool? value) {:karcarthy/type "tool" :name (:name value)}
     (map? value) (model-map value)
     (sequential? value) (mapv model-value value)
     (set? value) (mapv model-value value)
-    :else (core/fail! :evaluation :output
-                      "Eval returned a value that cannot be sent to the model"
-                      {:class (.getName (class value))})))
+    :else (contract/fail!
+           :evaluation :output
+           "Eval returned a value that cannot be sent to the model"
+           {:class (.getName (class value))})))
 
 (defn ^:no-doc eval-in-run!
   "Evaluate one Clojure expression in `rt`, with `input` lexically available."
   [rt code input]
-  (core/consume! rt :evals 1)
+  (run/consume! rt :evals 1)
   (let [ordinal (swap! (:eval-counter rt) inc)
         rt (assoc rt :eval-namespace
                   (symbol (str (:eval-namespace rt) ".expr_" ordinal)))
         started (System/nanoTime)]
-    (core/emit! rt {:type :eval/started :code code :input input})
+    (run/emit! rt {:type :eval/started :code code :input input})
     (try
       (let [ns-obj (eval-ns! rt)
             expression (binding [*ns* ns-obj]
                          (read-expression code))
             expansion (binding [*ns* ns-obj]
                         (macroexpand-expression expression))]
-        (core/emit! rt {:type :eval/expanded
-                        :expression expression
-                        :expansion expansion
-                        :namespace (ns-name ns-obj)})
+        (run/emit! rt {:type :eval/expanded
+                       :expression expression
+                       :expansion expansion
+                       :namespace (ns-name ns-obj)})
         (intern ns-obj 'input input)
-        (let [value (binding [*ns* ns-obj core/*run* rt]
+        (let [value (binding [*ns* ns-obj run/*run* rt]
                       (clojure.core/eval expression))
               value (model-value value)]
-          (core/emit! rt {:type :eval/completed
-                          :duration-ms (/ (double (- (System/nanoTime) started))
-                                          1000000.0)
-                          :value value})
+          (run/emit! rt {:type :eval/completed
+                         :duration-ms (/ (double (- (System/nanoTime) started))
+                                         1000000.0)
+                         :value value})
           value))
       (catch Throwable t
         (let [structured? (= :failure (:karcarthy/type (ex-data t)))
               failure (if structured?
-                        (core/throwable->failure t)
-                        (core/failure :evaluation :evaluation
-                                      (deepest-message t)
-                                      {:code code}))]
-          (core/emit! rt {:type :eval/failed
-                          :phase (:phase failure)
-                          :duration-ms (/ (double (- (System/nanoTime) started))
-                                          1000000.0)
-                          :error failure})
+                        (contract/throwable->failure t)
+                        (contract/failure :evaluation :evaluation
+                                          (deepest-message t) {:code code}))]
+          (run/emit! rt {:type :eval/failed
+                         :phase (:phase failure)
+                         :duration-ms (/ (double (- (System/nanoTime) started))
+                                         1000000.0)
+                         :error failure})
           (if structured?
             (throw t)
-            (core/fail! :evaluation :evaluation (deepest-message t)
-                        {:code code} t)))))))
+            (contract/fail! :evaluation :evaluation (deepest-message t)
+                            {:code code} t)))))))

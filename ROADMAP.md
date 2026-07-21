@@ -1,6 +1,6 @@
 # Roadmap
 
-karcarthy is a native Clojure agent harness. The implemented kernel includes:
+karcarthy is a native Clojure agent harness. The implemented library includes:
 
 - Agent and Tool values that retain definitions and expansions;
 - a model and Tool loop with typed inputs, outputs, approvals, and events;

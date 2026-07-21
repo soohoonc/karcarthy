@@ -3,7 +3,7 @@
 
 (def test-namespaces
   '[karcarthy-test
-    karcarthy.core-test
+    karcarthy.run-test
     karcarthy.cli-test
     karcarthy.monitor-test
     karcarthy.tools-test

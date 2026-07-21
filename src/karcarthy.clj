@@ -13,7 +13,7 @@
             [karcarthy.tool :as tool-data]
             [karcarthy.tools :as tools]))
 
-;; Agent and Tool macros are forwarding macros so callers need one alias.
+;; Re-export the construction macros so most applications need one alias.
 (defmacro agent [config]
   `(agent-data/agent ~config))
 

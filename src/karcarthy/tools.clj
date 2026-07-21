@@ -2,7 +2,8 @@
   "Small, orthogonal tools for agents operating in a local directory."
   (:refer-clojure :exclude [read])
   (:require [clojure.string :as str]
-            [karcarthy.core :as core])
+            [karcarthy.contract :as contract]
+            [karcarthy.tool :as tool])
   (:import [java.io ByteArrayOutputStream]
            [java.nio.charset StandardCharsets]
            [java.nio.file Files LinkOption Path Paths StandardOpenOption]
@@ -24,20 +25,20 @@
 
 (defn- local-path [^Path root value]
   (when-not (and (string? value) (not (str/blank? value)))
-    (core/fail! :contract :tool-input "path must be a non-empty string"
+    (contract/fail! :contract :tool-input "path must be a non-empty string"
                 {:path value}))
   (let [given (Paths/get value (make-array String 0))
         candidate (-> (if (.isAbsolute given) given (.resolve root given))
                       (.toAbsolutePath)
                       (.normalize))]
     (when-not (.startsWith candidate root)
-      (core/fail! :tool :path "Path escapes the configured directory"
+      (contract/fail! :tool :path "Path escapes the configured directory"
                   {:path value :root (str root)}))
     (when-let [ancestor (existing-ancestor candidate)]
       (let [real-root (.toRealPath root no-link-options)
             real-ancestor (.toRealPath ancestor no-link-options)]
         (when-not (.startsWith real-ancestor real-root)
-          (core/fail! :tool :path "Path resolves outside the configured directory"
+          (contract/fail! :tool :path "Path resolves outside the configured directory"
                       {:path value :root (str root)}))))
     candidate))
 
@@ -105,7 +106,7 @@
          (subs text (+ index (count old-text))))))
 
 (defn- read-tool [root options]
-  (core/make-tool
+  (tool/make-tool
    {:name "read"
     :description
     "Read a UTF-8 text file inside the configured directory. Use offset and limit for large files. Read a file before editing it."
@@ -124,7 +125,7 @@
            offset (long (or offset 1))
            limit (long (or limit 2000))]
        (when-not (Files/isRegularFile file no-link-options)
-         (core/fail! :tool :read "File does not exist or is not regular"
+         (contract/fail! :tool :read "File does not exist or is not regular"
                      {:path path}))
        (with-open [reader (Files/newBufferedReader file StandardCharsets/UTF_8)]
          (let [selected (->> (line-seq reader)
@@ -142,7 +143,7 @@
             :truncated? (or more? (:truncated? bounded))}))))))
 
 (defn- write-tool [root options]
-  (core/make-tool
+  (tool/make-tool
    {:name "write"
     :description
     "Create or replace a UTF-8 text file inside the configured directory. Prefer edit for targeted changes to an existing file. Parent directories are created."
@@ -167,7 +168,7 @@
         :bytes (count (.getBytes ^String content StandardCharsets/UTF_8))}))))
 
 (defn- edit-tool [root options]
-  (core/make-tool
+  (tool/make-tool
    {:name "edit"
     :description
     "Replace exact text in an existing UTF-8 file. By default old_text must occur exactly once; set replace_all only when every occurrence should change."
@@ -185,14 +186,14 @@
    (fn [_ {:keys [path old_text new_text replace_all]}]
      (let [file (local-path root path)]
        (when-not (Files/isRegularFile file no-link-options)
-         (core/fail! :tool :edit "File does not exist or is not regular"
+         (contract/fail! :tool :edit "File does not exist or is not regular"
                      {:path path}))
        (let [text (Files/readString file StandardCharsets/UTF_8)
              count (occurrences text old_text)]
          (when (zero? count)
-           (core/fail! :tool :edit "old_text was not found" {:path path}))
+           (contract/fail! :tool :edit "old_text was not found" {:path path}))
          (when (and (not replace_all) (not= 1 count))
-           (core/fail! :tool :edit
+           (contract/fail! :tool :edit
                        "old_text is not unique; provide more context or set replace_all"
                        {:path path :occurrences count}))
          (let [updated (if replace_all
@@ -206,7 +207,7 @@
             :replacements (if replace_all count 1)}))))))
 
 (defn- bash-tool [root options]
-  (core/make-tool
+  (tool/make-tool
    {:name "bash"
     :description
     "Run a shell command in the configured directory. Use read, search, edit, and write for file operations when they fit. Avoid destructive commands unless explicitly requested."
@@ -225,7 +226,7 @@
                   (long (or (:max-process-output-bytes options) 100000))))))
 
 (defn- search-tool [root options]
-  (core/make-tool
+  (tool/make-tool
    {:name "search"
     :description
     "Search local file contents with ripgrep regular expressions. Use this instead of Bash grep for bounded, path-scoped results."
@@ -258,7 +259,7 @@
                   :output (str/join "\n" (take max-results lines))
                   :matches (min max-results (count lines))
                   :truncated? truncated?))
-         (core/fail! :tool :search "ripgrep failed" result))))))
+         (contract/fail! :tool :search "ripgrep failed" result))))))
 
 (defn local
   "Build the minimal local toolset rooted at one existing directory."
@@ -266,7 +267,7 @@
   ([options]
    (let [root (absolute-path (or (:cwd options) "."))]
      (when-not (Files/isDirectory root no-link-options)
-       (core/fail! :contract :configuration
+       (contract/fail! :contract :configuration
                    "Local tool root must be an existing directory"
                    {:cwd (str root)}))
      [(read-tool root options)

@@ -1,9 +1,9 @@
 (ns karcarthy.model.responses
-  "Responses-compatible HTTP transport. It only translates model I/O; the
-  karcarthy core owns the loop and executes function tools locally."
+  "Responses-compatible HTTP transport. It only translates model I/O."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [karcarthy.core :as core])
+            [karcarthy.contract :as contract]
+            [karcarthy.tool :as tool])
   (:import [java.net URI]
            [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers
             HttpResponse$BodyHandlers]
@@ -47,12 +47,12 @@
     :hosted
     (if (= :responses (:transport tool))
       (:spec tool)
-      (core/fail! :model :configuration
+      (contract/fail! :model :configuration
                   "Hosted Tool belongs to a different transport"
                   {:tool-transport (:transport tool)
                    :model-transport :responses}))
     :function (function-tool tool)
-    (core/fail! :model :configuration
+    (contract/fail! :model :configuration
                 "Responses transport received an unsupported normalized Tool"
                 {:tool tool})))
 
@@ -61,7 +61,7 @@
   endpoint and selected model must support this hosted Tool."
   ([] (web-search {}))
   ([options]
-   (core/hosted-tool :responses (merge {:type "web_search"} options))))
+   (tool/hosted-tool :responses (merge {:type "web_search"} options))))
 
 (defn- api-name [x]
   (str/replace (name x) "-" "_"))
@@ -132,7 +132,7 @@
   (try
     (json/read-str (or arguments "{}") :key-fn keyword)
     (catch Throwable t
-      (core/fail! :model :response
+      (contract/fail! :model :response
                   "Responses endpoint returned invalid function-call arguments"
                   {:arguments arguments} t))))
 
@@ -148,11 +148,11 @@
   "Pure: normalize a Responses API payload for the karcarthy loop."
   [payload]
   (when-let [error (:error payload)]
-    (core/fail! :model :response
+    (contract/fail! :model :response
                 (or (:message error) "Responses request failed")
                 {:error error}))
   (when (and (:status payload) (not= "completed" (:status payload)))
-    (core/fail! :model :response
+    (contract/fail! :model :response
                 (str "Responses request ended with status " (:status payload))
                 {:status (:status payload)
                  :incomplete-details (:incomplete_details payload)}))
@@ -207,12 +207,12 @@
                            (not (authorization-header? headers)))
         timeout-ms (long (or (:timeout-ms model) 120000))]
     (when (and default-auth? (str/blank? key))
-      (core/fail! :model :configuration
+      (contract/fail! :model :configuration
                   "Responses API key is not configured"
                   {:transport :responses
                    :api-key-env (:api-key-env model)}))
     (when (str/blank? (:id model))
-      (core/fail! :model :configuration
+      (contract/fail! :model :configuration
                   "Responses model configuration requires :id"
                   {:model model}))
     (let [builder (doto (HttpRequest/newBuilder)
@@ -235,13 +235,13 @@
   (try
     (json/read-str response-body :key-fn keyword)
     (catch Throwable t
-      (core/fail! :model :response
+      (contract/fail! :model :response
                   "Responses endpoint returned non-JSON content"
                   {:status status :body response-body} t))))
 
 (defn- check-http-status! [status request-id payload]
   (when-not (<= 200 status 299)
-    (core/fail! :model :request
+    (contract/fail! :model :request
                 (or (get-in payload [:error :message])
                     (str "Responses request failed with HTTP " status))
                 {:status status
@@ -324,7 +324,7 @@
                (vreset! completed (:response event))
 
                "error"
-               (core/fail! :model :response
+               (contract/fail! :model :response
                            (or (get-in event [:error :message])
                                (:message event)
                                "Responses stream failed")
@@ -332,7 +332,7 @@
 
                nil)))
           (when-not @completed
-            (core/fail! :model :response
+            (contract/fail! :model :response
                         "Responses stream ended without a terminal response"
                         {:request-id request-id}))
           (response @completed))))))
