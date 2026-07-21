@@ -3,7 +3,7 @@
 (load-file "examples/coding/main.clj")
 
 (ns karcarthy.live-test
-  "Paid verification of the public live examples."
+  "Paid verification of the public examples and core Agent features."
   (:require [clojure.java.shell :as shell]
             [clojure.string :as str]
             [clojure.test :as t :refer [deftest is]]
@@ -21,6 +21,71 @@
 (defn- credentials? []
   (or (not (str/blank? (System/getenv "RESPONSES_API_KEY")))
       (not (str/blank? (System/getenv "OPENAI_API_KEY")))))
+
+(defn- model-id []
+  (or (System/getenv "KARCARTHY_OPENAI_MODEL") "gpt-5.6"))
+
+(defn- live-model []
+  {:transport :responses
+   :provider :openai
+   :id (model-id)
+   :reasoning :low
+   :timeout-ms 180000})
+
+(k/deftool static-stamp
+  {:description "Return a deterministic marker for this live Tool test."
+   :input map?
+   :input-schema {:type "object"
+                  :properties {"text" {:type "string"}}
+                  :required ["text"]
+                  :additionalProperties false}
+   :output string?}
+  [{:keys [text]}]
+  (str "static-tool:" text))
+
+(defn- feature-matrix-agent []
+  (let [static-specialist
+        (k/agent
+         {:name "static-specialist"
+          :description "Return the fixed marker requested by this live test."
+          :model (live-model)
+          :instructions "Return exactly static-agent-ok. Do not call a Tool."
+          :input string?
+          :output string?
+          :max-turns 2})
+        dynamic-code
+        (str
+         "(let [stamp (tool {:name \"dynamic-stamp\" "
+         ":description \"Return a deterministic dynamic Tool marker.\" "
+         ":input map? "
+         ":input-schema {:type \"object\" "
+         ":properties {\"text\" {:type \"string\"}} "
+         ":required [\"text\"] :additionalProperties false} "
+         ":output string?} "
+         "[value] (str \"dynamic-tool:\" (:text value))) "
+         "specialist (agent {:name \"dynamic-specialist\" "
+         ":description \"Exercise a Tool created inside eval.\" "
+         ":model " (pr-str (live-model)) " "
+         ":instructions \"Call dynamic-stamp exactly once with text dynamic-agent. "
+         "Return the Tool result exactly. Do not call eval.\" "
+         ":tools [stamp] :input string? :output string? :max-turns 3})] "
+         "(:output (run! specialist input)))")]
+    (k/agent
+     {:name "live-feature-matrix"
+      :model (live-model)
+      :instructions
+      (str
+       "Exercise every requested harness feature before answering. "
+       "First call static-stamp with text static. "
+       "Then call static-specialist with input static. "
+       "Then call eval exactly once with input dynamic and this exact code: "
+       dynamic-code " "
+       "Only after all three calls succeed, return exactly LIVE-FEATURES-OK.")
+      :tools [static-stamp]
+      :agents [static-specialist]
+      :input string?
+      :output string?
+      :max-turns 8})))
 
 (defn- temp-directory []
   (Files/createTempDirectory "karcarthy-live-coding-"
@@ -41,6 +106,41 @@
     (let [run (k/run! (basic/basic-agent) "Reply with only the word ready.")]
       (is (= :completed (:status run)) (pr-str (:error run)))
       (is (= "ready" (some-> (:output run) str/trim str/lower-case))))))
+
+(deftest static-tools-static-agents-and-dynamic-eval-work-together
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [run (k/run! (feature-matrix-agent) "Run the live feature matrix."
+                      {:limits {:model-calls 12
+                                :evals 1
+                                :depth 2
+                                :parallelism 8
+                                :deadline-ms 300000}})
+          tool-names (->> (:events run)
+                          (filter #(= :tool/started (:type %)))
+                          (map :tool)
+                          set)
+          agent-names (->> (:events run)
+                           (filter #(= :agent/started (:type %)))
+                           (map :agent)
+                           set)
+          eval-types (->> (:events run)
+                          (map :type)
+                          (filter #(= "eval" (namespace %)))
+                          set)]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (= "LIVE-FEATURES-OK" (some-> (:output run) str/trim)))
+      (is (every? tool-names
+                  ["static-stamp" "static-specialist" "eval" "dynamic-stamp"])
+          (pr-str tool-names))
+      (is (every? agent-names
+                  ["live-feature-matrix" "static-specialist"
+                   "dynamic-specialist"])
+          (pr-str agent-names))
+      (is (= #{:eval/started :eval/expanded :eval/completed} eval-types)
+          (pr-str eval-types))
+      (is (= 1 (get-in run [:usage :evals]))))))
 
 (deftest architect-example-writes-and-runs-two-agents
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
