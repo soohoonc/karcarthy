@@ -1,18 +1,19 @@
 ---
-title: Review code dynamically
-description: Let a proposed change choose its reviewers and verify a finding recursively.
+title: Code review
+description: Let a proposed change choose focused reviewers and verify a finding recursively.
 ---
 
-The code-review example starts with one orchestrator and one proposed change.
-After reading the diff, the orchestrator creates two or three relevant
-reviewers, runs them concurrently, and turns their reports into conventional,
-prioritized findings.
+This example makes dynamic orchestration observable. One code-review Agent
+reads a proposed change, creates two or three relevant reviewers, and runs them
+concurrently. The reviewer responsible for the riskiest claim creates a nested
+verifier that tries to disprove its strongest finding.
 
-One reviewer also creates a nested `finding-verifier`. The verifier receives the
-change and one candidate finding, then tries to disprove it before the finding
-reaches the final review.
+The final answer is a conventional code review. The Run events retain the
+generated Clojure and the complete Agent tree that produced it.
 
-## Run the bundled review
+## Run the example
+
+Set an OpenAI credential and run:
 
 ```bash
 clojure -M:examples review
@@ -25,11 +26,13 @@ scheduler must:
 2. choose the highest-priority jobs before applying the limit; and
 3. prevent two workers from claiming the same job.
 
-The diff violates all three requirements. This gives you known findings against
-which to judge the review, without requiring a checkout or external tools.
+The diff violates all three requirements. These known defects make the example
+possible to evaluate without requiring another checkout or external Tools.
 
-The terminal first displays a live Run tree. Names vary because the diff chooses
-the reviewers, but its shape is clear:
+## Read the output
+
+The terminal first displays a live Run tree. Reviewer names vary because the
+change determines the concerns, but the structure is explicit:
 
 ```text
 Run run_7c2e9b… · running
@@ -41,12 +44,19 @@ Run run_7c2e9b… · running
 ```
 
 The command then prints `REVIEW`, followed by `Findings` and `Summary`. Each
-finding has a severity, file and line, failure scenario, minimal fix, and the
-verifier verdict when one exists.
+finding includes severity, file and line, a failure scenario, a minimal fix,
+and the verifier verdict when one exists.
 
-## Inspect what the model wrote
+Useful questions for this run are:
 
-`run-review!` returns a normal Run map. Retain it at a REPL:
+- Did the final review identify each of the three known defects?
+- Did it report unsupported findings?
+- Did the nested verifier reject or strengthen its candidate?
+- How many Agent calls, model calls, tokens, and eval attempts were used?
+
+## Inspect the generated Clojure
+
+Retain the Run at a REPL:
 
 ```clojure
 (require '[karcarthy :as k])
@@ -57,7 +67,7 @@ verifier verdict when one exists.
    example.review/default-change))
 ```
 
-The generated source and its macroexpansion are retained as events:
+The generated expressions and macroexpansions are retained as events:
 
 ```clojure
 (->> (k/events result)
@@ -65,9 +75,8 @@ The generated source and its macroexpansion are retained as events:
      (map #(select-keys % [:agent :depth :expression :expansion])))
 ```
 
-The first expression creates the top-level reviewers. The second is written by
-one of those reviewers and creates `finding-verifier`. Inspect the same event
-sequence as a trace:
+The first expression creates the top-level reviewers. The nested expression
+creates `finding-verifier`. Inspect the Agent lineage independently:
 
 ```clojure
 (->> (k/events result)
@@ -75,63 +84,46 @@ sequence as a trace:
      (map (juxt :agent :parent-id :depth)))
 ```
 
-## Compare fixed and dynamic composition
+This distinguishes what the Agent generated from what the harness executed.
 
-Both approaches use the same Agents, `future`, and `run!`:
+## Compare orchestration boundaries
 
-| Question | Fixed composition | Dynamic review |
+Managers, workers, parallelism, and traces are common across agent libraries.
+The relevant difference is what may be defined after the orchestrator reads the
+diff.
+
+| Library or pattern | Supplied by the application | Chosen at run time |
 | --- | --- | --- |
-| Who chooses the reviewers? | Application author | Orchestrator after reading the diff |
-| Where is coordination written? | `examples/composition/main.clj` | Retained `:eval/expanded` Clojure |
-| Can a reviewer add a verifier? | Only if the application implements it | Yes, through the same recursive eval boundary |
-| Run scope | Joins an active Run when called inside one; the standalone example creates separate Runs | Generated reviewer calls join the orchestrator's active Run |
+| karcarthy | One code-review Agent and the Clojure runtime | The Agent creates new Agent definitions and their coordination as retained Clojure; created Agents receive the same recursive capability |
+| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/multi_agent/) | Agents exposed as Tools or handoffs, plus optional Python orchestration | A manager chooses among exposed Agents; application code can control chaining and parallelism |
+| [Pydantic AI Dynamic Workflow](https://pydantic.dev/docs/ai/harness/dynamic-workflow/) | A catalog of named subagents | The model writes sandboxed Python to fan out, chain, vote, or retry calls to that catalog |
+| [LangGraph orchestrator-worker](https://docs.langchain.com/oss/python/langgraph/workflows-agents#orchestrator-worker) | A graph or functional workflow, worker function, and shared state | The orchestrator plans tasks and dispatches workers dynamically |
+| [Agent-o-rama](https://github.com/redplanetlabs/agent-o-rama) | A graph of Java or Clojure functions deployed as an agent | The declared graph runs with integrated storage, tracing, evaluation, and deployment |
 
-Use the fixed form when every change needs the same review policy. Use the
-dynamic form when the review topology should depend on the code—for example, an
-authentication diff may create security and API-contract reviewers, while a
-scheduler diff may create ordering and concurrency reviewers.
+The closest comparison is Pydantic AI's Dynamic Workflow: in both cases the
+model writes coordination code inside one Tool call. karcarthy additionally
+allows that code to construct new Agent values and gives those Agents the same
+recursive eval capability inside one Run. The tradeoff is direct: karcarthy
+evaluates full-trust JVM Clojure, while Pydantic AI runs the generated Python in
+a sandbox.
 
-## Compare the orchestration boundary
+This comparison is about the orchestration boundary, not production readiness.
+Libraries with storage, deployment, evaluation UIs, or sandboxing solve a
+larger operational problem than this demonstration library intends to solve.
 
-Several libraries support managers, workers, parallelism, and traces. The
-useful comparison is not whether they can run this review; all of them can. It
-is what the model is allowed to define after it reads the diff.
+## Reproduce the comparison
 
-| Library or pattern | What is supplied by the application | What may be chosen at run time |
-| --- | --- | --- |
-| karcarthy | One orchestrator and the Clojure runtime | The model creates new Agent definitions and their coordination as retained Clojure; every created Agent receives the same recursive eval capability |
-| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/multi_agent/) | Agents exposed as tools or handoffs, plus optional Python orchestration | A manager can choose among exposed Agents; application code can also control chaining and parallelism |
-| [Pydantic AI DynamicWorkflow](https://pydantic.dev/docs/ai/harness/dynamic-workflow/) | A catalog of named sub-agents | The model writes sandboxed Python to fan out, chain, vote, or retry calls to that catalog; DynamicWorkflow itself does not nest, while [SubAgents](https://pydantic.dev/docs/ai/harness/subagents/) can form trees |
-| [LangGraph orchestrator-worker](https://docs.langchain.com/oss/python/langgraph/workflows-agents#orchestrator-worker) | Graph or functional workflow, worker function, and shared state shape | The orchestrator can plan an unknown number of tasks and dispatch them dynamically with `Send` |
-| [Agent-o-rama](https://github.com/redplanetlabs/agent-o-rama) | A graph of Java or Clojure functions deployed as an agent | The declared graph executes with built-in storage, tracing, evaluation, and deployment facilities |
+Use `example.review/default-change`, the same model and reasoning effort, and no
+repository or web Tools. Record:
 
-The closest comparison is Pydantic AI's DynamicWorkflow: in both cases the
-model writes Python or Clojure coordination inside one tool call.
-The sharper karcarthy claim is that the code can also construct new Agent
-values and that the same eval boundary is available recursively, all inside one
-Run. The tradeoff is equally sharp: karcarthy evaluates full-trust JVM Clojure,
-whereas DynamicWorkflow runs its Python in a sandbox.
-
-This is an architectural comparison, not a production-readiness ranking.
-Agent-o-rama, for example, deliberately includes storage, deployment, and an
-evaluation UI that are outside this small demonstration library's thesis.
-
-## Run the same comparison elsewhere
-
-Use `example.review/default-change` unchanged, the same model and reasoning
-effort, and no repository or web tools. Record:
-
-- how many of the three known defects appear in the final review;
-- how many reported findings are verified and how many are false positives;
-- whether reviewer definitions are predefined or generated from the diff;
+- recall against the three known defects;
+- verified findings and false positives;
+- whether reviewers are predefined or created after reading the diff;
 - whether a reviewer can create the nested verifier during the same run; and
-- model calls, input/output tokens, and elapsed time.
+- model calls, input and output tokens, and elapsed time.
 
-Keep the generated workflow or trace with the result. That makes the comparison
-about observable behavior and execution representation rather than framework
-marketing.
+Keep the generated code or trace with the result. This makes the comparison
+about observable behavior rather than framework descriptions.
 
-This is the central claim of karcarthy: model-authored coordination is ordinary
-Clojure code, not a second workflow representation. See [Compose a known
-team](/docs/guides/composition) for the fixed version and [Dynamic
-eval](/docs/eval) for the exact execution boundary.
+See [Agent orchestration](/docs/agent-orchestration) for the general patterns
+and [Eval](/docs/reference/eval) for the exact execution boundary.

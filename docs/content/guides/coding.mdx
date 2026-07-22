@@ -53,9 +53,9 @@ The built-in `eval` Tool is present automatically. The Coding Agent may solve
 the task directly or write Clojure that creates a focused reviewer when that
 helps. The prompt does not require a fixed topology.
 
-That distinction matters: the [composition example](/docs/guides/composition)
-defines the review team before the task, while the [dynamic code-review
-example](/docs/guides/review) creates reviewers after reading the change.
+That distinction matters: [code orchestration](/docs/agent-orchestration#orchestrate-in-code)
+defines participants before the task, while the [code-review example](/docs/guides/review)
+creates reviewers after reading the change.
 
-Use [Evaluate an agent](/docs/guides/harbor) to run this Agent against an
-isolated repository task and a behavioral verifier.
+Use the [Harbor integration](/docs/protocols/harbor) to run this Agent against
+an isolated repository task and a behavioral verifier.

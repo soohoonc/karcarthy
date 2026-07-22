@@ -35,5 +35,5 @@ Results are written under `examples/harbor/jobs`. Open them with:
 uvx --python 3.13 --from harbor harbor view examples/harbor/jobs
 ```
 
-The complete task, metric, process boundary, and trajectory guide are in
-[Evaluate an agent](https://karcarthy.vercel.app/docs/guides/harbor).
+The complete task, metric, process boundary, and trajectory guide are in the
+[Harbor integration](https://karcarthy.vercel.app/docs/protocols/harbor).

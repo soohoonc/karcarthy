@@ -1,0 +1,97 @@
+---
+title: Harbor
+description: Evaluate a karcarthy Coding Agent in an isolated repository task.
+---
+
+[Harbor](https://www.harborframework.com/) is an evaluation harness for agents
+that work in computer environments. The bundled integration runs karcarthy's
+Coding Agent in an isolated repository, scores the resulting behavior with
+hidden tests, and records the trajectory for inspection.
+
+ACP is the process boundary between Harbor and karcarthy:
+
+```text
+Harbor task → ACP client → karcarthy Agent → repository Tools
+     │                                      │
+     └──────── verifier and trajectory ─────┘
+```
+
+## What the bundled task evaluates
+
+The task presents a scheduler with duplicate delivery and retry bugs. The Agent
+must diagnose and fix the persistence behavior without changing the public
+Store method signatures.
+
+After the Agent exits, hidden behavioral tests run against its repository:
+
+```text
+reward 1  all hidden tests pass
+reward 0  one or more hidden tests fail
+```
+
+The repository does not check in a model result. A live run creates the score,
+logs, and trajectory for the selected model.
+
+## Before you begin
+
+Install Docker, JDK 21, the Clojure CLI, and `uv`. A model-backed evaluation is
+paid and requires an OpenAI credential plus explicit opt-in.
+
+## Run the evaluation
+
+```bash
+KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh
+```
+
+Set `KARCARTHY_OPENAI_MODEL` to select another Responses-compatible model and
+`KARCARTHY_ATTEMPTS` to repeat the task.
+
+The script packages the Coding Agent, launches it through ACP in the task
+environment, and writes the jobs under `examples/harbor/jobs`.
+
+## Inspect the result
+
+Open Harbor's local viewer:
+
+```bash
+uvx --python 3.13 --from harbor harbor view examples/harbor/jobs
+```
+
+Inspect the artifacts together:
+
+- the verifier reward and hidden-test logs;
+- the Agent's final answer;
+- model messages and token usage;
+- repository Tool calls and observations; and
+- any dynamically generated Clojure and participating Agent calls.
+
+The reward says whether the final behavior passed. The trajectory explains how
+the Agent reached it and whether orchestration contributed.
+
+## Validate without a model
+
+Run Harbor's oracle to check that the task environment and verifier can reach a
+reward of `1` without spending model tokens:
+
+```bash
+uvx --python 3.13 --from harbor harbor run \
+  --path examples/harbor/tasks/scheduler \
+  --agent oracle \
+  --jobs-dir examples/harbor/jobs \
+  --job-name oracle \
+  --yes
+```
+
+## Use your own Agent or task
+
+`examples/harbor/main.clj` defines the Agent factory served through ACP. Change
+`harbor-agent` to package another Agent while preserving the session-supplied
+working directory.
+
+Harbor tasks live under `examples/harbor/tasks`. Add another task directory
+with its instruction, environment, and verifier, then point the `--path`
+argument in `run.sh` at it. The packaging and adapter details are documented in
+[`examples/harbor/README.md`](https://github.com/soohoonc/karcarthy/blob/main/examples/harbor/README.md).
+
+See [ACP](/docs/protocols/acp) for the process and session boundary that Harbor
+launches.

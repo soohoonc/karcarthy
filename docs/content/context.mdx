@@ -1,0 +1,88 @@
+---
+title: Context
+description: Pass local dependencies through a Run without adding them to model input.
+---
+
+Context is local dependency injection for a Run. Pass it to `run!`:
+
+```clojure
+(k/run! support "Look up account 123."
+        {:context {:db db
+                   :account-id "123"}})
+```
+
+Tools and evaluated Clojure read the current value with `(k/context)`:
+
+```clojure
+(k/deftool lookup-account
+  {:description "Look up the current account."
+   :input-schema {:type "object"
+                  :properties {}
+                  :additionalProperties false}
+   :output-schema map?}
+  [_]
+  (lookup! (:db (k/context)) (:account-id (k/context))))
+```
+
+Context is never sent to the model automatically. It becomes model-visible
+only when application code deliberately includes it in instructions, messages,
+Tool output, or Agent input.
+
+## Context, input, and Sessions
+
+| Value | Purpose | Model-visible automatically? | Lifetime |
+| --- | --- | --- | --- |
+| Agent input | The task given to an Agent | Yes | One Agent call |
+| Context | Local dependencies and request metadata | No | One Run |
+| Session | Model conversation history | Yes, to the first Agent | Across Runs when reused |
+
+Context is not a workflow state store or conversation history.
+
+## Validate context
+
+Use `:context-schema` on an Agent to check the local value before that Agent
+runs:
+
+```clojure
+(k/defagent account-agent
+  {:model "gpt-5.6"
+   :instructions "Answer questions about the current account."
+   :context-schema map?
+   :output-schema string?})
+```
+
+A mismatch produces a structured schema failure.
+
+## Dynamic configuration
+
+`:model`, `:instructions`, `:tools`, and `:agents` may be functions of the
+current Run context:
+
+```clojure
+{:instructions
+ (fn [{:keys [context]}]
+   (str "Answer for account " (:account-id context) "."))
+ :tools
+ (fn [{:keys [context]}]
+   (tools-for-plan (:plan context)))}
+```
+
+Guardrails and approval-policy functions receive the same Run-context map plus
+the value they are checking. The map contains the Run, Agent, parent, depth,
+local context, active limits, current usage, and Agent value.
+
+## Participating Agent calls
+
+A participating `run!` inherits the active context unless it provides
+`:context` explicitly:
+
+```clojure
+(k/run! verifier finding
+        {:context (assoc (k/context) :verification? true)})
+```
+
+The override applies to that Agent call and its descendants. It does not mutate
+the parent value.
+
+See [Sessions](/docs/sessions) for conversation history and [Tools](/docs/tools)
+for using context inside Tool functions.

@@ -2,9 +2,7 @@
   "title": "Examples",
   "pages": [
     "review",
-    "composition",
     "coding",
-    "chat",
-    "harbor"
+    "chat"
   ]
 }

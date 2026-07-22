@@ -105,7 +105,7 @@ language yourself:
 That is where Lisp's homoiconicity matters: the model can produce ordinary
 Clojure data, and the running program can execute it as ordinary Clojure code.
 
-| | Fixed composition | Dynamic review |
+| | Code orchestration | Dynamic orchestration |
 | --- | --- | --- |
 | Reviewers chosen by | Application author | Orchestrator after reading the diff |
 | Coordination stored as | Source code | Retained generated source and macroexpansion |
@@ -134,7 +134,7 @@ start processes.
 | --- | --- |
 | [Basic](examples/basic/main.clj) | One Agent Run |
 | [Code review](examples/review/main.clj) | A diff selects its reviewers; one creates a nested verifier |
-| [Compose](examples/composition/main.clj) | A fixed review team written directly in Clojure |
+| [Code orchestration](examples/composition/main.clj) | A fixed review team written directly in Clojure |
 | [Chat](examples/chat/main.clj) | Conversation history with a Session |
 | [Coding](examples/coding/main.clj) | Repository work with local Tools |
 | [Harbor](examples/harbor/README.md) | Evaluation with a behavioral verifier and trajectory |

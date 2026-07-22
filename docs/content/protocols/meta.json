@@ -3,6 +3,7 @@
   "pages": [
     "models",
     "mcp",
-    "acp"
+    "acp",
+    "harbor"
   ]
 }

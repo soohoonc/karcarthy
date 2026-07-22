@@ -1,12 +1,12 @@
 ---
 title: Why Clojure?
-description: Generated workflows remain ordinary code.
+description: Agent orchestration is ordinary Clojure.
 ---
 
 Most agent libraries already provide Agents, Tools, conversation state, limits,
 and traces. karcarthy keeps those familiar pieces.
 
-Clojure changes one boundary: when the right workflow depends on the task, a
+Clojure changes one boundary: when the right orchestration depends on the task, a
 model can produce code as data and the running program can execute it directly.
 
 ## One language for both cases
@@ -20,7 +20,7 @@ those roles are known, write the coordination yourself:
      (mapv (comp k/output deref)))
 ```
 
-If the diff should determine which reviews exist, let an Agent write the
+If the diff should determine which reviews exist, let an Agent generate the
 equivalent expression after it sees the change:
 
 ```clojure
@@ -41,8 +41,8 @@ equivalent expression after it sees the change:
        (mapv (comp output deref))))
 ```
 
-The model authored the coordination, not a graph node that karcarthy later had
-to interpret.
+The resulting coordination is Clojure, not a graph node that karcarthy later
+has to interpret.
 
 ## The eval boundary
 
@@ -105,3 +105,6 @@ conversation with only its explicit input.
 Eval is full-trust JVM Clojure, not a sandbox. Reader evaluation is disabled,
 but evaluated code has the permissions of the host process. Isolate the process
 when generated code or its available dependencies are not trusted.
+
+Continue with [Agent orchestration](/docs/agent-orchestration) for delegation,
+code orchestration, dynamic orchestration, and nested Agent calls.
