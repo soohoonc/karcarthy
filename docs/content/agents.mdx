@@ -1,12 +1,14 @@
 ---
-title: Agents and runs
-description: Define Agent data and execute it with run!.
+title: Agents
+description: Define model-backed Agents as ordinary Clojure data.
 ---
 
-An Agent is a flat Clojure map containing a model, instructions, Tools, other
-Agents it may call, and boundary schemas.
+An Agent is a flat Clojure map that describes a model, its instructions, the
+Tools and Agents it may call, and its input and output boundaries.
 
 ```clojure
+(require '[karcarthy :as k])
+
 (k/defagent researcher
   {:description "Research one question and return sourced findings."
    :model "gpt-5.6"
@@ -16,98 +18,82 @@ Agents it may call, and boundary schemas.
    :output-schema string?})
 ```
 
-`defagent` derives `:name` from the var. Use `agent` for an expression and pass
-`:name` explicitly. Both macros retain their definition and expansion:
+`defagent` derives `:name` from the var. Use `agent` to construct a value inside
+an expression and provide `:name` explicitly:
 
 ```clojure
-(k/definition researcher)
-(k/expansion researcher)
-(assoc researcher :instructions "Return three findings.")
+(def researcher
+  (k/agent
+   {:name "researcher"
+    :model "gpt-5.6"
+    :instructions "Research carefully."
+    :input-schema string?
+    :output-schema string?}))
 ```
-
-## Models
-
-A string selects the OpenAI Responses transport:
-
-```clojure
-{:model "gpt-5.6"}
-```
-
-Use a map for advanced configuration:
-
-```clojure
-{:model {:transport :responses
-         :provider :openai
-         :id "gpt-5.6"
-         :reasoning :medium
-         :timeout-ms 180000}}
-```
-
-## Runs
-
-```clojure
-(def result (k/run! researcher "What changed in Java?"))
-(select-keys result [:status :output :usage :error])
-```
-
-A Run is `:completed`, `:failed`, or `:cancelled`. Invalid configuration throws
-before execution. Model, Tool, schema validation, budget, deadline, and
-cancellation failures during execution produce a failed or cancelled Run map.
-
-The first `run!` establishes a run. Calls within its dynamic extent participate
-in that run and share limits, usage, events, context, approvals, cancellation,
-and its ID. Each Agent starts a fresh model conversation. Only the first Agent
-uses the optional Session.
-
-## Existing Agents as Tools
-
-Put Agents in `:agents` when the model should decide whether to call them:
-
-```clojure
-(k/defagent manager
-  {:model "gpt-5.6"
-   :instructions "Resolve the request. Ask support when useful."
-   :agents [support]
-   :output-schema string?})
-```
-
-The called Agent receives only its explicit input, not the parent's model
-conversation. Its output returns as the Tool result. `:agents` does not create
-a hierarchy or transfer control; it is the Agent-as-Tool pattern.
-
-## Dynamic composition
-
-Every Agent also receives `eval`. The model may evaluate one Clojure expression
-that creates and runs Agents:
-
-```clojure
-{:code "(let [a (agent {:name \"change-reviewer\" ...})]
-          (:output (run! a input)))"}
-```
-
-See [Dynamic eval](/docs/eval).
 
 ## Configuration
 
 | Key | Meaning |
 | --- | --- |
-| `:name` | Stable name. `agent` requires it; `defagent` derives it. |
+| `:name` | Stable Agent name. `agent` requires it; `defagent` derives it. |
 | `:description` | Tells another model when to call this Agent. |
-| `:model` | Model ID string, model map, or run-context function. |
-| `:instructions` | String or run-context function. |
-| `:tools` / `:agents` | Tools and Agents available to the model. |
-| `:context-schema` | Validation schema for local run context. |
-| `:input-schema` / `:output-schema` | Boundary schemas, also exposed to models when convertible to JSON Schema. |
-| `:max-turns` | Maximum model turns before the Agent fails. |
-| `:input-guardrails` / `:output-guardrails` | Input and output checks. |
-| `:limits` | Limits that can only narrow the active run. |
+| `:model` | Model ID, model configuration, or context function. |
+| `:instructions` | Complete model-visible string or context function. |
+| `:tools` | Tools available to the model. |
+| `:agents` | Agents available through delegation. |
+| `:context-schema` | Schema for local Run context. |
+| `:input-schema` / `:output-schema` | Agent input and output boundaries. |
+| `:input-guardrails` / `:output-guardrails` | Functions that check input and output. |
+| `:max-turns` | Maximum model turns for this Agent call. |
+| `:limits` | Limits that may narrow the active Run. |
+
+Instructions are exact: karcarthy does not prepend a framework prompt. The
+`:model`, `:instructions`, `:tools`, and `:agents` values may be functions of
+the current Run context when configuration needs local dependencies.
+
+See [Models](/docs/protocols/models) for transport configuration and [Context](/docs/context)
+for context functions.
+
+## Schemas and guardrails
+
+Schemas validate the Agent boundary. Input is checked before the first model
+request; output is checked before the Agent completes.
+
+Guardrails run in the same positions and receive the local Run context plus the
+value:
 
 ```clojure
-(k/run! account-agent "Summarize account 123."
-        {:context {:account-id "123" :db db}
-         :limits {:model-calls 40
-                  :depth 4
-                  :concurrency 4
-                  :evals 8
-                  :deadline-ms 300000}})
+{:input-guardrails
+ [(fn [run-context value]
+    (allowed-request? (:context run-context) value))]
+ :output-guardrails
+ [(fn [_ value]
+    (grounded? value))]}
 ```
+
+A schema or guardrail failure produces a structured failed Run.
+
+## Agents are data
+
+Normal Clojure operations work directly on an Agent:
+
+```clojure
+(:instructions researcher)
+(assoc researcher :instructions "Return exactly three findings.")
+```
+
+The construction macros retain their source definition and macroexpansion for
+inspection:
+
+```clojure
+(k/definition researcher)
+(k/expansion researcher)
+```
+
+There is no hidden configuration object or separate workflow representation.
+
+## Next
+
+- [Running agents](/docs/running-agents) explains `run!`, results, limits, and cancellation.
+- [Tools](/docs/tools) adds callable functions.
+- [Agent orchestration](/docs/agent-orchestration) covers delegation and multi-Agent coordination.

@@ -9,32 +9,27 @@ const config = {
     return [
       {
         source: '/docs/workflows',
-        destination: '/docs/agents',
+        destination: '/docs/agent-orchestration',
         permanent: true,
       },
       {
         source: '/docs/runners',
-        destination: '/docs/agents',
+        destination: '/docs/running-agents',
         permanent: true,
       },
       {
         source: '/docs/runtime',
-        destination: '/docs/agents',
+        destination: '/docs/running-agents',
         permanent: true,
       },
       {
         source: '/docs/execution',
-        destination: '/docs/agents',
-        permanent: true,
-      },
-      {
-        source: '/docs/running-agents',
-        destination: '/docs/agents',
+        destination: '/docs/running-agents',
         permanent: true,
       },
       {
         source: '/docs/integrations',
-        destination: '/docs/models',
+        destination: '/docs/protocols/models',
         permanent: true,
       },
       {
@@ -59,7 +54,7 @@ const config = {
       },
       {
         source: '/docs/repl',
-        destination: '/docs/quickstart#develop-at-the-repl',
+        destination: '/docs/quickstart#run-it',
         permanent: true,
       },
       {
@@ -69,7 +64,7 @@ const config = {
       },
       {
         source: '/docs/harbor',
-        destination: '/docs/guides/harbor',
+        destination: '/docs/protocols/harbor',
         permanent: true,
       },
       {
@@ -89,17 +84,27 @@ const config = {
       },
       {
         source: '/docs/examples/python',
-        destination: '/docs/models',
+        destination: '/docs/protocols/models',
         permanent: true,
       },
       {
         source: '/docs/examples/typescript',
-        destination: '/docs/models',
+        destination: '/docs/protocols/models',
         permanent: true,
       },
       {
         source: '/docs/examples/coding-agent',
         destination: '/docs/guides/coding',
+        permanent: true,
+      },
+      {
+        source: '/docs/examples/composition',
+        destination: '/docs/agent-orchestration#orchestrate-in-code',
+        permanent: true,
+      },
+      {
+        source: '/docs/examples/harbor',
+        destination: '/docs/protocols/harbor',
         permanent: true,
       },
       {
@@ -110,6 +115,26 @@ const config = {
       {
         source: '/docs/examples/:path*',
         destination: '/docs/guides/:path*',
+        permanent: true,
+      },
+      {
+        source: '/docs/eval',
+        destination: '/docs/agent-orchestration#dynamic-orchestration',
+        permanent: true,
+      },
+      {
+        source: '/docs/limits-safety',
+        destination: '/docs/running-agents#usage-and-limits',
+        permanent: true,
+      },
+      {
+        source: '/docs/guides/composition',
+        destination: '/docs/agent-orchestration#orchestrate-in-code',
+        permanent: true,
+      },
+      {
+        source: '/docs/guides/harbor',
+        destination: '/docs/protocols/harbor',
         permanent: true,
       },
     ];

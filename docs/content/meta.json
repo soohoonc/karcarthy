@@ -2,17 +2,18 @@
   "title": "karcarthy",
   "pages": [
     "index",
-    "quickstart",
     "why-clojure",
-    "guides",
-    "---Concepts---",
+    "quickstart",
+    "---Core concepts---",
     "agents",
     "tools",
-    "eval",
+    "running-agents",
+    "agent-orchestration",
+    "context",
     "sessions",
     "events",
-    "limits-safety",
     "protocols",
+    "guides",
     "reference"
   ]
 }

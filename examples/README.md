@@ -9,8 +9,8 @@ folder and `main.clj`; none of them are part of published library artifacts.
 | Basic Agent | [`basic/main.clj`](basic/main.clj) | One live model Run |
 | Code review | [`review/main.clj`](review/main.clj) | A diff selects its reviewers; one creates a nested verifier |
 | Chat | [`chat/main.clj`](chat/main.clj) | Sessions and a terminal application |
-| Agent composition | [`composition/main.clj`](composition/main.clj) | A predefined code-review team in ordinary Clojure |
-| Coding Agent | [`coding/main.clj`](coding/main.clj) | Open-ended repository work with optional dynamic eval |
+| Code orchestration | [`composition/main.clj`](composition/main.clj) | A predefined code-review team in ordinary Clojure |
+| Coding Agent | [`coding/main.clj`](coding/main.clj) | Open-ended repository work with optional dynamic orchestration |
 | Harbor | [`harbor`](harbor) | Evaluate the Coding Agent with a verifier and trajectory |
 
 Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running an example. Use
@@ -46,12 +46,12 @@ Start a REPL, then load the terminal chat:
 (example.chat/chat!)
 ```
 
-## Agent composition
+## Code orchestration
 
 [`composition/main.clj`](composition/main.clj) defines correctness,
 concurrency, and test reviewers ahead of time. Load it from a REPL and call
-`example.composition/review-change`. This is the fixed-team comparison to the
-dynamic code-review example.
+`example.composition/review-change`. This is the application-defined comparison
+to the dynamically orchestrated code-review example.
 
 ## Coding Agent
 

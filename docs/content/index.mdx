@@ -1,17 +1,19 @@
 ---
 title: Overview
-description: Agents write Clojure that runs Agents.
+description: A Clojure agent library where Agents can write Clojure that runs Agents.
 ---
 
 > **Agents write Clojure that runs Agents.**
 
-karcarthy is a small Clojure agent library. Its distinctive feature is a
-built-in `eval` Tool: while an Agent is running, it can write one ordinary
-Clojure expression that creates Agents, runs them, and combines their results.
+karcarthy is a small, homoiconic agent library for Clojure. It owns the model
+and Tool loop while leaving orchestration in the host language.
 
-There is no workflow graph between generated code and Clojure.
+An Agent can answer directly, call a Tool, delegate to an available Agent, or
+evaluate one ordinary Clojure expression that creates and runs the Agents its
+task needs. There is no workflow graph or second orchestration language between
+generated code and Clojure.
 
-## Start with one Agent
+## Run one Agent
 
 ```clojure
 (require '[karcarthy :as k])
@@ -22,60 +24,55 @@ There is no workflow graph between generated code and Clojure.
    :input-schema string?
    :output-schema string?})
 
-(def change
-  "Contract: count may be zero.\n+def average(total, count): return total / count")
+(def result
+  (k/run! reviewer
+          "Contract: count may be zero. Change: average returns total / count."))
 
-(k/run! reviewer change)
+(:status result) ;=> :completed
+(:output result) ;=> "..."
 ```
 
-An Agent is a flat Clojure map. `run!` returns a Run map containing its status,
-output, usage, events, and structured error when one occurs.
+Agents and Tools are flat Clojure data. `run!` returns a Run map with status,
+output, usage, events, and a structured error when execution fails.
 
-## Let the change choose its reviewers
+## Orchestrate with Clojure
 
-Every Agent also receives `eval`. The Tool accepts a single `code` string. The
-current Agent input is already available as `input` inside the expression.
-
-For a scheduler change, the Agent might decide that correctness and concurrency
-need separate reviews:
+When the application already knows the participants, write an ordinary
+function:
 
 ```clojure
-(let [correctness-reviewer
-      (agent {:name "correctness-reviewer"
-              :model "gpt-5.6"
-              :instructions "Find concrete behavioral defects."
-              :input-schema string?
-              :output-schema string?})
-      concurrency-reviewer
+(->> [correctness-reviewer concurrency-reviewer]
+     (mapv #(future (k/run! % change)))
+     (mapv (comp k/output deref)))
+```
+
+When the right participants depend on the task, an Agent can generate the same
+kind of Clojure after it reads the input:
+
+```clojure
+(let [reviewer
       (agent {:name "concurrency-reviewer"
               :model "gpt-5.6"
               :instructions "Check whether two workers can claim one job."
               :input-schema string?
-              :output-schema string?})
-      jobs (mapv #(future (run! % input))
-                 [correctness-reviewer concurrency-reviewer])]
-  (mapv (comp output deref) jobs))
+              :output-schema string?})]
+  (output (run! reviewer input)))
 ```
 
-karcarthy reads exactly one expression with reader evaluation disabled,
-macroexpands it, and evaluates it in the same JVM. The expression can branch,
-recurse, create Agents and Tools, run work concurrently, and return a model-safe
-value to the calling Agent. In the central example, one reviewer recursively
-creates a verifier that tries to disprove its strongest candidate finding.
+That expression may use normal control flow, functions, macros, concurrency,
+recursion, Agent construction, Tool construction, and `run!`. An Agent it
+creates receives the same capability, so delegation can be nested.
 
-## Keep one Run
+## One Run follows the code
 
-The first `run!` establishes a Run. Calls made during its dynamic extent join
-that Run, including calls inside Clojure futures. They share limits, usage,
-events, cancellation, approvals, context, and the Run ID. Each Agent gets a
-fresh model conversation.
-
-Known workflows use the same primitives. If the team is part of the application,
-write an ordinary Clojure function instead of asking a model to generate it.
+The first `run!` establishes a Run. Calls in its dynamic extent—including calls
+inside `future`—share the Run ID, limits, usage, events, cancellation,
+approvals, context, and executor. Each participating Agent still starts a fresh
+model conversation with only its explicit input.
 
 <Cards>
+  <Card title="Why Clojure?" description="Understand the library's central design choice." href="/docs/why-clojure" />
   <Card title="Quickstart" description="Install karcarthy and run one Agent." href="/docs/quickstart" />
-  <Card title="Why Clojure?" description="See why generated workflows remain ordinary code." href="/docs/why-clojure" />
-  <Card title="Review code dynamically" description="Run and inspect the central example." href="/docs/guides/review" />
-  <Card title="Dynamic eval" description="Learn the exact expression and result boundary." href="/docs/eval" />
+  <Card title="Agent orchestration" description="Delegate, compose, and create Agents dynamically." href="/docs/agent-orchestration" />
+  <Card title="Code review" description="Run the recursive orchestration example." href="/docs/guides/review" />
 </Cards>

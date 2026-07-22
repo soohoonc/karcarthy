@@ -1,0 +1,149 @@
+---
+title: Agent orchestration
+description: Delegate work, coordinate Agents in Clojure, or let an Agent create the coordination dynamically.
+---
+
+karcarthy supports two familiar forms of orchestration:
+
+- **Orchestration by code:** your application chooses the Agents and calls
+  `run!` using ordinary Clojure.
+- **Orchestration by an Agent:** an Agent delegates to available Agents or
+  writes Clojure that creates and coordinates new ones.
+
+Both forms use the same Agent values and `run!`. There is no graph, workflow
+node, or runner abstraction between them.
+
+## Delegate to available Agents
+
+Put an Agent in `:agents` when a manager should decide whether to call it:
+
+```clojure
+(k/defagent fact-checker
+  {:description "Check a factual claim against the supplied evidence."
+   :model "gpt-5.6"
+   :instructions "Return supported, contradicted, or unknown with a reason."
+   :input-schema string?
+   :output-schema string?})
+
+(k/defagent editor
+  {:model "gpt-5.6"
+   :instructions "Edit the report. Ask the fact-checker when a claim is uncertain."
+   :agents [fact-checker]
+   :output-schema string?})
+```
+
+The available Agent appears to the model as a Tool. It receives only the
+explicit Tool input, starts a fresh model conversation, and returns its output
+to the manager. This is delegation, not a transfer of the parent's conversation.
+
+## Orchestrate in code
+
+When the participants and control flow are known, write a function:
+
+```clojure
+(defn review-change [change]
+  (->> [correctness-reviewer concurrency-reviewer test-reviewer]
+       (mapv #(future (k/run! % change)))
+       (mapv (comp k/output deref))))
+```
+
+This is normal Clojure: use `let`, `if`, `case`, functions, macros,
+`loop/recur`, `future`, `deref`, and collection operations. If called outside
+an active Run, each top-level `run!` establishes its own Run. If called from a
+Tool or evaluated expression inside a Run, those calls participate in the
+active Run.
+
+## Dynamic orchestration
+
+Every model-backed Agent receives a built-in `eval` Tool. After reading its
+input, the Agent may provide exactly one Clojure expression. The current Agent
+input is bound to `input` inside that expression.
+
+For a scheduler change, a code-review Agent might decide that concurrency
+deserves a focused review:
+
+```clojure
+(let [reviewer
+      (agent {:name "concurrency-reviewer"
+              :model "gpt-5.6"
+              :instructions
+              "Find concrete races that could make two workers claim one job."
+              :input-schema string?
+              :output-schema string?})]
+  (output (run! reviewer input)))
+```
+
+The expression may choose participants, branch, retry, stop early, run work in
+parallel, create Tools, and combine results. The orchestration is retained as
+Clojure source and macroexpansion in `:eval/expanded` events.
+
+This is the central Clojure-specific capability: the Agent generates ordinary
+host-language code rather than filling in a separate workflow representation.
+
+## Nested delegation
+
+Agents created dynamically receive the same `eval` Tool. A reviewer can create
+a verifier for one candidate finding, and that verifier participates in the
+same Run:
+
+```clojure
+(let [candidate-finding "Two workers can claim the same pending job."
+      verifier
+      (agent {:name "finding-verifier"
+              :model "gpt-5.6"
+              :instructions "Try to disprove the candidate finding."
+              :input-schema string?
+              :output-schema string?})]
+  (output (run! verifier
+                (str "Change:\n" input
+                     "\n\nFinding:\n" candidate-finding))))
+```
+
+Depth and eval limits bound recursive delegation. Agent input is always
+explicit; parent model conversations are never inherited.
+
+## Concurrency and Run scope
+
+Clojure dynamic bindings flow into `future`, so concurrent Agent calls join the
+active Run:
+
+```clojure
+(let [jobs (mapv #(future (run! % input)) reviewers)]
+  (mapv (fn [job]
+          (let [result @job]
+            {:agent (:agent result)
+             :status (:status result)
+             :output (:output result)}))
+        jobs))
+```
+
+Participating calls share the Run ID, limits, usage, events, cancellation,
+approvals, context, and executor. Their Agent events retain parent IDs and
+depth, producing one observable tree.
+
+## Choose an approach
+
+| Use | When |
+| --- | --- |
+| Available Agents | The manager may choose among capabilities defined by the application |
+| Code orchestration | The participants and control flow are known in advance |
+| Dynamic orchestration | The input should determine which Agents exist and how they coordinate |
+
+These approaches compose. An application-defined function may call Agents that
+delegate, and dynamically created Agents may call application-defined Tools or
+Agents.
+
+## Trust boundary
+
+Dynamic orchestration evaluates full-trust JVM Clojure in the current process.
+Reader evaluation is disabled, but `(do ...)` and ordinary function calls have
+the permissions of the host JVM. The single-expression rule is a protocol
+boundary, not a security sandbox.
+
+Isolate the process and restrict its filesystem, network, credentials, and
+classpath when generated code is not trusted with host authority. The same
+operational consideration applies to shell Tools and MCP server processes.
+
+Run the complete recursive example in [Code review](/docs/guides/review). See
+[Eval](/docs/reference/eval) for the exact namespace, result normalization,
+events, and failure phases.

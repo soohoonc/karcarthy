@@ -1,10 +1,10 @@
 ---
-title: Tools and context
-description: Give a model callable functions without mixing local dependencies into its input.
+title: Tools
+description: Give an Agent callable functions with validated boundaries.
 ---
 
 A Tool is a Clojure function a model can call. Its name, description, and input
-schema are visible to the model; local dependencies remain in Run context.
+schema are visible to the model.
 
 ```clojure
 (k/deftool lookup-user
@@ -18,7 +18,7 @@ schema are visible to the model; local dependencies remain in Run context.
   (lookup! (:db (k/context)) user-id))
 ```
 
-Expose it by putting the Tool value in an Agent's `:tools` vector:
+Expose the Tool through an Agent:
 
 ```clojure
 (k/defagent support
@@ -28,24 +28,26 @@ Expose it by putting the Tool value in an Agent's `:tools` vector:
    :output-schema string?})
 ```
 
-## What happens on a Tool call
+## Tool calls
 
-On every model turn, karcarthy sends each Tool's name, description, and JSON
-input schema. The model may return a Tool call such as:
+For each model turn, karcarthy sends the Tool's name, description, and JSON
+input schema. When the model returns a Tool call, karcarthy:
 
-```clojure
-{:name "lookup-user"
- :input {:user-id "user_123"}}
-```
+1. validates its input;
+2. runs input guardrails;
+3. requests approval when required;
+4. calls the Tool function;
+5. validates its output and runs output guardrails; and
+6. returns the result to the model.
 
-karcarthy validates the input, requests approval if configured, runs the
-Clojure function, validates its output, and sends that output back to the
-model. The model continues until it returns a final answer.
+An exception from ordinary Tool work becomes an error result that the model can
+inspect and recover from on its next turn. Configuration, schema, guardrail,
+approval, budget, deadline, and cancellation failures stop the Run.
 
 ## `tool` and `deftool`
 
-Use `deftool` for a top-level definition. Use `tool` to create the same value
-inside an expression:
+Use `deftool` for a top-level definition. Use `tool` to construct the same
+value inside an expression:
 
 ```clojure
 (def lookup-user
@@ -61,44 +63,31 @@ inside an expression:
    (lookup! (:db (k/context)) user-id)))
 ```
 
-The body has one input binding and can use all of Clojure.
+The body receives only the validated input and may use ordinary Clojure. Read
+local dependencies with `(k/context)`; see [Context](/docs/context).
 
-## Validation and JSON Schema
+## Schemas and guardrails
 
-`:input-schema` is the one source of truth for both Clojure validation and the
-model-facing schema. It may be a predicate, a spec, or JSON Schema. A Tool's
-input schema must be convertible to JSON Schema; use an explicit JSON Schema
-when a predicate or spec does not describe the model interface. The optional
-`:output-schema` validates the value returned by the Tool body.
+`:input-schema` is the source of truth for both local validation and the
+model-facing interface. It may be a predicate, spec, or JSON Schema, but it
+must be convertible to JSON Schema. Use an explicit object-shaped schema for
+normal function Tools.
 
-Explicit schemas are validated and evaluated as JSON Schema Draft 2020-12 by
-default. Set `$schema` to select Draft 4, 6, 7, or 2019-09. Keywords such as
-`items`, `anyOf`, `const`, and `additionalProperties` use standard JSON Schema
-semantics rather than a harness-specific subset.
+Explicit schemas use JSON Schema Draft 2020-12 by default. Set `$schema` to
+select Draft 4, 6, 7, or 2019-09. The optional `:output-schema` validates the
+Tool result.
 
-Function Tool schemas should be object-shaped with named properties. That is
-the common interface expected by model providers, even though a local Clojure
-function can accept any value.
-
-An exception from ordinary Tool work becomes a Tool result marked as an error,
-so the model can inspect it and recover on its next turn. Configuration, input
-or output schema, guardrail, approval, budget, deadline, cancellation, model,
-Session, and eval failures still stop the Run.
-
-## Keep dependencies out of model input
-
-Pass local dependencies to `run!`:
+Input and output guardrails receive `[run-context value]`:
 
 ```clojure
-(k/run! support "Look up account 123."
-        {:context {:db db}})
+{:input-guardrails [allowed-query?]
+ :output-guardrails [safe-result?]}
 ```
 
-Tools read them with `(k/context)`. Context is not sent to the model unless
-your code deliberately includes it in instructions, messages, or Tool output.
+## Approvals
 
-For a Tool with `:needs-approval :always` or `:once`, pass an approval
-function to `run!`:
+Set `:needs-approval` to `:never`, `:once`, `:always`, a boolean, or a function
+of `[run-context input]`.
 
 ```clojure
 (k/run! support prompt
@@ -107,22 +96,21 @@ function to `run!`:
            (confirm? (:name tool) input))})
 ```
 
-Without a handler, approval fails closed.
+Without an approval handler, required approval fails closed. Approval governs a
+Tool call; it does not reduce the operating-system authority of the Tool or its
+process.
 
-## Where Tools come from
+## Tool sources
 
-All callable functions enter an Agent through `:tools`, but they may execute
-in different places:
+All callable functions enter an Agent through `:tools`, but they may execute in
+different places:
 
 | Source | Execution |
 | --- | --- |
-| `tool` / `deftool` | A Clojure function in the karcarthy process. |
-| `local-tools` | Built-in filesystem, shell, and search functions in the karcarthy process. |
-| provider-hosted Tool | The selected model endpoint executes it. |
-| MCP Tool | An external MCP server process executes it. |
-
-`local-tools` returns `read`, `write`, `edit`, `bash`, and ripgrep-backed
-`search` Tools:
+| `tool` / `deftool` | Clojure function in the karcarthy process |
+| `local-tools` | Filesystem, shell, and search functions rooted at a directory |
+| Provider-hosted Tool | Selected model endpoint |
+| MCP Tool | External MCP server process |
 
 ```clojure
 (def tools
@@ -135,22 +123,9 @@ in different places:
                      :bash :always}}))
 ```
 
-File Tools remain under `:cwd`, including after resolving symlinks. `bash` is
-bounded by timeout and output size but is not a sandbox.
+`local-tools` supplies `read`, `write`, `edit`, `bash`, and `search`. File Tools
+remain under `:cwd`, including after symlink resolution. `bash` is bounded by
+timeout and output size but is not a sandbox.
 
-Provider-hosted Tools are declared as Tool values but executed by the
-model endpoint; see [Model providers](/docs/protocols/models#provider-hosted-tools).
-
-For MCP, karcarthy starts a stdio MCP server, discovers its remote Tool
-definitions, and turns each one into an ordinary Tool value. Connection
-lifecycle, approval defaults, naming, supported protocol features, and
-ACP-provided MCP servers are documented on the dedicated [MCP page](/docs/protocols/mcp).
-
-Agents are declared separately with `:agents`; see [Existing Agents as
-Tools](/docs/agents#existing-agents-as-tools).
-
-## Next
-
-- [Model providers](/docs/protocols/models) configures endpoints, streaming, and hosted Tools.
-- [MCP tools](/docs/protocols/mcp) adapts Tools from an external process.
-- [Build a coding agent](/docs/guides/coding) uses filesystem and shell Tools end to end.
+See [Models](/docs/protocols/models#provider-hosted-tools) for hosted Tools and
+[MCP](/docs/protocols/mcp) for remote Tools.
