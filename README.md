@@ -3,8 +3,8 @@
 > **Agents write Clojure that runs Agents.**
 
 karcarthy is a small, homoiconic agent library for Clojure. An Agent can answer
-directly, call a Tool, or evaluate one ordinary Clojure expression that creates
-and runs the team its task needs.
+directly or call a Tool. When its tools include `k/eval`, it can also evaluate
+one ordinary Clojure expression that creates and runs the team its task needs.
 
 There is no workflow graph or second orchestration language. Use `let`, `if`,
 functions, macros, `future`, `mapv`, and `run!`.
@@ -21,9 +21,7 @@ functions, macros, `future`, `mapv`, and `run!`.
 
 (k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Review the proposed change. Report only concrete defects."
-   :input-schema string?
-   :output-schema string?})
+   :instructions "Review the proposed change. Report only concrete defects."})
 
 (def change
   (str "Contract: count may be zero.\n"
@@ -45,8 +43,16 @@ provider, reasoning, streaming, or timeout options.
 
 ## Let the change choose its reviewers
 
-Every Agent receives a built-in `eval` Tool. The Tool accepts one `code` string;
-the current Agent input is already bound to `input`.
+Add `k/eval` to an Agent's `:tools` when it should choose its own orchestration.
+The Tool accepts one `code` string; the current Agent input is already bound to
+`input`.
+
+```clojure
+(k/agent {:name "review-orchestrator"
+          :model "gpt-5.6"
+          :instructions "Choose focused reviewers after reading the change."
+          :tools [k/eval]})
+```
 
 For a scheduler change, an Agent might decide that correctness and concurrency
 need separate reviews, then write:
@@ -55,15 +61,11 @@ need separate reviews, then write:
 (let [correctness-reviewer
       (agent {:name "correctness-reviewer"
               :model "gpt-5.6"
-              :instructions "Find concrete behavioral defects in this change."
-              :input-schema string?
-              :output-schema string?})
+              :instructions "Find concrete behavioral defects in this change."})
       concurrency-reviewer
       (agent {:name "concurrency-reviewer"
               :model "gpt-5.6"
-              :instructions "Check whether concurrent workers can claim one job twice."
-              :input-schema string?
-              :output-schema string?})
+              :instructions "Check whether concurrent workers can claim one job twice."})
       jobs (mapv #(future (run! % input))
                  [correctness-reviewer concurrency-reviewer])]
   (mapv (comp output deref) jobs))
@@ -78,8 +80,8 @@ calls inside `future`—join that Run and share its ID, limits, usage, deadline,
 cancellation, approvals, events, context, and executor. Each Agent still starts
 a fresh model conversation.
 
-An evaluated reviewer can itself use `eval`, creating a nested verifier that
-tries to disprove a candidate finding before it reaches the final review.
+An evaluated reviewer can itself include `:tools [eval]` to create a nested
+verifier. Eval is not inherited by dynamically created Agents.
 
 Run that complete example with an API key set:
 

@@ -70,12 +70,11 @@ local dependencies with `(k/context)`; see [Context](/docs/context).
 
 `:input-schema` is the source of truth for both local validation and the
 model-facing interface. It may be a predicate, spec, or JSON Schema, but it
-must be convertible to JSON Schema. Use an explicit object-shaped schema for
-normal function Tools.
+must be convertible to JSON Schema. Both Tool schemas default to `string?`.
+Use an explicit object-shaped input schema for normal function Tools.
 
 Explicit schemas use JSON Schema Draft 2020-12 by default. Set `$schema` to
-select Draft 4, 6, 7, or 2019-09. The optional `:output-schema` validates the
-Tool result.
+select Draft 4, 6, 7, or 2019-09. `:output-schema` validates the Tool result.
 
 Input and output guardrails receive `[run-context value]`:
 

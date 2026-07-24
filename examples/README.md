@@ -32,9 +32,10 @@ clojure -M:examples review
 ```
 
 The bundled input contains a scheduler contract, storage semantics, and a short
-diff. After reading it, the orchestrator uses `eval` to create two or three
-relevant reviewers and run them concurrently. One reviewer creates a nested
-`finding-verifier` to challenge its strongest candidate. The Run monitor
+diff. The orchestrator explicitly includes `k/eval`; after reading the diff, it
+creates two or three relevant reviewers and runs them concurrently. One reviewer
+also explicitly includes eval and creates a nested `finding-verifier` to challenge
+its strongest candidate. The Run monitor
 redraws the tree as they work. See the [example README](review/README.md).
 
 ## Chat

@@ -1,5 +1,6 @@
 (ns karcarthy.eval
   "The eval Tool and same-process evaluation of one Clojure expression."
+  (:refer-clojure :exclude [eval])
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
             [karcarthy.agent :as agent]
@@ -17,6 +18,12 @@
             :description "Exactly one complete Clojure expression to evaluate."}}
    :required ["code"]
    :additionalProperties false})
+
+(def eval
+  "Deferred eval Tool capability. Add it to an Agent's `:tools` to let that
+  Agent evaluate one Clojure expression and dynamically compose Agents."
+  {:karcarthy/type :eval-tool
+   :name "eval"})
 
 (def ^:private description-template
   "Evaluate one Clojure expression. The expression may create and run Agents. Its
@@ -38,8 +45,12 @@ is needed.
 
 `agent` is a macro that accepts one configuration map. The map requires
 `:name`, `:model`, and `:instructions`; `:input-schema` and `:output-schema`
-are optional. `(run! agent-value agent-input)` runs the resulting Agent and
-returns a Run map.
+default to `string?`. `(run! agent-value agent-input)` runs the resulting Agent
+and returns a Run map.
+
+Agents created here do not receive eval automatically. Add `:tools [eval]` only
+when a child Agent should also be able to evaluate Clojure and orchestrate
+dynamically.
 
 Use `let`, `if`, `mapv`, `future`, `deref`, `agent`, and `run!` normally. A
 `run!` call returns a Run map; `(output run)` returns its output or throws when
@@ -61,9 +72,7 @@ transports and process-backed Tools may still perform their normal external I/O.
 (let [reviewers (mapv (fn [[name instructions]]
                         (agent {:name name
                                 :model \"MODEL_ID\"
-                                :instructions instructions
-                                :input-schema string?
-                                :output-schema string?}))
+                                :instructions instructions}))
                       [[\"correctness-reviewer\" \"Find concrete behavioral defects.\"]
                        [\"concurrency-reviewer\" \"Check shared-state assumptions.\"]])
       tasks (mapv #(future (run! % input)) reviewers)]
@@ -223,14 +232,15 @@ Use the model configuration listed below in place of the example's model value.
               (when (seq available)
                 (clojure.core/refer parent-sym :only available)))))
         (doseq [sym '[agent defagent tool deftool run! output context definition
-                      expansion]]
+                      expansion eval]]
           (when (ns-resolve ns-obj sym)
             (ns-unmap ns-obj sym)))
         (clojure.core/refer
          'karcarthy.agent
          :only '[agent defagent definition expansion])
         (clojure.core/refer 'karcarthy.tool :only '[tool deftool])
-        (clojure.core/refer 'karcarthy.run :only '[run! output context]))
+        (clojure.core/refer 'karcarthy.run :only '[run! output context])
+        (clojure.core/refer 'karcarthy.eval :only '[eval]))
       (doseq [[sym value] (:eval-bindings rt)]
         (when (ns-resolve ns-obj sym)
           (ns-unmap ns-obj sym))

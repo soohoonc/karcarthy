@@ -55,9 +55,16 @@ active Run.
 
 ## Dynamic orchestration
 
-Every model-backed Agent receives a built-in `eval` Tool. After reading its
-input, the Agent may provide exactly one Clojure expression. The current Agent
-input is bound to `input` inside that expression.
+Add `k/eval` to a model-backed Agent's `:tools` when it should choose its
+orchestration after reading the input. The Agent may provide exactly one
+Clojure expression, with its current input bound to `input`.
+
+```clojure
+(k/agent {:name "review-orchestrator"
+          :model "gpt-5.6"
+          :instructions "Choose the reviewers this change needs."
+          :tools [k/eval]})
+```
 
 For a scheduler change, a code-review Agent might decide that concurrency
 deserves a focused review:
@@ -75,16 +82,16 @@ deserves a focused review:
 
 The expression may choose participants, branch, retry, stop early, run work in
 parallel, create Tools, and combine results. The orchestration is retained as
-Clojure source and macroexpansion in `:eval/expanded` events.
+Clojure source and macroexpansion in `:eval/expanded` events. An Agent created
+inside the expression receives eval only if its own `:tools` includes `eval`.
 
 This is the central Clojure-specific capability: the Agent generates ordinary
 host-language code rather than filling in a separate workflow representation.
 
 ## Nested delegation
 
-Agents created dynamically receive the same `eval` Tool. A reviewer can create
-a verifier for one candidate finding, and that verifier participates in the
-same Run:
+An Agent configured with eval can create a verifier for one candidate finding,
+and that verifier participates in the same Run without inheriting eval:
 
 ```clojure
 (let [candidate-finding "Two workers can claim the same pending job."

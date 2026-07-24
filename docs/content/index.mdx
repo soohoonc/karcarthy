@@ -8,10 +8,10 @@ description: A Clojure agent library where Agents can write Clojure that runs Ag
 karcarthy is a small, homoiconic agent library for Clojure. It owns the model
 and Tool loop while leaving orchestration in the host language.
 
-An Agent can answer directly, call a Tool, delegate to an available Agent, or
-evaluate one ordinary Clojure expression that creates and runs the Agents its
-task needs. There is no workflow graph or second orchestration language between
-generated code and Clojure.
+An Agent can answer directly, call a Tool, or delegate to an available Agent.
+When its `:tools` includes `k/eval`, it can also evaluate one ordinary Clojure
+expression that creates and runs the Agents its task needs. There is no workflow
+graph or second orchestration language between generated code and Clojure.
 
 ## Run one Agent
 
@@ -61,7 +61,7 @@ kind of Clojure after it reads the input:
 
 That expression may use normal control flow, functions, macros, concurrency,
 recursion, Agent construction, Tool construction, and `run!`. An Agent it
-creates receives the same capability, so delegation can be nested.
+creates receives eval only when its own `:tools` includes `eval`.
 
 ## One Run follows the code
 

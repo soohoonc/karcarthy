@@ -9,8 +9,7 @@
 
 (k/deftool explicit-name-tool
   {:name "explicit-tool"
-   :description "Return the input."
-   :input-schema map?}
+   :description "Return the input."}
   [input]
   input)
 
@@ -25,7 +24,7 @@
         (remove-ns namespace)))))
 
 (deftest facade-exposes-only-the-native-harness
-  (doseq [sym '[agent defagent tool deftool agent? tool?
+  (doseq [sym '[agent defagent tool deftool agent? tool? eval
                 run! output context
                 session session? session-id get-items add-items!
                 pop-item! clear-session!
@@ -69,7 +68,11 @@
   (let [agent-expansion (k/expansion explicit-name-agent)
         tool-expansion (k/expansion explicit-name-tool)]
     (is (= "explicit-agent" (:name (evaluate-expansion agent-expansion))))
-    (is (= "explicit-tool" (:name (evaluate-expansion tool-expansion))))))
+    (is (= "explicit-tool" (:name (evaluate-expansion tool-expansion))))
+    (is (= string? (:input-schema explicit-name-agent)))
+    (is (= string? (:output-schema explicit-name-agent)))
+    (is (= string? (:input-schema explicit-name-tool)))
+    (is (= string? (:output-schema explicit-name-tool)))))
 
 (deftest facade-retains-repl-metadata
   (doseq [sym '[agent tool run! output session prompt local-tools events]]
@@ -94,7 +97,7 @@
            'karcarthy.session '[Session session session? session-id get-items
                                 add-items! pop-item! clear-session!]
            'karcarthy.schema '[valid? explain json-schema]
-           'karcarthy.eval '[read-expression]}]
+           'karcarthy.eval '[eval read-expression]}]
     (require namespace)
     (doseq [sym symbols]
       (is (some? (ns-resolve namespace sym))

@@ -9,6 +9,10 @@
     :tools :agents :output-schema :max-turns :input-guardrails
     :output-guardrails :limits})
 
+(def ^:private default-schemas
+  {:input-schema string?
+   :output-schema string?})
+
 (defn- functions? [value]
   (and (sequential? value) (every? fn? value)))
 
@@ -50,23 +54,24 @@
   (when-not (map? config)
     (schema/fail! :schema :configuration
                     "Agent configuration must be a map" {:value config}))
-  (schema/reject-unknown! "Agent" config-keys config)
-  (when-not (and (string? (:name config)) (seq (:name config)))
-    (schema/fail! :schema :configuration
+  (let [config (merge default-schemas config)]
+    (schema/reject-unknown! "Agent" config-keys config)
+    (when-not (and (string? (:name config)) (seq (:name config)))
+      (schema/fail! :schema :configuration
                     "Agent :name must be a non-empty string" {:config config}))
-  (when (or (nil? (:model config)) (nil? (:instructions config)))
-    (schema/fail! :schema :configuration
+    (when (or (nil? (:model config)) (nil? (:instructions config)))
+      (schema/fail! :schema :configuration
                     "An Agent requires :model and :instructions"
                     {:name (:name config)}))
-  (validate-config! config)
-  (when-let [limits (:limits config)]
-    (run-context/validate-limits!
-     (merge run-context/default-limits limits)))
-  (assoc (update config :model normalize-model)
-         :karcarthy/type :agent
-         :definition-ns definition-ns
-         :definition definition
-         :expansion expansion))
+    (validate-config! config)
+    (when-let [limits (:limits config)]
+      (run-context/validate-limits!
+       (merge run-context/default-limits limits)))
+    (assoc (update config :model normalize-model)
+           :karcarthy/type :agent
+           :definition-ns definition-ns
+           :definition definition
+           :expansion expansion)))
 
 (defmacro agent
   "Construct a model-backed Agent."

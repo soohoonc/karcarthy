@@ -1,8 +1,9 @@
 # karcarthy - guide for Codex
 
 karcarthy is a native, homoiconic Clojure agent harness. It owns the model/tool
-loop. Agents and Tools are flat data; orchestration is ordinary Clojure. A
-model may evaluate one Clojure expression and call Agents during the same run.
+loop. Agents and Tools are flat data; orchestration is ordinary Clojure. An
+Agent with `karcarthy/eval` in its `:tools` may evaluate one Clojure expression
+and call Agents during the same run.
 
 There is no Runner protocol, EDN/JSON workflow DSL, or separate dynamic system.
 Do not reintroduce `pipe`, `branch`, workflow nodes, runner adapters, or a JSON
@@ -73,11 +74,12 @@ cd docs && npm run lint && npm run types:check && npm run build
   machinery is dynamically scoped and must not become a public argument.
 - **Agents and Tools retain code.** Preserve `:definition` and `:expansion`
   when changing macros or evaluation.
-- **Eval is recursive.** Every model Agent receives a dynamically documented
-  `eval` Tool for one Clojure expression. The expression may use normal control
-  flow, construct Agents and Tools, and call `run!`; no parent conversation is
-  inherited by those Agent calls. Do not create a workflow representation or
-  opt-in flag.
+- **Eval is an explicit recursive capability.** An Agent receives the dynamically
+  documented `eval` Tool only when its `:tools` includes `karcarthy/eval`. The
+  expression may use normal control flow, construct Agents and Tools, and call
+  `run!`; no parent conversation is inherited by those Agent calls. Constructed
+  Agents do not inherit eval and must include `eval` in their own `:tools` to
+  recurse. Do not create a workflow representation or a separate boolean flag.
 - **Instructions are exact.** `:instructions` is the complete model-visible
   string or a call-metadata function returning it. The harness does not prepend
   a framework prompt. Keep capability mechanics in Tool descriptions generated

@@ -79,7 +79,7 @@
        "Then call eval exactly once with this exact code: "
        dynamic-code " "
        "Only after all three calls succeed, return exactly LIVE-FEATURES-OK.")
-      :tools [static-stamp]
+      :tools [static-stamp k/eval]
       :agents [static-specialist]
       :input-schema string?
       :output-schema string?

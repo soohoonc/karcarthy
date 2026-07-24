@@ -28,7 +28,7 @@
             :reasoning :medium
             :timeout-ms 300000}
     :instructions instructions
-    :tools (k/local-tools {:cwd cwd})
+    :tools (conj (k/local-tools {:cwd cwd}) k/eval)
     :input-schema string?
     :output-schema string?
     :max-turns 24}))
