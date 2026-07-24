@@ -6,6 +6,10 @@
   #{:name :description :input-schema :output-schema :needs-approval
     :input-guardrails :output-guardrails :to-model-output})
 
+(def ^:private default-schemas
+  {:input-schema string?
+   :output-schema string?})
+
 (def ^:private approval-policies
   #{false true :never :once :always})
 
@@ -35,39 +39,37 @@
   (when-not (map? config)
     (schema/fail! :schema :configuration
                     "Tool configuration must be a map" {:value config}))
-  (schema/reject-unknown! "Tool" config-keys config)
-  (doseq [[key predicate message]
-          [[:name #(and (string? %) (seq %))
-            "Tool :name must be a non-empty string"]
-           [:description string? "Tool :description must be a string"]]]
-    (when-not (predicate (get config key))
-      (schema/fail! :schema :configuration message {:config config})))
-  (when-not (contains? config :input-schema)
-    (schema/fail! :schema :configuration
-                    "Tool :input-schema is required" {:config config}))
-  (when-not (schema/json-schema (:input-schema config))
-    (schema/fail! :schema :configuration
+  (let [config (merge default-schemas config)]
+    (schema/reject-unknown! "Tool" config-keys config)
+    (doseq [[key predicate message]
+            [[:name #(and (string? %) (seq %))
+              "Tool :name must be a non-empty string"]
+             [:description string? "Tool :description must be a string"]]]
+      (when-not (predicate (get config key))
+        (schema/fail! :schema :configuration message {:config config})))
+    (when-not (schema/json-schema (:input-schema config))
+      (schema/fail! :schema :configuration
                     "Tool :input-schema must be expressible as JSON Schema"
                     {:tool (:name config)
                      :input-schema (:input-schema config)}))
-  (when (contains? config :needs-approval)
-    (let [policy (:needs-approval config)]
-      (when-not (fn? policy)
-        (validate-approval! policy))))
-  (doseq [[key predicate message]
-          [[:input-guardrails #(or (nil? %) (functions? %))
-            "Tool :input-guardrails must contain functions"]
-           [:output-guardrails #(or (nil? %) (functions? %))
-            "Tool :output-guardrails must contain functions"]
-           [:to-model-output #(or (nil? %) (fn? %))
-            "Tool :to-model-output must be a function"]]]
-    (when-not (predicate (get config key))
-      (schema/fail! :schema :configuration message {:config config})))
-  (assoc config
-         :karcarthy/type :tool
-         :definition definition
-         :expansion expansion
-         :execute execute))
+    (when (contains? config :needs-approval)
+      (let [policy (:needs-approval config)]
+        (when-not (fn? policy)
+          (validate-approval! policy))))
+    (doseq [[key predicate message]
+            [[:input-guardrails #(or (nil? %) (functions? %))
+              "Tool :input-guardrails must contain functions"]
+             [:output-guardrails #(or (nil? %) (functions? %))
+              "Tool :output-guardrails must contain functions"]
+             [:to-model-output #(or (nil? %) (fn? %))
+              "Tool :to-model-output must be a function"]]]
+      (when-not (predicate (get config key))
+        (schema/fail! :schema :configuration message {:config config})))
+    (assoc config
+           :karcarthy/type :tool
+           :definition definition
+           :expansion expansion
+           :execute execute)))
 
 (defmacro tool
   "Construct a schema-validated Tool backed by Clojure code."

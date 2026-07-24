@@ -37,13 +37,12 @@ Create `src/example.clj`:
 
 (k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Review the proposed change. Report only concrete defects."
-   :input-schema string?
-   :output-schema string?})
+   :instructions "Review the proposed change. Report only concrete defects."})
 ```
 
 An Agent is a Clojure value containing its model, instructions, Tools, other
-Agents it may call, and boundary schemas.
+Agents it may call, and boundary schemas. Input and output both default to
+`string?`; provide schemas only when either boundary has another shape.
 
 ## Run it
 

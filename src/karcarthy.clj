@@ -1,8 +1,9 @@
 (ns karcarthy
   "The public karcarthy API: a native, homoiconic Clojure agent harness."
-  (:refer-clojure :exclude [agent run!])
+  (:refer-clojure :exclude [agent eval run!])
   (:require [karcarthy.acp :as acp]
             [karcarthy.agent :as agent-data]
+            [karcarthy.eval :as eval-data]
             [karcarthy.schema :as schema]
             [karcarthy.mcp :as mcp]
             [karcarthy.monitor :as mon]
@@ -34,6 +35,7 @@
 (defexport schema-valid? schema/valid?)
 (defexport explain-schema schema/explain)
 (defexport schema->json-schema schema/json-schema)
+(defexport eval eval-data/eval)
 
 (defexport run! run/run!)
 (defexport context run/context)

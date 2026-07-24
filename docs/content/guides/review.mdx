@@ -94,7 +94,7 @@ diff.
 
 | Library or pattern | Supplied by the application | Chosen at run time |
 | --- | --- | --- |
-| karcarthy | One code-review Agent and the Clojure runtime | The Agent creates new Agent definitions and their coordination as retained Clojure; created Agents receive the same recursive capability |
+| karcarthy | One code-review Agent with `k/eval` and the Clojure runtime | The Agent creates new Agent definitions and their coordination as retained Clojure; created Agents may explicitly include eval when recursion is useful |
 | [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/multi_agent/) | Agents exposed as Tools or handoffs, plus optional Python orchestration | A manager chooses among exposed Agents; application code can control chaining and parallelism |
 | [Pydantic AI Dynamic Workflow](https://pydantic.dev/docs/ai/harness/dynamic-workflow/) | A catalog of named subagents | The model writes sandboxed Python to fan out, chain, vote, or retry calls to that catalog |
 | [LangGraph orchestrator-worker](https://docs.langchain.com/oss/python/langgraph/workflows-agents#orchestrator-worker) | A graph or functional workflow, worker function, and shared state | The orchestrator plans tasks and dispatches workers dynamically |
@@ -103,9 +103,9 @@ diff.
 The closest comparison is Pydantic AI's Dynamic Workflow: in both cases the
 model writes coordination code inside one Tool call. karcarthy additionally
 allows that code to construct new Agent values and gives those Agents the same
-recursive eval capability inside one Run. The tradeoff is direct: karcarthy
-evaluates full-trust JVM Clojure, while Pydantic AI runs the generated Python in
-a sandbox.
+option of explicitly enabling recursive eval inside one Run. The tradeoff is
+direct: karcarthy evaluates full-trust JVM Clojure, while Pydantic AI runs the
+generated Python in a sandbox.
 
 This comparison is about the orchestration boundary, not production readiness.
 Libraries with storage, deployment, evaluation UIs, or sandboxing solve a

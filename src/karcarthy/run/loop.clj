@@ -13,6 +13,10 @@
 (defn- eval-tool [model tools agents]
   ((requiring-resolve 'karcarthy.eval/eval-tool) model tools agents))
 
+(defn- eval-capability? [value]
+  (and (map? value)
+       (= :eval-tool (:karcarthy/type value))))
+
 (defn- resolve-value [value run-context]
   (if (fn? value)
     (value (context/run-context run-context))
@@ -243,18 +247,22 @@
   (let [max-turns (or (:max-turns agent) 20)
         model (normalize-model (resolve-value (:model agent) rt))
         tools-value (:tools agent)
-        direct-tools (vec (or (resolve-value tools-value rt) []))
+        configured-tools (vec (or (resolve-value tools-value rt) []))
+        eval-enabled? (boolean (some eval-capability? configured-tools))
+        direct-tools (vec (remove eval-capability? configured-tools))
         agents-value (:agents agent)
         available-agents (vec (or (resolve-value agents-value rt) []))
-        _ (doseq [tool direct-tools]
-            (when-not (or (tool? tool) (hosted-tool? tool))
+        _ (doseq [tool configured-tools]
+            (when-not (or (tool? tool) (hosted-tool? tool)
+                          (eval-capability? tool))
               (fail! :tool :configuration
-                     "Agent :tools must contain Tool values"
+                     "Agent :tools must contain Tool values or karcarthy/eval"
                      {:value tool})))
         agent-tools (mapv #(agent-as-tool run-agent! %) available-agents)
         tools (unique-tools!
-               (conj (into direct-tools agent-tools)
-                     (eval-tool model direct-tools available-agents)))
+               (cond-> (into direct-tools agent-tools)
+                 eval-enabled?
+                 (conj (eval-tool model direct-tools available-agents))))
         tool-map (into {} (comp (filter tool?) (map (juxt :name identity))) tools)
         instructions (instructions! rt (:instructions agent))
         prior (context/session-items! (:session rt))

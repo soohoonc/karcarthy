@@ -3,6 +3,21 @@ title: Eval
 description: Input, namespace, events, limits, and result rules for dynamically generated Clojure.
 ---
 
+## Enable eval
+
+Eval is an explicit Agent capability:
+
+```clojure
+(k/agent {:name "orchestrator"
+          :model "gpt-5.6"
+          :instructions "Choose and run the specialists needed for the task."
+          :tools [k/eval]})
+```
+
+Without `k/eval` in `:tools`, the model does not see the eval Tool. Agents
+created by an evaluated expression do not inherit it; use `:tools [eval]` in
+their configuration when recursive dynamic orchestration is intentional.
+
 ## Tool schema
 
 ```clojure

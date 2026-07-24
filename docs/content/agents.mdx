@@ -13,9 +13,7 @@ Tools and Agents it may call, and its input and output boundaries.
   {:description "Research one question and return sourced findings."
    :model "gpt-5.6"
    :instructions "Research carefully. Distinguish evidence from inference."
-   :tools [web-search]
-   :input-schema string?
-   :output-schema string?})
+   :tools [web-search]})
 ```
 
 `defagent` derives `:name` from the var. Use `agent` to construct a value inside
@@ -26,9 +24,7 @@ an expression and provide `:name` explicitly:
   (k/agent
    {:name "researcher"
     :model "gpt-5.6"
-    :instructions "Research carefully."
-    :input-schema string?
-    :output-schema string?}))
+    :instructions "Research carefully."}))
 ```
 
 ## Configuration
@@ -39,10 +35,10 @@ an expression and provide `:name` explicitly:
 | `:description` | Tells another model when to call this Agent. |
 | `:model` | Model ID, model configuration, or context function. |
 | `:instructions` | Complete model-visible string or context function. |
-| `:tools` | Tools available to the model. |
+| `:tools` | Tools available to the model; include `k/eval` for dynamic Clojure orchestration. |
 | `:agents` | Agents available through delegation. |
 | `:context-schema` | Schema for local Run context. |
-| `:input-schema` / `:output-schema` | Agent input and output boundaries. |
+| `:input-schema` / `:output-schema` | Agent input and output boundaries; each defaults to `string?`. |
 | `:input-guardrails` / `:output-guardrails` | Functions that check input and output. |
 | `:max-turns` | Maximum model turns for this Agent call. |
 | `:limits` | Limits that may narrow the active Run. |

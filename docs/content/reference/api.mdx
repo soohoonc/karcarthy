@@ -33,7 +33,8 @@ karcarthy.acp
 
 Both forms create an Agent. `defagent` defines a var and supplies `:name` from
 its symbol. `agent` creates a value and requires `:name` in the config. Both
-require `:model` and `:instructions`.
+require `:model` and `:instructions`. Omitted `:input-schema` and
+`:output-schema` values default to `string?`.
 
 ```clojure
 {:name "researcher"
@@ -73,8 +74,9 @@ pattern. It does not create a hierarchy or transfer the conversation.
 An object-shaped `:input-schema` becomes the callable schema; otherwise the
 model calls the Agent with `{"input": ...}`.
 
-Every model Agent receives an `eval` Tool for one Clojure expression. The
-expression may create Agents and Tools and call `run!`.
+Include `k/eval` in `:tools` to give an Agent the eval Tool for one Clojure
+expression. The expression may create Agents and Tools and call `run!`.
+Constructed Agents do not inherit eval.
 
 ```clojure
 (k/agent? value)
@@ -92,9 +94,10 @@ experiments. They are not needed to run an Agent.
 (k/deftool name config [input] body ...)
 ```
 
-A Tool requires `:name`, `:description`, and `:input-schema`; `deftool`
-supplies the name. Optional keys are `:output-schema`, `:needs-approval`,
-`:input-guardrails`, `:output-guardrails`, and `:to-model-output`.
+A Tool requires `:name` and `:description`; `deftool` supplies the name.
+`:input-schema` and `:output-schema` default to `string?`. Other optional keys
+are `:needs-approval`, `:input-guardrails`, `:output-guardrails`, and
+`:to-model-output`.
 
 Guardrails receive `[run-context value]`. `:needs-approval` accepts `:never`,
 `:once`, `:always`, a boolean, or a function of `[run-context input]`.
@@ -202,8 +205,8 @@ instructions; karcarthy does not add a base prompt.
 ## Eval
 
 Eval is deliberately model-facing rather than a separate public compiler API.
-Every Agent receives the `eval` Tool with `{:code string}`. The current Agent
-input is bound to `input` inside the expression. Code
+Add `k/eval` to an Agent's `:tools` to expose the eval Tool with
+`{:code string}`. The current Agent input is bound to `input` inside the expression. Code
 can use `agent`, `defagent`, `tool`, `deftool`, `run!`, `context`, `definition`,
 and `expansion`. See [Eval](/docs/reference/eval).
 

@@ -46,7 +46,8 @@ has to interpret.
 
 ## The eval boundary
 
-Every Agent receives an `eval` Tool with one input field:
+An Agent whose `:tools` includes `k/eval` receives an eval Tool with one input
+field:
 
 ```clojure
 {:code "(+ 1 2)"}
@@ -55,7 +56,8 @@ Every Agent receives an `eval` Tool with one input field:
 The current Agent input is already bound to `input`. `code` must contain exactly
 one Clojure expression, but that expression may use normal `let`, `if`, `mapv`,
 `future`, functions, macros, recursion, Agent construction, Tool construction,
-and `run!`.
+and `run!`. Agents created by the expression do not inherit eval; include
+`:tools [eval]` when recursive dynamic orchestration is intentional.
 
 The boundary is small:
 

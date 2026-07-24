@@ -90,7 +90,7 @@
                      (:instructions @seen)))
         (is (= "Run the smallest relevant test.\n\nDo not commit changes."
                (:instructions @seen)))
-        (is (= #{"read" "write" "edit" "bash" "search" "eval"}
+        (is (= #{"read" "write" "edit" "bash" "search"}
                (->> (:tools @seen)
                     (filter #(= :function (:kind %)))
                     (map :name)
@@ -124,7 +124,7 @@
                               :instructions "Run the command."
                               :tools [bash]
                               :output-schema string?})
-              result (future (k/run! agent nil {:cancel cancel}))
+              result (future (k/run! agent "input" {:cancel cancel}))
               pid-file (.resolve root "process.pid")]
           (try
             (loop [attempt 0]

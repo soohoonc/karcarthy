@@ -27,7 +27,7 @@
    "one to report only concrete defects introduced by the change, with severity, "
    "file and line, a failure scenario, and a minimal fix; no style advice. "
    "Choose the reviewer responsible for the riskiest behavioral claim and instruct "
-   "it to call eval exactly once: it must create and run one Agent named "
+   "it to include :tools [eval] and call eval exactly once: it must create and run one Agent named "
    "finding-verifier to challenge its strongest candidate finding, then include the "
    "verdict in its report. Tell the other reviewers not to use eval. Run all top-level "
    "reviewers exactly once and concurrently with future. Dereference their Run maps "
@@ -42,6 +42,7 @@
    {:name "code-reviewer"
     :model (model-config)
     :instructions (instructions)
+    :tools [k/eval]
     :input-schema string?
     :output-schema string?
     :max-turns 5}))

@@ -33,7 +33,7 @@ The example roots local Tools at the supplied directory:
   :instructions
   "Inspect the repository and run its tests before changing it. Diagnose the
    cause, make focused edits, and run the relevant tests again."
-  :tools (k/local-tools {:cwd cwd})
+  :tools (conj (k/local-tools {:cwd cwd}) k/eval)
   :input-schema string?
   :output-schema string?
   :max-turns 24})
@@ -49,9 +49,9 @@ concurrency, and total time. See
 
 ## Let the task choose the architecture
 
-The built-in `eval` Tool is present automatically. The Coding Agent may solve
-the task directly or write Clojure that creates a focused reviewer when that
-helps. The prompt does not require a fixed topology.
+This Coding Agent explicitly includes `k/eval`, so it may solve the task
+directly or write Clojure that creates a focused reviewer when that helps. A
+fixed-flow or leaf Agent can omit `k/eval` entirely.
 
 That distinction matters: [code orchestration](/docs/agent-orchestration#orchestrate-in-code)
 defines participants before the task, while the [code-review example](/docs/guides/review)

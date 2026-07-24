@@ -32,7 +32,7 @@
                                :tools [tool]
                                :output-schema string?}
                               key true))
-                run (k/run! agent nil {key true})]
+                run (k/run! agent "input" {key true})]
             (and (true? (get tool key))
                  (true? (get agent key))
                  (= :completed (:status run))))))]

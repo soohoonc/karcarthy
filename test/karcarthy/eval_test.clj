@@ -26,10 +26,31 @@
                         (keval/read-expression "1 2")))
   (is (thrown? Throwable (keval/read-expression "#=(System/exit 1)"))))
 
+(deftest eval-is-an-explicit-agent-capability
+  (let [requests (atom [])
+        model (k/mock-model
+               (fn [request]
+                 (swap! requests conj request)
+                 {:type :final :output "done"}))
+        leaf (k/agent {:name "leaf"
+                       :model {:id "fake" :transport model}
+                       :instructions "Answer."})
+        dynamic (k/agent {:name "dynamic"
+                          :model {:id "fake" :transport model}
+                          :instructions "Answer."
+                          :tools [k/eval]})]
+    (is (= :completed (:status (k/run! leaf "task"))))
+    (is (= :completed (:status (k/run! dynamic "task"))))
+    (is (not (contains? (set (map :name (:tools (first @requests))))
+                        "eval")))
+    (is (contains? (set (map :name (:tools (second @requests))))
+                   "eval"))))
+
 (deftest eval-resolves-public-vars-from-the-agent-definition-namespace
   (let [parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
+                         :tools [k/eval]
                          :output-schema string?})
         run (k/run! parent "value"
                     {:model-transports
@@ -53,6 +74,8 @@
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
+                         :tools [k/eval]
+                         :input-schema vector?
                          :output-schema vector?})
         run (k/run! parent ["one" "two"]
                     {:model-transports
@@ -83,6 +106,7 @@
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
+                         :tools [k/eval]
                          :output-schema map?})
         run (k/run! parent "hello"
                     {:model-transports
@@ -106,11 +130,12 @@
         parent-code
         (str "(let [child (agent {:name \"child\" "
              ":model {:transport :child :id \"child\"} "
-             ":instructions \"Use eval.\" :output-schema int?})] "
+             ":instructions \"Use eval.\" :tools [eval] :output-schema int?})] "
              "(:output (run! child input)))")
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
+                         :tools [k/eval]
                          :output-schema int?})
         run (k/run! parent "solve"
                     {:model-transports
@@ -130,8 +155,9 @@
     (let [parent (k/agent {:name "parent"
                            :model {:transport :parent :id "parent"}
                            :instructions "Use eval."
+                           :tools [k/eval]
                            :output-schema any?})
-          run (k/run! parent nil
+          run (k/run! parent "input"
                       {:limits {:evals 0}
                        :model-transports
                        {:parent (eval-model "(+ 1 2)")}})]
@@ -141,8 +167,9 @@
     (let [parent (k/agent {:name "parent"
                            :model {:transport :parent :id "parent"}
                            :instructions "Use eval."
+                           :tools [k/eval]
                            :output-schema any?})
-          run (k/run! parent nil
+          run (k/run! parent "input"
                       {:model-transports
                        {:parent (eval-model "(Object.)")}})]
       (is (= :failed (:status run)))
@@ -153,12 +180,14 @@
   (let [code
         (str "(do (defagent made "
              "{:model {:transport :child :id \"child\"} "
-             ":instructions \"Answer.\" :output-schema map?}) "
+             ":instructions \"Answer.\" :input-schema map? :output-schema map?}) "
              "(assoc (:output (run! made input)) "
              ":context (context)))")
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
+                         :tools [k/eval]
+                         :input-schema map?
                          :output-schema map?})
         run (k/run! parent {:task "work"}
                     {:context {:request-id "r1"}
@@ -179,6 +208,7 @@
         parent (k/agent {:name "parent"
                          :model {:transport :parent :id "parent"}
                          :instructions "Use eval."
+                         :tools [k/eval]
                          :output-schema string?})
         run (k/run! parent "work"
                     {:limits {:concurrency 1}
