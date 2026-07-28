@@ -729,9 +729,9 @@
     (is (= "Complete the assigned task." (:instructions @request)))
     (doseq [section ["## When to use"
                      "## Tool input"
-                     "## Creating an Agent"
+                     "## Authoring Agents and Tools"
                      "## Run behavior"
-                     "## Example: parallel reviewers"
+                     "## Example: security review with verification"
                      "## Available model configuration"
                      "## Available Tools"
                      "## Available Agents"]]

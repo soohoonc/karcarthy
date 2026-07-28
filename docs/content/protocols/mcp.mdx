@@ -1,10 +1,10 @@
 ---
 title: MCP
-description: Import Tools from a stdio MCP server.
+description: Import tools from a stdio MCP server.
 ---
 
-Use MCP when the Tools an Agent needs already live in an MCP server. karcarthy
-starts the server, discovers its Tools, and adapts them into ordinary Tool
+Use MCP when the tools an agent needs already live in an MCP server. karcarthy
+starts the server, discovers its tools, and adapts them into ordinary tool
 values. The model loop does not need a separate MCP execution path.
 
 ## Connect and run
@@ -20,11 +20,10 @@ values. The model loop does not need a separate MCP execution path.
 (try
   (let [tools (k/mcp-tools connection)
         agent (k/agent
-               {:name "project-agent"
-                :model "gpt-5.6"
-                :instructions "Inspect the project and answer the request."
-                :tools tools
-                :output-schema string?})]
+                {:name "project-agent"
+                 :model "gpt-5.6"
+                 :instructions "Inspect the project and answer the request."
+                 :tools tools})]
     (k/run! agent "Summarize the open work."
             {:approval (fn [{:keys [tool input]}]
                          (approve? (:name tool) input))}))
@@ -37,7 +36,7 @@ accepts:
 
 | Key | Meaning |
 | --- | --- |
-| `:name` | Stable local name used in generated Tool names. Defaults to the command. |
+| `:name` | Stable local name used in generated tool names. Defaults to the command. |
 | `:command` | Executable to start. Required. |
 | `:args` | String arguments passed to the executable. |
 | `:env` | Environment additions as a map or ACP-style name/value entries. |
@@ -54,7 +53,7 @@ paginates `tools/list`, and executes calls with `tools/call`. A
 `notifications/tools/list_changed` notification marks the definitions stale;
 the next call to `mcp-tools` or the underlying definitions API refreshes them.
 
-Each remote definition becomes a normal Tool containing its input schema and
+Each remote definition becomes a normal tool containing its input schema and
 description. The default name is:
 
 ```text
@@ -67,32 +66,32 @@ prefix.
 
 ## Approval and trust
 
-MCP Tools default to `:needs-approval :always`. Pass an approval handler to
-`run!`, as above, or set a different policy when adapting the Tools:
+MCP tools default to `:needs-approval :always`. Pass an approval handler to
+`run!`, as above, or set a different policy when adapting the tools:
 
 ```clojure
 (k/mcp-tools connection {:needs-approval :never})
 ```
 
-Use `:never` only for a server and Tool implementation you trust. Tool-call
+Use `:never` only for a server and tool implementation you trust. Tool-call
 approval does not sandbox the MCP server process: the process starts before a
-model requests a Tool and has the operating-system authority of karcarthy.
+model requests a tool and has the operating-system authority of karcarthy.
 
 ## Supported boundary
 
 | MCP capability | Support |
 | --- | --- |
 | stdio transport | Yes |
-| Tool discovery and calls | Yes |
-| paginated Tool lists | Yes |
-| Tool-list change notifications | Yes |
+| tool discovery and calls | Yes |
+| paginated tool lists | Yes |
+| tool-list change notifications | Yes |
 | server `ping` requests | Yes |
 | resources and prompts | No |
 | sampling and elicitation | No |
 | MCP tasks | No |
 | Streamable HTTP | No |
 
-This is deliberately a Tool adapter, not a complete MCP host. See the
+This is deliberately a tool adapter, not a complete MCP host. See the
 [official MCP specification](https://modelcontextprotocol.io/specification/2025-11-25)
 for the protocol beyond karcarthy's implemented boundary.
 
@@ -100,8 +99,8 @@ for the protocol beyond karcarthy's implemented boundary.
 
 An ACP client may provide stdio MCP server configurations when it creates a
 session. karcarthy starts those servers in the ACP session working directory,
-adapts their Tools with approval enabled, and makes the Tools available to the
-session Agent. They are closed with the ACP session.
+adapts their tools with approval enabled, and makes the tools available to the
+session agent. They are closed with the ACP session.
 
 ## Next
 

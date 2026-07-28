@@ -6,31 +6,31 @@ vulnerability. Include reproduction steps and the affected commit.
 
 ## Model-authored Clojure is executable code
 
-karcarthy intentionally evaluates model-authored Clojure. The `eval` Tool reads
+karcarthy intentionally evaluates model-authored Clojure. The `eval` tool reads
 exactly one expression with `*read-eval*` false, so the reader cannot execute
-`#=` forms. It then evaluates the expression as JVM Clojure. In the default
-full-trust mode it can access everything available to its evaluation namespace
-and process.
+`#=` forms. It then evaluates the expression as JVM Clojure. Evaluation is
+full-trust and can access everything available to its namespace and process.
 
-Treat model-authored source as trusted code. Every model Agent has this
-evaluation capability. Do not run one when the process contains capabilities
-the code must not exercise. Applications needing isolation should place the
-entire harness in a process, container, VM, restricted classloader, or a future
-alternate evaluation policy. Do not mistake macroexpansion or schemas for a
-security sandbox.
+An agent receives this capability only when its `:tools` includes `k/eval`.
+Agents constructed by evaluated code do not inherit it. Treat source authored
+by an eval-enabled agent as trusted code, and do not enable eval when the process
+contains capabilities that code must not exercise. Applications needing
+isolation should place the entire harness in a process, container, VM,
+restricted classloader, or a future alternate evaluation policy. Do not mistake
+macroexpansion or schemas for a security sandbox.
 
 ## Tools and context
 
-Tools execute application Clojure with access to the current Run's local context.
-Use narrow context values, input/output schemas, guardrails, approval, Run
-deadlines, timeouts exposed by individual Tools, and least-privilege
+Tools execute application Clojure with access to the current run's local context.
+Use narrow context values, input/output schemas, guardrails, approval, run
+deadlines, timeouts exposed by individual tools, and least-privilege
 credentials. Approval is currently a synchronous allow/deny decision; durable
 suspension is not implemented.
 
 Tool output and event payloads may contain sensitive data. Redact them in the
 observer before external export.
 
-The local `read`, `write`, `edit`, and `search` Tools reject paths
+The local `read`, `write`, `edit`, and `search` tools reject paths
 that resolve outside their configured `:cwd`, including existing symlink
 ancestors. This is a correctness boundary for those tools, not a process
 sandbox. `bash` starts in `:cwd` but can access anything allowed to the

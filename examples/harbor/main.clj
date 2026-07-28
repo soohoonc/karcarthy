@@ -1,5 +1,5 @@
 (ns main
-  "Fixed Coding Agent exposed to Harbor through ACP."
+  "Fixed root Coding Agent exposed to Harbor through ACP."
   (:require [clojure.string :as str]
             [karcarthy :as k]))
 
@@ -34,6 +34,4 @@
     :model (model context)
     :instructions instructions
     :tools (conj (k/local-tools {:cwd cwd}) k/eval)
-    :input-schema string?
-    :output-schema string?
     :max-turns 24}))

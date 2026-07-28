@@ -1,6 +1,6 @@
 ---
 title: Models
-description: Connect an Agent to OpenAI or another Responses-compatible endpoint.
+description: Connect an agent to OpenAI or another Responses-compatible endpoint.
 ---
 
 For OpenAI Responses, use the model ID directly:
@@ -36,22 +36,21 @@ Use the same transport with a different endpoint and credential source:
 The endpoint options are `:base-url`, `:path`, `:url`, `:api-key`,
 `:api-key-env`, `:headers`, `:auth?`, `:timeout-ms`, `:stream`, and
 `:provider-options`. The endpoint must implement the Responses request and
-event shapes used by the selected Tools.
+event shapes used by the selected tools.
 
-## Provider-hosted Tools
+## Provider-hosted tools
 
-Some Tools execute at the model provider rather than inside karcarthy:
+Some tools execute at the model provider rather than inside karcarthy:
 
 ```clojure
 (k/defagent researcher
   {:model "gpt-5.6"
    :instructions "Research current information and cite sources."
-   :tools [(k/responses-web-search)]
-   :output-schema string?})
+   :tools [(k/responses-web-search)]})
 ```
 
-The endpoint and model must support the hosted Tool. karcarthy passes its
-declaration through the transport; it does not execute that Tool locally.
+The endpoint and model must support the hosted tool. karcarthy passes its
+declaration through the transport; it does not execute that tool locally.
 
 ## Deterministic tests
 
@@ -66,7 +65,7 @@ declaration through the transport; it does not execute that Tool locally.
       :usage {:input-tokens 4 :output-tokens 2}})))
 ```
 
-Use it for Tool-loop, Session, and event tests without a paid call. The
+Use it for tool-loop, session, and event tests without a paid call. The
 [API reference](/docs/reference/api#models) defines the normalized model
 interface.
 
@@ -83,7 +82,7 @@ It returns either a final value:
  :provider-state optional-continuation}
 ```
 
-or Tool calls:
+or tool calls:
 
 ```clojure
 {:type :tool-calls

@@ -1,9 +1,9 @@
 ---
 title: Build a chat agent
-description: Carry model conversation across Runs with a Session.
+description: Carry model conversation across runs with a session.
 ---
 
-A chat application needs an Agent, a Session, and a loop. karcarthy does not
+A chat application needs an agent, a session, and a loop. karcarthy does not
 add a separate chat abstraction.
 
 ## Run the example
@@ -25,7 +25,7 @@ you> /quit
 ```
 
 The exact wording varies, but the second response can use the first turn
-because both Runs receive the same Session.
+because both runs receive the same session.
 
 ## The state boundary
 
@@ -34,8 +34,7 @@ because both Runs receive the same Session.
   (k/agent
    {:name "chat-assistant"
     :model "gpt-5.6"
-    :instructions "Be helpful and concise."
-    :output-schema string?}))
+    :instructions "Be helpful and concise."}))
 
 (def session (k/session))
 
@@ -43,8 +42,8 @@ because both Runs receive the same Session.
   (k/run! assistant input {:session session}))
 ```
 
-Each top-level call to `run!` establishes a new run. The Session contributes earlier normalized
-messages and receives the new turn after it completes.
+Each top-level call to `run!` establishes a new run. The session contributes
+earlier normalized messages and receives the new turn after it completes.
 
 Inspect or clear the conversation:
 
@@ -53,6 +52,6 @@ Inspect or clear the conversation:
 (example.chat/reset-chat!)
 ```
 
-A Session stores conversation, not arbitrary application state or a Run
-checkpoint. [Sessions](/docs/sessions) defines that boundary and explains how
+A session stores conversation, not arbitrary application state or a run
+checkpoint. [sessions](/docs/sessions) defines that boundary and explains how
 to provide durable storage.

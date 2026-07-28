@@ -1,9 +1,9 @@
 ---
 title: Quickstart
-description: Install karcarthy and run your first Agent.
+description: Install karcarthy and run your first agent.
 ---
 
-This guide creates one Agent, runs it, and inspects the resulting Run.
+This guide defines one reviewer, runs it, and then gives it `eval`.
 
 ## Before you begin
 
@@ -17,17 +17,17 @@ Create `deps.edn`:
 {:deps
  {io.github.soohoonc/karcarthy
   {:git/url "https://github.com/soohoonc/karcarthy"
-   :git/sha "985db89bf37bd591939b46cf52cce8c14e72306f"}}
+   :git/sha "76468125d3c22c00c5a8e0e5d4c13bcee249ad30"}}
  :paths ["src"]}
 ```
 
-Set the credential in the shell that will start Clojure:
+Set the credential in the shell that starts Clojure:
 
 ```bash
 export OPENAI_API_KEY="..."
 ```
 
-## Define the Agent
+## Define one agent
 
 Create `src/example.clj`:
 
@@ -37,12 +37,13 @@ Create `src/example.clj`:
 
 (k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Review the proposed change. Report only concrete defects."})
+   :instructions
+   "Review this pull request. Report concrete defects introduced by the patch
+    and explain the evidence for each finding."})
 ```
 
-An Agent is a Clojure value containing its model, instructions, Tools, other
-Agents it may call, and boundary schemas. Input and output both default to
-`string?`; provide schemas only when either boundary has another shape.
+`defagent` creates an agent value and derives its name from `reviewer`. Agent
+input and output default to strings.
 
 ## Run it
 
@@ -52,65 +53,85 @@ Start a REPL:
 clojure -M
 ```
 
-Require both the example and karcarthy, then start a Run:
+Then run the reviewer:
 
 ```clojure
 (require '[example :as example]
          '[karcarthy :as k])
 
-(def run
-  (k/run! example/reviewer
-          (str "Contract: count may be zero.\n"
-               "Change: def average(total, count): return total / count")))
+(def review-request
+  (str
+   "Requirement: only admins may export customer data.\n"
+   "Existing behavior: require-user authenticates but does not check roles.\n\n"
+   "```diff\n"
+   "+(defn export-customers [request]\n"
+   "+  (let [user (auth/require-user request)]\n"
+   "+    {:status 200\n"
+   "+     :body (csv/encode (customers/all))}))\n"
+   "```"))
+
+(def result
+  (k/run! example/reviewer review-request))
 ```
 
-The answer varies by model call. Inspect the stable parts of the result:
+`run!` waits for the agent and returns a map:
 
 ```clojure
-(:status run)          ;=> :completed
-(println (:output run))
-(:usage run)           ;=> {:model-calls ..., :input-tokens ..., ...}
+(:status result)       ;=> :completed
+(println (:output result))
+(:usage result)        ;=> {:model-calls ..., :input-tokens ..., ...}
 ```
 
-`run!` returns a failed Run for failures during execution. Check `:status`
-before consuming `:output`; `:error` explains a failure. Invalid Agent, Tool,
-or run configuration throws before execution starts.
-
-## Watch the Run
-
-Create a monitor and pass it as the observer:
+Or use `output` when a failed run should throw:
 
 ```clojure
-(def live (k/monitor {:display :tree}))
-
-(def monitored-run
-  (k/run! example/reviewer
-          (str "Contract: reject ports outside 1..65535.\n"
-               "Change: def parse_port(value): return int(value)")
-          {:on-event live}))
+(k/output result)
 ```
 
-The terminal redraws while the Agent runs. Evaluate the monitor to print its
-final tree again:
+Only one agent participates:
 
-```clojure
-(k/monitor live)
+```text
+run! reviewer
+└─ reviewer → model → review
 ```
 
-## Change it
+## Give it eval
 
-Edit the instructions in `src/example.clj`, reload the namespace, and run the
-new definition:
+Replace the definition with:
+
+```clojure title="src/example.clj"
+(k/defagent reviewer
+  {:model "gpt-5.6"
+   :instructions
+   "Review this pull request. After reading the patch, choose the specialist
+    justified by the change and use eval to author and run it. Pass candidate
+    findings to an independent verifier and publish only verified defects."
+   :tools [k/eval]})
+```
+
+Reload the namespace and run the same request:
 
 ```clojure
 (require '[example :as example] :reload)
-(k/run! example/reviewer
-        (str "Contract: empty input returns nil.\n"
-             "Change: def first(items): return items[0]"))
+(k/output (k/run! example/reviewer review-request))
 ```
 
-You have run the familiar part of karcarthy: one model-backed Agent. Next,
-[Agent orchestration](/docs/agent-orchestration) shows the available delegation,
-code orchestration, and dynamic orchestration patterns. [Code review](/docs/guides/review)
-runs the complete recursive example, and [Why Clojure?](/docs/why-clojure)
-explains why it does not need a workflow DSL.
+The reviewer now sees an `eval` tool. Its description teaches the model how to
+write one Clojure expression using `agent`, `run!`, `output`, and the original
+`input`.
+
+For this patch, the reviewer may construct a `security-reviewer`, run it, then
+construct a `verifier` and pass the candidate findings to it. Those agents are
+not predefined by the application. The reviewer authors them after reading the
+patch.
+
+Agents created inside eval do not inherit eval. Add `:tools [eval]` to a
+constructed agent only when it should be able to author another program.
+
+## Next
+
+- [Agent orchestration](/docs/agent-orchestration) explains predefined agents,
+  direct Clojure orchestration, and eval.
+- [Code review](/docs/guides/review) runs the complete review example.
+- [Running agents](/docs/running-agents) covers limits, cancellation, and
+  monitoring.

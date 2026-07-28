@@ -1,73 +1,116 @@
 ---
 title: Eval
-description: Input, namespace, events, limits, and result rules for dynamically generated Clojure.
+description: How an agent learns and executes model-authored Clojure.
 ---
 
 ## Enable eval
 
-Eval is an explicit Agent capability:
+Eval is explicit:
 
 ```clojure
-(k/agent {:name "orchestrator"
-          :model "gpt-5.6"
-          :instructions "Choose and run the specialists needed for the task."
-          :tools [k/eval]})
+(k/agent
+ {:name "reviewer"
+  :model "gpt-5.6"
+  :instructions "Review the change and use eval when a specialist is useful."
+  :tools [k/eval]})
 ```
 
-Without `k/eval` in `:tools`, the model does not see the eval Tool. Agents
-created by an evaluated expression do not inherit it; use `:tools [eval]` in
-their configuration when recursive dynamic orchestration is intentional.
+Without `k/eval`, the model does not see an eval tool.
 
-## Tool schema
+## What the model is told
+
+`k/eval` begins as a capability marker. When the agent runs, karcarthy replaces
+it with a tool generated for that agent.
+
+The generated tool description tells the model:
+
+- It may send exactly one Clojure expression.
+- The current agent input is bound to `input`.
+- `agent` and `tool` construct new values.
+- `run!` runs an agent and `output` extracts a completed result.
+- Normal Clojure such as `let`, `if`, collections, `future`, and `deref` is
+  available.
+- Nested calls join the active run but start fresh model conversations.
+- Evaluated code is full-trust JVM Clojure.
+
+The description also includes the current model configuration and lists tools
+and agents supplied by the application. This is how the model learns the API;
+it is not expected to infer the syntax from the tool name.
+
+## Tool input
+
+The model calls eval with:
 
 ```clojure
-{:type "object"
- :properties
- {"code" {:type "string"}}
- :required ["code"]
- :additionalProperties false}
+{:code "(+ 1 2)"}
 ```
 
-`code` is exactly one top-level expression. A surrounding `do` is valid because
-it is one expression. Empty input, additional expressions, and reader eval are
-rejected.
+The input schema accepts only the string field `code`. The string must contain
+one top-level expression. A `let` or `do` may contain an entire program while
+still satisfying that rule.
+
+Empty input, extra expressions, and reader evaluation are rejected.
+
+## Evaluation namespace
+
+The expression receives these bindings:
+
+```clojure
+agent
+defagent
+tool
+deftool
+run!
+output
+context
+definition
+expansion
+eval
+input
+```
+
+It also receives public values from the namespace where the parent agent was
+defined, plus the tools and agents catalogued in the generated eval
+description.
+
+An agent created by the expression does not inherit eval. Give it
+`:tools [eval]` only when it should be able to author another program.
 
 ## Processing
 
-1. Consume one unit from the run's `:evals` limit.
-2. Read one expression with `*read-eval*` false.
-3. Recursively macroexpand executable positions while preserving quoted data.
-4. Evaluate it with the current Agent `input` and available Tools and Agents bound.
-5. Normalize the final value for the model transport.
+For each call, karcarthy:
 
-## Events
+1. consumes one unit from the run's `:evals` limit;
+2. reads exactly one expression with `*read-eval*` disabled;
+3. macroexpands executable positions while preserving quoted data;
+4. evaluates the expression with the active run bound; and
+5. converts its returned value into data the model transport can encode.
 
-| Event | Meaning | Notable fields |
-| --- | --- | --- |
-| `:eval/started` | An attempt began. | `:code`, `:input` |
-| `:eval/expanded` | Reading and expansion succeeded. | `:expression`, `:expansion`, `:namespace` |
-| `:eval/completed` | Evaluation and result normalization succeeded. | `:value`, `:duration-ms` |
-| `:eval/failed` | A phase failed. | `:phase`, `:error`, `:duration-ms` |
-
-All events have the normal run, Agent, parent, depth, and timestamp fields.
+Constructing an agent does not run it. The expression must call `run!`.
 
 ## Run participation
 
-If evaluated code calls `run!`, that call returns a Run map and participates in
-the active run. Its `:id` matches the active run ID. Usage and limits are shared.
-Its `:events` contains the events observed during that Agent call; the first
-Run's event list remains the aggregate trace.
+A nested `run!` returns a normal run map and participates in the active run.
+It shares the run ID, limits, usage, events, cancellation, approvals, context,
+and executor.
 
-An Agent call may narrow `:context` or `:limits`. It cannot widen the limits
-established by the first `run!` call.
+Each participating agent receives only its explicit input and begins a fresh
+model conversation. It does not inherit the parent model's messages.
 
-## Failure phases
+## Events
 
-- `:eval` for source shape and reader failures
-- `:evaluation` for compiler or evaluated-code failures
-- `:output` when the final value is not model-safe
-- the original run, model, Agent, Tool, deadline, cancellation, or budget phase
-  when a participating operation fails
+| Event | Meaning | Fields |
+| --- | --- | --- |
+| `:eval/started` | Evaluation started. | `:code`, `:input` |
+| `:eval/expanded` | Reading and macroexpansion succeeded. | `:expression`, `:expansion`, `:namespace` |
+| `:eval/completed` | Evaluation and result conversion succeeded. | `:value`, `:duration-ms` |
+| `:eval/failed` | A phase failed. | `:phase`, `:error`, `:duration-ms` |
 
-Failures become the eval Tool failure. If generated code deliberately handles a
-failed Run map, it may return a different model-safe value.
+See [Events and monitoring](/docs/events) for the complete event list.
+
+## Trust
+
+Reader evaluation is disabled while reading source, but the resulting
+expression is deliberately executed with `clojure.core/eval`. This is not a
+sandbox. It has the filesystem, network, credentials, classpath, and other
+authority of the karcarthy process.

@@ -1,9 +1,9 @@
 ---
 title: Sessions
-description: Carry model conversation history across otherwise independent Runs.
+description: Carry model conversation history across otherwise independent runs.
 ---
 
-Each top-level `run!` starts without prior conversation unless you pass a Session:
+Each top-level `run!` starts without prior conversation unless you pass a session:
 
 ```clojure
 (def session (k/session))
@@ -15,13 +15,13 @@ Each top-level `run!` starts without prior conversation unless you pass a Sessio
         {:session session})
 ```
 
-A Session stores normalized conversation items from the first Agent. An
-independent `run!` call must receive the Session explicitly. An available or
-participating Agent starts without its parent's conversation; only its explicit
-Tool input is sent as its user message. Child conversations are not added to
-the parent's Session.
+A session stores normalized conversation items from the first agent. An
+independent `run!` call must receive the session explicitly. An available or
+participating agent starts without its parent's conversation; only its explicit
+tool input is sent as its user message. Child conversations are not added to
+the parent's session.
 
-## Process-local Sessions
+## Process-local sessions
 
 `session` is thread-safe and process-local:
 
@@ -39,12 +39,12 @@ the parent's Session.
 Use it for a REPL, tests, and processes where conversation history does not
 need to survive a restart.
 
-Top-level Runs using the same Session instance are serialized so that reading
+Top-level runs using the same session instance are serialized so that reading
 history and appending the new turn cannot interleave. Durable implementations
-that represent one conversation with multiple Session instances must provide
+that represent one conversation with multiple session instances must provide
 the equivalent coordination in their storage layer.
 
-## Durable Sessions
+## Durable sessions
 
 Applications that need durable history implement
 `karcarthy.session/Session`:
@@ -61,12 +61,12 @@ karcarthy does not prescribe a file, JSONL, or database format. The protocol
 is the boundary; storage, versioning, and retention policy belong to the
 application.
 
-A Session is conversation history, not a snapshot of a Run. It does not store
-Tool side effects, Clojure stacks, Agent definitions, or arbitrary application
+A session is conversation history, not a snapshot of a run. It does not store
+tool side effects, Clojure stacks, agent definitions, or arbitrary application
 state.
 
 ## Next
 
-- [Build a chat agent](/docs/guides/chat) uses a Session in a complete application.
-- [Events and monitoring](/docs/events) observes Session updates.
-- [Run data](/docs/reference/data#session) specifies Session item shapes.
+- [Build a chat agent](/docs/guides/chat) uses a session in a complete application.
+- [Events and monitoring](/docs/events) observes session updates.
+- [Run data](/docs/reference/data#session) specifies session item shapes.

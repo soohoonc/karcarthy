@@ -31,7 +31,7 @@ karcarthy.acp
 (k/defagent name config)
 ```
 
-Both forms create an Agent. `defagent` defines a var and supplies `:name` from
+Both forms create an agent. `defagent` defines a var and supplies `:name` from
 its symbol. `agent` creates a value and requires `:name` in the config. Both
 require `:model` and `:instructions`. Omitted `:input-schema` and
 `:output-schema` values default to `string?`.
@@ -69,14 +69,14 @@ The run-context value passed to dynamic configuration and guardrails is:
  :agent agent-value}
 ```
 
-`:agents` makes those Agents callable by the model using the Agent-as-Tool
+`:agents` makes those agents callable by the model using the agent-as-tool
 pattern. It does not create a hierarchy or transfer the conversation.
 An object-shaped `:input-schema` becomes the callable schema; otherwise the
-model calls the Agent with `{"input": ...}`.
+model calls the agent with `{"input": ...}`.
 
-Include `k/eval` in `:tools` to give an Agent the eval Tool for one Clojure
-expression. The expression may create Agents and Tools and call `run!`.
-Constructed Agents do not inherit eval.
+Include `k/eval` in `:tools` to give an agent the eval tool for one Clojure
+expression per call. The expression may create agents and tools and call `run!`.
+Constructed agents do not inherit eval.
 
 ```clojure
 (k/agent? value)
@@ -85,7 +85,7 @@ Constructed Agents do not inherit eval.
 ```
 
 `definition` and `expansion` expose the retained Clojure forms for tooling and
-experiments. They are not needed to run an Agent.
+experiments. They are not needed to run an agent.
 
 ## `tool` and `deftool`
 
@@ -94,15 +94,15 @@ experiments. They are not needed to run an Agent.
 (k/deftool name config [input] body ...)
 ```
 
-A Tool requires `:name` and `:description`; `deftool` supplies the name.
+A tool requires `:name` and `:description`; `deftool` supplies the name.
 `:input-schema` and `:output-schema` default to `string?`. Other optional keys
 are `:needs-approval`, `:input-guardrails`, `:output-guardrails`, and
 `:to-model-output`.
 
 Guardrails receive `[run-context value]`. `:needs-approval` accepts `:never`,
 `:once`, `:always`, a boolean, or a function of `[run-context input]`.
-Invalid static policies fail during Tool construction; invalid values returned
-by policy functions fail closed before the Tool body executes.
+Invalid static policies fail during tool construction; invalid values returned
+by policy functions fail closed before the tool body executes.
 
 ```clojure
 (k/tool? value)
@@ -115,7 +115,7 @@ by policy functions fail closed before the Tool body executes.
 (k/run! agent input options)
 ```
 
-Runs an Agent, waits for it to finish, and returns a Run map. The first call in
+Runs an agent, waits for it to finish, and returns a run map. The first call in
 a dynamic call chain establishes a run. Calls made during that dynamic extent
 participate in it and return the same shape with the same `:id`.
 
@@ -123,8 +123,8 @@ participate in it and return the same shape with the same `:id`.
 (k/output run)
 ```
 
-Returns the output of a completed Run. A failed or cancelled Run throws
-`ExceptionInfo` with the complete Run at `(:run (ex-data error))`, which keeps
+Returns the output of a completed run. A failed or cancelled run throws
+`ExceptionInfo` with the complete run at `(:run (ex-data error))`, which keeps
 ordinary composition concise without discarding failure data.
 
 ```clojure
@@ -145,10 +145,10 @@ ordinary composition concise without discarding failure data.
 
 `:on-event` and `:approval` are functions, `:model-transports` is a map, and
 `:cancel` is a boolean, function, or dereferenceable value such as an atom.
-Invalid option shapes fail before the Run starts. Static Agent `:limits` use
-the same validation as Run limits and fail during Agent construction.
+Invalid option shapes fail before the run starts. Static agent `:limits` use
+the same validation as run limits and fail during agent construction.
 
-`context` returns the current Run's local dependency value from a Tool or
+`context` returns the current run's local dependency value from a tool or
 evaluated expression:
 
 ```clojure
@@ -165,9 +165,9 @@ evaluated expression:
 (k/monitor-state live)
 ```
 
-A Run monitor is both an event handler and a printable value. Pass it as
+A run monitor is both an event handler and a printable value. Pass it as
 `run!`'s `:on-event` option. Passing it back to `monitor` shows the latest tree;
-`monitor-state` returns data for every Run it has seen. `:display :tree`
+`monitor-state` returns data for every run it has seen. `:display :tree`
 redraws a live terminal tree; omit it for a silent monitor. The tree refreshes
 elapsed time once per second and adds model usage when each call completes.
 `:out` must be a `java.io.Writer` and defaults to `*out*`.
@@ -189,7 +189,7 @@ See [Events and monitoring](/docs/events).
 ```
 
 `session` is thread-safe and process-local. Durable stores implement
-`karcarthy.session/Session`. Runs sharing one Session instance serialize their
+`karcarthy.session/Session`. Runs sharing one session instance serialize their
 read/run/append sequence.
 
 ## Prompts
@@ -199,16 +199,18 @@ read/run/append sequence.
 ```
 
 `prompt` joins strings and run-context functions. `prompt-file` reads UTF-8
-text. The resulting string becomes the Agent's complete model-visible
+text. The resulting string becomes the agent's complete model-visible
 instructions; karcarthy does not add a base prompt.
 
 ## Eval
 
-Eval is deliberately model-facing rather than a separate public compiler API.
-Add `k/eval` to an Agent's `:tools` to expose the eval Tool with
-`{:code string}`. The current Agent input is bound to `input` inside the expression. Code
-can use `agent`, `defagent`, `tool`, `deftool`, `run!`, `context`, `definition`,
-and `expansion`. See [Eval](/docs/reference/eval).
+Add `k/eval` to an agent's `:tools` to expose a dynamically generated eval
+tool with `{:code string}`. Its model-facing description explains the available
+Clojure API, current model configuration, tools, and agents.
+
+The current agent input is bound to `input`. Code can use `agent`, `defagent`,
+`tool`, `deftool`, `run!`, `output`, `context`, `definition`, and `expansion`.
+See [Eval](/docs/reference/eval).
 
 ## Models
 
@@ -237,7 +239,7 @@ Use a deterministic model in tests:
 (k/mock-model (fn [request] {:type :final :output "done"}))
 ```
 
-`model!` calls the active transport from code executing inside a Run:
+`model!` calls the active transport from code executing inside a run:
 
 ```clojure
 (k/model! normalized-request)
@@ -249,7 +251,7 @@ remain strings when `:output-schema` is `string?`.
 The normalized custom transport contract is documented under
 [Models](/docs/protocols/models#normalized-transport-contract).
 
-## Supplied Tools
+## Supplied tools
 
 ```clojure
 (k/responses-web-search)
@@ -264,7 +266,7 @@ The normalized custom transport contract is documented under
 ```
 
 `local-tools` supplies `read`, `write`, `edit`, `bash`, and `search`. MCP uses
-stdio and must be closed by the caller. See [Tools](/docs/tools),
+stdio and must be closed by the caller. See [tools](/docs/tools),
 [Models](/docs/protocols/models), and [MCP](/docs/protocols/mcp) for execution and lifecycle
 semantics.
 
@@ -274,7 +276,7 @@ semantics.
 (k/serve-acp! {:agent assistant})
 ```
 
-Or provide an Agent factory:
+Or provide an agent factory:
 
 ```clojure
 (k/serve-acp!
@@ -288,7 +290,7 @@ Or provide an Agent factory:
              :output-schema string?}))})
 ```
 
-Client-provided MCP Tools are appended automatically. See [ACP](/docs/protocols/acp) for
+Client-provided MCP tools are appended automatically. See [ACP](/docs/protocols/acp) for
 the complete session factory and supported protocol surface.
 
 ## Events and schema validation

@@ -1,54 +1,57 @@
 ---
 title: Events and monitoring
-description: Observe runs, Agent calls, model output, Tools, and eval.
+description: Observe runs, agents, model calls, tools, sessions, and eval.
 ---
 
 Pass an event handler to `run!`:
 
 ```clojure
 (def seen (atom []))
+
 (def result
-  (k/run! assistant input {:on-event #(swap! seen conj %)}))
+  (k/run! reviewer input
+          {:on-event #(swap! seen conj %)}))
 ```
 
-Or use the built-in live monitor:
+Or display a live tree:
 
 ```clojure
 (def live (k/monitor {:display :tree}))
-(def result (k/run! assistant input {:on-event live}))
+(def result (k/run! reviewer input {:on-event live}))
 ```
 
 ```text
-Run run_7c2e9b… · running · 51s · 7 model calls · 12,910 tokens · 2 evals
-└─ code-reviewer · waiting for Agents
-   ├─ correctness-reviewer · calling model
-   └─ concurrency-reviewer · waiting for Agents
-      └─ finding-verifier · calling model
+run run_7c2e9b… · running · 51s · 7 model calls · 2 evals
+└─ reviewer
+   ├─ security-reviewer
+   └─ verifier
 ```
 
-`(k/monitor live)` prints the latest view again. `(k/monitor-state live)`
+`(k/monitor live)` prints the latest tree again. `(k/monitor-state live)`
 returns the event-derived data. One monitor may observe several runs.
 
-## Event families
+## Event names
 
-```clojure
-:run/started          :run/completed       :run/failed
-:run/cancelled
-:agent/started        :agent/completed     :agent/failed
-:model/requested      :model/text-delta    :model/completed
-:model/failed
-:tool/started         :tool/completed      :tool/failed
-:session/updated
-:eval/started         :eval/expanded       :eval/completed
-:eval/failed
-```
+| Family | Events |
+| --- | --- |
+| run | `:run/started`, `:run/completed`, `:run/failed`, `:run/cancelled` |
+| agent | `:agent/started`, `:agent/completed`, `:agent/failed` |
+| model | `:model/requested`, `:model/text-delta`, `:model/tool-call-delta`, `:model/stream-event`, `:model/completed`, `:model/failed` |
+| tool | `:tool/approval-requested`, `:tool/approval-resolved`, `:tool/approval-reused`, `:tool/started`, `:tool/completed`, `:tool/failed` |
+| session | `:session/updated` |
+| eval | `:eval/started`, `:eval/expanded`, `:eval/completed`, `:eval/failed` |
 
-All events carry `:run-id` and time. Agent-scoped events carry `:agent-id`,
-`:parent-id`, and `:depth`. Calls to `run!` that participate in an existing run
-appear as Agent branches under the same run ID; they do not emit another Run
-lifecycle.
+Every event has `:karcarthy/type :event`, `:type`, `:time-ms`, and `:run-id`.
+Agent-scoped events also have `:agent-id`, `:parent-id`, and `:depth`. Tool
+events include `:tool-call-id` where applicable.
 
-Eval's expanded event retains both the parsed expression and macroexpansion:
+Only the first `run!` emits run lifecycle events. Nested agent calls emit their
+own agent, model, tool, and eval events under the same run ID.
+
+## Inspect eval
+
+The expanded event retains the expression the model wrote and the result of
+macroexpansion:
 
 ```clojure
 (->> (k/events result)
@@ -56,21 +59,32 @@ Eval's expanded event retains both the parsed expression and macroexpansion:
      (map #(select-keys % [:expression :expansion :namespace])))
 ```
 
-## Application events
+The relevant fields are:
 
-Tools and evaluated Clojure may emit domain events:
+| Event | Fields |
+| --- | --- |
+| `:eval/started` | `:code`, `:input` |
+| `:eval/expanded` | `:expression`, `:expansion`, `:namespace` |
+| `:eval/completed` | `:value`, `:duration-ms` |
+| `:eval/failed` | `:phase`, `:error`, `:duration-ms` |
+
+## Emit application events
+
+Tools and evaluated Clojure may add events:
 
 ```clojure
 (k/emit! {:type :application/decision
           :decision :retry})
 ```
 
-karcarthy adds authoritative run and Agent lineage before storing and
-publishing the event. Conflicting `:run-id`, `:agent-id`, `:parent-id`,
-`:depth`, `:time-ms`, and `:karcarthy/type` values are ignored.
-See the [event catalog](/docs/reference/events) for the stable names.
+karcarthy supplies the run and agent lineage. Conflicting lineage fields in the
+application event are ignored.
 
-Streaming deltas are delivered live through `:on-event` but are not retained
-in the completed Run. This keeps token-by-token output from growing the Run
-map without bound. Event handlers are best-effort observers: an exception in
-one does not fail the Agent Run.
+## Retained and live-only events
+
+`k/events` returns retained lifecycle and application events. Model text,
+tool-call, and raw stream deltas are sent through `:on-event` but are not kept
+in the completed run.
+
+Event handlers are best-effort observers. An exception in a handler does not
+fail the agent.

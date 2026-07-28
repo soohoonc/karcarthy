@@ -21,19 +21,21 @@
 
 (def eval
   "Deferred eval Tool capability. Add it to an Agent's `:tools` to let that
-  Agent evaluate one Clojure expression and dynamically compose Agents."
+  Agent author and evaluate Clojure programs during a Run."
   {:karcarthy/type :eval-tool
    :name "eval"})
 
 (def ^:private description-template
-  "Evaluate one Clojure expression. The expression may create and run Agents. Its
-value is returned to you.
+  "Author and evaluate one Clojure expression for the current task. The
+expression may construct Agents and Tools, coordinate them with ordinary Clojure,
+and run Agents. Its value is returned to you.
 
 ## When to use
 
-Use `eval` when ordinary Clojure composition materially helps: create a focused
-Agent, run several Agents concurrently, transform their results, or choose the
-next step from data. Call a directly available Tool or Agent when no composition
+Use `eval` when the task benefits from a runtime-authored program: define
+task-specific Agents or Tools, run several Agents concurrently, transform their
+results, or choose the next step from data. This is ordinary Clojure, not a
+workflow DSL. Call a directly available Tool or Agent when no authored program
 is needed.
 
 ## Tool input
@@ -41,7 +43,7 @@ is needed.
 - `code` is exactly one complete Clojure expression, without Markdown fences.
 - The current Agent input is already bound to the symbol `input`.
 
-## Creating an Agent
+## Authoring Agents and Tools
 
 `agent` is a macro that accepts one configuration map. The map requires
 `:name`, `:model`, and `:instructions`; `:input-schema` and `:output-schema`
@@ -49,8 +51,11 @@ default to `string?`. `(run! agent-value agent-input)` runs the resulting Agent
 and returns a Run map.
 
 Agents created here do not receive eval automatically. Add `:tools [eval]` only
-when a child Agent should also be able to evaluate Clojure and orchestrate
-dynamically.
+when a child Agent should also be able to author and evaluate Clojure.
+
+`tool` accepts a configuration map, one `[input]` binding vector, and a Clojure
+body. A Tool authored here is the same Tool value as one written in application
+source and may be included in a constructed Agent's `:tools`.
 
 Use `let`, `if`, `mapv`, `future`, `deref`, `agent`, and `run!` normally. A
 `run!` call returns a Run map; `(output run)` returns its output or throws when
@@ -63,20 +68,31 @@ including calls in `future`, participates in that same run and shares limits,
 usage, cancellation, approvals, events, context, and run id. Each Agent starts
 with only its explicit input and a fresh model conversation.
 
-The expression runs in this JVM. It does not start a Clojure subprocess. Model
-transports and process-backed Tools may still perform their normal external I/O.
+The expression is full-trust JVM Clojure, not a sandbox. It does not start a
+Clojure subprocess. Model transports and process-backed Tools may still perform
+their normal external I/O.
 
-## Example: parallel reviewers
+## Example: security review with verification
 
 ```clojure
-(let [reviewers (mapv (fn [[name instructions]]
-                        (agent {:name name
-                                :model \"MODEL_ID\"
-                                :instructions instructions}))
-                      [[\"correctness-reviewer\" \"Find concrete behavioral defects.\"]
-                       [\"concurrency-reviewer\" \"Check shared-state assumptions.\"]])
-      tasks (mapv #(future (run! % input)) reviewers)]
-  (mapv (comp output deref) tasks))
+(let [security-reviewer
+      (agent {:name \"security-reviewer\"
+              :model \"MODEL_ID\"
+              :instructions
+              \"Review authentication, authorization, and sensitive-data access.
+               Return only candidate vulnerabilities introduced by the patch.\"})
+      candidates (output (run! security-reviewer input))
+      verifier
+      (agent {:name \"verifier\"
+              :model \"MODEL_ID\"
+              :instructions
+              \"Independently disprove or confirm each candidate against the
+               supplied requirements and code.\"})]
+  {:candidates candidates
+   :verification
+   (output
+    (run! verifier
+          (str input \"\\n\\nCandidate findings:\\n\" candidates)))})
 ```
 
 Use the model configuration listed below in place of the example's model value.

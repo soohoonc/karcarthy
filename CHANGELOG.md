@@ -10,8 +10,8 @@ All notable changes are documented here, following
 
 - A native Clojure Agent/Tool harness with dynamic instructions, local context,
   optional Sessions, approvals, limits, cancellation, and events.
-- Homoiconic `eval`: every model Agent can evaluate one ordinary Clojure
-  expression that may create and run Agents.
+- Explicit homoiconic `eval`: an Agent may opt into a Tool that evaluates one
+  ordinary Clojure expression per call and may create and run Agents.
 - A complete, dynamically generated `eval` Tool manual covering the Clojure
   expression boundary, use cases, information boundary, execution behavior,
   and the model, Tool, and Agent symbols actually available.
@@ -31,7 +31,7 @@ All notable changes are documented here, following
   session-provided stdio MCP servers, selectable model configuration, and
   aggregate prompt usage compatible with Harbor's ACP-to-ATIF conversion.
 - An explicit paid live test that asks GPT-5.6 to author and run a concurrent
-  Clojure workflow.
+  Clojure program.
 - A paid Agent test that inspects and edits a temporary directory.
 - A minimal REPL chat example built from an Agent, `run!`, and a Session.
 - Event-driven Run monitors that print current Agent state directly at the REPL
@@ -40,7 +40,7 @@ All notable changes are documented here, following
   exposes the underlying Clojure data explicitly.
 - A live Coding Agent that inspects repositories with local Tools, chooses its
   own strategy, edits code, and verifies the result.
-- A packaged Harbor evaluation that runs the fixed Coding Agent on an isolated
+- A packaged Harbor evaluation that runs the fixed root Coding Agent on an isolated
   repository task and records its verifier reward and ATIF trajectory.
 - A concise `session` constructor for process-local conversation history.
 - A concise `output` accessor that returns completed Run output and throws with
@@ -72,9 +72,9 @@ All notable changes are documented here, following
 - Runnable examples now live in task-scoped folders outside library source and Harbor
   builds a separate application artifact; library artifacts contain only the
   harness and production CLI.
-- Documentation now introduces the harness from ordinary Agent use outward,
-  separates prompt input from local context and Tool schemas, and presents the
-  homoiconic motivation after the programming model.
+- Documentation now leads with the homoiconic thesis, then presents the
+  familiar model-and-Tool loop as its smallest case while keeping prompt input,
+  local context, and Tool schemas distinct.
 - The harness now owns the model/tool loop; provider transports only translate
   model I/O.
 - Orchestration is normal Clojure control flow plus `run!`, rather than a
