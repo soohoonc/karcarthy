@@ -1,9 +1,9 @@
 ---
 title: Context
-description: Pass local dependencies through a Run without adding them to model input.
+description: Pass local dependencies through a run without adding them to model input.
 ---
 
-Context is local dependency injection for a Run. Pass it to `run!`:
+Context is local dependency injection for a run. Pass it to `run!`:
 
 ```clojure
 (k/run! support "Look up account 123."
@@ -11,7 +11,7 @@ Context is local dependency injection for a Run. Pass it to `run!`:
                    :account-id "123"}})
 ```
 
-Tools and evaluated Clojure read the current value with `(k/context)`:
+Tools and evaluated Clojure read it with `(k/context)`:
 
 ```clojure
 (k/deftool lookup-account
@@ -26,29 +26,28 @@ Tools and evaluated Clojure read the current value with `(k/context)`:
 
 Context is never sent to the model automatically. It becomes model-visible
 only when application code deliberately includes it in instructions, messages,
-Tool output, or Agent input.
+tool output, or agent input.
 
-## Context, input, and Sessions
+## Context, input, and sessions
 
 | Value | Purpose | Model-visible automatically? | Lifetime |
 | --- | --- | --- | --- |
-| Agent input | The task given to an Agent | Yes | One Agent call |
-| Context | Local dependencies and request metadata | No | One Run |
-| Session | Model conversation history | Yes, to the first Agent | Across Runs when reused |
+| agent input | The task given to an agent | Yes | One agent call |
+| Context | Local dependencies and request metadata | No | One run |
+| Session | Model conversation history | Yes, to the first agent | Across runs when reused |
 
 Context is not a workflow state store or conversation history.
 
 ## Validate context
 
-Use `:context-schema` on an Agent to check the local value before that Agent
+Use `:context-schema` on an agent to check the local value before that agent
 runs:
 
 ```clojure
 (k/defagent account-agent
   {:model "gpt-5.6"
    :instructions "Answer questions about the current account."
-   :context-schema map?
-   :output-schema string?})
+   :context-schema map?})
 ```
 
 A mismatch produces a structured schema failure.
@@ -56,7 +55,7 @@ A mismatch produces a structured schema failure.
 ## Dynamic configuration
 
 `:model`, `:instructions`, `:tools`, and `:agents` may be functions of the
-current Run context:
+current run context:
 
 ```clojure
 {:instructions
@@ -67,11 +66,11 @@ current Run context:
    (tools-for-plan (:plan context)))}
 ```
 
-Guardrails and approval-policy functions receive the same Run-context map plus
-the value they are checking. The map contains the Run, Agent, parent, depth,
-local context, active limits, current usage, and Agent value.
+Guardrails and approval-policy functions receive the same run-context map plus
+the value they are checking. The map contains the run, agent, parent, depth,
+local context, active limits, current usage, and agent value.
 
-## Participating Agent calls
+## Participating agent calls
 
 A participating `run!` inherits the active context unless it provides
 `:context` explicitly:
@@ -81,8 +80,8 @@ A participating `run!` inherits the active context unless it provides
         {:context (assoc (k/context) :verification? true)})
 ```
 
-The override applies to that Agent call and its descendants. It does not mutate
+The override applies to that agent call and its descendants. It does not mutate
 the parent value.
 
-See [Sessions](/docs/sessions) for conversation history and [Tools](/docs/tools)
-for using context inside Tool functions.
+See [sessions](/docs/sessions) for conversation history and [tools](/docs/tools)
+for using context inside tool functions.

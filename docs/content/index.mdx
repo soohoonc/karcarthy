@@ -1,78 +1,135 @@
 ---
 title: Overview
-description: A Clojure agent library where Agents can write Clojure that runs Agents.
+description: An agent harness that authors itself.
 ---
 
-> **Agents write Clojure that runs Agents.**
+> **Agents as code.**
 
-karcarthy is a small, homoiconic agent library for Clojure. It owns the model
-and Tool loop while leaving orchestration in the host language.
+Karcarthy is an experimental agent harness written in Clojure to make use of
+the Lisp based language's homoiconicity (code as data).
 
-An Agent can answer directly, call a Tool, or delegate to an available Agent.
-When its `:tools` includes `k/eval`, it can also evaluate one ordinary Clojure
-expression that creates and runs the Agents its task needs. There is no workflow
-graph or second orchestration language between generated code and Clojure.
+When an agent is supplied the `k/eval` tool, the model can submit a Clojure expression
+to the same process running the agent and evaluate it dynamically.
+This expression can be another agents or any arbitrary Clojure code for that matter.
+There is no separate workflow system or process running ...
 
-## Run one Agent
+## Run one agent
+
+Use the `defagent` macro to define an agent, then execute it with `run!`. For
+example, we can define one reviewer for a pull request:
 
 ```clojure
 (require '[karcarthy :as k])
 
 (k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Review the proposed change. Report only concrete defects."
-   :input-schema string?
-   :output-schema string?})
+   :instructions
+   "Review this pull request. Report concrete defects introduced by the patch
+    and explain the evidence for each finding."})
 
-(def result
-  (k/run! reviewer
-          "Contract: count may be zero. Change: average returns total / count."))
+(def review-request
+  (str
+   "Review PR #87: add a customer export endpoint\n\n"
+   "Requirement: only users with the `:admin` role may export customer data.
+    Other authenticated users must receive 403.\n\n"
+   "Existing behavior: `auth/require-user` authenticates the request and returns
+    the user. It does not check roles.\n\n"
+   "```diff\n"
+   "diff --git a/src/app/routes.clj b/src/app/routes.clj\n"
+   "--- a/src/app/routes.clj\n"
+   "+++ b/src/app/routes.clj\n"
+   "@@ -18,0 +19,5 @@\n"
+   "+\n"
+   "+(defn export-customers [request]\n"
+   "+  (let [user (auth/require-user request)]\n"
+   "+    {:status 200\n"
+   "+     :body (csv/encode (customers/all))}))\n"
+   "```"))
 
-(:status result) ;=> :completed
-(:output result) ;=> "..."
+(k/output (k/run! reviewer review-request))
 ```
 
-Agents and Tools are flat Clojure data. `run!` returns a Run map with status,
-output, usage, events, and a structured error when execution fails.
+This is one agent invocation. No other agents are created or called. `run!`
+returns a map with the status, output, usage, events, and any error. `output`
+returns the completed output:
 
-## Orchestrate with Clojure
+```text
+Require the admin role before exporting customers — src/app/routes.clj:21
 
-When the application already knows the participants, write an ordinary
-function:
+`auth/require-user` rejects anonymous requests but accepts every authenticated
+user. A non-admin user can therefore reach `customers/all` and receive the full
+export. Check the `:admin` role before reading customer data and return 403 when
+it is absent.
+```
+
+## Let the agent decide
+
+Now give the same reviewer `k/eval` (with slight adjustment to the prompt):
 
 ```clojure
-(->> [correctness-reviewer concurrency-reviewer]
-     (mapv #(future (k/run! % change)))
-     (mapv (comp k/output deref)))
+(k/defagent reviewer
+  {:model "gpt-5.6"
+   :instructions
+   "Review this pull request. After reading the patch, author the reviewer
+    appropriate for the affected risk surface with eval.
+    Pass its candidate findings to an independent verifier. Publish only
+    verified defects introduced by the patch."
+   :tools [k/eval]})
+
+(k/output (k/run! reviewer review-request))
 ```
 
-When the right participants depend on the task, an Agent can generate the same
-kind of Clojure after it reads the input:
+`k/eval` becomes a model-facing tool whose description explains the available
+Clojure API. It tells the model how to construct an agent with `agent`, run it
+with `run!`, extract its result with `output`, and use the original request
+through the bound symbol `input`. For our reviewer, it could produce something like:
 
 ```clojure
-(let [reviewer
-      (agent {:name "concurrency-reviewer"
-              :model "gpt-5.6"
-              :instructions "Check whether two workers can claim one job."
-              :input-schema string?
-              :output-schema string?})]
-  (output (run! reviewer input)))
+(let [security-reviewer
+      (agent
+       {:name "security-reviewer"
+        :model "gpt-5.6"
+        :instructions
+        "Review only the security consequences of this patch. Trace
+         authentication, authorization, and sensitive-data access. Return only
+         candidate vulnerabilities introduced by the patch, with evidence."})
+      candidates (output (run! security-reviewer input))
+      verifier
+      (agent
+       {:name "verifier"
+        :model "gpt-5.6"
+        :instructions
+        "Try to disprove each candidate finding against the supplied
+         requirements and code. Return CONFIRMED, REJECTED, or NEEDS CONTEXT
+         for each one, with the exact evidence."})]
+  {:candidates candidates
+   :verification
+   (output
+    (run! verifier
+          (str input "\n\nCandidate findings:\n" candidates)))})
 ```
 
-That expression may use normal control flow, functions, macros, concurrency,
-recursion, Agent construction, Tool construction, and `run!`. An Agent it
-creates receives eval only when its own `:tools` includes `eval`.
+Then the harness evaluates that expression in the same process:
 
-## One Run follows the code
+```text
+run! reviewer
+└─ reviewer reads the patch
+   └─ model calls eval with one Clojure expression
+      ├─ construct and run security-reviewer
+      └─ construct and run verifier
+   └─ eval returns both results to reviewer
+└─ reviewer writes the final review
+```
 
-The first `run!` establishes a Run. Calls in its dynamic extent—including calls
-inside `future`—share the Run ID, limits, usage, events, cancellation,
-approvals, context, and executor. Each participating Agent still starts a fresh
-model conversation with only its explicit input.
+Each agent shares the limits, usage, events, cancellation, and context
+of the top level `run`. Each constructed agent
+acts as a subagent with whatever the "parent" agent decides to pass in.
+With this we have a simple agent harness capable of authoring itself.
+
+> These docs were drafted mostly by LLMs and are being rewritten by hand.
 
 <Cards>
-  <Card title="Why Clojure?" description="Understand the library's central design choice." href="/docs/why-clojure" />
-  <Card title="Quickstart" description="Install karcarthy and run one Agent." href="/docs/quickstart" />
-  <Card title="Agent orchestration" description="Delegate, compose, and create Agents dynamically." href="/docs/agent-orchestration" />
-  <Card title="Code review" description="Run the recursive orchestration example." href="/docs/guides/review" />
+  <Card title="Quickstart" description="Install karcarthy and run one agent." href="/docs/quickstart" />
+  <Card title="Agent orchestration" description="Compare predefined, application-authored, and model-authored programs." href="/docs/agent-orchestration" />
+  <Card title="Code review" description="Run the reviewer, security reviewer, and verifier example." href="/docs/guides/review" />
 </Cards>

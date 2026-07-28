@@ -42,10 +42,82 @@
   [{:keys [text]}]
   (str "static-tool:" text))
 
-(defn- feature-matrix-agent []
-  (let [static-specialist
+(defn- predefined-support-router []
+  (let [billing-agent
         (k/agent
-         {:name "static-specialist"
+         {:name "billing-agent"
+          :description
+          "Handle duplicate charges, refunds, invoices, and payment questions."
+          :model (live-model)
+          :instructions
+          "Return exactly BILLING-AGENT-HANDLED."
+          :input-schema string?
+          :output-schema string?
+          :max-turns 2})
+        incident-responder
+        (k/agent
+         {:name "incident-responder"
+          :description
+          "Handle errors, outages, broken integrations, and product failures."
+          :model (live-model)
+          :instructions
+          "Return exactly INCIDENT-RESPONDER-HANDLED."
+          :input-schema string?
+          :output-schema string?
+          :max-turns 2})]
+    (k/agent
+     {:name "predefined-support-router"
+      :model (live-model)
+      :instructions
+      (str
+       "Resolve each support request by delegating it to exactly one available "
+       "agent whose description matches the issue. Return that agent's answer "
+       "exactly.")
+      :agents [billing-agent incident-responder]
+      :input-schema string?
+      :output-schema string?
+      :max-turns 4})))
+
+(defn- predefined-review-board []
+  (let [availability-reviewer
+        (k/agent
+         {:name "availability-reviewer"
+          :description
+          "Assess reliability, migration, rollback, and operational continuity."
+          :model (live-model)
+          :instructions
+          "Return exactly AVAILABILITY-REVIEW-COMPLETE."
+          :input-schema string?
+          :output-schema string?
+          :max-turns 2})
+        security-reviewer
+        (k/agent
+         {:name "security-reviewer"
+          :description
+          "Assess access control, sensitive data, secrets, and trust boundaries."
+          :model (live-model)
+          :instructions
+          "Return exactly SECURITY-REVIEW-COMPLETE."
+          :input-schema string?
+          :output-schema string?
+          :max-turns 2})]
+    (k/agent
+     {:name "predefined-review-board"
+      :model (live-model)
+      :instructions
+      (str
+       "Evaluate every infrastructure change by consulting the availability "
+       "reviewer and security reviewer. Return a concise recommendation based "
+       "on both reviews.")
+      :agents [availability-reviewer security-reviewer]
+      :input-schema string?
+      :output-schema string?
+      :max-turns 5})))
+
+(defn- feature-matrix-agent []
+  (let [static-agent
+        (k/agent
+         {:name "static-agent"
           :description "Return the fixed marker requested by this live test."
           :model (live-model)
           :instructions "Return exactly static-agent-ok. Do not call a Tool."
@@ -61,13 +133,13 @@
          ":required [\"text\"] :additionalProperties false} "
          ":output-schema string?} "
          "[value] (str \"dynamic-tool:\" (:text value))) "
-         "specialist (agent {:name \"dynamic-specialist\" "
+         "worker (agent {:name \"dynamic-worker\" "
          ":description \"Exercise a Tool created inside eval.\" "
          ":model " (pr-str (live-model)) " "
          ":instructions \"Call dynamic-stamp exactly once with text dynamic-agent. "
          "Return the Tool result exactly. Do not call eval.\" "
          ":tools [stamp] :input-schema string? :output-schema string? :max-turns 3})] "
-         "(:output (run! specialist input)))")]
+         "(:output (run! worker input)))")]
     (k/agent
      {:name "live-feature-matrix"
       :model (live-model)
@@ -75,15 +147,59 @@
       (str
        "Exercise every requested harness feature before answering. "
        "First call static-stamp with text static. "
-       "Then call static-specialist with input static. "
+       "Then call static-agent with input static. "
        "Then call eval exactly once with this exact code: "
        dynamic-code " "
        "Only after all three calls succeed, return exactly LIVE-FEATURES-OK.")
       :tools [static-stamp k/eval]
-      :agents [static-specialist]
+      :agents [static-agent]
       :input-schema string?
       :output-schema string?
       :max-turns 8})))
+
+(defn- routing-prompt-agent []
+  (k/agent
+   {:name "support-router"
+    :model (live-model)
+    :instructions
+    (str
+     "Resolve customer support requests. Delegate each request to exactly one "
+     "newly configured agent whose role matches the issue. Return that agent's "
+     "answer without adding unsupported facts.")
+    :tools [k/eval]
+    :input-schema string?
+    :output-schema string?
+    :max-turns 4}))
+
+(defn- parallel-prompt-agent []
+  (k/agent
+   {:name "comparison-coordinator"
+    :model (live-model)
+    :instructions
+    (str
+     "Assess engineering proposals by obtaining one independent analysis of the "
+     "benefits and another independent analysis of the risks. Perform independent "
+     "work concurrently when possible. Return a concise response with Benefits, "
+     "Risks, and Recommendation sections.")
+    :tools [k/eval]
+    :input-schema string?
+    :output-schema string?
+    :max-turns 4}))
+
+(defn- authored-tool-prompt-agent []
+  (k/agent
+   {:name "capability-author"
+    :model (live-model)
+    :instructions
+    (str
+     "Analyze text by delegating the work to a focused analyst. When an answer "
+     "depends on exact computation, give the analyst a task-specific "
+     "deterministic tool instead of asking it to estimate. Return the calculated "
+     "result and a concise conclusion.")
+    :tools [k/eval]
+    :input-schema string?
+    :output-schema string?
+    :max-turns 4}))
 
 (defn- temp-directory []
   (Files/createTempDirectory "karcarthy-live-coding-"
@@ -104,6 +220,68 @@
     (let [run (k/run! (basic/basic-agent) "Reply with only the word ready.")]
       (is (= :completed (:status run)) (pr-str (:error run)))
       (is (= "ready" (some-> (:output run) str/trim str/lower-case))))))
+
+(deftest model-selects-one-predefined-agent
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [run (k/run! (predefined-support-router)
+                      "I was charged twice for invoice INV-42."
+                      {:limits {:model-calls 4
+                                :depth 1
+                                :concurrency 4
+                                :deadline-ms 300000}})
+          agent-names (->> (:events run)
+                           (filter #(= :agent/started (:type %)))
+                           (mapv :agent))
+          tool-names (->> (:events run)
+                          (filter #(= :tool/started (:type %)))
+                          (mapv :tool))]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (= "BILLING-AGENT-HANDLED" (some-> (:output run) str/trim)))
+      (is (= ["predefined-support-router" "billing-agent"] agent-names)
+          (pr-str agent-names))
+      (is (= ["billing-agent"] tool-names) (pr-str tool-names))
+      (is (zero? (get-in run [:usage :evals]))))))
+
+(deftest model-consults-multiple-predefined-agents
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [run (k/run! (predefined-review-board)
+                      (str "Move the customer database to a new distributed SQL "
+                           "service before the holiday traffic peak.")
+                      {:limits {:model-calls 8
+                                :depth 1
+                                :concurrency 4
+                                :deadline-ms 300000}})
+          completed-outputs (->> (:events run)
+                                 (filter #(= :agent/completed (:type %)))
+                                 (map (juxt :agent :output))
+                                 (into {}))
+          agent-names (->> (:events run)
+                           (filter #(= :agent/started (:type %)))
+                           (map :agent)
+                           set)
+          tool-names (->> (:events run)
+                          (filter #(= :tool/started (:type %)))
+                          (map :tool)
+                          set)]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (= "AVAILABILITY-REVIEW-COMPLETE"
+             (get completed-outputs "availability-reviewer"))
+          (pr-str completed-outputs))
+      (is (= "SECURITY-REVIEW-COMPLETE"
+             (get completed-outputs "security-reviewer"))
+          (pr-str completed-outputs))
+      (is (= #{"predefined-review-board"
+               "availability-reviewer"
+               "security-reviewer"}
+             agent-names)
+          (pr-str agent-names))
+      (is (= #{"availability-reviewer" "security-reviewer"} tool-names)
+          (pr-str tool-names))
+      (is (zero? (get-in run [:usage :evals]))))))
 
 (deftest static-tools-static-agents-and-dynamic-eval-work-together
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
@@ -130,15 +308,115 @@
       (is (= :completed (:status run)) (pr-str (:error run)))
       (is (= "LIVE-FEATURES-OK" (some-> (:output run) str/trim)))
       (is (every? tool-names
-                  ["static-stamp" "static-specialist" "eval" "dynamic-stamp"])
+                  ["static-stamp" "static-agent" "eval" "dynamic-stamp"])
           (pr-str tool-names))
       (is (every? agent-names
-                  ["live-feature-matrix" "static-specialist"
-                   "dynamic-specialist"])
+                  ["live-feature-matrix" "static-agent"
+                   "dynamic-worker"])
           (pr-str agent-names))
       (is (= #{:eval/started :eval/expanded :eval/completed} eval-types)
           (pr-str eval-types))
       (is (= 1 (get-in run [:usage :evals]))))))
+
+(deftest eval-description-teaches-input-based-agent-selection
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [run (k/run! (routing-prompt-agent)
+                      (str "I was charged twice for invoice INV-42. Identify "
+                           "which support role should handle this and what "
+                           "information they need next.")
+                      {:limits {:model-calls 4
+                                :evals 1
+                                :depth 1
+                                :concurrency 4
+                                :deadline-ms 300000}})
+          eval-code (->> (:events run)
+                         (filter #(= :eval/started (:type %)))
+                         first
+                         :code)
+          agent-names (->> (:events run)
+                           (filter #(= :agent/started (:type %)))
+                           (mapv :agent))]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (not (str/blank? (:output run))) (pr-str (:output run)))
+      (is (= 1 (get-in run [:usage :evals])))
+      (is (and (string? eval-code)
+               (str/includes? eval-code "(agent")
+               (str/includes? eval-code "run!"))
+          (pr-str eval-code))
+      (is (= 2 (count agent-names))
+          (pr-str agent-names)))))
+
+(deftest eval-description-teaches-parallel-agent-calls
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [run (k/run! (parallel-prompt-agent)
+                      (str "Assess moving the primary customer database from "
+                           "PostgreSQL to a new distributed SQL service before "
+                           "the holiday traffic peak.")
+                      {:limits {:model-calls 5
+                                :evals 1
+                                :depth 1
+                                :concurrency 6
+                                :deadline-ms 300000}})
+          eval-code (->> (:events run)
+                         (filter #(= :eval/started (:type %)))
+                         first
+                         :code)
+          agent-names (->> (:events run)
+                           (filter #(= :agent/started (:type %)))
+                           (map :agent)
+                           set)]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (str/includes? (str/lower-case (or (:output run) "")) "benefit")
+          (pr-str (:output run)))
+      (is (str/includes? (str/lower-case (or (:output run) "")) "risk")
+          (pr-str (:output run)))
+      (is (= 1 (get-in run [:usage :evals])))
+      (is (and (string? eval-code) (str/includes? eval-code "future"))
+          (pr-str eval-code))
+      (is (and (string? eval-code) (str/includes? eval-code "deref"))
+          (pr-str eval-code))
+      (is (= 3 (count agent-names))
+          (pr-str agent-names)))))
+
+(deftest eval-description-teaches-tool-and-agent-authoring
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [run (k/run! (authored-tool-prompt-agent)
+                      (str "Count the whitespace-separated words in each phrase "
+                           "and say which is longer: \"red green blue\" and "
+                           "\"one two three four\".")
+                      {:limits {:model-calls 5
+                                :evals 1
+                                :depth 1
+                                :concurrency 4
+                                :deadline-ms 300000}})
+          eval-code (->> (:events run)
+                         (filter #(= :eval/started (:type %)))
+                         first
+                         :code)
+          agent-names (->> (:events run)
+                           (filter #(= :agent/started (:type %)))
+                           (mapv :agent))
+          tool-names (->> (:events run)
+                          (filter #(= :tool/started (:type %)))
+                          (mapv :tool))]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (str/includes? (or (:output run) "") "3") (pr-str (:output run)))
+      (is (str/includes? (or (:output run) "") "4") (pr-str (:output run)))
+      (is (= 1 (get-in run [:usage :evals])))
+      (is (and (string? eval-code)
+               (str/includes? eval-code "(tool")
+               (str/includes? eval-code "(agent"))
+          (pr-str eval-code))
+      (is (= 2 (count agent-names))
+          (pr-str agent-names))
+      (is (some #(not= "eval" %) tool-names)
+          (pr-str tool-names)))))
 
 (deftest review-example-creates-reviewers-and-a-nested-verifier
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")

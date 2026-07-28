@@ -1,27 +1,27 @@
 ---
 title: Running agents
-description: Execute an Agent and control its result, usage, limits, and cancellation.
+description: Execute an agent and control its result, usage, limits, and cancellation.
 ---
 
-`run!` executes an Agent and waits for it to finish:
+`run!` executes an agent and waits for it to finish:
 
 ```clojure
-(def result (k/run! researcher "What changed in Java?"))
+(def result (k/run! reviewer review-request))
 
 (select-keys result [:status :output :usage :error])
 ```
 
-A Run is `:completed`, `:failed`, or `:cancelled`. Check `:status` before using
+A run is `:completed`, `:failed`, or `:cancelled`. Check `:status` before using
 `:output`, or call `output` when failure should throw:
 
 ```clojure
 (k/output result)
 ```
 
-`output` returns the value of a completed Run. For a failed or cancelled Run,
-it throws `ExceptionInfo` containing the complete Run at `(:run (ex-data e))`.
+`output` returns the value of a completed run. For a failed or cancelled run,
+it throws `ExceptionInfo` containing the complete run at `(:run (ex-data e))`.
 
-## Run options
+## Options
 
 ```clojure
 (k/run! agent input
@@ -35,30 +35,30 @@ it throws `ExceptionInfo` containing the complete Run at `(:run (ex-data e))`.
 
 | Option | Purpose |
 | --- | --- |
-| `:context` | Local dependencies available to configuration, guardrails, Tools, and evaluated code |
-| `:session` | Conversation history for the first Agent |
-| `:limits` | Shared Run budgets |
+| `:context` | Local dependencies available to configuration, guardrails, tools, and evaluated code |
+| `:session` | Conversation history for the first agent |
+| `:limits` | Shared run budgets |
 | `:on-event` | Live event observer |
-| `:approval` | Tool approval handler |
+| `:approval` | Tool-call approval handler |
 | `:cancel` | Boolean, function, atom, or other dereferenceable cancellation signal |
 | `:model-transports` | Custom normalized model transports |
 
-Invalid Agent, Tool, or Run configuration throws before execution. Failures
-during model calls, Tool calls, validation, evaluation, budgets, deadlines, or
-cancellation return a structured failed or cancelled Run.
+Invalid agent, tool, or run configuration throws before execution. Failures
+during model calls, tool calls, validation, evaluation, budgets, deadlines, or
+cancellation return a structured failed or cancelled run.
 
-## Run scope
+## One run
 
-The first `run!` establishes a Run. Calls within its dynamic extent participate
-in that Run, including calls inside Clojure futures. They share limits, usage,
-events, cancellation, approvals, context, executor, and Run ID.
+The first `run!` establishes a run. Calls within its dynamic extent participate
+in that run, including calls inside Clojure futures. They share limits, usage,
+events, cancellation, approvals, context, executor, and run ID.
 
-Each participating Agent starts a fresh model conversation with its explicit
-input. Only the first Agent reads and writes the optional Session.
+Each participating agent starts a fresh model conversation with its explicit
+input. Only the first agent reads and writes the optional session.
 
 ## Usage and limits
 
-The Run's `:usage` reports model calls, input and output tokens when provided by
+The run's `:usage` reports model calls, input and output tokens when provided by
 the transport, eval attempts, and duration.
 
 ```clojure
@@ -76,25 +76,25 @@ the transport, eval attempts, and duration.
 | --- | --- |
 | `:model-calls` | Attempted model turns |
 | `:input-tokens` / `:output-tokens` | Reported model usage |
-| `:depth` | Participating Agent call depth |
-| `:concurrency` | Concurrent Tool and participating Agent work |
+| `:depth` | Participating agent call depth |
+| `:concurrency` | Concurrent tool and participating agent work |
 | `:evals` | Eval attempts, including failed attempts |
 | `:deadline-ms` | Wall-clock time from the first `run!` |
 
-Agent-specific limits and participating `run!` calls may narrow the active
+Agent-specific limits and nested `run!` calls may narrow the active
 limits; they cannot widen them.
 
 ## Cancellation
 
-Cancellation is checked while waiting for model, Tool, and participating Agent
-work. It interrupts in-flight Java futures and produces a cancelled Run with
+Cancellation is checked while waiting for model, tool, and participating agent
+work. It interrupts in-flight Java futures and produces a cancelled run with
 its lifecycle events retained.
 
-Third-party transports and Tools should respond to thread interruption and
-close their own resources. Built-in process Tools terminate their child
+Third-party transports and tools should respond to thread interruption and
+close their own resources. Built-in process tools terminate their child
 processes.
 
-## Observe a Run
+## Observe a run
 
 Pass an event handler or monitor through `:on-event`:
 
@@ -103,5 +103,5 @@ Pass an event handler or monitor through `:on-event`:
 (def result (k/run! agent input {:on-event live}))
 ```
 
-See [Events and monitoring](/docs/events) for streaming events and Run trees,
-and [Run data](/docs/reference/data) for the complete result shape.
+See [events and monitoring](/docs/events) for streaming events and run trees,
+and [run data](/docs/reference/data) for the complete result shape.

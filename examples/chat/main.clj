@@ -6,8 +6,7 @@
   (k/agent
    {:name "chat-assistant"
     :model "gpt-5.6"
-    :instructions "Be helpful and concise."
-    :output-schema string?}))
+    :instructions "Be helpful and concise."}))
 
 (def session (k/session))
 (def last-run (atom nil))

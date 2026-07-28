@@ -15,83 +15,145 @@
   {:type "object"
    :properties
    {"code" {:type "string"
-            :description "Exactly one complete Clojure expression to evaluate."}}
+            :description
+            "One complete, unfenced Clojure expression. `input` and the documented Karcarthy forms and values are already defined. The expression is evaluated as full-trust JVM Clojure, and its final value must be model-encodable data."}}
    :required ["code"]
    :additionalProperties false})
 
 (def eval
   "Deferred eval Tool capability. Add it to an Agent's `:tools` to let that
-  Agent evaluate one Clojure expression and dynamically compose Agents."
+  Agent author and evaluate Clojure programs during a Run."
   {:karcarthy/type :eval-tool
    :name "eval"})
 
 (def ^:private description-template
-  "Evaluate one Clojure expression. The expression may create and run Agents. Its
-value is returned to you.
+  "Write and evaluate exactly one Clojure expression. Return only the expression
+in `code`; do not use Markdown fences.
 
-## When to use
+Use this tool to write Clojure that creates agents or tools, calls agents, runs
+calls concurrently, transforms their outputs, or selects what to call based on
+intermediate results.
 
-Use `eval` when ordinary Clojure composition materially helps: create a focused
-Agent, run several Agents concurrently, transform their results, or choose the
-next step from data. Call a directly available Tool or Agent when no composition
-is needed.
+## Clojure evaluation
 
-## Tool input
+The expression is evaluated as full-trust JVM Clojure. `clojure.core` is
+referred, so you may use `let`, `do`, `if`, `case`, functions, macros, `mapv`,
+`future`, `deref`, `loop/recur`, namespace loading, and Java interop. Code
+available on the process classpath may be required and called. Reader evaluation
+is disabled while the expression is read. This is not a sandbox.
 
-- `code` is exactly one complete Clojure expression, without Markdown fences.
-- The current Agent input is already bound to the symbol `input`.
+The following names are already defined:
 
-## Creating an Agent
+- `input` — the exact input supplied to the agent calling this tool.
+- `agent` — constructs an agent value from a configuration map.
+- `tool` — constructs a tool value from a configuration map and Clojure body.
+- `run!` — calls an agent with an explicit input and returns a run map.
+- `output` — returns the output of a completed run or throws if it failed.
+- `context` — returns the local application context for the current agent call.
+- `definition` and `expansion` — return retained source information.
+- `eval` — the eval capability that may be placed in another agent's `:tools`.
 
-`agent` is a macro that accepts one configuration map. The map requires
-`:name`, `:model`, and `:instructions`; `:input-schema` and `:output-schema`
-default to `string?`. `(run! agent-value agent-input)` runs the resulting Agent
-and returns a Run map.
+## Creating and calling an agent
 
-Agents created here do not receive eval automatically. Add `:tools [eval]` only
-when a child Agent should also be able to evaluate Clojure and orchestrate
-dynamically.
-
-Use `let`, `if`, `mapv`, `future`, `deref`, `agent`, and `run!` normally. A
-`run!` call returns a Run map; `(output run)` returns its output or throws when
-the Run did not complete.
-
-## Run behavior
-
-The first `run!` establishes a run. Every `run!` called from this evaluation,
-including calls in `future`, participates in that same run and shares limits,
-usage, cancellation, approvals, events, context, and run id. Each Agent starts
-with only its explicit input and a fresh model conversation.
-
-The expression runs in this JVM. It does not start a Clojure subprocess. Model
-transports and process-backed Tools may still perform their normal external I/O.
-
-## Example: parallel reviewers
+Creating an agent does not call it. Call it explicitly with:
 
 ```clojure
-(let [reviewers (mapv (fn [[name instructions]]
-                        (agent {:name name
-                                :model \"MODEL_ID\"
-                                :instructions instructions}))
-                      [[\"correctness-reviewer\" \"Find concrete behavioral defects.\"]
-                       [\"concurrency-reviewer\" \"Check shared-state assumptions.\"]])
-      tasks (mapv #(future (run! % input)) reviewers)]
-  (mapv (comp output deref) tasks))
+(output (run! agent-value agent-input))
 ```
 
-Use the model configuration listed below in place of the example's model value.
+Create an agent with:
+
+```clojure
+(agent
+ {:name \"agent-name\"
+  :model MODEL_CONFIGURATION
+  :instructions \"Complete instructions for this agent.\"
+  :tools [tool-values]
+  :agents [agent-values]})
+```
+
+`:name`, `:model`, and `:instructions` are required. `:tools` and `:agents` are
+optional. `:input-schema` and `:output-schema` default to `string?`.
+
+Example:
+
+```clojure
+(let [analyst
+      (agent {:name \"analyst\"
+              :model MODEL_CONFIGURATION
+              :instructions
+              \"Inspect the supplied material and return only concrete findings.\"})]
+  (output (run! analyst input)))
+```
+
+Replace `MODEL_CONFIGURATION` with the exact Clojure value under
+`Available model configuration` below.
+
+An agent created by this expression does not receive `eval` automatically. Give
+it `:tools [eval]` only if that agent must also write and evaluate Clojure.
+
+## Creating a tool
+
+Create a tool with:
+
+```clojure
+(tool
+ {:name \"word-count\"
+  :description \"Count whitespace-separated words in text.\"
+  :input-schema
+  {:type \"object\"
+   :properties {\"text\" {:type \"string\"}}
+   :required [\"text\"]
+   :additionalProperties false}
+  :output-schema int?}
+ [{:keys [text]}]
+ (count (re-seq #\"\\S+\" text)))
+```
+
+A tool body receives exactly one input binding. Include a created or available
+tool in an agent's `:tools`; creating a tool does not call it directly. Use an
+object-shaped input schema for function tools sent to Responses-compatible
+models.
+
+## Calling agents concurrently
+
+Create each call inside `future` and dereference the futures:
+
+```clojure
+(let [first-call  (future (output (run! first-agent input)))
+      second-call (future (output (run! second-agent input)))]
+  [(deref first-call) (deref second-call)])
+```
+
+Every `run!` called by this expression belongs to the same run established by
+the original `run!`, including calls made inside `future`. They share limits,
+model and eval usage, cancellation, approvals, events, context, and run id. Each
+called agent receives only the input passed to `run!` and starts with an empty
+model conversation.
+
+## Returning a value
+
+The expression's final value must be `nil`, a string, number, boolean, keyword,
+symbol, map, sequence, or set composed of those values. Agent and tool values are
+returned as name summaries. Do not return functions, futures, Java objects, or
+run maps.
 
 ## Available model configuration
 
 {{MODEL_CONFIGURATION}}
 
-## Available Tools
+## Available tools
 
 {{AVAILABLE_TOOLS}}
 
-## Available Agents
+The listed values may be placed in a created agent's `:tools`.
+
+## Available agents
 
 {{AVAILABLE_AGENTS}}
+
+The listed values may be called with `run!` or placed in a created agent's
+`:agents`.
 ")
 
 (def ^:private reserved-symbols

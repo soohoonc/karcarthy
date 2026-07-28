@@ -1,5 +1,5 @@
 (ns example.review
-  "Live trace of a code-review orchestrator creating reviewers after reading a change."
+  "Live trace of a reviewer creating a security reviewer and verifier."
   (:require [clojure.string :as str]
             [karcarthy :as k]))
 
@@ -15,36 +15,34 @@
 
 (defn instructions []
   (str
-   "Act as the orchestrator for a code review. Read the proposed change before "
-   "deciding what expertise the review needs. Call eval exactly once. In one "
-   "ordinary Clojure expression, create two or three reviewer Agents with unique, "
-   "short kebab-case names ending in -reviewer. Each name must state one concrete "
-   "concern in familiar terms; avoid abstract labels such as semantics or invariants. "
-   "Choose the concerns from this change; do not use a fixed catalog of roles. "
-   "Configure every reviewer with "
-   ":model " (pr-str (model-config)) ", :input-schema string?, and "
-   ":output-schema string?. Give every reviewer the complete input. Require each "
-   "one to report only concrete defects introduced by the change, with severity, "
-   "file and line, a failure scenario, and a minimal fix; no style advice. "
-   "Choose the reviewer responsible for the riskiest behavioral claim and instruct "
-   "it to include :tools [eval] and call eval exactly once: it must create and run one Agent named "
-   "finding-verifier to challenge its strongest candidate finding, then include the "
-   "verdict in its report. Tell the other reviewers not to use eval. Run all top-level "
-   "reviewers exactly once and concurrently with future. Dereference their Run maps "
-   "and return their names, statuses, and outputs as model-safe data. After eval "
-   "returns, remove duplicates and write the final review as Markdown with `## "
-   "Findings` followed by findings ordered from P0 to P2, then `## Summary`. Every "
-   "finding must include the verifier verdict when one exists. If there are no "
-   "defects, say so explicitly. Do not call a reviewer again."))
+   "Act as the reviewer and final editor for a code review. Read the proposed "
+   "change before deciding what kind of review it needs. Call eval exactly once. In one ordinary "
+   "Clojure expression:\n"
+   "1. Create exactly one reviewer whose role matches the affected risk surface. "
+   "When the change touches authentication, authorization, untrusted input, "
+   "secrets, or sensitive data, name it security-reviewer and instruct it to "
+   "review those boundaries. The bundled customer-export change meets that "
+   "condition. Configure that reviewer with :model "
+   (pr-str (model-config))
+   ". Give it the complete input and require only candidate defects introduced "
+   "by the patch, with severity, file and line, a concrete failure or exploit "
+   "scenario, evidence, and a minimal fix. Run it exactly once.\n"
+   "2. Create one agent named verifier with the same model. Pass it the complete "
+   "input plus the review output. Instruct it to independently try to "
+   "disprove every candidate against the supplied requirements and code and return "
+   "CONFIRMED, REJECTED, or NEEDS CONTEXT with exact evidence. Run it exactly once.\n"
+   "3. Return both outputs as model-safe data.\n"
+   "After eval returns, write the final review as Markdown with `## Findings` "
+   "followed by verified findings ordered from P0 to P2, then `## Summary`. Omit "
+   "rejected or unsupported candidates. If there are no verified defects, say so "
+   "explicitly. Do not call either agent again."))
 
-(defn code-reviewer []
+(defn reviewer []
   (k/agent
-   {:name "code-reviewer"
+   {:name "reviewer"
     :model (model-config)
     :instructions (instructions)
     :tools [k/eval]
-    :input-schema string?
-    :output-schema string?
     :max-turns 5}))
 
 (defn credentials? []
@@ -55,7 +53,7 @@
   ([change]
    (run-review! change (k/monitor {:display :tree})))
   ([change monitor]
-   (k/run! (code-reviewer) change
+   (k/run! (reviewer) change
            {:on-event monitor
             :limits {:model-calls 12
                      :evals 2
@@ -65,29 +63,24 @@
 
 (def default-change
   (str
-   "Review target: PR #42 — claim due jobs in priority order\n\n"
-   "Contract:\n"
-   "- Only pending jobs may be claimed.\n"
-   "- Return at most `limit` jobs, highest priority first.\n"
-   "- Several workers may call this function concurrently; a job must be claimed once.\n\n"
-   "Storage behavior:\n"
-   "- `find` returns matching jobs in insertion order.\n"
-   "- `save` updates one job without locking the preceding read.\n\n"
+   "Review target: PR #87 — add a customer export endpoint\n\n"
+   "Requirement:\n"
+   "- Only users with the `:admin` role may export customer data.\n"
+   "- Other authenticated users must receive 403.\n\n"
+   "Existing behavior:\n"
+   "- `auth/require-user` authenticates the request and returns the user.\n"
+   "- It does not check roles or permissions.\n\n"
    "```diff\n"
-   "diff --git a/scheduler.py b/scheduler.py\n"
+   "diff --git a/src/app/routes.clj b/src/app/routes.clj\n"
    "index 2ad1c8b..7bc214e 100644\n"
-   "--- a/scheduler.py\n"
-   "+++ b/scheduler.py\n"
-   "@@ -8,3 +8,9 @@ def enqueue(store, job):\n"
-   "     store.save(job)\n"
+   "--- a/src/app/routes.clj\n"
+   "+++ b/src/app/routes.clj\n"
+   "@@ -18,0 +19,5 @@\n"
    "+\n"
-   "+def claim_due_jobs(store, now, limit=100):\n"
-   "+    jobs = store.find(run_at_lte=now)[:limit]\n"
-   "+    jobs.sort(key=lambda job: (-job.priority, job.run_at))\n"
-   "+    for job in jobs:\n"
-   "+        job.state = \"running\"\n"
-   "+        store.save(job)\n"
-   "+    return jobs\n"
+   "+(defn export-customers [request]\n"
+   "+  (let [user (auth/require-user request)]\n"
+   "+    {:status 200\n"
+   "+     :body (csv/encode (customers/all))}))\n"
    "```"))
 
 (defn -main [& words]

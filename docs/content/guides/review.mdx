@@ -1,62 +1,109 @@
 ---
-title: Code review
-description: Let a proposed change choose focused reviewers and verify a finding recursively.
+title: Build a code reviewer
+description: Let one reviewer create the review agent and verifier a patch needs.
 ---
 
-This example makes dynamic orchestration observable. One code-review Agent
-reads a proposed change, creates two or three relevant reviewers, and runs them
-concurrently. The reviewer responsible for the riskiest claim creates a nested
-verifier that tries to disprove its strongest finding.
+A useful code review has three responsibilities:
 
-The final answer is a conventional code review. The Run events retain the
-generated Clojure and the complete Agent tree that produced it.
+- The reviewer reads the requirements, diff, surrounding code, and tests. It
+  decides which risks deserve deeper review.
+- A reviewer chosen for the affected risk surface investigates it and returns
+  candidate defects with evidence.
+- A verifier tries to disprove each candidate against the code and
+  requirements.
 
-## Run the example
+Triage is a responsibility of the reviewer, not necessarily another agent. A
+candidate becomes a published finding only after verification.
 
-Set an OpenAI credential and run:
+## Define the reviewer
+
+This reviewer has repository tools and `eval`:
+
+```clojure
+(defn code-reviewer [repo]
+  (let [repo-tools
+        (->> (k/local-tools
+              {:cwd repo
+               :needs-approval {:read :never
+                                :search :never
+                                :bash :always}})
+             (filterv #(contains? #{"read" "search" "bash"} (:name %))))]
+    (k/agent
+     {:name "reviewer"
+      :model "gpt-5.6"
+      :instructions
+      "Review the current patch as a maintainer.
+
+       Read the repository guidance, diff, affected code, callers, and relevant
+       tests. Decide what kind of review the change needs and use eval to
+       author and run that reviewer. Pass its complete candidate report to a
+       separately authored verifier.
+
+       Publish only defects introduced by the patch that the verifier confirms.
+       For each finding, include severity, path and line, a concrete failure
+       scenario, evidence, and the smallest reasonable fix. Do not report style,
+       pre-existing problems, or speculation."
+      :tools (conj repo-tools k/eval)})))
+```
+
+The application supplies access to the repository and the review standard. It
+does not predefine a security reviewer or verifier.
+
+After reading an authorization-sensitive patch, the model can use eval to
+construct those agents. The eval tool description teaches it the `agent`,
+`run!`, `output`, and `input` bindings.
+
+Constructed agents do not inherit the reviewer's tools. If another reviewer needs
+repository access, the evaluated expression must give it the available tools
+explicitly.
+
+## Run the review
+
+```clojure
+(k/run! (code-reviewer "/workspace/project")
+        "Review the current working-tree diff."
+        {:approval approve-review-command
+         :on-event (k/monitor {:display :tree})})
+```
+
+The reviewer may run a narrow test when it helps prove or disprove a finding.
+The approval handler decides whether a proposed command may execute.
+
+## Run the bundled example
+
+The repository includes a smaller example that does not require another
+checkout:
 
 ```bash
-clojure -M:examples review
+OPENAI_API_KEY=... clojure -M:examples review
 ```
 
-The bundled input is deliberately small and self-contained. It states that a
-scheduler must:
-
-1. claim only pending jobs;
-2. choose the highest-priority jobs before applying the limit; and
-3. prevent two workers from claiming the same job.
-
-The diff violates all three requirements. These known defects make the example
-possible to evaluate without requiring another checkout or external Tools.
-
-## Read the output
-
-The terminal first displays a live Run tree. Reviewer names vary because the
-change determines the concerns, but the structure is explicit:
+Its input describes a customer export endpoint with this requirement:
 
 ```text
-Run run_7c2e9b… · running
-└─ code-reviewer
-   ├─ state-reviewer
-   ├─ ordering-reviewer
-   └─ concurrency-reviewer
-      └─ finding-verifier
+Only users with the :admin role may export customer data.
+Other authenticated users must receive 403.
 ```
 
-The command then prints `REVIEW`, followed by `Findings` and `Summary`. Each
-finding includes severity, file and line, a failure scenario, a minimal fix,
-and the verifier verdict when one exists.
+The patch calls `auth/require-user`, which authenticates the caller but does not
+check roles. The reviewer should recognize the authorization boundary, author a
+`security-reviewer`, and then author a `verifier`.
 
-Useful questions for this run are:
+```text
+run! reviewer
+└─ reviewer
+   └─ eval
+      ├─ security-reviewer
+      └─ verifier
+```
 
-- Did the final review identify each of the three known defects?
-- Did it report unsupported findings?
-- Did the nested verifier reject or strengthen its candidate?
-- How many Agent calls, model calls, tokens, and eval attempts were used?
+The security reviewer should identify the missing role check. The verifier
+should confirm it from the stated behavior and reject unsupported candidates.
+The reviewer then publishes the final finding.
 
-## Inspect the generated Clojure
+## Inspect what the model wrote
 
-Retain the Run at a REPL:
+At a REPL:
 
 ```clojure
 (require '[karcarthy :as k])
@@ -67,7 +114,7 @@ Retain the Run at a REPL:
    example.review/default-change))
 ```
 
-The generated expressions and macroexpansions are retained as events:
+The eval events retain the model-authored expression and its macroexpansion:
 
 ```clojure
 (->> (k/events result)
@@ -75,8 +122,7 @@ The generated expressions and macroexpansions are retained as events:
      (map #(select-keys % [:agent :depth :expression :expansion])))
 ```
 
-The first expression creates the top-level reviewers. The nested expression
-creates `finding-verifier`. Inspect the Agent lineage independently:
+Inspect the participating agents separately:
 
 ```clojure
 (->> (k/events result)
@@ -84,46 +130,20 @@ creates `finding-verifier`. Inspect the Agent lineage independently:
      (map (juxt :agent :parent-id :depth)))
 ```
 
-This distinguishes what the Agent generated from what the harness executed.
+The first query shows what the reviewer authored. The second shows what the
+harness ran.
 
-## Compare orchestration boundaries
+## Judge the result
 
-Managers, workers, parallelism, and traces are common across agent libraries.
-The relevant difference is what may be defined after the orchestrator reads the
-diff.
+For this example, check:
 
-| Library or pattern | Supplied by the application | Chosen at run time |
-| --- | --- | --- |
-| karcarthy | One code-review Agent with `k/eval` and the Clojure runtime | The Agent creates new Agent definitions and their coordination as retained Clojure; created Agents may explicitly include eval when recursion is useful |
-| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/multi_agent/) | Agents exposed as Tools or handoffs, plus optional Python orchestration | A manager chooses among exposed Agents; application code can control chaining and parallelism |
-| [Pydantic AI Dynamic Workflow](https://pydantic.dev/docs/ai/harness/dynamic-workflow/) | A catalog of named subagents | The model writes sandboxed Python to fan out, chain, vote, or retry calls to that catalog |
-| [LangGraph orchestrator-worker](https://docs.langchain.com/oss/python/langgraph/workflows-agents#orchestrator-worker) | A graph or functional workflow, worker function, and shared state | The orchestrator plans tasks and dispatches workers dynamically |
-| [Agent-o-rama](https://github.com/redplanetlabs/agent-o-rama) | A graph of Java or Clojure functions deployed as an agent | The declared graph runs with integrated storage, tracing, evaluation, and deployment |
+- Did the reviewer choose security review because the patch crosses an
+  authorization boundary?
+- Did the security reviewer identify the missing admin-role check?
+- Did the verifier test the candidate against the supplied requirement and
+  existing behavior?
+- Did the final answer omit rejected or unsupported claims?
+- How many model calls, tokens, and eval attempts did the run use?
 
-The closest comparison is Pydantic AI's Dynamic Workflow: in both cases the
-model writes coordination code inside one Tool call. karcarthy additionally
-allows that code to construct new Agent values and gives those Agents the same
-option of explicitly enabling recursive eval inside one Run. The tradeoff is
-direct: karcarthy evaluates full-trust JVM Clojure, while Pydantic AI runs the
-generated Python in a sandbox.
-
-This comparison is about the orchestration boundary, not production readiness.
-Libraries with storage, deployment, evaluation UIs, or sandboxing solve a
-larger operational problem than this demonstration library intends to solve.
-
-## Reproduce the comparison
-
-Use `example.review/default-change`, the same model and reasoning effort, and no
-repository or web Tools. Record:
-
-- recall against the three known defects;
-- verified findings and false positives;
-- whether reviewers are predefined or created after reading the diff;
-- whether a reviewer can create the nested verifier during the same run; and
-- model calls, input and output tokens, and elapsed time.
-
-Keep the generated code or trace with the result. This makes the comparison
-about observable behavior rather than framework descriptions.
-
-See [Agent orchestration](/docs/agent-orchestration) for the general patterns
-and [Eval](/docs/reference/eval) for the exact execution boundary.
+The final review is model output. The diff, test results, verifier verdicts, and
+retained events are the evidence for assessing it.

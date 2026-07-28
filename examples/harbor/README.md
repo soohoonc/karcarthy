@@ -1,7 +1,7 @@
 # Harbor evaluation
 
-This directory packages the Coding Agent for a Harbor task. Harbor runs the
-Agent against an isolated repository, executes a separate behavioral verifier,
+This directory packages the coding agent for a Harbor task. Harbor runs the
+agent against an isolated repository, executes a separate behavioral verifier,
 and records the trajectory.
 
 ## Requirements
@@ -20,7 +20,7 @@ uvx --python 3.13 --from harbor harbor run \
   --yes
 ```
 
-## Run the Coding Agent
+## Run the coding agent
 
 ```bash
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh

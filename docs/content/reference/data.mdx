@@ -1,9 +1,9 @@
 ---
 title: Run data
-description: Agent, Tool, Run, Session, failure, and monitor data shapes.
+description: Agent, tool, run, session, failure, and monitor data shapes.
 ---
 
-## Agent
+## Agent data
 
 ```clojure
 {:karcarthy/type :agent
@@ -18,7 +18,7 @@ description: Agent, Tool, Run, Session, failure, and monitor data shapes.
  :expansion '(...)}
 ```
 
-Agent configuration is flat. `definition` and `expansion` are additional
+The agent configuration is flat. `definition` and `expansion` are additional
 inspection data, not a second configuration layer.
 
 Unknown unqualified configuration keys are rejected. Namespaced keyword keys
@@ -28,7 +28,7 @@ are preserved as extension data, following the normal Clojure map convention:
 (assoc researcher :my-app/owner "research")
 ```
 
-## Tool
+## Tool data
 
 ```clojure
 {:karcarthy/type :tool
@@ -42,10 +42,10 @@ are preserved as extension data, following the normal Clojure map convention:
 ```
 
 Tool input uses one `:input-schema` for validation and the model interface.
-Tools use the same namespaced extension-key convention as Agents and Run
+Tools use the same namespaced extension-key convention as agents and run
 options.
 
-## Run
+## Run data
 
 ```clojure
 {:karcarthy/type :run
@@ -64,11 +64,11 @@ options.
 ```
 
 Participating `run!` calls return the same shape and same `:id`. Their `:events`
-cover the Agent call; the first Run retains the aggregate event sequence.
+cover the agent call; the first run retains the aggregate event sequence.
 
 ## Session
 
-A Session stores normalized conversation items in chronological order. Text
+A session stores normalized conversation items in chronological order. Text
 turns use:
 
 ```clojure
@@ -76,7 +76,7 @@ turns use:
 {:role :assistant :content "answer"}
 ```
 
-Tool turns add an assistant Tool call followed by its result:
+Tool turns add an assistant tool call followed by its result:
 
 ```clojure
 {:role :assistant
@@ -88,12 +88,12 @@ Tool turns add an assistant Tool call followed by its result:
  :content "..."}
 ```
 
-Recoverable Tool failures use the same item with `:is-error true` and an error
+Recoverable tool failures use the same item with `:is-error true` and an error
 value in `:content`.
 
-Only the first Agent in a top-level Run reads from and writes to the supplied
-Session. Participating Agents start fresh conversations. Top-level Runs using
-the same Session instance serialize the complete read/run/append operation.
+Only the first agent in a top-level run reads from and writes to the supplied
+session. Participating agents start fresh conversations. Top-level runs using
+the same session instance serialize the complete read/run/append operation.
 
 ## Failure
 
@@ -109,6 +109,6 @@ the same Session instance serialize the complete read/run/append operation.
 ## Monitor snapshot
 
 `monitor-state` returns process-local data derived from events. Each run entry
-contains status, elapsed time, usage, eval count, Agent order, parent IDs,
-activities, active Tools, and errors. The completed Run and its events are the
+contains status, elapsed time, usage, eval count, agent order, parent IDs,
+activities, active tools, and errors. The completed run and its events are the
 record; the monitor is a projection for display.

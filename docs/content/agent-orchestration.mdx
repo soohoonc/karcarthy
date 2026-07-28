@@ -1,156 +1,151 @@
 ---
 title: Agent orchestration
-description: Delegate work, coordinate Agents in Clojure, or let an Agent create the coordination dynamically.
+description: Decide who defines the agents and when.
 ---
 
-karcarthy supports two familiar forms of orchestration:
+Another agent can enter a program in three ways:
 
-- **Orchestration by code:** your application chooses the Agents and calls
-  `run!` using ordinary Clojure.
-- **Orchestration by an Agent:** an Agent delegates to available Agents or
-  writes Clojure that creates and coordinates new ones.
+1. The application makes it available through `:agents`.
+2. Application code calls it with `run!`.
+3. A model authors it inside `eval` after reading the input.
 
-Both forms use the same Agent values and `run!`. There is no graph, workflow
-node, or runner abstraction between them.
+These are ordinary agent values and ordinary Clojure calls. karcarthy does not
+turn them into workflow nodes.
 
-## Delegate to available Agents
+## Make an agent available
 
-Put an Agent in `:agents` when a manager should decide whether to call it:
+Use `:agents` when the application knows the possible agents but wants the
+model to decide whether to call one:
 
 ```clojure
-(k/defagent fact-checker
-  {:description "Check a factual claim against the supplied evidence."
+(k/defagent verifier
+  {:description "Check a proposed code-review finding against the supplied code."
    :model "gpt-5.6"
-   :instructions "Return supported, contradicted, or unknown with a reason."
-   :input-schema string?
-   :output-schema string?})
+   :instructions
+   "Try to disprove the finding. Return CONFIRMED, REJECTED, or NEEDS CONTEXT."})
 
-(k/defagent editor
+(k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Edit the report. Ask the fact-checker when a claim is uncertain."
-   :agents [fact-checker]
-   :output-schema string?})
+   :instructions
+   "Review the patch. Ask the verifier to check every candidate finding."
+   :agents [verifier]})
 ```
 
-The available Agent appears to the model as a Tool. It receives only the
-explicit Tool input, starts a fresh model conversation, and returns its output
-to the manager. This is delegation, not a transfer of the parent's conversation.
+The verifier is already defined before `reviewer` runs. The model sees it as a
+callable capability, chooses whether to call it, and supplies its input. The
+verifier starts a fresh model conversation and returns its output to the
+reviewer.
 
-## Orchestrate in code
+## Call agents from application code
 
-When the participants and control flow are known, write a function:
+When the participants and order are already known, write the coordination as a
+normal function:
 
 ```clojure
 (defn review-change [change]
-  (->> [correctness-reviewer concurrency-reviewer test-reviewer]
-       (mapv #(future (k/run! % change)))
-       (mapv (comp k/output deref))))
+  (let [candidates
+        (k/output (k/run! security-reviewer change))]
+    (k/output
+     (k/run! verifier
+             (str change "\n\nCandidate findings:\n" candidates)))))
 ```
 
-This is normal Clojure: use `let`, `if`, `case`, functions, macros,
-`loop/recur`, `future`, `deref`, and collection operations. If called outside
-an active Run, each top-level `run!` establishes its own Run. If called from a
-Tool or evaluated expression inside a Run, those calls participate in the
-active Run.
+Use `let`, `if`, `case`, functions, macros, collections, `future`, and `deref`
+normally. There is no karcarthy workflow API to learn.
 
-## Dynamic orchestration
+Calls made outside an active run establish separate runs. Calls made from a
+tool or evaluated expression participate in that active run.
 
-Add `k/eval` to a model-backed Agent's `:tools` when it should choose its
-orchestration after reading the input. The Agent may provide exactly one
-Clojure expression, with its current input bound to `input`.
+## Let the model author the program
+
+Use `k/eval` when the input should determine which agents exist:
 
 ```clojure
-(k/agent {:name "review-orchestrator"
-          :model "gpt-5.6"
-          :instructions "Choose the reviewers this change needs."
-          :tools [k/eval]})
+(k/defagent reviewer
+  {:model "gpt-5.6"
+   :instructions
+   "Review this pull request. Decide what kind of review the patch needs,
+    author and run that reviewer with eval, then pass its candidates to a
+    verifier."
+   :tools [k/eval]})
 ```
 
-For a scheduler change, a code-review Agent might decide that concurrency
-deserves a focused review:
+After seeing a change to an administrative export route, the reviewer can send
+this code to `eval`:
 
 ```clojure
-(let [reviewer
-      (agent {:name "concurrency-reviewer"
-              :model "gpt-5.6"
-              :instructions
-              "Find concrete races that could make two workers claim one job."
-              :input-schema string?
-              :output-schema string?})]
-  (output (run! reviewer input)))
-```
-
-The expression may choose participants, branch, retry, stop early, run work in
-parallel, create Tools, and combine results. The orchestration is retained as
-Clojure source and macroexpansion in `:eval/expanded` events. An Agent created
-inside the expression receives eval only if its own `:tools` includes `eval`.
-
-This is the central Clojure-specific capability: the Agent generates ordinary
-host-language code rather than filling in a separate workflow representation.
-
-## Nested delegation
-
-An Agent configured with eval can create a verifier for one candidate finding,
-and that verifier participates in the same Run without inheriting eval:
-
-```clojure
-(let [candidate-finding "Two workers can claim the same pending job."
+(let [security-reviewer
+      (agent
+       {:name "security-reviewer"
+        :model "gpt-5.6"
+        :instructions
+        "Review authentication, authorization, and sensitive-data access.
+         Return only candidate vulnerabilities introduced by the patch."})
+      candidates (output (run! security-reviewer input))
       verifier
-      (agent {:name "finding-verifier"
-              :model "gpt-5.6"
-              :instructions "Try to disprove the candidate finding."
-              :input-schema string?
-              :output-schema string?})]
-  (output (run! verifier
-                (str "Change:\n" input
-                     "\n\nFinding:\n" candidate-finding))))
+      (agent
+       {:name "verifier"
+        :model "gpt-5.6"
+        :instructions
+        "Try to disprove each candidate against the requirements and code."})]
+  (output
+   (run! verifier
+         (str input "\n\nCandidate findings:\n" candidates))))
 ```
 
-Depth and eval limits bound recursive delegation. Agent input is always
-explicit; parent model conversations are never inherited.
+The reviewer wrote both agent definitions. They were not supplied through
+`:agents`. The `agent`, `run!`, and `output` symbols are available because the
+eval tool installs them in the evaluation namespace. `input` is the original
+review request.
 
-## Concurrency and Run scope
+The eval tool description explains this API to the model. It also lists any
+tools and agents that the application did supply, so evaluated code can use
+those values by name.
 
-Clojure dynamic bindings flow into `future`, so concurrent Agent calls join the
-active Run:
+## Pass data explicitly
+
+One agent does not inherit another agent's conversation. Pass the data it
+needs:
+
+```clojure
+(let [candidates (output (run! security-reviewer input))]
+  (output
+   (run! verifier
+         (str input "\n\nCandidate findings:\n" candidates))))
+```
+
+This is why the verifier receives both the original change and the candidate
+report.
+
+## Run work concurrently
+
+Use Clojure futures when calls are independent:
 
 ```clojure
 (let [jobs (mapv #(future (run! % input)) reviewers)]
-  (mapv (fn [job]
-          (let [result @job]
-            {:agent (:agent result)
-             :status (:status result)
-             :output (:output result)}))
-        jobs))
+  (mapv #(output @%) jobs))
 ```
 
-Participating calls share the Run ID, limits, usage, events, cancellation,
-approvals, context, and executor. Their Agent events retain parent IDs and
-depth, producing one observable tree.
+Dynamic run bindings flow into the futures. All calls share the run ID, limits,
+usage, events, cancellation, approvals, context, and executor.
 
-## Choose an approach
+## Choose the boundary
 
-| Use | When |
-| --- | --- |
-| Available Agents | The manager may choose among capabilities defined by the application |
-| Code orchestration | The participants and control flow are known in advance |
-| Dynamic orchestration | The input should determine which Agents exist and how they coordinate |
+| Approach | Who defines the agents? | When? |
+| --- | --- | --- |
+| `:agents` | The application | Before the run |
+| Application code | The application | Before the input is handled |
+| `k/eval` | The model | After reading the input |
 
-These approaches compose. An application-defined function may call Agents that
-delegate, and dynamically created Agents may call application-defined Tools or
-Agents.
+These approaches can be combined. An eval-enabled reviewer may use a
+predefined repository tool, construct a new reviewer, and call both in one
+expression.
 
-## Trust boundary
+## Trust
 
-Dynamic orchestration evaluates full-trust JVM Clojure in the current process.
-Reader evaluation is disabled, but `(do ...)` and ordinary function calls have
-the permissions of the host JVM. The single-expression rule is a protocol
-boundary, not a security sandbox.
+Eval runs full-trust Clojure in the current JVM. The one-expression rule is a
+protocol boundary, not a sandbox. Isolate the process when model-authored code
+should not have the process's filesystem, network, credentials, or classpath
+authority.
 
-Isolate the process and restrict its filesystem, network, credentials, and
-classpath when generated code is not trusted with host authority. The same
-operational consideration applies to shell Tools and MCP server processes.
-
-Run the complete recursive example in [Code review](/docs/guides/review). See
-[Eval](/docs/reference/eval) for the exact namespace, result normalization,
-events, and failure phases.
+See [Eval](/docs/reference/eval) for the exact tool and evaluation behavior.

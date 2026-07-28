@@ -1,18 +1,18 @@
 ---
 title: ACP
-description: Serve a karcarthy Agent to an editor or evaluation harness over ACP.
+description: Serve a karcarthy agent to an editor or evaluation harness over ACP.
 ---
 
-Use ACP when another process needs to launch and control a karcarthy Agent. An
+Use ACP when another process needs to launch and control a karcarthy agent. An
 editor or evaluation harness starts the server and communicates over
 newline-delimited JSON-RPC on standard input and output.
 
 ACP is the process boundary. The object being served is still an ordinary
-karcarthy Agent.
+karcarthy agent.
 
-## Serve one Agent
+## Serve one agent
 
-Given a namespace containing an Agent:
+Given a namespace containing an agent:
 
 ```clojure
 (ns example.acp
@@ -20,8 +20,7 @@ Given a namespace containing an Agent:
 
 (k/defagent assistant
   {:model "gpt-5.6"
-   :instructions "Complete the coding request."
-   :output-schema string?})
+   :instructions "Complete the coding request."})
 ```
 
 start the stdio server with its qualified var:
@@ -30,12 +29,12 @@ start the stdio server with its qualified var:
 clojure -M -m karcarthy.acp example.acp/assistant
 ```
 
-The Agent namespace must be present on the process classpath. A deployed
-application therefore packages its Agent definitions alongside karcarthy.
+The agent namespace must be present on the process classpath. A deployed
+application therefore packages its agent definitions alongside karcarthy.
 
-## Build the Agent per session
+## Build the agent per session
 
-A coding Agent normally depends on the directory, selected model, and MCP
+A coding agent normally depends on the directory, selected model, and MCP
 servers supplied by the ACP client. Serve a factory in that case:
 
 ```clojure
@@ -48,8 +47,7 @@ servers supplied by the ACP client. Serve a factory in that case:
     :model {:transport :responses
             :id (or model-id "gpt-5.6")}
     :instructions "Inspect the repository, make focused changes, and verify them."
-    :tools (k/local-tools {:cwd cwd})
-    :output-schema string?}))
+    :tools (k/local-tools {:cwd cwd})}))
 
 (defn -main [& _]
   (k/serve-acp!
@@ -72,14 +70,14 @@ The factory receives:
  :model-id "gpt-5.6"}
 ```
 
-Client-provided MCP Tools are appended to the Agent's own `:tools`
+Client-provided MCP tools are appended to the agent's own `:tools`
 automatically. The factory may inspect them but does not need to merge them.
 
 ## Session behavior
 
 Each ACP session owns:
 
-- its working directory and conversation Session;
+- its working directory and conversation session;
 - its selected model;
 - client-provided stdio MCP processes;
 - cancellation and permission state; and
@@ -88,9 +86,9 @@ Each ACP session owns:
 Prompt text and embedded resource blocks become the input to `run!`. Agent
 text deltas become ACP `agent_message_chunk` updates. Tool starts, results, and
 failures become `tool_call` and `tool_call_update` messages with raw input and
-output. A Tool requiring approval becomes `session/request_permission`.
+output. A tool requiring approval becomes `session/request_permission`.
 
-Token usage is returned only when every model call in the Run reports input
+Token usage is returned only when every model call in the run reports input
 and output tokens. This avoids presenting a partial total as complete.
 
 ## Implemented protocol surface
@@ -104,7 +102,7 @@ and output tokens. This avoids presenting a partial total as complete.
 | `session/close` | Yes |
 | model selection through `session/set_config_option` | Yes |
 | compatibility `session/set_model` | Yes |
-| streamed Agent messages and Tool updates | Yes |
+| streamed agent messages and tool updates | Yes |
 | client permission requests | Yes |
 | client-provided stdio MCP servers | Yes |
 | session resume/load | No |
@@ -119,7 +117,7 @@ for the wider protocol.
 
 `serve-acp!` accepts `:agent`, `:models`, `:run-options`,
 `:client-request-timeout-ms`, and optional `:in`/`:out` streams for embedding
-or tests. A static Agent's configured model ID is advertised automatically.
+or tests. A static agent's configured model ID is advertised automatically.
 
 An `:on-event` callback inside `:run-options` receives the complete karcarthy
 event stream in addition to the ACP updates sent to the client. This is the
@@ -131,7 +129,7 @@ stream. Write diagnostics to stderr or another sink.
 
 ## Security
 
-ACP is designed for a trusted client launching a local Agent process. The
+ACP is designed for a trusted client launching a local agent process. The
 client chooses the session directory and may provide commands for stdio MCP
 servers. Do not expose this stdio boundary to an untrusted remote party without
 an isolation and authentication layer.

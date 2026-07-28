@@ -3,7 +3,6 @@
   "pages": [
     "api",
     "eval",
-    "data",
-    "events"
+    "data"
   ]
 }

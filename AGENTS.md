@@ -45,11 +45,11 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `examples/main.clj` | Small command dispatcher for the live Basic and Coding examples and the REPL. |
 | `examples/basic/main.clj` | Minimal live Agent example. |
 | `examples/coding/main.clj` | Open-ended live Coding Agent. |
-| `examples/harbor/main.clj` | Fixed Coding Agent packaged for Harbor evaluation through ACP. |
+| `examples/harbor/main.clj` | Fixed root Coding Agent packaged for Harbor evaluation through ACP. |
 | `examples/harbor/run.sh` | Opt-in live Harbor evaluation of the bundled scheduler task. |
 | `src/karcarthy/cli.clj` | Minimal executable entry point; there is no JSON workflow command. |
 | `test/karcarthy/run_test.clj` | Model loop, instructions/context, Sessions, streaming, composition, limits, and events. |
-| `test/karcarthy/eval_test.clj` | Dynamic Clojure workflows, concurrency, recursion, and eval boundaries. |
+| `test/karcarthy/eval_test.clj` | Model-authored Clojure programs, concurrency, recursion, and eval boundaries. |
 | `test/karcarthy/responses_test.clj` | Pure translation plus offline complete and SSE endpoint integration tests. |
 | `test/karcarthy/tools_test.clj` | Local tools and generic prompt composition. |
 | `test/karcarthy/mcp_test.clj` | MCP initialization, discovery, execution, and shutdown. |

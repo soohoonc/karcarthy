@@ -1,62 +1,87 @@
 ---
 title: Agents
-description: Define model-backed Agents as ordinary Clojure data.
+description: Define a model, its instructions, and the capabilities it may call.
 ---
 
-An Agent is a flat Clojure map that describes a model, its instructions, the
-Tools and Agents it may call, and its input and output boundaries.
+An agent is a flat Clojure map used by the model/tool loop:
 
 ```clojure
 (require '[karcarthy :as k])
 
-(k/defagent researcher
-  {:description "Research one question and return sourced findings."
-   :model "gpt-5.6"
-   :instructions "Research carefully. Distinguish evidence from inference."
-   :tools [web-search]})
+(k/defagent reviewer
+  {:model "gpt-5.6"
+   :instructions
+   "Review the patch. Report concrete defects and explain the evidence."})
 ```
 
-`defagent` derives `:name` from the var. Use `agent` to construct a value inside
-an expression and provide `:name` explicitly:
+`defagent` defines a var and derives the agent name from its symbol. Use
+`agent` when constructing a value inside an expression:
 
 ```clojure
-(def researcher
+(def reviewer
   (k/agent
-   {:name "researcher"
+   {:name "reviewer"
     :model "gpt-5.6"
-    :instructions "Research carefully."}))
+    :instructions "Review the patch."}))
 ```
+
+Both forms create the same kind of value.
 
 ## Configuration
 
 | Key | Meaning |
 | --- | --- |
-| `:name` | Stable Agent name. `agent` requires it; `defagent` derives it. |
-| `:description` | Tells another model when to call this Agent. |
+| `:name` | Agent name. `agent` requires it; `defagent` derives it. |
+| `:description` | Tells another model when to call this agent. |
 | `:model` | Model ID, model configuration, or context function. |
-| `:instructions` | Complete model-visible string or context function. |
-| `:tools` | Tools available to the model; include `k/eval` for dynamic Clojure orchestration. |
-| `:agents` | Agents available through delegation. |
-| `:context-schema` | Schema for local Run context. |
-| `:input-schema` / `:output-schema` | Agent input and output boundaries; each defaults to `string?`. |
+| `:instructions` | The complete model-visible instructions. |
+| `:tools` | Tools the model may call. Include `k/eval` to allow authored Clojure. |
+| `:agents` | Predefined agents the model may call. |
+| `:context-schema` | Schema for local run context. |
+| `:input-schema` / `:output-schema` | Input and output boundaries. Both default to `string?`. |
 | `:input-guardrails` / `:output-guardrails` | Functions that check input and output. |
-| `:max-turns` | Maximum model turns for this Agent call. |
-| `:limits` | Limits that may narrow the active Run. |
+| `:max-turns` | Maximum model turns for one call. |
+| `:limits` | Limits that may narrow the active run. |
 
-Instructions are exact: karcarthy does not prepend a framework prompt. The
-`:model`, `:instructions`, `:tools`, and `:agents` values may be functions of
-the current Run context when configuration needs local dependencies.
+karcarthy sends `:instructions` exactly as provided. It does not prepend a
+framework prompt. The descriptions of configured tools, including eval, are
+sent separately as model-callable capabilities.
 
-See [Models](/docs/protocols/models) for transport configuration and [Context](/docs/context)
-for context functions.
+`:model`, `:instructions`, `:tools`, and `:agents` may be functions of the
+current run context.
+
+## Predefined and authored agents
+
+An agent listed in `:agents` already exists before the parent runs:
+
+```clojure
+(k/defagent reviewer
+  {:model "gpt-5.6"
+   :instructions "Review the patch and ask the verifier to check findings."
+   :agents [verifier]})
+```
+
+The parent model may call `verifier`, but it does not define it.
+
+An agent with `k/eval` can instead construct a new agent after reading its
+input:
+
+```clojure
+(k/defagent reviewer
+  {:model "gpt-5.6"
+   :instructions "Choose and author the reviewer this patch needs."
+   :tools [k/eval]})
+```
+
+The eval tool description teaches the model the `agent` form and makes the
+current input available as `input`. See [Eval](/docs/reference/eval).
 
 ## Schemas and guardrails
 
-Schemas validate the Agent boundary. Input is checked before the first model
-request; output is checked before the Agent completes.
+Input is checked before the first model request. Output is checked before the
+agent completes.
 
-Guardrails run in the same positions and receive the local Run context plus the
-value:
+Guardrails receive the local run context and the value:
 
 ```clojure
 {:input-guardrails
@@ -67,29 +92,31 @@ value:
     (grounded? value))]}
 ```
 
-A schema or guardrail failure produces a structured failed Run.
+A schema or guardrail failure produces a structured failed run.
 
-## Agents are data
+## Definitions and values
 
-Normal Clojure operations work directly on an Agent:
-
-```clojure
-(:instructions researcher)
-(assoc researcher :instructions "Return exactly three findings.")
-```
-
-The construction macros retain their source definition and macroexpansion for
-inspection:
+`agent` and `defagent` retain the original form and its macroexpansion:
 
 ```clojure
-(k/definition researcher)
-(k/expansion researcher)
+(k/definition reviewer)
+(k/expansion reviewer)
 ```
 
-There is no hidden configuration object or separate workflow representation.
+The resulting agent is still ordinary data:
+
+```clojure
+(:instructions reviewer)
+(assoc reviewer :instructions "Return only verified findings.")
+```
+
+There is no hidden configuration object or separate representation for agents
+created by a model.
 
 ## Next
 
-- [Running agents](/docs/running-agents) explains `run!`, results, limits, and cancellation.
-- [Tools](/docs/tools) adds callable functions.
-- [Agent orchestration](/docs/agent-orchestration) covers delegation and multi-Agent coordination.
+- [Tools](/docs/tools) defines model-callable functions.
+- [Running agents](/docs/running-agents) covers results, limits, and
+  cancellation.
+- [Agent orchestration](/docs/agent-orchestration) compares the three ways
+  agents enter a program.

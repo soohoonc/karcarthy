@@ -14,9 +14,7 @@
             :id (model-id)
             :reasoning :low
             :timeout-ms 180000}
-    :instructions "Answer clearly and concisely."
-    :input-schema string?
-    :output-schema string?}))
+    :instructions "Answer clearly and concisely."}))
 
 (defn credentials? []
   (or (not (str/blank? (System/getenv "RESPONSES_API_KEY")))
@@ -29,9 +27,10 @@
     (System/exit 2))
   (let [input (if (seq words)
                 (str/join " " words)
-                (str "Review this Python change in one sentence. "
-                     "Contract: count may be zero. Change: "
-                     "`def divide(total, count): return total / count`"))
+                (str "Review this Python function in one sentence. "
+                     "It should return None when count is zero:\n\n"
+                     "def average(total, count):\n"
+                     "    return total / count"))
         run (k/run! (basic-agent) input)]
     (if (= :completed (:status run))
       (println (:output run))

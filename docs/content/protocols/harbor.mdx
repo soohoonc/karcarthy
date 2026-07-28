@@ -1,28 +1,28 @@
 ---
 title: Harbor
-description: Evaluate a karcarthy Coding Agent in an isolated repository task.
+description: Evaluate a karcarthy Coding agent in an isolated repository task.
 ---
 
 [Harbor](https://www.harborframework.com/) is an evaluation harness for agents
 that work in computer environments. The bundled integration runs karcarthy's
-Coding Agent in an isolated repository, scores the resulting behavior with
+Coding agent in an isolated repository, scores the resulting behavior with
 hidden tests, and records the trajectory for inspection.
 
 ACP is the process boundary between Harbor and karcarthy:
 
 ```text
-Harbor task → ACP client → karcarthy Agent → repository Tools
+Harbor task → ACP client → karcarthy agent → repository tools
      │                                      │
      └──────── verifier and trajectory ─────┘
 ```
 
 ## What the bundled task evaluates
 
-The task presents a scheduler with duplicate delivery and retry bugs. The Agent
+The task presents a scheduler with duplicate delivery and retry bugs. The agent
 must diagnose and fix the persistence behavior without changing the public
 Store method signatures.
 
-After the Agent exits, hidden behavioral tests run against its repository:
+After the agent exits, hidden behavioral tests run against its repository:
 
 ```text
 reward 1  all hidden tests pass
@@ -46,7 +46,7 @@ KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh
 Set `KARCARTHY_OPENAI_MODEL` to select another Responses-compatible model and
 `KARCARTHY_ATTEMPTS` to repeat the task.
 
-The script packages the Coding Agent, launches it through ACP in the task
+The script packages the Coding agent, launches it through ACP in the task
 environment, and writes the jobs under `examples/harbor/jobs`.
 
 ## Inspect the result
@@ -60,13 +60,13 @@ uvx --python 3.13 --from harbor harbor view examples/harbor/jobs
 Inspect the artifacts together:
 
 - the verifier reward and hidden-test logs;
-- the Agent's final answer;
+- the agent's final answer;
 - model messages and token usage;
-- repository Tool calls and observations; and
-- any dynamically generated Clojure and participating Agent calls.
+- repository tool calls and observations; and
+- any dynamically generated Clojure and participating agent calls.
 
 The reward says whether the final behavior passed. The trajectory explains how
-the Agent reached it and whether orchestration contributed.
+the agent reached it and whether orchestration contributed.
 
 ## Validate without a model
 
@@ -82,10 +82,10 @@ uvx --python 3.13 --from harbor harbor run \
   --yes
 ```
 
-## Use your own Agent or task
+## Use your own agent or task
 
-`examples/harbor/main.clj` defines the Agent factory served through ACP. Change
-`harbor-agent` to package another Agent while preserving the session-supplied
+`examples/harbor/main.clj` defines the agent factory served through ACP. Change
+`harbor-agent` to package another agent while preserving the session-supplied
 working directory.
 
 Harbor tasks live under `examples/harbor/tasks`. Add another task directory

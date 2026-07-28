@@ -25,7 +25,7 @@ pure and offline-testable.
   `karcarthy.agent`, `karcarthy.tool`, `karcarthy.schema`, and
   `karcarthy.run`.
 - A provider integration is a narrow normalized model transport. It must not
-  run Tools or Agents.
+  run tools or agents.
 - Use normal Clojure for orchestration. Do not add workflow node constructors
   or an interpreter.
 - Generated behavior goes through `karcarthy.eval`: read with reader evaluation
