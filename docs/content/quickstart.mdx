@@ -103,8 +103,8 @@ Replace the definition with:
 (k/defagent reviewer
   {:model "gpt-5.6"
    :instructions
-   "Review this pull request. After reading the patch, choose the specialist
-    justified by the change and use eval to author and run it. Pass candidate
+   "Review this pull request. After reading the patch, decide what kind of
+    review the change needs and use eval to author and run that reviewer. Pass candidate
     findings to an independent verifier and publish only verified defects."
    :tools [k/eval]})
 ```

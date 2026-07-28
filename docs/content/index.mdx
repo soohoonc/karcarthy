@@ -70,8 +70,8 @@ Now give the same reviewer `k/eval` (with slight adjustment to the prompt):
 (k/defagent reviewer
   {:model "gpt-5.6"
    :instructions
-   "Review this pull request. After reading the patch, author and select
-    a specialist reviewer with eval.
+   "Review this pull request. After reading the patch, author the reviewer
+    appropriate for the affected risk surface with eval.
     Pass its candidate findings to an independent verifier. Publish only
     verified defects introduced by the patch."
    :tools [k/eval]})

@@ -698,7 +698,7 @@
     (is (= ["text"]
            (get-in @requests [0 :tools 0 :parameters :required])))))
 
-(deftest eval-tool-has-a-complete-dynamic-manual
+(deftest eval-tool-describes-code-authoring-and-dynamic-values
   (let [request (atom nil)
         model (k/mock-model
                (fn [value]
@@ -727,25 +727,36 @@
         description (:description eval-tool)]
     (is (= :completed (:status run)))
     (is (= "Complete the assigned task." (:instructions @request)))
-    (doseq [section ["## When to use"
-                     "## Tool input"
-                     "## Authoring Agents and Tools"
-                     "## Run behavior"
-                     "## Example: security review with verification"
+    (doseq [section ["## Clojure evaluation"
+                     "## Creating and calling an agent"
+                     "## Creating a tool"
+                     "## Calling agents concurrently"
+                     "## Returning a value"
                      "## Available model configuration"
-                     "## Available Tools"
-                     "## Available Agents"]]
+                     "## Available tools"
+                     "## Available agents"]]
       (is (str/includes? description section) section))
     (is (str/includes? description
                        "{:transport :captured, :provider :test, :id \"test-model\"}"))
-    (is (str/includes? description "(run! agent-value agent-input)"))
-    (is (str/includes? description "(output run)"))
+    (is (str/includes? description
+                       "(output (run! agent-value agent-input))"))
+    (is (str/includes? description
+                       "Creating an agent does not call it."))
+    (is (str/includes? description
+                       "full-trust JVM Clojure"))
+    (is (str/includes? description
+                       "{:name \"word-count\""))
+    (is (str/includes? description
+                       ":additionalProperties false"))
     (is (str/includes? description "`uppercase`"))
     (is (str/includes? description "`finding-verifier`"))
     (is (= ["code"]
            (get-in eval-tool [:parameters :required])))
     (is (= #{"code"}
-           (set (keys (get-in eval-tool [:parameters :properties])))))))
+           (set (keys (get-in eval-tool [:parameters :properties])))))
+    (is (str/includes?
+         (get-in eval-tool [:parameters :properties "code" :description])
+         "One complete, unfenced Clojure expression"))))
 
 (deftest guardrails-reject
   (let [input-guarded

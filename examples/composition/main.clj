@@ -9,7 +9,7 @@
     :instructions
     (str "Read the proposed change and identify the affected trust boundaries. "
          "Return the relevant files, security-sensitive operations, and the "
-         "specialist review warranted by the change. Do not write findings.")}))
+         "review focus warranted by the change. Do not write findings.")}))
 
 (def security-reviewer
   (k/agent

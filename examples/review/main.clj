@@ -1,5 +1,5 @@
 (ns example.review
-  "Live trace of a reviewer creating a specialist and verifier."
+  "Live trace of a reviewer creating a security reviewer and verifier."
   (:require [clojure.string :as str]
             [karcarthy :as k]))
 
@@ -16,19 +16,19 @@
 (defn instructions []
   (str
    "Act as the reviewer and final editor for a code review. Read the proposed "
-   "change before choosing a specialist. Call eval exactly once. In one ordinary "
+   "change before deciding what kind of review it needs. Call eval exactly once. In one ordinary "
    "Clojure expression:\n"
-   "1. Create exactly one specialist justified by the affected risk surface. "
+   "1. Create exactly one reviewer whose role matches the affected risk surface. "
    "When the change touches authentication, authorization, untrusted input, "
    "secrets, or sensitive data, name it security-reviewer and instruct it to "
    "review those boundaries. The bundled customer-export change meets that "
-   "condition. Configure the specialist with :model "
+   "condition. Configure that reviewer with :model "
    (pr-str (model-config))
    ". Give it the complete input and require only candidate defects introduced "
    "by the patch, with severity, file and line, a concrete failure or exploit "
    "scenario, evidence, and a minimal fix. Run it exactly once.\n"
    "2. Create one agent named verifier with the same model. Pass it the complete "
-   "input plus the specialist output. Instruct it to independently try to "
+   "input plus the review output. Instruct it to independently try to "
    "disprove every candidate against the supplied requirements and code and return "
    "CONFIRMED, REJECTED, or NEEDS CONTEXT with exact evidence. Run it exactly once.\n"
    "3. Return both outputs as model-safe data.\n"

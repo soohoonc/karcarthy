@@ -64,8 +64,9 @@ Use `k/eval` when the input should determine which agents exist:
 (k/defagent reviewer
   {:model "gpt-5.6"
    :instructions
-   "Review this pull request. Choose the specialist justified by the patch,
-    author and run it with eval, then pass its candidates to a verifier."
+   "Review this pull request. Decide what kind of review the patch needs,
+    author and run that reviewer with eval, then pass its candidates to a
+    verifier."
    :tools [k/eval]})
 ```
 
@@ -137,7 +138,7 @@ usage, events, cancellation, approvals, context, and executor.
 | `k/eval` | The model | After reading the input |
 
 These approaches can be combined. An eval-enabled reviewer may use a
-predefined repository tool, construct a new specialist, and call both in one
+predefined repository tool, construct a new reviewer, and call both in one
 expression.
 
 ## Trust

@@ -12,7 +12,7 @@ clojure -M:examples review
 The bundled customer-export patch is self-contained and deliberately omits the
 required administrator authorization check. The command also accepts another
 diff and its requirements as one quoted argument; the reviewer should select the
-specialist justified by that change.
+review role justified by that change.
 
 Set `RESPONSES_API_KEY` or `OPENAI_API_KEY` before running it. Use
 `KARCARTHY_OPENAI_MODEL` to override the default model.

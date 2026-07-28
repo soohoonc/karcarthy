@@ -1,14 +1,14 @@
 ---
 title: Build a code reviewer
-description: Let one reviewer create the specialist and verifier a patch needs.
+description: Let one reviewer create the review agent and verifier a patch needs.
 ---
 
 A useful code review has three responsibilities:
 
 - The reviewer reads the requirements, diff, surrounding code, and tests. It
   decides which risks deserve deeper review.
-- A specialist investigates one risk surface and returns candidate defects with
-  evidence.
+- A reviewer chosen for the affected risk surface investigates it and returns
+  candidate defects with evidence.
 - A verifier tries to disprove each candidate against the code and
   requirements.
 
@@ -35,9 +35,9 @@ This reviewer has repository tools and `eval`:
       "Review the current patch as a maintainer.
 
        Read the repository guidance, diff, affected code, callers, and relevant
-       tests. Choose only the specialist justified by the change and use eval
-       to author and run it. Pass its complete candidate report to a separately
-       authored verifier.
+       tests. Decide what kind of review the change needs and use eval to
+       author and run that reviewer. Pass its complete candidate report to a
+       separately authored verifier.
 
        Publish only defects introduced by the patch that the verifier confirms.
        For each finding, include severity, path and line, a concrete failure
@@ -53,7 +53,7 @@ After reading an authorization-sensitive patch, the model can use eval to
 construct those agents. The eval tool description teaches it the `agent`,
 `run!`, `output`, and `input` bindings.
 
-Constructed agents do not inherit the reviewer's tools. If a specialist needs
+Constructed agents do not inherit the reviewer's tools. If another reviewer needs
 repository access, the evaluated expression must give it the available tools
 explicitly.
 

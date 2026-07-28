@@ -46,15 +46,15 @@ run! reviewer
 
 ## Let the agent author a program
 
-Give the same reviewer `k/eval` when the input should determine which
-specialists run:
+Give the same reviewer `k/eval` when the input should determine which review
+agents run:
 
 ```clojure
 (k/defagent reviewer
   {:model "gpt-5.6"
    :instructions
-   "Review this pull request. Choose the specialist justified by the patch and
-    use eval to author and run it. Pass candidate findings to an independent
+   "Review this pull request. Decide what kind of review the patch needs and
+    use eval to author and run that reviewer. Pass candidate findings to an independent
     verifier and publish only verified defects."
    :tools [k/eval]})
 ```

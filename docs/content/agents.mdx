@@ -69,7 +69,7 @@ input:
 ```clojure
 (k/defagent reviewer
   {:model "gpt-5.6"
-   :instructions "Choose and author the specialist needed for this patch."
+   :instructions "Choose and author the reviewer this patch needs."
    :tools [k/eval]})
 ```
 

@@ -74,9 +74,13 @@ capability, then give it to an agent constructed in the same expression:
 (let [character-count
       (tool {:name "character-count"
              :description "Count the characters in a string."
-             :input-schema string?
+             :input-schema
+             {:type "object"
+              :properties {"text" {:type "string"}}
+              :required ["text"]
+              :additionalProperties false}
              :output-schema integer?}
-        [text]
+        [{:keys [text]}]
         (count text))
       analyst
       (agent {:name "length-analyst"
