@@ -176,6 +176,46 @@
     (is (= "done" (:output run)))
     (is (= :complete @path))))
 
+(deftest tool-batches-wait-for-concurrency-capacity
+  (let [active (atom 0)
+        peak (atom 0)
+        slow-tool
+        (k/tool
+         {:name "slow"
+          :description "Return text after a short delay."
+          :input-schema ::tool-input
+          :output-schema string?}
+         [{:keys [text]}]
+         (let [running (swap! active inc)]
+           (swap! peak max running)
+           (try
+             (Thread/sleep 20)
+             text
+             (finally
+               (swap! active dec)))))
+        calls (mapv (fn [index]
+                      {:id (str "call-" index)
+                       :name "slow"
+                       :input {:text (str index)}})
+                    (range 10))
+        agent
+        (k/agent
+         {:name "batched-tools"
+          :model {:id "fake"
+                  :transport
+                  (scripted-model
+                   {:type :tool-calls :calls calls}
+                   {:type :final :output "done"})}
+          :instructions "Use the Tool."
+          :tools [slow-tool]})
+        run (k/run! agent "task" {:limits {:concurrency 3}})]
+    (is (= :completed (:status run)) (pr-str (:error run)))
+    (is (= "done" (:output run)))
+    (is (= 3 @peak))
+    (is (= 10
+           (count (filter #(= :tool/completed (:type %))
+                          (:events run)))))))
+
 (deftest named-transport-is-resolved-independently-from-provider
   (let [transport (scripted-model "done")
         agent (k/agent {:name "routed"

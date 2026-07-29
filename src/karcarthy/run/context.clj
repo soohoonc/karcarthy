@@ -213,20 +213,23 @@
                {:result result :value value}))))
   value)
 
-(defn ^:no-doc submit-limited! [rt f]
+(defn- try-submit-limited! [rt f]
   (let [^Semaphore semaphore (:semaphore rt)]
-    (when-not (.tryAcquire semaphore)
+    (when (.tryAcquire semaphore)
+      (try
+        (.submit (:executor rt)
+                 ^Callable
+                 (reify Callable
+                   (call [_]
+                     (try (f) (finally (.release semaphore))))))
+        (catch Throwable error
+          (.release semaphore)
+          (throw error))))))
+
+(defn ^:no-doc submit-limited! [rt f]
+  (or (try-submit-limited! rt f)
       (fail! :budget :concurrency "Run concurrency limit was reached"
-             {:limit (get-in rt [:limits :concurrency])}))
-    (try
-      (.submit (:executor rt)
-               ^Callable
-               (reify Callable
-                 (call [_]
-                   (try (f) (finally (.release semaphore))))))
-      (catch Throwable error
-        (.release semaphore)
-        (throw error)))))
+             {:limit (get-in rt [:limits :concurrency])})))
 
 (defn ^:no-doc await-future!
   [rt ^Future child]
@@ -278,3 +281,28 @@
         (when-not (.isDone child)
           (.cancel child true)))
       (throw error))))
+
+(defn ^:no-doc map-limited!
+  "Run functions concurrently without exceeding the active Run's limit.
+
+  Work beyond the current capacity waits for an earlier batch instead of
+  failing merely because one model response contained many Tool calls."
+  [rt functions]
+  (loop [pending (vec functions)
+         results []]
+    (check-run! rt)
+    (if (empty? pending)
+      results
+      (let [[children remaining]
+            (loop [children []
+                   remaining pending]
+              (if (empty? remaining)
+                [children remaining]
+                (if-let [child (try-submit-limited! rt (first remaining))]
+                  (recur (conj children child) (subvec remaining 1))
+                  [children remaining])))]
+        (when (empty? children)
+          (fail! :budget :concurrency "Run concurrency limit was reached"
+                 {:limit (get-in rt [:limits :concurrency])}))
+        (recur remaining
+               (into results (await-futures! rt children)))))))

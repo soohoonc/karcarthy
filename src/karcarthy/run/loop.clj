@@ -297,16 +297,16 @@
 
           :tool-calls
           (let [calls (vec (:calls response))
-                jobs (mapv (fn [call]
-                             (let [tool (get tool-map (:name call))]
-                               (when-not tool
-                                 (fail! :tool :not-found
-                                        (str "Unknown tool: " (:name call))
-                                        {:known (vec (keys tool-map))}))
-                               (context/submit-limited! rt
-                                                        #(run-tool! rt tool call))))
-                           calls)
-                results (context/await-futures! rt jobs)
+                functions
+                (mapv (fn [call]
+                        (let [tool (get tool-map (:name call))]
+                          (when-not tool
+                            (fail! :tool :not-found
+                                   (str "Unknown tool: " (:name call))
+                                   {:known (vec (keys tool-map))}))
+                          #(run-tool! rt tool call)))
+                      calls)
+                results (context/map-limited! rt functions)
                 assistant-message {:role :assistant :tool-calls calls}
                 result-messages
                 (mapv (fn [{:keys [id name model-output is-error]}]

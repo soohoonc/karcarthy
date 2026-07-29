@@ -3,7 +3,8 @@
   (:require [clojure.java.io :as io]
             [clojure.java.shell :as shell]
             [clojure.string :as str]
-            [karcarthy :as k]))
+            [karcarthy :as k]
+            [karcarthy.monitor :as monitor]))
 
 (def base-instructions
   (str
@@ -165,81 +166,37 @@
   ([]
    (terminal-approval *in* *out*))
   ([reader writer]
+   (terminal-approval reader writer nil))
+  ([reader writer live-monitor]
    (let [prompt-lock (Object.)]
      (fn [{:keys [tool input]}]
        (locking prompt-lock
-         (binding [*in* reader
-                   *out* writer]
-           (println)
-           (println (str "approval> " (:name tool) " "
-                         (tool-summary tool input)))
-           (print "Allow this tool call? [y/N] ")
-           (flush)
-           (contains? #{"y" "yes"}
-                      (some-> (read-line) str/trim str/lower-case))))))))
-
-(defn- finish-section! [state]
-  (when (or (:reasoning? @state) (:answer? @state))
-    (println))
-  (swap! state assoc :reasoning? false :answer? false))
+         (let [prompt!
+               (fn []
+                 (binding [*in* reader
+                           *out* writer]
+                   (println)
+                   (println (str "approval> " (:name tool) " "
+                                 (tool-summary tool input)))
+                   (print "Allow this tool call? [y/N] ")
+                   (flush)
+                   (contains? #{"y" "yes"}
+                              (some-> (read-line)
+                                      str/trim
+                                      str/lower-case))))]
+           (if live-monitor
+             (monitor/write-above! live-monitor prompt!)
+             (prompt!))))))))
 
 (defn terminal-events
-  "Create a compact event renderer for streamed summaries, answers, and tools."
+  "Create the fixed live Run monitor used for one terminal turn."
   ([]
    (terminal-events *out*))
   ([writer]
-   (let [state (atom {:reasoning? false :answer? false :saw-text? false})]
-     {:state state
-      :on-event
-      (fn [event]
-        (binding [*out* writer]
-          (locking state
-            (case (:type event)
-              :model/reasoning-summary-delta
-              (when (zero? (long (or (:depth event) 0)))
-                (when-not (:reasoning? @state)
-                  (finish-section! state)
-                  (print "thinking> ")
-                  (swap! state assoc :reasoning? true))
-                (print (:delta event))
-                (flush))
-
-              :model/text-delta
-              (when (zero? (long (or (:depth event) 0)))
-                (when-not (:answer? @state)
-                  (finish-section! state)
-                  (print "agent> ")
-                  (swap! state assoc :answer? true :saw-text? true))
-                (print (:delta event))
-                (flush))
-
-              :model/completed
-              (finish-section! state)
-
-              :tool/approval-requested
-              (finish-section! state)
-
-              :tool/started
-              (do
-                (finish-section! state)
-                (println (str "tool> " (:tool event) " "
-                              (tool-summary {:name (:tool event)}
-                                            (:input event)))))
-
-              :agent/started
-              (when (pos? (long (or (:depth event) 0)))
-                (finish-section! state)
-                (println (str "agent> started " (:agent event))))
-
-              :eval/started
-              (do
-                (finish-section! state)
-                (println "eval> running Clojure program"))
-
-              nil))))
-      :finish #(binding [*out* writer]
-                 (locking state
-                   (finish-section! state)))})))
+   (let [live-monitor (k/monitor {:display :tree :out writer})]
+     {:monitor live-monitor
+      :on-event live-monitor
+      :finish #(.close ^java.io.Closeable live-monitor)})))
 
 (defn- print-status! [coding]
   (let [items (k/get-items (:session coding))
@@ -271,8 +228,7 @@
    "/quit    Exit"))
 
 (defn coding! [options]
-  (let [coding (coding-session options)
-        approval (terminal-approval)]
+  (let [coding (coding-session options)]
     (println "karcarthy coding")
     (print-status! coding)
     (when (:dynamic? coding)
@@ -294,14 +250,15 @@
                      (recur))
           (if (str/blank? input)
             (recur)
-            (let [{:keys [state on-event finish]} (terminal-events)
+            (let [{:keys [monitor on-event finish]} (terminal-events)
                   run (ask! coding input
                             {:on-event on-event
-                             :approval approval})]
+                             :approval (terminal-approval
+                                        *in* *out* monitor)})]
               (finish)
+              (println)
               (if (= :completed (:status run))
-                (when-not (:saw-text? @state)
-                  (println "agent>" (:output run)))
+                (println "agent>" (:output run))
                 (println "error>" (get-in run [:error :message])))
               (recur))))))))
 
