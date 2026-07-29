@@ -46,7 +46,7 @@ Some tools execute at the model provider rather than inside karcarthy:
 (k/defagent researcher
   {:model "gpt-5.6"
    :instructions "Research current information and cite sources."
-   :tools [(k/responses-web-search)]})
+   :tools [(k/web-search)]})
 ```
 
 The endpoint and model must support the hosted tool. karcarthy passes its

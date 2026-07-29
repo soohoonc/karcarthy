@@ -71,11 +71,11 @@ Define a research Agent with a web-search Tool:
 (require '[karcarthy :as k])
 
 (k/defagent researcher
-  {:model "gpt-5.6-terra"
+  {:model "gpt-5.6"
    :instructions
    "Research the question thoroughly. Prefer primary sources, verify important
     claims, and return a concise report with citations."
-   :tools [(k/responses-web-search)]})
+   :tools [(k/web-search)]})
 
 (def question
   "Compare SQLite, DuckDB, and ClickHouse for local analytics. Explain when
@@ -100,7 +100,7 @@ Now add `k/eval` and tell the researcher when it should use it:
    "Research the question thoroughly. Prefer primary sources, verify important
     claims, and return a concise report with citations. Use eval when the
     question benefits from independent lines of research."
-   :tools [(k/responses-web-search)
+   :tools [(k/web-search)
            k/eval]})
 
 (k/output (k/run! researcher question))
@@ -127,7 +127,7 @@ call eval to generate a Clojure expression like this:
                :model
                {:transport :responses
                 :provider :openai
-                :id "gpt-5.6-terra"}
+                :id "gpt-5.6"}
                :instructions
                "Research the assigned system. Prefer primary sources and
                 return concise findings with citations."
@@ -163,7 +163,7 @@ input passed to its `run!` call.
 
 Agents created inside eval do not inherit Tools. The expression explicitly gives
 each researcher `web_search`, which is available because the root Agent was
-given `(k/responses-web-search)`.
+given `(k/web-search)`.
 
 ## Continue
 

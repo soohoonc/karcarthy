@@ -32,7 +32,7 @@
                 monitor monitor-state
                 hosted-tool hosted-tool?
                 local-tools prompt prompt-file
-                responses-web-search connect-mcp! mcp-tools close-mcp!
+                web-search connect-mcp! mcp-tools close-mcp!
                 serve-acp!
                 definition expansion
                 schema-valid? explain-schema schema->json-schema]]
@@ -46,6 +46,7 @@
                     handoff! environment conversation-state? model-transport
                     memory-session atom-session output! run-output
                     workspace-tools workspace-prompt
+                    responses-web-search
                     read-agent-form check-agent-form! eval-agent-form!
                     compile-agent! system-prompt
                     contract-valid? explain-contract contract->json-schema]]
