@@ -7,7 +7,8 @@
 (def ^:private rendered-event-types
   #{:run/started :run/completed :run/failed :run/cancelled
     :agent/started :agent/completed :agent/failed
-    :model/requested :model/completed :model/failed
+    :model/requested :model/reasoning-summary-delta
+    :model/completed :model/failed
     :tool/started :tool/completed :tool/failed
     :eval/started :eval/expanded :eval/completed :eval/failed})
 
@@ -51,6 +52,9 @@
                :status :running
                :activity :running
                :reasoning-summary ""
+               :usage {:model-calls 0
+                       :input-tokens 0
+                       :output-tokens 0}
                :tools {}
                :tool-order []
                :started-at-ms (:time-ms event)
@@ -92,10 +96,11 @@
   (assoc agent :activity activity :updated-at-ms (:time-ms event)))
 
 (defn- start-model [agent event]
-  (assoc agent
-         :activity :model
-         :reasoning-summary ""
-         :updated-at-ms (:time-ms event)))
+  (-> agent
+      (assoc :activity :model
+             :reasoning-summary ""
+             :updated-at-ms (:time-ms event))
+      (update-in [:usage :model-calls] inc)))
 
 (defn- append-reasoning-summary [agent event]
   (assoc agent
@@ -114,13 +119,18 @@
 (defn- usage-value [usage kebab snake]
   (long (or (get usage kebab) (get usage snake) 0)))
 
-(defn- add-model-usage [run event]
+(defn- add-usage [value event]
   (let [usage (:usage event)]
-    (-> run
+    (-> value
         (update-in [:usage :input-tokens] +
                    (usage-value usage :input-tokens :input_tokens))
         (update-in [:usage :output-tokens] +
                    (usage-value usage :output-tokens :output_tokens)))))
+
+(defn- finish-model [agent event]
+  (-> agent
+      (add-usage event)
+      (set-activity :running event)))
 
 (defn- reduce-run-event [run event]
   (let [run (assoc run :updated-at-ms (:time-ms event))]
@@ -161,8 +171,8 @@
 
       :model/completed
       (-> run
-          (add-model-usage event)
-          (update-agent event set-activity :running event))
+          (add-usage event)
+          (update-agent event finish-model event))
 
       :model/failed
       (update-agent run event set-activity :model-failed event)
@@ -268,12 +278,21 @@
                         str/trim)]
     (when (seq summary)
       (if (> (count summary) 160)
-        (str (subs summary 0 159) "…")
+        (str "…" (subs summary (- (count summary) 159)))
         summary))))
+
+(defn- agent-usage-label [agent]
+  (let [model-calls (get-in agent [:usage :model-calls] 0)
+        tokens (+ (get-in agent [:usage :input-tokens] 0)
+                  (get-in agent [:usage :output-tokens] 0))]
+    (when (pos? model-calls)
+      (str " · " (plural model-calls "call")
+           " · " (plural tokens "token")))))
 
 (defn- agent-lines [run agent prefix last?]
   (let [connector (if last? "└─ " "├─ ")
-        line (str prefix connector (:name agent) " · " (activity-label agent))
+        line (str prefix connector (:name agent) " · " (activity-label agent)
+                  (agent-usage-label agent))
         child-prefix (str prefix (if last? "   " "│  "))
         summary (reasoning-label agent)
         children (vec (children run (:id agent)))]

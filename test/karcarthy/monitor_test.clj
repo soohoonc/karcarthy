@@ -88,8 +88,23 @@
       (is (str/includes?
            view
            "Run run_123 · running · 0s · 2 model calls · 15 tokens · 1 eval"))
-      (is (str/includes? view "└─ parent · waiting for Agent"))
-      (is (str/includes? view "   └─ child · calling model")))
+      (is (str/includes?
+           view
+           "└─ parent · waiting for Agent · 1 call · 15 tokens"))
+      (is (str/includes?
+           view
+           "   └─ child · calling model · 1 call · 0 tokens")))
+    (monitor
+     (event :model/reasoning-summary-delta
+            {:agent-id "agent_child"
+             :parent-id "agent_parent"
+             :depth 1
+             :delta "Checking the implementation."}))
+    (let [view (view monitor)]
+      (is (str/includes?
+           view
+           "child · reasoning · 1 call · 0 tokens"))
+      (is (str/includes? view "↳ Checking the implementation.")))
     (doseq [event finish-events] (monitor event))
     (let [run (get-in @monitor [:runs "run_123"])
           view (view monitor)]
@@ -99,8 +114,8 @@
       (is (= {:model-calls 3 :input-tokens 100 :output-tokens 25}
              (:usage run)))
       (is (str/includes? view "· completed · 1m 01s · 3 model calls · 125 tokens"))
-      (is (str/includes? view "parent · done"))
-      (is (str/includes? view "child · done")))))
+      (is (str/includes? view "parent · done · 1 call · 15 tokens"))
+      (is (str/includes? view "child · done · 1 call · 27 tokens")))))
 
 (deftest monitor-is-a-valid-run-event-handler
   (let [monitor (k/monitor)
@@ -150,6 +165,22 @@
              "\u001b[JRun run_123 · running · 0s · 0 model calls · 0 tokens\n"))
         (is (str/includes? rendered "\u001b[1A\u001b[J"))
         (is (str/includes? rendered "└─ parent · running")))
+      (finally
+        (.close monitor)))))
+
+(deftest tree-display-redraws-reasoning-deltas-immediately
+  (let [out (StringWriter.)
+        monitor (k/monitor {:display :tree :out out})]
+    (try
+      (doseq [event (take 3 start-events)]
+        (monitor event))
+      (monitor
+       (event :model/reasoning-summary-delta
+              {:agent-id "agent_parent"
+               :parent-id nil
+               :depth 0
+               :delta "Inspecting now."}))
+      (is (str/includes? (str out) "↳ Inspecting now."))
       (finally
         (.close monitor)))))
 
