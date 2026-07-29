@@ -5,19 +5,18 @@
 [![test](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml/badge.svg)](https://github.com/soohoonc/karcarthy/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-karcarthy is a Clojure library for building Agents that can write the program
-that coordinates their own work.
+karcarthy is an experimental Clojure agent harness. An agent combines a model
+with instructions and tools, and the harness runs the model/tool loop.
 
-Why Clojure? A Clojure program is made from ordinary Clojure data: lists,
-vectors, maps, and symbols. A model can produce a Clojure expression as data,
-and karcarthy can evaluate that expression directly. The expression can create
-Agents, call them with `run!`, run independent work concurrently with `future`,
-inspect the results, and decide what should happen next.
+Clojure is [homoiconic](https://clojure.org/reference/reader): Clojure programs
+are represented by Clojure data structures. karcarthy uses this code-as-data
+property to let a model write the Clojure code that coordinates its work.
 
-Without eval, you write the program that coordinates the Agents. With `k/eval`,
-the model can write that program after it has seen the task. Both use the same
-Agent values, Tools, and Clojure functions. There is no separate workflow
-language or workflow runner.
+When an agent has the `k/eval` tool, the model can submit one Clojure expression
+with each eval call. That expression can use ordinary Clojure, construct agents
+and tools, and call `run!`. The harness evaluates it in the same process. There
+is no separate workflow language or workflow runner between the code the model
+writes and the code the harness runs.
 
 [Documentation](https://karcarthy.vercel.app/docs)
 
@@ -25,11 +24,11 @@ language or workflow runner.
 
 You need JDK 21, the Clojure CLI, and an OpenAI API key.
 
-| Requirement | Check | Installation |
-| --- | --- | --- |
-| JDK 21 | `java --version` | [Install Eclipse Temurin 21](https://adoptium.net/temurin/releases/?version=21) |
-| Clojure CLI | `clojure -Sdescribe` | [Install the Clojure CLI](https://clojure.org/guides/install_clojure) |
-| OpenAI API key | `test -n "$OPENAI_API_KEY"` | [Create an API key](https://platform.openai.com/api-keys) |
+| Requirement    | Check                       | Installation                                                                    |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------- |
+| JDK 21         | `java --version`            | [Install Eclipse Temurin 21](https://adoptium.net/temurin/releases/?version=21) |
+| Clojure CLI    | `clojure -Sdescribe`        | [Install the Clojure CLI](https://clojure.org/guides/install_clojure)           |
+| OpenAI API key | `test -n "$OPENAI_API_KEY"` | [Create an API key](https://platform.openai.com/api-keys)                       |
 
 Clone the repository and set your API key:
 
@@ -41,35 +40,26 @@ export OPENAI_API_KEY="..."
 
 ### Try the coding agent
 
-| Command | What it opens |
-| --- | --- |
-| `clojure -M:examples coding` | A multi-turn coding session rooted in the current directory |
-| `clojure -M:examples coding cwd=/path/to/repo` | The same session rooted in another repository |
-| `clojure -M:examples coding dynamic=true` | The coding agent with `k/eval`, allowing it to write and run Clojure during the task |
+| Command                                        | What it opens                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `clojure -M:examples coding`                   | A multi-turn coding session rooted in the current directory                          |
+| `clojure -M:examples coding cwd=/path/to/repo` | The same session rooted in another repository                                        |
+| `clojure -M:examples coding dynamic=true`      | The coding agent with `k/eval`, allowing it to write and run Clojure during the task |
 
 At the `you>` prompt, try:
 
 ```text
-Inspect this repository. Explain how a run moves from the model to tools and
-back, and cite the files you used. Do not edit files.
+Explain this repository to me.
 ```
 
-Then continue the same conversation:
-
-```text
-Now identify one place where the documentation does not match the
-implementation.
-```
-
-The session streams the answer and maintains a live view of model calls, tools,
-reasoning summaries, nested Agents, and token usage.
+Then continue the same conversation however you want.
 
 See [Build a coding agent](https://karcarthy.vercel.app/docs/guides/coding) for
 approvals, session commands, dynamic eval, and three focused local tests.
 
 ## Run one Agent
 
-Start a REPL from the repository:
+For an interactive start, run the REPL from the repository:
 
 ```bash
 clojure -M
@@ -81,7 +71,7 @@ Define a research Agent with a web-search Tool:
 (require '[karcarthy :as k])
 
 (k/defagent researcher
-  {:model "gpt-5.6"
+  {:model "gpt-5.6-terra"
    :instructions
    "Research the question thoroughly. Prefer primary sources, verify important
     claims, and return a concise report with citations."
@@ -94,23 +84,12 @@ Define a research Agent with a web-search Tool:
 (k/output (k/run! researcher question))
 ```
 
-This Agent performs the research in one model conversation. A possible run
-looks like this:
-
-```text
-run! researcher
-└─ researcher receives the question
-   ├─ searches for SQLite sources
-   ├─ searches for DuckDB sources
-   ├─ searches for ClickHouse sources
-   ├─ compares the evidence
-   └─ returns a cited report
-```
+This defines and runs a simple `researcher` agent that will search online for some question passed in.
 
 `run!` returns a Run map containing the status, output, usage, events, and any
 error. `output` returns the completed output or throws when the Run failed.
 
-## Give the Agent eval
+## Give the Agent `k/eval`
 
 Now add `k/eval` and tell the researcher when it should use it:
 
@@ -130,7 +109,7 @@ Now add `k/eval` and tell the researcher when it should use it:
 The researcher can still answer directly. It does not have to use eval.
 
 If it decides that the comparison benefits from independent research, it can
-call eval with one Clojure expression like this:
+call eval to generate a Clojure expression like this:
 
 ```clojure
 (let [topics
@@ -148,7 +127,7 @@ call eval with one Clojure expression like this:
                :model
                {:transport :responses
                 :provider :openai
-                :id "gpt-5.6"}
+                :id "gpt-5.6-terra"}
                :instructions
                "Research the assigned system. Prefer primary sources and
                 return concise findings with citations."
@@ -158,7 +137,7 @@ call eval with one Clojure expression like this:
   (mapv deref jobs))
 ```
 
-The expression is Clojure written by the model during the Run.
+The expression is just plain Clojure written by the model.
 
 It creates three Agents, gives each one the available web-search Tool, starts
 their independent work with `future`, waits for their results with `deref`, and
@@ -185,28 +164,6 @@ input passed to its `run!` call.
 Agents created inside eval do not inherit Tools. The expression explicitly gives
 each researcher `web_search`, which is available because the root Agent was
 given `(k/responses-web-search)`.
-
-## What happens underneath
-
-The first `run!` establishes the Run and calls the root Agent’s model.
-
-If the model calls an ordinary Tool, karcarthy executes the Tool, returns its
-result to the model, and continues the model/tool loop. Provider-hosted Tools,
-such as web search, execute at the model provider.
-
-If the model calls eval, karcarthy reads one Clojure expression and evaluates it
-in the current JVM process. Any `run!` calls made by that expression participate
-in the existing Run rather than creating unrelated Runs.
-
-Those nested calls share the root Run’s limits, usage, events, cancellation,
-context, and monitoring. Their model conversations remain independent.
-
-When the expression finishes, its value is returned to the root model as the
-eval result. The root model can inspect it, perform more work, or produce the
-final answer.
-
-Eval executes full-trust JVM Clojure. It is a programming capability, not a
-sandbox.
 
 ## Continue
 
