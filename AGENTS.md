@@ -14,7 +14,7 @@ workflow bridge.
 ```bash
 clojure -M:test
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... clojure -M:live-test
-OPENAI_API_KEY=... clojure -M:examples basic "Say hello."
+OPENAI_API_KEY=... clojure -M:examples chat
 OPENAI_API_KEY=... clojure -M:examples coding /path/to/repo "Fix the failing tests."
 KARCARTHY_LIVE=1 OPENAI_API_KEY=... examples/harbor/run.sh
 clojure -M -m karcarthy.acp your.namespace/agent-var
@@ -42,8 +42,8 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `src/karcarthy/tools.clj` | Minimal `read` / `write` / `edit` / `bash` / `search` Tools rooted at a local directory. |
 | `src/karcarthy/mcp.clj` | MCP 2025-11-25 stdio client and MCP-to-Tool adapter. |
 | `src/karcarthy/acp.clj` | ACP v1 stdio server, sessions, cancellation, tool updates, permissions, and session-provided MCP. |
-| `examples/main.clj` | Small command dispatcher for the live Basic and Coding examples and the REPL. |
-| `examples/basic/main.clj` | Minimal live Agent example. |
+| `examples/main.clj` | Small command dispatcher for Chat, Coding, and the REPL. |
+| `examples/chat/main.clj` | Streamed terminal Chat backed by a Session. |
 | `examples/coding/main.clj` | Open-ended live Coding Agent. |
 | `examples/harbor/main.clj` | Fixed root Coding Agent packaged for Harbor evaluation through ACP. |
 | `examples/harbor/run.sh` | Opt-in live Harbor evaluation of the bundled scheduler task. |
@@ -54,7 +54,7 @@ cd docs && npm run lint && npm run types:check && npm run build
 | `test/karcarthy/tools_test.clj` | Local tools and generic prompt composition. |
 | `test/karcarthy/mcp_test.clj` | MCP initialization, discovery, execution, and shutdown. |
 | `test/karcarthy/acp_test.clj` | ACP session lifecycle, permissions, updates, and MCP bridging. |
-| `test/karcarthy/live_test.clj` | Opt-in paid verification of the public Basic and Coding Agent examples. |
+| `test/karcarthy/live_test.clj` | Opt-in paid verification of the Coding Agent and core live capabilities. |
 
 ## Conventions
 

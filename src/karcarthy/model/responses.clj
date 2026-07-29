@@ -314,6 +314,13 @@
                "response.output_text.delta"
                (emit-delta! {:type :text-delta :delta (:delta event)})
 
+               "response.reasoning_summary_text.delta"
+               (emit-delta! {:type :reasoning-summary-delta
+                             :item-id (:item_id event)
+                             :output-index (:output_index event)
+                             :summary-index (:summary_index event)
+                             :delta (:delta event)})
+
                "response.function_call_arguments.delta"
                (emit-delta! {:type :tool-call-delta
                              :call-id (:item_id event)

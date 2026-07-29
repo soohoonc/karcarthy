@@ -129,6 +129,8 @@
 (deftest model-stream-deltas-are-run-events
   (let [transport
         {:stream (fn [_ emit!]
+                   (emit! {:type :reasoning-summary-delta
+                           :delta "Preparing the answer."})
                    (emit! {:type :text-delta :delta "hel"})
                    (emit! {:type :text-delta :delta "lo"})
                    {:type :final :output "hello"})}
@@ -144,8 +146,15 @@
            (->> @observed
                 (filter #(= :model/text-delta (:type %)))
                 (mapv :delta))))
-    (is (empty? (filter #(= :model/text-delta (:type %))
-                        (:events run))))))
+    (is (= ["Preparing the answer."]
+           (->> @observed
+                (filter #(= :model/reasoning-summary-delta (:type %)))
+                (mapv :delta))))
+    (is (empty?
+         (filter #(contains? #{:model/text-delta
+                               :model/reasoning-summary-delta}
+                             (:type %))
+                 (:events run))))))
 
 (deftest model-streaming-can-be-disabled-per-model
   (let [path (atom nil)

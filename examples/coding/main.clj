@@ -25,18 +25,23 @@
     :model {:transport :responses
             :provider :openai
             :id (model-id (:model-id context))
-            :reasoning :medium
+            :reasoning {:effort :medium
+                        :summary :auto}
             :timeout-ms 300000}
     :instructions instructions
     :tools (conj (k/local-tools {:cwd cwd}) k/eval)
     :max-turns 24}))
 
-(defn run-coding! [cwd task]
-  (k/run! (coding-agent {:cwd cwd}) task
-          {:limits {:model-calls 32
-                    :evals 4
-                    :depth 3
-                    :deadline-ms 600000}}))
+(defn run-coding!
+  ([cwd task]
+   (run-coding! cwd task nil))
+  ([cwd task on-event]
+   (k/run! (coding-agent {:cwd cwd}) task
+           (cond-> {:limits {:model-calls 32
+                             :evals 4
+                             :depth 3
+                             :deadline-ms 600000}}
+             on-event (assoc :on-event on-event)))))
 
 (defn -main [& args]
   (let [[cwd & task-words] args]
@@ -44,10 +49,12 @@
       (binding [*out* *err*]
         (println "Usage: clojure -M:examples coding <directory> <task>"))
       (System/exit 2))
-    (let [run (run-coding! cwd (str/join " " task-words))]
-      (if (= :completed (:status run))
-        (println (:output run))
-        (do
-          (binding [*out* *err*]
-            (println "Run failed:" (get-in run [:error :message])))
-          (System/exit 1))))))
+    (with-open [live (k/monitor {:display :tree})]
+      (let [run (run-coding! cwd (str/join " " task-words) live)]
+        (println)
+        (if (= :completed (:status run))
+          (println (:output run))
+          (do
+            (binding [*out* *err*]
+              (println "Run failed:" (get-in run [:error :message])))
+            (System/exit 1)))))))

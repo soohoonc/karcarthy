@@ -143,6 +143,9 @@
           (update-in [:usage :model-calls] inc)
           (update-agent event set-activity :model event))
 
+      :model/reasoning-summary-delta
+      (update-agent run event set-activity :reasoning event)
+
       :model/completed
       (-> run
           (add-model-usage event)
@@ -229,6 +232,7 @@
     :failed "failed"
     (case (:activity agent)
       :model "calling model"
+      :reasoning "reasoning"
       :model-failed "model failed"
       :evaluating "evaluating Clojure"
       :waiting-agents "waiting for Agent"

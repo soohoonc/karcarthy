@@ -13,6 +13,7 @@
   (let [body (responses/request
               {:model {:id "gpt-5.6"
                        :reasoning {:effort :high
+                                   :summary :auto
                                    :context :all-turns}
                        :verbosity :low
                        :parallel-tool-calls false
@@ -27,7 +28,8 @@
                :output-schema {:type "object"
                                :properties {"answer" {:type "string"}}}})]
     (is (= "gpt-5.6" (:model body)))
-    (is (= {:effort "high" :context "all_turns"} (:reasoning body)))
+    (is (= {:effort "high" :summary "auto" :context "all_turns"}
+           (:reasoning body)))
     (is (= "low" (get-in body [:text :verbosity])))
     (is (false? (:parallel_tool_calls body)))
     (is (= 0.2 (:temperature body)))
@@ -205,6 +207,11 @@
         (.getBytes
          (sse-body
           {:type "response.created" :response {:id "resp_stream"}}
+          {:type "response.reasoning_summary_text.delta"
+           :item_id "reasoning_1"
+           :output_index 0
+           :summary_index 0
+           :delta "Checking the request."}
           {:type "response.output_text.delta" :delta "hel"}
           {:type "response.output_text.delta" :delta "lo"}
           {:type "response.completed" :response response-payload})
@@ -239,7 +246,12 @@
             request (deref seen 5000 ::timeout)]
         (is (= :final (:type result)))
         (is (= "hello" (:output result)))
-        (is (= [{:type :text-delta :delta "hel"}
+        (is (= [{:type :reasoning-summary-delta
+                 :item-id "reasoning_1"
+                 :output-index 0
+                 :summary-index 0
+                 :delta "Checking the request."}
+                {:type :text-delta :delta "hel"}
                 {:type :text-delta :delta "lo"}]
                @deltas))
         (is (= "text/event-stream" (:accept request)))

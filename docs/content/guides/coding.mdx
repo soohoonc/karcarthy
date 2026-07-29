@@ -15,9 +15,10 @@ clojure -M:examples coding /workspace/project \
   "Investigate the failing integration tests, fix the cause, and verify it."
 ```
 
-The command prints the agent's final account of the cause, changes, and
-verification. The answer is live model output and therefore varies; the
-repository diff and test results are the evidence to inspect.
+The command displays a live run tree while the agent works, followed by its
+final account of the cause, changes, and verification. The answer is live model
+output and therefore varies; the repository diff and test results are the
+evidence to inspect.
 
 ## The agent
 
@@ -29,7 +30,8 @@ The example roots local tools at the supplied directory:
   :model {:transport :responses
           :provider :openai
           :id "gpt-5.6"
-          :reasoning :medium}
+          :reasoning {:effort :medium
+                      :summary :auto}}
   :instructions
   "Inspect the repository and run its tests before changing it. Diagnose the
    cause, make focused edits, and run the relevant tests again."
@@ -45,17 +47,16 @@ The complete example also sets limits on model calls, eval, agent depth,
 concurrency, and total time. See
 [`examples/coding/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/coding/main.clj).
 
+The Responses API does not expose raw reasoning. The example requests a
+reasoning summary and the live monitor labels the agent as `reasoning` when
+summary deltas arrive.
+
 ## Let the task determine the program
 
 This coding agent explicitly includes `k/eval`, so it may solve the task
 directly or author Clojure that creates focused agents, tools, and coordination
-when that helps. Unlike the controlled code-review demonstration, this example
-does not require any topology. A fixed-flow or leaf agent can omit `k/eval`
-entirely.
-
-That distinction matters: [application-authored orchestration](/docs/agent-orchestration#call-agents-from-application-code)
-defines participants before the task, while the [code-review example](/docs/guides/review)
-creates reviewers after reading the change.
+when that helps. The example does not require a fixed topology. An agent that
+does not need to write a program can omit `k/eval`.
 
 Use the [Harbor integration](/docs/protocols/harbor) to run this agent against
 an isolated repository task and a behavioral verifier.

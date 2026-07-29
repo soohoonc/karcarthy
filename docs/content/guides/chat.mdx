@@ -8,10 +8,15 @@ add a separate chat abstraction.
 
 ## Run the example
 
-Set `OPENAI_API_KEY`, start a REPL, and load the example:
+Set `OPENAI_API_KEY` and run:
+
+```bash
+clojure -M:examples chat
+```
+
+Or start the example REPL and call the chat loop:
 
 ```clojure
-(load-file "examples/chat/main.clj")
 (example.chat/chat!)
 ```
 
@@ -24,8 +29,9 @@ agent> karcarthy.
 you> /quit
 ```
 
-The exact wording varies, but the second response can use the first turn
-because both runs receive the same session.
+The response text is streamed to the terminal. Its exact wording varies, but
+the second response can use the first turn because both runs receive the same
+session.
 
 ## The state boundary
 

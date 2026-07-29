@@ -55,6 +55,11 @@
     (context/emit! run-context
                    {:type :model/text-delta :delta (:delta delta)})
 
+    :reasoning-summary-delta
+    (context/emit! run-context
+                   (assoc (dissoc delta :type)
+                          :type :model/reasoning-summary-delta))
+
     :tool-call-delta
     (context/emit! run-context
                    (assoc (dissoc delta :type)

@@ -36,7 +36,7 @@ returns the event-derived data. One monitor may observe several runs.
 | --- | --- |
 | run | `:run/started`, `:run/completed`, `:run/failed`, `:run/cancelled` |
 | agent | `:agent/started`, `:agent/completed`, `:agent/failed` |
-| model | `:model/requested`, `:model/text-delta`, `:model/tool-call-delta`, `:model/stream-event`, `:model/completed`, `:model/failed` |
+| model | `:model/requested`, `:model/text-delta`, `:model/reasoning-summary-delta`, `:model/tool-call-delta`, `:model/stream-event`, `:model/completed`, `:model/failed` |
 | tool | `:tool/approval-requested`, `:tool/approval-resolved`, `:tool/approval-reused`, `:tool/started`, `:tool/completed`, `:tool/failed` |
 | session | `:session/updated` |
 | eval | `:eval/started`, `:eval/expanded`, `:eval/completed`, `:eval/failed` |
@@ -83,8 +83,8 @@ application event are ignored.
 ## Retained and live-only events
 
 `k/events` returns retained lifecycle and application events. Model text,
-tool-call, and raw stream deltas are sent through `:on-event` but are not kept
-in the completed run.
+reasoning-summary, tool-call, and raw stream deltas are sent through `:on-event`
+but are not kept in the completed run.
 
 Event handlers are best-effort observers. An exception in a handler does not
 fail the agent.
