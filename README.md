@@ -153,15 +153,17 @@ Set `OPENAI_API_KEY` before running live examples.
 
 ```bash
 clojure -M:examples chat
-clojure -M:examples coding /workspace/project \
-  "Inspect the project and explain one documentation weakness. Do not edit files."
+clojure -M:examples coding cwd=/workspace/project
 clojure -M:examples repl
 ```
+
+Add `dynamic=true` to Coding when the agent should also receive `k/eval`.
 
 | Example | What it shows |
 | --- | --- |
 | [Chat](examples/chat/main.clj) | A streamed conversation with session history |
-| [Coding](examples/coding/main.clj) | Local repository tools, live progress, and `k/eval` |
+| [Coding](examples/coding/main.clj) | An interactive repository session, streamed progress, approvals, and optional `k/eval` |
+| [REPL](examples/main.clj) | Direct exploration of the public Clojure API |
 
 ## Development
 

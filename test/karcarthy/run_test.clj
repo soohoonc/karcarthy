@@ -737,9 +737,9 @@
     (is (= :completed (:status run)))
     (is (= "Complete the assigned task." (:instructions @request)))
     (doseq [section ["## Clojure evaluation"
-                     "## Creating and calling an agent"
+                     "## Creating and calling an Agent"
                      "## Creating a tool"
-                     "## Calling agents concurrently"
+                     "## Calling Agents concurrently"
                      "## Returning a value"
                      "## Available model configuration"
                      "## Available tools"
@@ -748,11 +748,19 @@
     (is (str/includes? description
                        "{:transport :captured, :provider :test, :id \"test-model\"}"))
     (is (str/includes? description
-                       "(output (run! agent-value agent-input))"))
+                       "(run! reviewer input)"))
     (is (str/includes? description
-                       "Creating an agent does not call it."))
+                       "Creating an Agent does not call it"))
     (is (str/includes? description
                        "full-trust JVM Clojure"))
+    (is (str/includes? description
+                       "For simple work, use the normal Tools directly"))
+    (is (str/includes? description
+                       "receives only the input passed to `run!`"))
+    (is (str/includes? description
+                       "Use `future` only for independent calls"))
+    (is (str/includes? description
+                       "Add only the Tools it needs"))
     (is (str/includes? description
                        "{:name \"word-count\""))
     (is (str/includes? description

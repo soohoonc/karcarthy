@@ -11,7 +11,7 @@
   (str "karcarthy examples\n\n"
        "Usage:\n"
        "  clojure -M:examples chat\n"
-       "  clojure -M:examples coding <directory> <task>\n"
+       "  clojure -M:examples coding [cwd=<directory>] [dynamic=true|false]\n"
        "  clojure -M:examples repl\n"))
 
 (defn repl-print [value]
