@@ -119,6 +119,17 @@
       (finally
         (.close monitor)))))
 
+(deftest monitor-shows-reasoning-summary-activity
+  (let [monitor (k/monitor)]
+    (doseq [event (take 3 start-events)] (monitor event))
+    (monitor
+     (event :model/reasoning-summary-delta
+            {:agent-id "agent_parent"
+             :parent-id nil
+             :depth 0
+             :delta "Inspecting the repository."}))
+    (is (str/includes? (view monitor) "parent · reasoning"))))
+
 (deftest monitor-prints-its-current-tree-at-the-repl
   (let [monitor (k/monitor)]
     (doseq [event (take 2 start-events)] (monitor event))

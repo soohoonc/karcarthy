@@ -11,10 +11,15 @@
 (def session (k/session))
 (def last-run (atom nil))
 
-(defn ask! [input]
-  (let [run (k/run! assistant input {:session session})]
-    (reset! last-run run)
-    run))
+(defn ask!
+  ([input]
+   (ask! input nil))
+  ([input on-event]
+   (let [run (k/run! assistant input
+                     (cond-> {:session session}
+                       on-event (assoc :on-event on-event)))]
+     (reset! last-run run)
+     run)))
 
 (defn reset-chat! []
   (k/clear-session! session))
@@ -30,8 +35,21 @@
         "/reset" (do (reset-chat!)
                       (println "Conversation cleared.")
                       (recur))
-        (let [run (ask! input)]
-          (if (= :completed (:status run))
-            (println "agent>" (:output run))
-            (println "error>" (get-in run [:error :message])))
+        (let [streamed? (atom false)
+              on-event (fn [event]
+                         (when (= :model/text-delta (:type event))
+                           (reset! streamed? true)
+                           (print (:delta event))
+                           (flush)))]
+          (print "agent> ")
+          (flush)
+          (let [run (ask! input on-event)]
+            (if (= :completed (:status run))
+              (if @streamed?
+                (println)
+                (println (:output run)))
+              (println "error:" (get-in run [:error :message]))))
           (recur))))))
+
+(defn -main [& _]
+  (chat!))

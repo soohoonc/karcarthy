@@ -88,7 +88,9 @@
                        :time-ms (System/currentTimeMillis)
                        :run-id (:run-id ctx)}
                       (select-keys ctx [:agent-id :parent-id :depth]))]
-     (when-not (contains? #{:model/text-delta :model/tool-call-delta
+     (when-not (contains? #{:model/text-delta
+                            :model/reasoning-summary-delta
+                            :model/tool-call-delta
                             :model/stream-event}
                           (:type event))
        (swap! (:events ctx) conj event)

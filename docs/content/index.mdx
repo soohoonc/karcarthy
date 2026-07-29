@@ -1,17 +1,22 @@
 ---
 title: Overview
-description: An agent harness that authors itself.
+description: A Clojure agent harness for model-authored programs.
 ---
 
 > **Agents as code.**
 
-Karcarthy is an experimental agent harness written in Clojure to make use of
-the Lisp based language's homoiconicity (code as data).
+karcarthy is an experimental Clojure agent harness. An agent combines a model
+with instructions and tools, and the harness runs the model/tool loop.
 
-When an agent is supplied the `k/eval` tool, the model can submit a Clojure expression
-to the same process running the agent and evaluate it dynamically.
-This expression can be another agents or any arbitrary Clojure code for that matter.
-There is no separate workflow system or process running ...
+Clojure is [homoiconic](https://clojure.org/reference/reader): Clojure programs
+are represented by Clojure data structures. karcarthy uses this code-as-data
+property to let a model write the Clojure code that coordinates its work.
+
+When an agent has the `k/eval` tool, the model can submit one Clojure expression
+with each eval call. That expression can use ordinary Clojure, construct agents
+and tools, and call `run!`. The harness evaluates it in the same process. There
+is no separate workflow language or workflow runner between the code the model
+writes and the code the harness runs.
 
 ## Run one agent
 
@@ -64,14 +69,14 @@ it is absent.
 
 ## Let the agent decide
 
-Now give the same reviewer `k/eval` (with slight adjustment to the prompt):
+Now give the same reviewer `k/eval` with revised instructions:
 
 ```clojure
 (k/defagent reviewer
   {:model "gpt-5.6"
    :instructions
-   "Review this pull request. After reading the patch, author the reviewer
-    appropriate for the affected risk surface with eval.
+   "Review this pull request. After reading the patch, use eval to author and
+    run a reviewer for the affected risk surface.
     Pass its candidate findings to an independent verifier. Publish only
     verified defects introduced by the patch."
    :tools [k/eval]})
@@ -82,7 +87,8 @@ Now give the same reviewer `k/eval` (with slight adjustment to the prompt):
 `k/eval` becomes a model-facing tool whose description explains the available
 Clojure API. It tells the model how to construct an agent with `agent`, run it
 with `run!`, extract its result with `output`, and use the original request
-through the bound symbol `input`. For our reviewer, it could produce something like:
+through the bound symbol `input`. For this input, the reviewer could submit an
+expression like this:
 
 ```clojure
 (let [security-reviewer
@@ -109,7 +115,7 @@ through the bound symbol `input`. For our reviewer, it could produce something l
           (str input "\n\nCandidate findings:\n" candidates)))})
 ```
 
-Then the harness evaluates that expression in the same process:
+The harness evaluates that expression in the same process:
 
 ```text
 run! reviewer
@@ -121,15 +127,18 @@ run! reviewer
 └─ reviewer writes the final review
 ```
 
-Each agent shares the limits, usage, events, cancellation, and context
-of the top level `run`. Each constructed agent
-acts as a subagent with whatever the "parent" agent decides to pass in.
-With this we have a simple agent harness capable of authoring itself.
+Every nested `run!` call shares the limits, usage, events, cancellation,
+approvals, context, and run ID of the top-level run. Each constructed agent
+starts a fresh model conversation and receives only the input passed to
+`run!`.
+
+This is the central idea: an agent can author the Clojure program that
+coordinates its work. Eval is full-trust JVM Clojure, not a sandbox.
 
 > These docs were drafted mostly by LLMs and are being rewritten by hand.
 
 <Cards>
   <Card title="Quickstart" description="Install karcarthy and run one agent." href="/docs/quickstart" />
   <Card title="Agent orchestration" description="Compare predefined, application-authored, and model-authored programs." href="/docs/agent-orchestration" />
-  <Card title="Code review" description="Run the reviewer, security reviewer, and verifier example." href="/docs/guides/review" />
+  <Card title="Coding agent" description="Explore a local repository with tools and eval." href="/docs/guides/coding" />
 </Cards>

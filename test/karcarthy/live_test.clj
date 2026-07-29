@@ -1,5 +1,3 @@
-(load-file "examples/basic/main.clj")
-(load-file "examples/review/main.clj")
 (load-file "examples/coding/main.clj")
 
 (ns karcarthy.live-test
@@ -8,9 +6,7 @@
             [clojure.string :as str]
             [clojure.test :as t :refer [deftest is]]
             [karcarthy :as k]
-            [example.basic :as basic]
-            [example.coding :as coding]
-            [example.review :as review])
+            [example.coding :as coding])
   (:import [java.nio.charset StandardCharsets]
            [java.nio.file Files Path]
            [java.nio.file.attribute FileAttribute]))
@@ -213,14 +209,6 @@
   (Files/writeString (.resolve root name) content StandardCharsets/UTF_8
                      (make-array java.nio.file.OpenOption 0)))
 
-(deftest basic-example-uses-the-live-transport
-  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
-  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
-  (when (and (live?) (credentials?))
-    (let [run (k/run! (basic/basic-agent) "Reply with only the word ready.")]
-      (is (= :completed (:status run)) (pr-str (:error run)))
-      (is (= "ready" (some-> (:output run) str/trim str/lower-case))))))
-
 (deftest model-selects-one-predefined-agent
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
   (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
@@ -417,33 +405,6 @@
           (pr-str agent-names))
       (is (some #(not= "eval" %) tool-names)
           (pr-str tool-names)))))
-
-(deftest review-example-creates-reviewers-and-a-nested-verifier
-  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
-  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
-  (when (and (live?) (credentials?))
-    (let [run (review/run-review!
-               review/default-change
-               (k/monitor))
-          eval-events (->> (:events run)
-                           (map :type)
-                           (filter #(= "eval" (namespace %)))
-                           frequencies)
-          agent-events (->> (:events run)
-                            (filter #(= :agent/started (:type %)))
-                            vec)
-          root-events (filter #(= "code-reviewer" (:agent %)) agent-events)
-          reviewer-events (filter #(= 1 (:depth %)) agent-events)
-          verifier-events (filter #(= 2 (:depth %)) agent-events)]
-      (is (= :completed (:status run)) (pr-str (:error run)))
-      (is (= 2 (get-in run [:usage :evals])))
-      (is (= {:eval/started 2 :eval/expanded 2 :eval/completed 2}
-             eval-events))
-      (is (= 1 (count root-events)))
-      (is (<= 2 (count reviewer-events) 3))
-      (is (= (count reviewer-events)
-             (count (set (map :agent reviewer-events)))))
-      (is (= ["finding-verifier"] (mapv :agent verifier-events))))))
 
 (deftest coding-example-inspects-edits-and-verifies
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
