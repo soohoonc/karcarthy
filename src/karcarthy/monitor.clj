@@ -50,6 +50,7 @@
                :name (:agent event)
                :status :running
                :activity :running
+               :reasoning-summary ""
                :tools {}
                :tool-order []
                :started-at-ms (:time-ms event)
@@ -89,6 +90,18 @@
 
 (defn- set-activity [agent activity event]
   (assoc agent :activity activity :updated-at-ms (:time-ms event)))
+
+(defn- start-model [agent event]
+  (assoc agent
+         :activity :model
+         :reasoning-summary ""
+         :updated-at-ms (:time-ms event)))
+
+(defn- append-reasoning-summary [agent event]
+  (assoc agent
+         :activity :reasoning
+         :reasoning-summary (str (:reasoning-summary agent) (:delta event))
+         :updated-at-ms (:time-ms event)))
 
 (defn- finish-agent [agent status event]
   (assoc agent
@@ -141,10 +154,10 @@
       :model/requested
       (-> run
           (update-in [:usage :model-calls] inc)
-          (update-agent event set-activity :model event))
+          (update-agent event start-model event))
 
       :model/reasoning-summary-delta
-      (update-agent run event set-activity :reasoning event)
+      (update-agent run event append-reasoning-summary event)
 
       :model/completed
       (-> run
@@ -249,12 +262,23 @@
        (keep (:agents run))
        (filter #(= parent-id (:parent-id %)))))
 
+(defn- reasoning-label [agent]
+  (let [summary (some-> (:reasoning-summary agent)
+                        (str/replace #"\s+" " ")
+                        str/trim)]
+    (when (seq summary)
+      (if (> (count summary) 160)
+        (str (subs summary 0 159) "…")
+        summary))))
+
 (defn- agent-lines [run agent prefix last?]
   (let [connector (if last? "└─ " "├─ ")
         line (str prefix connector (:name agent) " · " (activity-label agent))
         child-prefix (str prefix (if last? "   " "│  "))
+        summary (reasoning-label agent)
         children (vec (children run (:id agent)))]
-    (into [line]
+    (into (cond-> [line]
+            summary (conj (str child-prefix "↳ " summary)))
           (mapcat (fn [index child]
                     (agent-lines run child child-prefix
                                  (= index (dec (count children)))))
@@ -315,19 +339,42 @@
 (defmethod print-method Monitor [monitor ^Writer out]
   (.write out (monitor-view monitor)))
 
-(defn- draw-tree! [^Monitor monitor]
+(defn- clear-tree! [^Monitor monitor]
   (let [^Writer out (.-out monitor)
         rendered-lines (.-rendered-lines monitor)
-        previous @rendered-lines
-        view (monitor-view monitor)
-        lines (if (str/blank? view) 0 (count (str/split-lines view)))]
+        previous @rendered-lines]
     (when (pos? previous)
       (.write out (str "\u001b[" previous "A")))
     (.write out "\u001b[J")
+    (.flush out)
+    (reset! rendered-lines 0)))
+
+(defn- draw-tree! [^Monitor monitor]
+  (let [^Writer out (.-out monitor)
+        rendered-lines (.-rendered-lines monitor)
+        view (monitor-view monitor)
+        lines (if (str/blank? view) 0 (count (str/split-lines view)))]
+    (clear-tree! monitor)
     (when (pos? lines)
       (.write out (str view "\n")))
     (.flush out)
     (reset! rendered-lines lines)))
+
+(defn ^:no-doc write-above!
+  "Temporarily clear a tree display, write terminal output, then redraw it."
+  [monitor write!]
+  (when-not (instance? Monitor monitor)
+    (throw (ex-info "write-above! requires a Run monitor"
+                    {:value monitor})))
+  (when-not (ifn? write!)
+    (throw (ex-info "write-above! requires a function"
+                    {:value write!})))
+  (locking (.-lock ^Monitor monitor)
+    (clear-tree! monitor)
+    (try
+      (write!)
+      (finally
+        (draw-tree! monitor)))))
 
 (defn- active-runs? [snapshot]
   (some #(= :running (:status %)) (vals (:runs snapshot))))

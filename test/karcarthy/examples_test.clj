@@ -78,27 +78,39 @@
     (is (empty? (k/get-items (:session coding))))
     (is (nil? @(:last-run coding)))))
 
-(deftest terminal-output-shows-summary-answer-and-tools
+(deftest terminal-output-uses-the-fixed-run-monitor
   (let [writer (StringWriter.)
-        {:keys [state on-event finish]} (coding/terminal-events writer)]
-    (doseq [event [{:type :model/reasoning-summary-delta
+        {:keys [monitor on-event finish]}
+        (coding/terminal-events writer)
+        base {:run-id "run-1"
+              :agent-id "agent-1"
+              :parent-id nil
+              :depth 0
+              :time-ms 1000}]
+    (doseq [event [(merge base {:type :run/started
+                                :agent "coding-agent"})
+                   (merge base {:type :agent/started
+                                :agent "coding-agent"})
+                   (merge base {:type :model/requested})
+                   (merge base {:type :model/reasoning-summary-delta
                     :depth 0
-                    :delta "Inspecting."}
-                   {:type :model/completed :depth 0}
-                   {:type :tool/started
-                    :depth 0
-                    :tool "read"
-                    :input {:path "README.md"}}
-                   {:type :model/text-delta
-                    :depth 0
-                    :delta "Found it."}]]
+                                :delta "Inspecting."})
+                   (merge base {:type :model/completed
+                                :usage {}})
+                   (merge base {:type :tool/started
+                                :depth 0
+                                :tool "read"
+                                :tool-call-id "call-1"
+                                :input {:path "README.md"}})]]
       (on-event event))
-    (finish)
     (let [rendered (str writer)]
-      (is (str/includes? rendered "thinking> Inspecting."))
-      (is (str/includes? rendered "tool> read README.md"))
-      (is (str/includes? rendered "agent> Found it."))
-      (is (:saw-text? @state)))))
+      (is (str/includes? rendered "Run run-1 · running"))
+      (is (str/includes? rendered "↳ Inspecting."))
+      (is (not (str/includes? rendered "status>")))
+      (is (= :tools
+             (get-in (k/monitor-state monitor)
+                     [:runs "run-1" :agents "agent-1" :activity]))))
+    (finish)))
 
 (deftest terminal-approval-is-deny-by-default
   (testing "yes approves"

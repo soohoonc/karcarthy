@@ -128,7 +128,8 @@
              :parent-id nil
              :depth 0
              :delta "Inspecting the repository."}))
-    (is (str/includes? (view monitor) "parent · reasoning"))))
+    (is (str/includes? (view monitor) "parent · reasoning"))
+    (is (str/includes? (view monitor) "↳ Inspecting the repository."))))
 
 (deftest monitor-prints-its-current-tree-at-the-repl
   (let [monitor (k/monitor)]

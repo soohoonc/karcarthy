@@ -37,19 +37,20 @@ the process exits.
 
 ## Follow the work
 
-During a turn, the terminal uses three labels:
+During a turn, the Run monitor owns one live terminal region:
 
 ```text
-thinking> Inspecting the test command and the failing namespace.
-tool> read deps.edn
-tool> bash clojure -M:test
-agent> The failure comes from ...
+Run run_123… · running · 4s · 1 model call · 0 tokens
+└─ coding-agent · reasoning
+   ↳ Inspecting the test command and the failing namespace.
 ```
 
-`thinking>` is a provider-supplied reasoning summary. It is not the model's raw
-chain of thought. `tool>` shows a local tool call, and `agent>` is the streamed
-answer. When `dynamic=true`, the terminal also reports evaluated programs and
-the focused agents they start.
+The tree redraws in place instead of appending status lines. It shows model,
+Tool, eval, and nested-Agent activity. When the provider supplies a reasoning
+summary, the current summary appears under the Agent; this is not the model's
+raw chain of thought. Approval prompts temporarily replace the tree, which is
+redrawn after the answer. The final `agent>` response prints below the completed
+tree.
 
 The session commands are intentionally small:
 
