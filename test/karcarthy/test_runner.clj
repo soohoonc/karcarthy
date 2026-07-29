@@ -7,6 +7,7 @@
     karcarthy.run-test
     karcarthy.cli-test
     karcarthy.monitor-test
+    karcarthy.examples-test
     karcarthy.tools-test
     karcarthy.eval-test
     karcarthy.responses-test

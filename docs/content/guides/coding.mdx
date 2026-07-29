@@ -1,62 +1,182 @@
 ---
 title: Build a coding agent
-description: Give an agent repository tools and an open-ended task.
+description: Run a multi-turn coding session with repository tools and optional eval.
 ---
 
-The coding agent can read, search, edit, and run commands inside one repository.
-It inspects the project, makes focused changes, and verifies the result.
+## Start a session
 
-## Run it
-
-Set `OPENAI_API_KEY`, then provide an absolute repository path and a task:
+Set `OPENAI_API_KEY`, change to a repository, and start the coding example:
 
 ```bash
-clojure -M:examples coding /workspace/project \
-  "Investigate the failing integration tests, fix the cause, and verify it."
+clojure -M:examples coding
 ```
 
-The command displays a live run tree while the agent works, followed by its
-final account of the cause, changes, and verification. The answer is live model
-output and therefore varies; the repository diff and test results are the
-evidence to inspect.
+The current directory is the tool root. To work in another repository, pass it
+explicitly:
 
-## The agent
+```bash
+clojure -M:examples coding cwd=/workspace/project
+```
 
-The example roots local tools at the supplied directory:
+The command opens a prompt instead of running one fixed task:
+
+```text
+karcarthy coding
+repository: /workspace/project
+model: gpt-5.6
+dynamic eval: off
+local tool approvals: ask
+conversation items: 0
+Type /help for session commands.
+
+you>
+```
+
+Conversation history is kept in a process-local `Session` and is discarded when
+the process exits.
+
+## Follow the work
+
+During a turn, the terminal uses three labels:
+
+```text
+thinking> Inspecting the test command and the failing namespace.
+tool> read deps.edn
+tool> bash clojure -M:test
+agent> The failure comes from ...
+```
+
+`thinking>` is a provider-supplied reasoning summary. It is not the model's raw
+chain of thought. `tool>` shows a local tool call, and `agent>` is the streamed
+answer. When `dynamic=true`, the terminal also reports evaluated programs and
+the focused agents they start.
+
+The session commands are intentionally small:
+
+| Command | Effect |
+| --- | --- |
+| `/status` | Show the repository, model, capabilities, conversation size, and last-run usage |
+| `/diff` | Show tracked changes against `HEAD` |
+| `/clear` | Clear the process-local conversation |
+| `/help` | Show the command list |
+| `/quit` | Exit |
+
+## Approvals
+
+By default, `read` and `search` run without a prompt. `write`, `edit`, and
+`bash` show the proposed operation and require `y` or `yes`:
+
+```text
+approval> bash clojure -M:test
+Allow this tool call? [y/N]
+```
+
+Any other answer denies the call. To run local tools without these prompts,
+start the session with `approval=never`:
+
+```bash
+clojure -M:examples coding approval=never
+```
+
+This approval policy belongs to the example's local tools. Shell execution is
+bounded but not sandboxed.
+
+## Add dynamic programs
+
+The ordinary coding session has five repository tools: `read`, `write`, `edit`,
+`bash`, and `search`. It does not receive eval unless you request it:
+
+```bash
+clojure -M:examples coding dynamic=true
+```
+
+The example then adds `k/eval` to the same agent:
 
 ```clojure
-(k/agent
- {:name "coding-agent"
-  :model {:transport :responses
-          :provider :openai
-          :id "gpt-5.6"
-          :reasoning {:effort :medium
-                      :summary :auto}}
-  :instructions
-  "Inspect the repository and run its tests before changing it. Diagnose the
-   cause, make focused edits, and run the relevant tests again."
-  :tools (conj (k/local-tools {:cwd cwd}) k/eval)
-  :max-turns 24})
+(defn coding-agent [{:keys [cwd dynamic? approval]}]
+  (k/agent
+   {:name "coding-agent"
+    :model {:transport :responses
+            :provider :openai
+            :id "gpt-5.6"
+            :reasoning {:effort :medium
+                        :summary :auto}}
+    :instructions base-instructions
+    :tools
+    (cond-> (k/local-tools
+             {:cwd cwd
+              :needs-approval (approval-policies approval)})
+      dynamic? (conj k/eval))
+    :max-turns 24}))
 ```
 
-`local-tools` supplies `read`, `write`, `edit`, `bash`, and `search`. File
-operations remain under `:cwd`, including after symlink resolution. Shell
-execution is bounded but is not sandboxed.
+With eval installed, the model may still solve a straightforward task directly.
+For a task that benefits from independent investigation or review, it can
+instead author one Clojure expression that constructs agents and calls `run!`.
+Those calls share the root Run's limits, events, cancellation, and usage.
 
-The complete example also sets limits on model calls, eval, agent depth,
-concurrency, and total time. See
-[`examples/coding/main.clj`](https://github.com/soohoonc/karcarthy/blob/main/examples/coding/main.clj).
+Eval is full-trust JVM Clojure, not a sandbox. Code executed through eval is not
+governed by the local tools' approval prompts.
 
-The Responses API does not expose raw reasoning. The example requests a
-reasoning summary and the live monitor labels the agent as `reasoning` when
-summary deltas arrive.
+## Three focused local checks
 
-## Let the task determine the program
+### 1. Repository exploration and conversation
 
-This coding agent explicitly includes `k/eval`, so it may solve the task
-directly or author Clojure that creates focused agents, tools, and coordination
-when that helps. The example does not require a fixed topology. An agent that
-does not need to write a program can omit `k/eval`.
+```bash
+clojure -M:examples coding
+```
 
-Use the [Harbor integration](/docs/protocols/harbor) to run this agent against
-an isolated repository task and a behavioral verifier.
+At `you>`, enter:
+
+```text
+Inspect this repository. Explain how its tests are organized and cite the files
+you used. Do not edit files.
+```
+
+Then ask:
+
+```text
+Which single test would you run first after changing the model loop, and why?
+```
+
+This checks repository reads and searches, streamed progress, and whether the
+second turn uses the first turn's context.
+
+### 2. Edit, approval, and verification
+
+Use a repository where you are comfortable making a small change:
+
+```bash
+clojure -M:examples coding cwd=/workspace/disposable-project
+```
+
+At `you>`, enter:
+
+```text
+Find one small documentation error, fix only that error, and run the narrowest
+relevant check.
+```
+
+Approve only operations you understand, then run `/diff`. This checks the
+write or edit approval, shell approval, focused verification, and diff view.
+
+### 3. Model-authored orchestration
+
+```bash
+clojure -M:examples coding dynamic=true
+```
+
+At `you>`, enter:
+
+```text
+Use eval to investigate the public API from two independent perspectives:
+one agent should trace how a run executes, and another should assess whether
+the documentation matches the implementation. Synthesize their evidence.
+Do not edit files.
+```
+
+This checks explicit eval injection, model-authored Clojure, nested agents,
+shared Run observation, and final synthesis.
+
+Use the [Harbor integration](/docs/protocols/harbor) when the repository should
+be isolated and a behavioral verifier should score the result.

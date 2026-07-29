@@ -197,6 +197,17 @@
     :output-schema string?
     :max-turns 4}))
 
+(defn- selective-eval-agent []
+  (k/agent
+   {:name "selective-eval"
+    :model (live-model)
+    :instructions
+    "Resolve the user's request using the available capabilities as appropriate."
+    :tools [k/eval]
+    :input-schema string?
+    :output-schema string?
+    :max-turns 3}))
+
 (defn- temp-directory []
   (Files/createTempDirectory "karcarthy-live-coding-"
                              (make-array FileAttribute 0)))
@@ -331,10 +342,26 @@
       (is (= 1 (get-in run [:usage :evals])))
       (is (and (string? eval-code)
                (str/includes? eval-code "(agent")
+               (str/includes? eval-code ":instructions")
                (str/includes? eval-code "run!"))
           (pr-str eval-code))
       (is (= 2 (count agent-names))
           (pr-str agent-names)))))
+
+(deftest eval-description-keeps-trivial-work-direct
+  (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
+  (is (credentials?) "Set RESPONSES_API_KEY or OPENAI_API_KEY.")
+  (when (and (live?) (credentials?))
+    (let [run (k/run! (selective-eval-agent)
+                      "Return exactly DIRECT-PATH."
+                      {:limits {:model-calls 2
+                                :evals 1
+                                :depth 1
+                                :concurrency 2
+                                :deadline-ms 300000}})]
+      (is (= :completed (:status run)) (pr-str (:error run)))
+      (is (= "DIRECT-PATH" (some-> (:output run) str/trim)))
+      (is (zero? (get-in run [:usage :evals])) (pr-str (:events run))))))
 
 (deftest eval-description-teaches-parallel-agent-calls
   (is (live?) "Set KARCARTHY_LIVE=1 to authorize the paid live test.")
@@ -434,8 +461,12 @@
                      "        )\n\n"
                      "if __name__ == '__main__':\n"
                      "    unittest.main()\n"))
-        (let [run (coding/run-coding!
-                   (str root)
+        (let [session (coding/coding-session
+                       {:cwd (str root)
+                        :approval :never
+                        :model (live-model)})
+              run (coding/ask!
+                   session
                    (str "A scheduler deployment is returning completed jobs and "
                         "processing equal-time jobs in the wrong order. Investigate "
                         "the repository, fix the implementation, and verify it."))

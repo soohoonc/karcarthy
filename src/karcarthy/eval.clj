@@ -30,9 +30,13 @@
   "Write and evaluate exactly one Clojure expression. Return only the expression
 in `code`; do not use Markdown fences.
 
-Use this tool to write Clojure that creates agents or tools, calls agents, runs
-calls concurrently, transforms their outputs, or selects what to call based on
-intermediate results.
+Use this tool when Clojure is useful for control flow, exact computation, or
+calling Agents. For simple work, use the normal Tools directly.
+
+Create an Agent for a separate model task, such as focused research, a second
+opinion, or an independent review. Do not create an Agent for work you can do
+directly. A new Agent starts with no conversation history and receives only the
+input passed to `run!`, so pass it the complete task and the context it needs.
 
 ## Clojure evaluation
 
@@ -53,44 +57,29 @@ The following names are already defined:
 - `definition` and `expansion` — return retained source information.
 - `eval` — the eval capability that may be placed in another agent's `:tools`.
 
-## Creating and calling an agent
+## Creating and calling an Agent
 
-Creating an agent does not call it. Call it explicitly with:
-
-```clojure
-(output (run! agent-value agent-input))
-```
-
-Create an agent with:
+Creating an Agent does not call it. Call it with `run!` and read its completed
+result with `output`:
 
 ```clojure
-(agent
- {:name \"agent-name\"
-  :model MODEL_CONFIGURATION
-  :instructions \"Complete instructions for this agent.\"
-  :tools [tool-values]
-  :agents [agent-values]})
+(let [reviewer
+      (agent {:name \"reviewer\"
+              :model MODEL_CONFIGURATION
+              :instructions
+              \"Review the supplied change. Return concrete findings with evidence.\"})]
+  (output (run! reviewer input)))
 ```
 
 `:name`, `:model`, and `:instructions` are required. `:tools` and `:agents` are
 optional. `:input-schema` and `:output-schema` default to `string?`.
 
-Example:
-
-```clojure
-(let [analyst
-      (agent {:name \"analyst\"
-              :model MODEL_CONFIGURATION
-              :instructions
-              \"Inspect the supplied material and return only concrete findings.\"})]
-  (output (run! analyst input)))
-```
-
 Replace `MODEL_CONFIGURATION` with the exact Clojure value under
 `Available model configuration` below.
 
-An agent created by this expression does not receive `eval` automatically. Give
-it `:tools [eval]` only if that agent must also write and evaluate Clojure.
+An Agent created by this expression does not receive Tools or `eval`
+automatically. Add only the Tools it needs. Give it `:tools [eval]` only if that
+Agent must also write and evaluate Clojure.
 
 ## Creating a tool
 
@@ -115,9 +104,9 @@ tool in an agent's `:tools`; creating a tool does not call it directly. Use an
 object-shaped input schema for function tools sent to Responses-compatible
 models.
 
-## Calling agents concurrently
+## Calling Agents concurrently
 
-Create each call inside `future` and dereference the futures:
+Use `future` only for independent calls:
 
 ```clojure
 (let [first-call  (future (output (run! first-agent input)))
@@ -128,7 +117,7 @@ Create each call inside `future` and dereference the futures:
 Every `run!` called by this expression belongs to the same run established by
 the original `run!`, including calls made inside `future`. They share limits,
 model and eval usage, cancellation, approvals, events, context, and run id. Each
-called agent receives only the input passed to `run!` and starts with an empty
+called Agent receives only the input passed to `run!` and starts with an empty
 model conversation.
 
 ## Returning a value

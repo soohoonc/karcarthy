@@ -26,21 +26,35 @@ clojure -M:examples repl
 
 ## Coding
 
-Run one agent against a local repository:
+Start an interactive coding session in the current repository:
 
 ```bash
-clojure -M:examples coding /workspace/project \
-  "Inspect the project and explain one documentation weakness. Do not edit files."
+clojure -M:examples coding
 ```
 
-The terminal displays the live run tree while the model reasons, calls local
-tools, and finishes its answer. This example includes `k/eval`, so the model can
-write a Clojure expression that creates and coordinates focused agents when the
-task benefits from it.
+Use `cwd` to work somewhere else:
 
-The local tools include file-writing and shell capabilities. Use a disposable
-repository for tasks that permit edits. Eval is full-trust JVM Clojure, not a
-sandbox.
+```bash
+clojure -M:examples coding cwd=/workspace/project
+```
+
+The prompt keeps conversation history until you exit or run `/clear`.
+`thinking>` streams the provider's reasoning summary, `tool>` reports local
+tool calls, and `agent>` streams the answer. Use `/status`, `/diff`, `/clear`,
+`/help`, and `/quit` while the session is running.
+
+Reads and searches run directly. Writes, edits, and shell commands ask for
+approval by default. `approval=never` disables those local-tool prompts.
+
+Add the eval capability explicitly when you want the model to author a
+Clojure program that can create and coordinate focused agents:
+
+```bash
+clojure -M:examples coding cwd=/workspace/project dynamic=true
+```
+
+Eval runs full-trust JVM Clojure. It is not a sandbox, and local-tool approvals
+do not govern code evaluated through `k/eval`.
 
 The [`harbor`](harbor) directory is an evaluation integration rather than
 another introductory example.
