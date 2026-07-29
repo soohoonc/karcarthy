@@ -41,16 +41,18 @@ During a turn, the Run monitor owns one live terminal region:
 
 ```text
 Run run_123… · running · 4s · 1 model call · 0 tokens
-└─ coding-agent · reasoning
-   ↳ Inspecting the test command and the failing namespace.
+└─ coding-agent · waiting for Agent · 1 call · 842 tokens
+   └─ repository-reviewer · reasoning · 1 call · 0 tokens
+      ↳ Inspecting the test command and the failing namespace.
 ```
 
 The tree redraws in place instead of appending status lines. It shows model,
-Tool, eval, and nested-Agent activity. When the provider supplies a reasoning
-summary, the current summary appears under the Agent; this is not the model's
-raw chain of thought. Approval prompts temporarily replace the tree, which is
-redrawn after the answer. The final `agent>` response prints below the completed
-tree.
+Tool, eval, and nested-Agent activity, with model calls and tokens attributed to
+each Agent. Token counts update when a model response completes. When the
+provider supplies a reasoning summary, the current summary appears under that
+Agent; this is not the model's raw chain of thought. Approval prompts temporarily
+replace the tree, which is redrawn after the answer. The final `agent>` response
+prints below the completed tree.
 
 The session commands are intentionally small:
 
