@@ -71,7 +71,7 @@
                      (reset! seen request)
                      {:type :final :output "ok"}))
             local-tools (tools/local {:cwd (str root)})
-            all-tools (conj local-tools (k/responses-web-search))
+            all-tools (conj local-tools (k/web-search))
             agent (k/agent
                    {:name "local-agent"
                     :model {:id "fake" :transport model}

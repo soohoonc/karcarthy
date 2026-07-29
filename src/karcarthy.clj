@@ -57,7 +57,7 @@
 (defexport local-tools tools/local)
 (defexport prompt prompt/prompt)
 (defexport prompt-file prompt/prompt-file)
-(defexport responses-web-search responses/web-search)
+(defexport web-search responses/web-search)
 (defexport connect-mcp! mcp/connect!)
 (defexport mcp-tools mcp/tools)
 (defexport close-mcp! mcp/close!)
