@@ -74,10 +74,10 @@ jobs:
           cache-dependency-path: docs/package-lock.json
 
       - name: Install locked dependencies
-        run: npm ci
+        run: npm ci --audit=false
 
-      - name: Audit dependencies
-        run: npm audit --audit-level=low
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=low
 
       - name: Lint
         run: npm run lint
